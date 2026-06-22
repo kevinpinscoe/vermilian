@@ -21,6 +21,26 @@ no published releases yet.
 
 Vermilian is a cross-platform desktop app that connects to your self-hosted YouTrack via its REST API and provides a focused, opinionated interface for daily task and project management. YouTrack is the backend and source of truth; Vermilian is the client.
 
+## Screenshots
+
+> Captured against built-in demo data — no real YouTrack instance required.
+
+**Task board** — grouped by status, with priority and category chips:
+
+![Vermilian task board, light theme](docs/screenshots/board-light.png)
+
+**Dark theme:**
+
+![Vermilian task board, dark theme](docs/screenshots/board-dark.png)
+
+**Task detail panel** — inline field editing and a built-in timer:
+
+![Vermilian task detail panel](docs/screenshots/task-detail.png)
+
+**Settings** — the Connection section, with layered credential sources (shell command, file path, or OS keyring):
+
+![Vermilian settings — connection](docs/screenshots/settings.png)
+
 ## Target platforms
 
 | Platform | Architecture |
