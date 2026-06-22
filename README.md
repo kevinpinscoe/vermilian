@@ -6,16 +6,20 @@ An Electron desktop application that provides an enhanced frontend for a self-ho
 
 ## Status
 
-**Early development — not yet released.** Vermilian is in active development and is not yet
-feature-complete or packaged for general use. Expect rough edges and breaking changes; there are
-no published releases yet.
+**Functionally feature-complete against spec; in testing (early Phase 3).** Vermilian implements
+its core feature set and works end to end against a YouTrack instance. It is not yet a polished or
+released product — the remaining work is test coverage and polish, not core functionality, and
+there are no published releases yet.
 
-- **Design:** complete — feature specs, Architecture Decision Records (ADRs), wireframes, and the
-  component architecture are in place.
-- **Implemented so far:** the app shell and process architecture (main / preload / renderer with a
-  secure IPC bridge), encrypted local credential storage, the YouTrack REST client, and the
-  first-run settings and connection flow.
-- **In progress:** the task and project board views that make up the core day-to-day interface.
+- **Built and working:** the monday.com-style task board (table + Kanban) with grouping, filtering,
+  and sorting; the task detail panel with inline field editing; the full Pomodoro focus timer
+  (state machine, focus-mode lock, quit protection, crash-recovery checkpointing, and an automatic
+  YouTrack worklog on stop); layered credential storage; and light/dark themes.
+- **Tested:** unit tests cover the core logic (including 28 for the timer state machine), alongside
+  a growing end-to-end (Playwright) suite over the board, detail panel, and settings.
+- **Remaining before release:** end-to-end coverage for the timer, AI, and stand-up flows; a few
+  empty states; a due-date range filter; search and person toolbar buttons; and a version-mismatch
+  banner.
 
 ## What it is
 
@@ -23,8 +27,8 @@ Vermilian is a cross-platform desktop app that connects to your self-hosted YouT
 
 ## Highlights
 
-These are the features that shape Vermilian's design. The app is in early development
-(see [Status](#status)) — some are shipped, others are partially built:
+These are the features that shape Vermilian. They are built and working; the app is functionally
+feature-complete against its spec and now in testing (see [Status](#status)):
 
 - **Pomodoro focus timer** — a single-task focus tool built around ADHD work patterns. Running
   a timer puts the app into a focus mode; stopping it logs the elapsed minutes as a YouTrack
