@@ -21,6 +21,21 @@ no published releases yet.
 
 Vermilian is a cross-platform desktop app that connects to your self-hosted YouTrack via its REST API and provides a focused, opinionated interface for daily task and project management. YouTrack is the backend and source of truth; Vermilian is the client.
 
+## Highlights
+
+These are the features that shape Vermilian's design. The app is in early development
+(see [Status](#status)) — some are shipped, others are partially built:
+
+- **Pomodoro focus timer** — a single-task focus tool built around ADHD work patterns. Running
+  a timer puts the app into a focus mode; stopping it logs the elapsed minutes as a YouTrack
+  work item. Defaults to Pomodoro cycles (25-minute work blocks, breaks, long break every four),
+  with an open-ended mode as well.
+- **monday.com-style board** — a high-density task board with colour-coded status, priority, and
+  category chips, grouping, filtering, and sorting; table and Kanban views.
+- **Layered credential sources** — read your YouTrack token from a shell command (e.g. a secrets
+  manager), a file path, or the OS keyring — whichever fits your setup.
+- **Cross-platform desktop** — Linux, macOS (Intel + Apple Silicon), Windows 11, and Raspberry Pi OS.
+
 ## Screenshots
 
 > Captured against built-in demo data — no real YouTrack instance required.
@@ -33,9 +48,13 @@ Vermilian is a cross-platform desktop app that connects to your self-hosted YouT
 
 ![Vermilian task board, dark theme](docs/screenshots/board-dark.png)
 
-**Task detail panel** — inline field editing and a built-in timer:
+**Task detail panel** — inline field editing and a built-in Pomodoro timer:
 
 ![Vermilian task detail panel](docs/screenshots/task-detail.png)
+
+**Pomodoro focus timer** — focus mode with a work-block countdown; stopping logs a YouTrack worklog:
+
+![Vermilian Pomodoro focus timer](docs/screenshots/timer-focus.png)
 
 **Settings** — the Connection section, with layered credential sources (shell command, file path, or OS keyring):
 
