@@ -1,0 +1,62 @@
+# =============================================================================
+# Architecture Diagram Template — D2
+# Description: <one-line description of what this diagram shows>
+# Renderer:    Kroki (d2)  |  wiki.js with Kroki plugin
+# Reviewed:    YYYY-MM-DD
+#
+# Embed in wiki.js:
+#   ```kroki
+#   d2
+#   <paste diagram here>
+#   ```
+#
+# Render via Kroki CLI:
+#   curl -s -X POST https://<kroki-host>/d2 \
+#     -H 'Content-Type: text/plain' \
+#     --data-binary @_template.d2 -o out.svg
+# =============================================================================
+
+direction: right
+
+# --- Actors / External systems ---
+# actor: Actor {shape: person}
+# external: External Service {shape: cloud}
+
+# --- Application boundary ---
+# app: Application Name {
+#   layer1: Layer {shape: rectangle}
+#   layer2: Layer {shape: rectangle}
+# }
+
+# --- Data stores ---
+# db: Primary DB {shape: cylinder}
+# cache: Cache {shape: cylinder}
+
+# --- Connections (label describes the protocol or data flow) ---
+# actor -> app.layer1: HTTPS
+# app.layer1 -> app.layer2: internal
+# app.layer2 -> db: SQL
+# app.layer2 -> cache: key/value
+
+# =============================================================================
+# EXAMPLE — replace with your real diagram
+# =============================================================================
+
+direction: right
+
+user: User {shape: person}
+
+vermilion: vermilion {
+  ui: Web UI {shape: rectangle}
+  api: REST API {shape: rectangle}
+  ai: AI Worker {shape: rectangle}
+}
+
+db: Database {shape: cylinder}
+claude: Claude API {shape: cloud}
+
+user -> vermilion.ui: HTTPS
+vermilion.ui -> vermilion.api: REST / JSON
+vermilion.api -> db: queries
+vermilion.api -> vermilion.ai: task context
+vermilion.ai -> claude: prompts

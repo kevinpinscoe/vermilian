@@ -1,0 +1,83 @@
+# =============================================================================
+# Architecture Diagram — Component Overview (Vermilian Electron app)
+# Description: Process boundaries, state ownership, and external systems for the
+#              Phase 2 Electron app. The renderer never touches network or disk
+#              directly — every API call and credential op crosses IPC into main.
+# Renderer:    Kroki (d2)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# ADRs:        0002 (TanStack Query + Zustand) · 0004 (safeStorage, Linux fail-closed)
+#              0005 (YouTrack REST /api only) · 0006 (Haiku 4.5 create / Sonnet 4.6 stand-up)
+# Related:     spec/features/*.md (every feature maps onto these components)
+# =============================================================================
+
+direction: right
+
+user: "User" {shape: person}
+
+vermilian: "Vermilian — Electron desktop app" {
+  # -------------------------------------------------------------------------
+  # Renderer process — React 18 + Vibe. NO direct network/disk access.
+  # -------------------------------------------------------------------------
+  renderer: "Renderer process  (React 18 + @vibe/core)" {
+    direction: down
+    ui: "UI components\nleft rail · board · detail panel\nmodals · timer focus card" {shape: rectangle}
+    tq: "TanStack Query\nserver-state: ALL YouTrack/Claude\nreads + mutations, cached  (ADR-0002)" {shape: rectangle}
+    zustand: "Zustand store\nlocal UI state · one-at-a-time\ntimer (single-active invariant)" {shape: rectangle}
+  }
+
+  # -------------------------------------------------------------------------
+  # Preload — the only bridge. Typed contextBridge IPC, no Node in renderer.
+  # -------------------------------------------------------------------------
+  preload: "Preload (contextBridge)\ntyped IPC surface — security boundary" {shape: rectangle}
+
+  # -------------------------------------------------------------------------
+  # Main process — owns credentials, network, and all disk I/O.
+  # -------------------------------------------------------------------------
+  main: "Main process" {
+    direction: down
+    ipc: "IPC handlers" {shape: rectangle}
+    yt_client: "YouTrack API client\nREST /api only (ADR-0005)" {shape: rectangle}
+    claude_client: "Claude API client\nHaiku 4.5 create · Sonnet 4.6 stand-up (ADR-0006)" {shape: rectangle}
+    config_svc: "Config + settings I/O\napp-config.json + _vermilian-config Article" {shape: rectangle}
+    timer_svc: "Timer checkpoint + quit guard\nbefore-quit / close interception" {shape: rectangle}
+    creds: "Credential service\nsafeStorage encrypt/decrypt;\nLinux fail-closed (ADR-0004)" {shape: rectangle}
+  }
+}
+
+# Local state (Electron userData) ---------------------------------------------
+creds_store: "userData/credentials/\nyoutrack.token.bin · claude.key.bin\n(safeStorage blobs)" {shape: cylinder}
+appcfg: "userData/app-config.json\nnon-credential prefs — NEVER tokens" {shape: cylinder}
+timerfile: "userData/timer-state.json\ncheckpoint every 5s · forced-exit recovery" {shape: cylinder}
+notes: "Daily-notes folder (user path)\nstandup-YYYY-MM-DD.md" {shape: cylinder}
+
+# OS services -----------------------------------------------------------------
+keyring: "OS keyring\ngnome-keyring / kwallet" {shape: cloud}
+os: "OS services\nnotifications · folder picker · default browser" {shape: cloud}
+
+# External systems ------------------------------------------------------------
+youtrack: "YouTrack (self-hosted)\nsource of truth · REST /api\n_vermilian-config KB Article\n(workspaces · folders · board config)" {shape: cloud}
+claude: "Claude API (Anthropic)" {shape: cloud}
+
+# Connections -----------------------------------------------------------------
+user -> vermilian.renderer.ui: "clicks / keyboard"
+vermilian.renderer.ui -> vermilian.renderer.tq: "queries / mutations"
+vermilian.renderer.ui -> vermilian.renderer.zustand: "UI + timer state"
+vermilian.renderer.tq -> vermilian.preload: "IPC invoke (queryFn)"
+vermilian.renderer.zustand -> vermilian.preload: "timer events"
+vermilian.preload -> vermilian.main.ipc: "contextBridge"
+vermilian.main.ipc -> vermilian.main.yt_client
+vermilian.main.ipc -> vermilian.main.claude_client
+vermilian.main.ipc -> vermilian.main.config_svc
+vermilian.main.ipc -> vermilian.main.timer_svc
+vermilian.main.ipc -> vermilian.main.creds
+
+vermilian.main.yt_client -> youtrack: "HTTPS REST (Bearer)"
+vermilian.main.claude_client -> claude: "HTTPS (API key)"
+vermilian.main.config_svc -> appcfg: "read/write"
+vermilian.main.config_svc -> youtrack: "config Article sync (debounced, LWW)"
+vermilian.main.timer_svc -> timerfile: "checkpoint / recover"
+vermilian.main.timer_svc -> youtrack: "auto-worklog on stop/recover"
+vermilian.main.creds -> keyring: "encrypt/decrypt key"
+vermilian.main.creds -> creds_store: "read/write blobs"
+vermilian.main -> notes: "save stand-up markdown"
+vermilian.main -> os: "notifications · dialogs · openExternal"

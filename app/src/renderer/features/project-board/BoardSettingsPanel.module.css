@@ -1,0 +1,213 @@
+/* BoardSettingsPanel */
+
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100%;
+  background: var(--surface-main-background-color, #fff);
+  border-left: 1px solid var(--border-color, #e0e0e0);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.closeBtn:hover {
+  background: var(--surface-app-background-color, #f6f7fb);
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  border-bottom: 2px solid transparent;
+}
+
+.tabActive {
+  color: var(--primary-color, #0073ea);
+  border-bottom-color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}
+
+.tabContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Colours tab */
+.colorSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionLabel {
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444)) !important;
+}
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.colorSwatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.colorLabel {
+  flex: 1;
+  font-size: 13px !important;
+}
+
+.colorPicker {
+  width: 32px;
+  height: 24px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  padding: 1px;
+  cursor: pointer;
+  background: none;
+}
+
+.resetValueBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.resetValueBtn:hover {
+  color: var(--primary-color, #0073ea);
+}
+
+/* Views tab */
+.viewRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color-light, #f0f0f0);
+}
+
+.viewNameInput {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+}
+
+.viewNameInput:focus {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+}
+
+.viewType {
+  font-size: 11px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  background: var(--surface-app-background-color, #f6f7fb);
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.viewActionBtn {
+  background: none;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+.viewActionBtn:hover:not(:disabled) {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+
+.viewActionBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.addViewBtn {
+  background: none;
+  border: 1px dashed var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  padding: 8px;
+  width: 100%;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--primary-color, #0073ea);
+  text-align: center;
+}
+
+.addViewBtn:hover {
+  background: var(--primary-selected-color, #e6f0ff);
+}
+
+/* Danger zone */
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

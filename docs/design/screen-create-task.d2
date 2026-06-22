@@ -1,0 +1,80 @@
+# =============================================================================
+# UI Wireframe — Create Task (standard modal form)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/create-task.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com new-item dialog)
+# Related:     screen-project-board.d2 (+ New task button / “N” shortcut / inline quick-add)
+#              screen-task-detail.d2 (read/edit sibling — same field set)
+#              screen-create-task-ai.d2 (natural-language create path)
+#              screen-workspace-navigation.d2 (Project dropdown groups by folder tree)
+#              (Submit / success / failure are interaction sequences → Mermaid flow files.)
+#
+# What this depicts: the centred Vibe Modal create form (full field set, single
+# column). Esc / backdrop dismiss. Create disabled until Summary valid. Drawn
+# beside it: validation-error state, the in-flight submit, and the API-failure
+# banner. The lighter inline quick-add lives on the board, not here.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+board_behind: "Project board (behind the modal backdrop)" {
+  shape: rectangle
+  # Opened by: + New task (top-left of left rail) OR “N” (no text input focused).
+}
+
+modal: "“New task” modal  (centred)" {
+  shape: rectangle
+  direction: down
+  # Vibe: Modal. Esc or backdrop click dismisses without creating.
+
+  title: "New task                                     ✕" {shape: rectangle}
+
+  form: "Form — single column" {
+    shape: rectangle
+    direction: down
+    f_summary:  "Summary *          [ ____________ ]  (auto-focused; required)" {shape: rectangle}
+    f_project:  "Project *          [ Order Pipeline ▾ ]  (grouped by folder tree;\n                   Other workspaces collapsed at bottom)" {shape: rectangle}
+    f_priority: "Priority           [ Normal ▾ ]   (default Normal)" {shape: rectangle}
+    f_status:   "Status             [ To do ▾ ]    (default To do)" {shape: rectangle}
+    f_category: "Category           [ ▾ ]  (blank)\n                   ⓘ Auto-set because this is an Inbox project (when applicable)" {shape: rectangle}
+    f_due:      "Due Date           [ ____ ] 📅  (blank)" {shape: rectangle}
+    f_ticket:   "Ticket             [ ____ ]" {shape: rectangle}
+    f_tlink:    "Ticket link        [ http(s)://… ]" {shape: rectangle}
+    f_track:    "Tracking link      [ http(s)://… ]" {shape: rectangle}
+    f_notes:    "Notes              [ multi-line ____ ]" {shape: rectangle}
+    omitted:    "(Date time entered NOT shown — auto-set to Date.now() on submit)" {shape: rectangle}
+  }
+
+  actions: "Cancel        Create" {
+    shape: rectangle
+    create: "Create  (disabled until Summary valid)" {shape: oval}
+  }
+}
+
+# --- Validation-error state ---
+validation: "Validation (inline, below field)" {
+  shape: rectangle
+  direction: down
+  e_summary: "Summary    ⚠ Summary is required." {shape: rectangle}
+  e_url:     "Ticket link ⚠ Must be a valid URL.  (no http:// or https:// prefix)" {shape: rectangle}
+}
+
+# --- Submit + result states ---
+submit_states: "Submit states" {
+  shape: rectangle
+  direction: down
+  inflight: "Create ⟳  (disabled + spinner; POST /api/issues)" {shape: rectangle}
+  success:  "✓ Task created — KP-87  (Toast positive 3s)\nmodal closes · new task prepended to list" {shape: rectangle}
+  failure:  "Banner (danger) at top of modal: <error>\nform data intact · Create re-enabled to retry" {shape: rectangle}
+}
+
+# --- Navigation (annotation only) ---
+board_behind -> modal: "+ New task / N"
+modal.actions.create -> submit_states: "Create"

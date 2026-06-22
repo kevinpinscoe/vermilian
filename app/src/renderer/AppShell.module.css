@@ -1,0 +1,88 @@
+/* AppShell — global layout: topbar + (rail | content) */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Global top bar — always visible, spans full width */
+.topBar {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--ui-border-color);
+  background: var(--primary-background-color);
+  flex-shrink: 0;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.topBarTagline {
+  font-size: 14px;
+  color: #cc4400;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.1px;
+}
+
+.topBarSpacer {
+  flex: 1;
+}
+
+/* Rail + content row */
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+/* Inline dialogs (conflict, quit-protection) */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.dialog {
+  background: var(--primary-background-color);
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

@@ -1,0 +1,37 @@
+# Playwright
+playwright-report/
+test-results/
+
+# Node / Electron / pnpm
+node_modules/
+out/
+dist/
+.vite/
+.env
+.env.*
+
+# Build artifacts
+*.deb
+*.AppImage
+*.dmg
+*.exe
+*.zip
+
+# Tool version managers
+**/.node-version
+
+# Editor / OS
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/.claude
+**/.codex
+**/.trash/
+**/resume.sh
+**/resume.txt
+**/*.pyc
+**/*.pyo
+**/__pycache__/
+**/.obsidian/workspace.json
+**/.obsidian/graph.json
+**/.obsidian/plugins/*/data.json

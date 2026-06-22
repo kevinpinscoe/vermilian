@@ -1,0 +1,81 @@
+# =============================================================================
+# UI Wireframe — Task Timer: Focus mode card
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/task-timer.md
+# Inspiration: /home/acst/monday-screenshot.png (chrome reference only — focus mode is bespoke)
+# Related:     screen-task-detail.d2 (▶ Start timer primary entry), screen-project-board.d2 (▶ row entry + badge)
+#              screen-timer-break-banner.d2 (the interactive break state — separate file)
+#              flow-timer-quit-dialog.mmd (quit-protection sequence)
+#              screen-settings.d2 (durations, long-break frequency, sound, work-item type)
+#
+# What this depicts: FOCUS MODE — a dim overlay (~35% black) over the whole app
+# with a single full-opacity timer card centred above it. Clicks outside the card
+# are absorbed; Esc does NOT exit. Drawn beside it: running (pomodoro) vs paused
+# vs open-mode card content, the stop-conflict dialog, and the save-failed state.
+# (Break banner + quit dialog live in their own files.)
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+overlay: "FOCUS MODE — dim overlay (~35% black) over entire app\n(clicks outside the card absorbed; Esc does NOT exit;\n only OS window controls respond → app-quit hits quit dialog)" {
+  shape: rectangle
+  direction: down
+
+  card: "Timer card (full opacity, centred)" {
+    shape: rectangle
+    direction: down
+    # Vibe-tokened card above the overlay.
+    task: "KP-42 — Refactor API client" {shape: rectangle}
+    elapsed: "◍  12:34\n(mm:ss + circular progress ring for pomodoro)" {shape: rectangle}
+    phase: "Work block 2 of 4" {shape: rectangle}
+    buttons: "⏸ Pause     ⏹ Stop & log     Skip to break" {
+      shape: rectangle
+      # “Skip to break” is pomodoro-only (abandons rest of work block → break).
+    }
+  }
+}
+
+# --- Open-mode card variant (no Pomodoro structure) ---
+open_mode: "OPEN-mode card (Shift-click / “…” start)" {
+  shape: rectangle
+  direction: down
+  task: "KP-42 — Refactor API client" {shape: rectangle}
+  elapsed: "47:08   (mm:ss, no ring, runs indefinitely)" {shape: rectangle}
+  buttons: "⏸ Pause     ⏹ Stop & log   (no Skip to break)" {shape: rectangle}
+}
+
+# --- Paused state ---
+paused: "PAUSED (work block) — focus mode STAYS active" {
+  shape: rectangle
+  direction: down
+  note: "Elapsed frozen at pause; can't browse tasks while paused" {shape: rectangle}
+  resume: "▶ Resume     ⏹ Stop & log" {shape: rectangle}
+}
+
+# --- Stop conflict (starting a 2nd timer) ---
+conflict: "Start while another timer runs" {
+  shape: rectangle
+  direction: down
+  # Vibe: AlertDialog. One timer app-wide (Zustand single-active invariant).
+  msg: "Stop the current timer on ‘<task>’ first?" {shape: rectangle}
+  actions: "Stop and start new      Keep current running" {shape: rectangle}
+}
+
+# --- Worklog save states ---
+save_states: "Stop & log → worklog states" {
+  shape: rectangle
+  direction: down
+  # POST /api/issues/{id}/timeTracking/workItems  (duration = work minutes only)
+  success: "✓ Logged 25 min to ‘<task>’  (Toast positive)\nfocus exits · timer-state.json cleared" {shape: rectangle}
+  failed: "Save failed — 25 min NOT lost\n[ Retry ]   [ Discard ]\n(persists to checkpoint if app closed here)" {shape: rectangle}
+}
+
+# --- Navigation (annotation only) ---
+overlay.card.buttons -> save_states: "⏹ Stop & log"

@@ -1,0 +1,74 @@
+# =============================================================================
+# UI Wireframe — Create Task (AI / natural language)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/create-task-ai.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com new-item dialog chrome)
+# Related:     screen-create-task.d2 (the review form is identical to the standard form)
+#              screen-project-board.d2 (AI-create button sits by + New task in the rail)
+#              screen-settings.d2 (Claude API key + “Model for task creation” gate)
+#              flow-create-task-ai.mmd (the describe → extract → review sequence)
+#
+# What this depicts: the two states of the AI path —
+#   (1) INPUT modal (“Describe your task”) incl. gating, clarification, errors
+#   (2) REVIEW form (pre-filled, editable; identical layout to screen-create-task.d2)
+# Extraction is single-shot Claude Haiku 4.5 (ADR-0006); call runs in Electron main.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# Entry point (annotation): left-rail header
+entry: "Left rail header:  + New task   ✦ AI create\n• disabled + Tooltip if no Claude API key\n• shortcut “A” (no text input focused)" {
+  shape: rectangle
+  # Vibe: Button + IconButton, Tooltip.
+}
+
+# ---------------------------------------------------------------------------
+# (1) INPUT modal
+# ---------------------------------------------------------------------------
+input_modal: "“Describe your task” modal" {
+  shape: rectangle
+  direction: down
+  # Vibe: Modal.
+  title: "AI create                                    ✕" {shape: rectangle}
+  prompt_label: "Describe your task" {shape: rectangle}
+  subtitle: "Describe what needs to be done. Include any relevant\ndetails — priority, deadline, project, category, or\nrelated ticket numbers." {shape: rectangle}
+  textarea: "[ multi-line text area — auto-focused ____________ ]" {shape: rectangle}
+  actions: "Cancel        Generate" {
+    shape: rectangle
+    gen: "Generate  (disabled while empty)" {shape: oval}
+  }
+
+  # States shown within / under the input modal
+  inflight:    "⟳ Generating…  (textarea + button disabled; main-process Claude call)" {shape: rectangle}
+  clarify:     "Banner (info): <clarification_needed> — refine & re-generate" {shape: rectangle}
+  err_api:     "Banner (danger): <network / quota / invalid key> — Generate re-enabled" {shape: rectangle}
+  err_parse:   "Banner (danger): Could not parse a structured task — please try rephrasing." {shape: rectangle}
+}
+
+# ---------------------------------------------------------------------------
+# (2) REVIEW form — pre-filled, editable (same layout as screen-create-task.d2)
+# ---------------------------------------------------------------------------
+review_form: "Review form (pre-filled, editable)" {
+  shape: rectangle
+  direction: down
+  ai_banner: "ⓘ AI-generated — please review before creating.  (info, non-dismissible)" {shape: rectangle}
+  redescribe: "← Re-describe  (back to input; fresh single-shot extraction)" {shape: rectangle}
+  fields: "Same field set as standard create form\n(Summary, Project, Priority, Status, Category, Due Date,\n Ticket, links, Notes) — extracted values pre-filled;\n low-confidence fields left BLANK (no guesses)" {shape: rectangle}
+  proj_err: "Project   ⚠ Could not match a project — please select one.\n(shown when Claude's project name matches nothing)" {shape: rectangle}
+  actions: "Cancel        Create  (same submit flow + Date time entered auto-stamp)" {
+    shape: rectangle
+    create: "Create" {shape: oval}
+  }
+}
+
+# --- Navigation (annotation only) ---
+entry -> input_modal: "✦ AI create / A"
+input_modal.gen -> review_form: "Generate → extraction OK"
+review_form.redescribe -> input_modal: "← Re-describe"

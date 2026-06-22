@@ -1,0 +1,69 @@
+# =============================================================================
+# UI Wireframe — Columns panel (the “Hide” toolbar editor)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/board-configuration.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com column manager)
+# Related:     screen-project-board.d2 (opened from the toolbar “Hide” button)
+#              screen-board-settings.d2 (sibling panel — Colours/Views/Danger zone)
+#              screen-workspace-navigation.d2 (the workspace default this resets to)
+#              (Live-apply + debounced save are interaction sequences → Mermaid flow files.)
+#
+# What this depicts: the right-side “Columns” Sidebar. Lists the CLOSED set of
+# render-known YouTrack fields; each row = visibility checkbox + drag handle +
+# width input. Reordering/visibility/width apply live to the board behind the
+# panel and persist per-board to _vermilian-config on a debounced save.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# Entry point (annotation): board toolbar
+toolbar: "Board toolbar:  … Hide ▾ …   ← “Hide” opens this panel" {
+  shape: rectangle
+  # Vibe: Button / IconButton
+}
+
+panel: "“Columns” side panel" {
+  shape: rectangle
+  direction: down
+  # Vibe: Sidebar (right-side).
+
+  header: "Columns                                     ✕" {shape: rectangle}
+
+  hint: "☑ = visible on board    ⠿ = drag to reorder (mirrored on board)\nWidth in px;  0 = auto" {
+    shape: rectangle
+    # Vibe: helper text.
+  }
+
+  rows: "Column rows (closed set of render-known fields)" {
+    shape: rectangle
+    direction: down
+    # Each row: Vibe Checkbox + drag handle + width NumberField.
+    r_summary:  "⠿  ☑  Summary              [ 320 ]" {shape: rectangle}
+    r_ticket:   "⠿  ☑  Ticket               [ 100 ]" {shape: rectangle}
+    r_tlink:    "⠿  ☐  Ticket link          [   0 ] auto" {shape: rectangle}
+    r_tracking: "⠿  ☐  Tracking link        [   0 ] auto" {shape: rectangle}
+    r_priority: "⠿  ☑  Priority             [ 120 ]" {shape: rectangle}
+    r_status:   "⠿  ☑  Status               [ 140 ]" {shape: rectangle}
+    r_category: "⠿  ☑  Category             [ 120 ]" {shape: rectangle}
+    r_due:      "⠿  ☑  Due Date             [ 110 ]" {shape: rectangle}
+    r_notes:    "⠿  ☐  Notes                [   0 ] auto" {shape: rectangle}
+    r_entered:  "⠿  ☐  Date time entered    [ 150 ]" {shape: rectangle}
+    r_idread:   "⠿  ☐  idReadable           [  90 ]" {shape: rectangle}
+  }
+
+  footer: "↺  Reset to workspace default" {
+    shape: rectangle
+    # Restores the workspace's default column set (see workspace-navigation.md).
+    # Vibe: link button.
+  }
+}
+
+# --- Navigation (annotation only) ---
+toolbar -> panel: "Hide"

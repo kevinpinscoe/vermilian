@@ -1,0 +1,116 @@
+# =============================================================================
+# UI Wireframe — Board Settings panel (Colours / Views / Danger zone)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/board-configuration.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com board settings side panel)
+# Related:     screen-project-board.d2 (opened from the toolbar overflow “…” menu)
+#              screen-columns-panel.d2 (the Columns editor — separate panel, via “Hide”)
+#              screen-workspace-navigation.d2 (workspace defaults that overrides fall back to)
+#              (Save/sync + conflict toasts are interaction sequences → Mermaid flow files.)
+#
+# What this depicts: the right-side “Board settings” Sidebar with its three tabs.
+# The Colours tab is shown active; Views and Danger-zone tab bodies are drawn
+# beside it (only one tab body is visible at a time in the app). Config persists
+# per-board to the _vermilian-config Article on a debounced save.
+# NOTE: the Columns editor is NOT here — it is its own panel (screen-columns-panel.d2).
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# Entry point (annotation): board toolbar overflow menu
+overflow: "Board toolbar:  … (overflow) ▾\n   • Board settings…   ← opens panel\n   • (Hide → Columns panel, separate)" {
+  shape: rectangle
+  # Vibe: MenuButton / Menu
+}
+
+panel: "“Board settings” side panel" {
+  shape: rectangle
+  direction: down
+  # Vibe: Sidebar (right-side), TabList.
+
+  header: "Board settings                              ✕" {shape: rectangle}
+  tabs: "[ Colours* ]   [ Views ]   [ Danger zone ]" {
+    shape: rectangle
+    # Vibe: TabList. * = active tab.
+  }
+
+  # -------------------------------------------------------------------------
+  # COLOURS tab (active) — per-board overrides on the workspace palette
+  # -------------------------------------------------------------------------
+  colours_tab: "COLOURS tab (active)" {
+    shape: rectangle
+    direction: down
+
+    status_group: "Status" {
+      shape: rectangle
+      direction: down
+      # One row per enum value. Chip preview in CURRENT board colour
+      # (workspace default OR per-board override).
+      r1: "[chip: Working on it]   ◧◧◧◧ swatches   #00C875   Reset" {shape: rectangle}
+      r2: "[chip: Pending IT]      ◧◧◧◧ swatches   #FDAB3D   Reset" {shape: rectangle}
+      r3: "[chip: To do]           ◧◧◧◧ swatches   #C4C4C4   Reset" {shape: rectangle}
+      r4: "[chip: Done]            ◧◧◧◧ swatches   #00C875   Reset" {shape: rectangle}
+      # Vibe: Chip (preview), color swatch picker, TextField (hex), link button (Reset →
+      # removes per-board override, falls back to workspace default).
+    }
+    priority_group: "Priority" {
+      shape: rectangle
+      direction: down
+      p1: "[chip: Critical]        ◧◧◧◧ swatches   #E2445C   Reset" {shape: rectangle}
+      p2: "[chip: Major]  [chip: Normal]  [chip: Minor]   …" {shape: rectangle}
+    }
+    category_group: "Category" {
+      shape: rectangle
+      direction: down
+      c1: "[chip: OPS]             ◧◧◧◧ swatches   #0073EA   Reset" {shape: rectangle}
+      c2: "(one row per Category enum value)" {shape: rectangle}
+    }
+    live_note: "Changes apply live to the board behind the panel\n(debounced save to the Article)." {shape: rectangle}
+  }
+
+  # -------------------------------------------------------------------------
+  # VIEWS tab body
+  # -------------------------------------------------------------------------
+  views_tab: "VIEWS tab" {
+    shape: rectangle
+    direction: down
+    v1: "⠿  Main table   ( table )      Duplicate · Delete" {shape: rectangle}
+    v2: "⠿  Board        ( kanban )     Duplicate · Delete" {shape: rectangle}
+    v3: "⠿  My week      ( table )      Duplicate · Delete" {shape: rectangle}
+    new_view: "+ New view  (new table view; columns inherit workspace defaults)" {shape: rectangle}
+    # Each name inline-editable. Vibe: ListItem, IconButton, drag handle.
+  }
+
+  # -------------------------------------------------------------------------
+  # DANGER ZONE tab body
+  # -------------------------------------------------------------------------
+  danger_tab: "DANGER ZONE tab" {
+    shape: rectangle
+    direction: down
+    reset_btn: "Reset this board to defaults" {shape: oval}
+    desc: "Deletes this board's entry from _vermilian-config;\nboard re-derives from workspace defaults on next render." {shape: rectangle}
+  }
+}
+
+# Confirmation dialog for the danger-zone action
+reset_confirm: "Reset-to-defaults confirmation" {
+  shape: rectangle
+  direction: down
+  # Vibe: AlertDialog.
+  msg: "Reset this board to workspace defaults?\nYour columns, colours, and saved views\nfor this board will be removed." {shape: rectangle}
+  actions: "Cancel        Reset board" {
+    shape: rectangle
+    go: "Reset board" {shape: oval}
+  }
+}
+
+# --- Navigation (annotation only) ---
+overflow -> panel: "Board settings…"
+panel.danger_tab.reset_btn -> reset_confirm: "confirm"

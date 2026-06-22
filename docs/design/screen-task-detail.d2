@@ -1,0 +1,98 @@
+# =============================================================================
+# UI Wireframe — Task Detail panel (right-side, inline-edit)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/task-detail.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com item panel)
+# Related:     screen-project-board.d2 (clicking a task row opens this panel over the list)
+#              screen-timer-focus.d2 (▶ Start timer in the header)
+#              screen-create-task.d2 (full create form — sibling of this read/edit view)
+#              (Inline-edit save / delete / status-reject are interaction sequences →
+#               Mermaid flow files; this file is layout-only.)
+#
+# What this depicts: the detail panel slid in over the (still-visible) task list.
+# Width ≈ 1/3 window, min 380px. Reading and editing are the SAME view — click a
+# value to edit in place; blur saves via PATCH. Drawn beside it: an active inline
+# editor, the delete-confirm dialog, and the loading / fetch-error states.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+list_behind: "Task list (still visible & scrollable behind the panel)" {
+  shape: rectangle
+  # Clicking a DIFFERENT row swaps the task into the open panel (no close).
+}
+
+panel: "Task Detail panel  (≈1/3 width, min 380px)" {
+  shape: rectangle
+  direction: down
+  # Vibe: Sidebar (right), slides in/out. Esc or × closes.
+
+  header: "KP-42 · Kevin's Work Board     ▶ Start timer   🗑 Delete   ✕" {
+    shape: rectangle
+    # ID + project name. ▶ Start timer → ⏹ Stop timer (mm:ss) when this is the timed task.
+    # Vibe: Heading, Button, IconButton.
+  }
+
+  fields: "Fields — two-column (label left, value right); all inline-editable" {
+    shape: rectangle
+    direction: down
+    # Vibe: each value click → in-place editor (no modal). Blur → PATCH.
+    f_summary:  "Summary            Ship Q2 fulfillment report   (text)" {shape: rectangle}
+    f_priority: "Priority           [chip: Critical ▾]   (dropdown)" {shape: rectangle}
+    f_status:   "Status             [chip: In Progress ▾]   (dropdown — ALL values)" {shape: rectangle}
+    f_category: "Category           [chip: OPS ▾]   (dropdown)" {shape: rectangle}
+    f_due:      "Due Date           2026-06-03  📅   (date picker)" {shape: rectangle}
+    f_ticket:   "Ticket             ACME-1187   (text)" {shape: rectangle}
+    f_tlink:    "Ticket link        https://jira…/ACME-1187  ↗   (opens in OS browser)" {shape: rectangle}
+    f_track:    "Tracking link      Add link   (muted placeholder when empty)" {shape: rectangle}
+    f_notes:    "Notes              multi-line textarea…\n(Enter = newline; Ctrl/Cmd+Enter = commit + next)" {shape: rectangle}
+    f_entered:  "Date time entered  2026-05-20 09:14   (read-only)" {shape: rectangle}
+  }
+
+  kbd: "Keyboard: Tab / Shift+Tab move fields · Enter commits + advances · Esc reverts" {
+    shape: rectangle
+    # Vibe: helper text.
+  }
+}
+
+# --- Active inline editor (one field mid-edit) ---
+editing: "Inline editor active (e.g. Status)" {
+  shape: rectangle
+  direction: down
+  open_dd: "Status ▾\n  To do · In Progress · Done · Waiting for IT\n  BLOCKED · Waiting for approval · …" {shape: rectangle}
+  saving: "⟳ saving… (Vibe Loader, inline)" {shape: rectangle}
+  toast_ok: "✓ Saved   (Toast positive, auto-dismiss 2s)" {shape: rectangle}
+  toast_err: "⚠ <API error verbatim> — field reverts (Toast danger)" {shape: rectangle}
+}
+
+# --- Delete confirmation ---
+delete_confirm: "Delete confirmation" {
+  shape: rectangle
+  direction: down
+  # Vibe: AlertDialog. Confirm → DELETE /api/issues/<id>, close panel, remove row, Toast.
+  msg: "Delete this task? This cannot be undone." {shape: rectangle}
+  actions: "Cancel        Delete" {
+    shape: rectangle
+    go: "Delete" {shape: oval}
+  }
+}
+
+# --- Loading / fetch-error states ---
+states: "Panel open / task-switch states" {
+  shape: rectangle
+  direction: down
+  loading: "⟳ Loader — until full issue loads" {shape: rectangle}
+  fetch_err: "Banner (danger): couldn't load issue   [ Retry ]" {shape: rectangle}
+}
+
+# --- Navigation (annotation only) ---
+list_behind -> panel: "click row"
+panel.fields.f_status -> editing: "click value"
+panel.header -> delete_confirm: "🗑 Delete"

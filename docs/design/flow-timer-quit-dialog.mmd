@@ -1,0 +1,47 @@
+%%{init: {'theme': 'default'}}%%
+%% =============================================================================
+%% UI Flow — Task Timer: quit protection + forced-exit recovery
+%% Renderer:    Kroki (mermaid)  |  wiki.js (Kroki plugin or native Mermaid module)
+%% Reviewed:    2026-05-29
+%% Spec:        spec/features/task-timer.md
+%% Related:     screen-timer-focus.d2 / screen-timer-break-banner.d2 (the running states)
+%%              (Worklog POST and save-failed Retry/Discard are detailed on those screens.)
+%% What this depicts: what happens when the user tries to quit while a timer is
+%% running. App-driven quit paths (X, Cmd/Ctrl+Q, menu Quit) are intercepted by
+%% an AlertDialog; there is NO "force quit without logging" option. A true OS
+%% kill bypasses the app and is handled by next-launch recovery instead.
+%% =============================================================================
+
+flowchart TD
+
+    RUN["Timer running  (work block / break / paused)"]
+    QUIT(["Quit attempt: window X · Cmd or Ctrl+Q · menu Quit"])
+    INTERCEPT{"Timer running? (before-quit / close)"}
+    NORMAL["Quit normally"]
+
+    DIALOG["AlertDialog: Timer running on this task — N min elapsed. Stop before quitting?"]
+    KEEP(["Keep working  (default)"])
+    STOPQ(["Stop timer and quit"])
+
+    COMMIT["POST worklog — accumulated work minutes only"]
+    SAVED{"Worklog saved?"}
+    PROCEED["Proceed with quit"]
+    FAIL["Stay open: save-failed — Retry / Discard. Quit ABORTED; minutes not lost"]
+
+    KILL(["OS force-kill / crash / shutdown"])
+    RECOVER["Next launch: auto-log from timer-state.json, then info Toast. State file deleted only on success"]
+
+    RUN --> QUIT
+    QUIT --> INTERCEPT
+    INTERCEPT -->|"no"| NORMAL
+    INTERCEPT -->|"yes"| DIALOG
+    DIALOG --> KEEP
+    KEEP --> RUN
+    DIALOG --> STOPQ
+    STOPQ --> COMMIT
+    COMMIT --> SAVED
+    SAVED -->|"yes"| PROCEED
+    SAVED -->|"no"| FAIL
+    FAIL --> RUN
+    RUN -.->|"bypasses dialog entirely"| KILL
+    KILL -.-> RECOVER

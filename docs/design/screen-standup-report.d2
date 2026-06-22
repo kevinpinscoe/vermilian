@@ -1,0 +1,82 @@
+# =============================================================================
+# UI Wireframe — Daily Stand-Up Report
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/standup-report.md
+# Inspiration: /home/acst/monday-screenshot.png (toolbar + panel chrome)
+# Related:     screen-workspace-navigation.d2 (Scope is computed against the active workspace)
+#              screen-settings.d2 (Claude API key gate · model · daily-notes folder)
+#              screen-timer-focus.d2 (today's logged worklog time feeds the prompt)
+#
+# What this depicts: the two surfaces of stand-up —
+#   (1) SCOPE + WINDOW popover (from the toolbar Stand-up button)
+#   (2) REPORT panel (rendered markdown: Done / In Progress / Blocked) + actions
+# AI call runs in Electron main; default model claude-sonnet-4-6 (ADR-0006).
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# Entry point (annotation): main toolbar
+entry: "Main toolbar (all views):  🕘 Stand-up\n• disabled + Tooltip if no Claude API key\n• shortcut “S” (no text input focused)" {
+  shape: rectangle
+  # Vibe: Button + Tooltip.
+}
+
+# ---------------------------------------------------------------------------
+# (1) SCOPE + WINDOW popover
+# ---------------------------------------------------------------------------
+popover: "Scope + Window popover" {
+  shape: rectangle
+  direction: down
+  # Vibe: Menu / popover. Both controls default to last-used (persisted locally).
+  scope: "Scope  (radio)\n  ◉ All tasks in workspace   (default)\n  ○ Active workspace\n  ○ Custom workspace…  → checklist of all workspaces" {shape: rectangle}
+  window_ctl: "Window  (segmented)   [ 24h ][ 48h* ][ 7d ][ Custom… ]\ncontrols how far back ‘Done’ candidates extend" {shape: rectangle}
+  generate: "Generate" {shape: oval}
+}
+
+# ---------------------------------------------------------------------------
+# (2) REPORT panel  (Modal on narrow windows, else right-side panel)
+# ---------------------------------------------------------------------------
+report: "Report panel" {
+  shape: rectangle
+  direction: down
+  header: "Daily Stand-Up — May 29, 2026                ✕" {shape: rectangle}
+
+  body: "Rendered markdown (formatted HTML, not raw)" {
+    shape: rectangle
+    direction: down
+    # Sections with no tasks are omitted entirely.
+    done: "## Done\n- KP-42 — Refactor API client  (1h 25m today)\n- KP-37 — Fix worklog rounding" {shape: rectangle}
+    inprog: "## In Progress\n- KP-51 — Board drag-and-drop  (2h 10m today)" {shape: rectangle}
+    blocked: "## Blocked\n- KP-44 — Awaiting IT firewall change" {shape: rectangle}
+    # Each bullet prefixed with the verbatim readable ID; (…today) only when logged.
+  }
+
+  actions: "Copy to clipboard   ·   Save to daily notes   ·   Regenerate   ·   Close" {
+    shape: rectangle
+    # Copy → raw markdown; label flips “Copied ✓” 2s.
+    # Save → <daily-notes>/standup-YYYY-MM-DD.md (append w/ --- + “## Stand-up (HH:MM)” if exists);
+    #        disabled + tooltip if folder unset; label flips “Saved ✓” 2s.
+    # Regenerate → re-fetch + re-call Claude (loading state).
+  }
+}
+
+# --- Loading / error / empty states ---
+states: "Report states" {
+  shape: rectangle
+  direction: down
+  loading: "⟳ Generating report…" {shape: rectangle}
+  err_fetch: "Banner (danger): Could not load tasks — check your connection.  [ Retry ]" {shape: rectangle}
+  err_ai: "Banner (danger): Report generation failed. <error>  [ Retry ]" {shape: rectangle}
+  empty: "Banner (info): No recent activity to report.\nTry expanding the scope or check tasks are up to date." {shape: rectangle}
+}
+
+# --- Navigation (annotation only) ---
+entry -> popover: "🕘 Stand-up / S"
+popover.generate -> report: "Generate → fetch + Claude"

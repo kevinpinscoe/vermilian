@@ -1,0 +1,64 @@
+# =============================================================================
+# UI Wireframe Template — D2 (sketch mode)
+# Screen/Flow: <screen or flow name>
+# Renderer:    Kroki (d2)  |  wiki.js with Kroki plugin
+# Reviewed:    YYYY-MM-DD
+#
+# D2 sketch mode renders with a hand-drawn aesthetic suited for wireframes.
+# `sketch: true` at the top level enables it.
+#
+# Conventions:
+#   - Use nested shapes to represent regions within a screen.
+#   - shape: rectangle  for panels, cards, toolbars, lists.
+#   - shape: oval       for buttons and CTAs.
+#   - shape: person     for user actors outside the screen.
+#   - Arrows between shapes show navigation or data flow.
+#
+# Embed in wiki.js:
+#   ```kroki
+#   d2
+#   <paste diagram here>
+#   ```
+# =============================================================================
+
+sketch: true
+direction: down
+
+# --- Screen container ---
+# screen: Screen Name {
+#   shape: rectangle
+#
+#   header: Header {shape: rectangle}
+#   nav: Navigation {shape: rectangle}
+#   content: Content Area {shape: rectangle}
+#   sidebar: Sidebar {shape: rectangle}
+#   footer: Footer {shape: rectangle}
+# }
+
+# --- Buttons / CTAs ---
+# screen.content.cta: Primary Action {shape: oval}
+
+# --- Navigation arrows (screen to screen) ---
+# screen.content.cta -> other_screen: "action label"
+
+# =============================================================================
+# EXAMPLE — Task List screen; replace with your real wireframe
+# =============================================================================
+
+sketch: true
+direction: down
+
+task_list: Task List {
+  shape: rectangle
+
+  header: Header — vermilion {shape: rectangle}
+  toolbar: Project selector  |  Filter  |  Sort {shape: rectangle}
+  list: Task rows {shape: rectangle}
+  fab: + New Task {shape: oval}
+  footer: Footer — status bar {shape: rectangle}
+}
+
+task_detail: Task Detail {shape: rectangle}
+
+task_list.fab -> task_detail: opens
+task_list.list -> task_detail: click row

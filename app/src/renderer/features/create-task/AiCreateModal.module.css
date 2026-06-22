@@ -1,0 +1,133 @@
+/* AiCreateModal */
+
+.inputStep {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.reviewStep {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Scrollable fields area inside review step */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-bottom: 4px;
+  padding-right: 2px;
+  margin-top: 8px;
+}
+
+/* Actions row pinned at bottom of review step */
+.reviewActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.subtitle {
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  font-size: 13px;
+}
+
+.textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.textarea:focus {
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 2px rgba(0, 115, 234, 0.2);
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Inline banners for info / danger feedback */
+.banner {
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+
+.banner[data-kind='info'] {
+  background: var(--primary-selected-color, #e6f0ff);
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+}
+
+.banner[data-kind='danger'] {
+  background: var(--negative-color-selected, #fff0f2);
+  border-color: var(--negative-color, #e2445c);
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.redescribeLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--primary-color, #0073ea);
+  font-size: 14px;
+  font-family: inherit;
+  text-decoration: underline;
+}
+
+.redescribeLink:hover {
+  color: var(--primary-hover-color, #0060c0);
+}
+
+.redescribeLink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionsSpacer {
+  flex: 1;
+}

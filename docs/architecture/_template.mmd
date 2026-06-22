@@ -1,0 +1,54 @@
+%%{init: {'theme': 'default'}}%%
+%% =============================================================================
+%% Architecture Diagram Template — Mermaid
+%% Description: <one-line description of what this diagram shows>
+%% Renderer:    Kroki (mermaid)  |  wiki.js (Kroki plugin or native Mermaid module)
+%% Reviewed:    YYYY-MM-DD
+%%
+%% Embed in wiki.js (Kroki plugin):
+%%   ```kroki
+%%   mermaid
+%%   <paste diagram here>
+%%   ```
+%%
+%% Embed in wiki.js (native Mermaid module):
+%%   ```mermaid
+%%   <paste diagram here>
+%%   ```
+%%
+%% Render via Kroki CLI:
+%%   curl -s -X POST https://<kroki-host>/mermaid \
+%%     -H 'Content-Type: text/plain' \
+%%     --data-binary @_template.mmd -o out.svg
+%% =============================================================================
+
+graph TD
+
+    %% --- Actors ---
+    U["👤 User"]
+
+    %% --- Frontend ---
+    subgraph Frontend["Frontend"]
+        UI["Web UI"]
+    end
+
+    %% --- Backend ---
+    subgraph Backend["Backend"]
+        API["REST API"]
+        AIW["AI Worker"]
+    end
+
+    %% --- External ---
+    subgraph External["External"]
+        CLAUDE["Claude API"]
+    end
+
+    %% --- Data ---
+    DB[("Database")]
+
+    %% --- Connections ---
+    U -->|"HTTPS"| UI
+    UI -->|"REST / JSON"| API
+    API -->|"SQL / ORM"| DB
+    API --> AIW
+    AIW -->|"prompts"| CLAUDE

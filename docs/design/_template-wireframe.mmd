@@ -1,0 +1,78 @@
+%%{init: {'theme': 'default'}}%%
+%% =============================================================================
+%% UI Wireframe / Screen Flow Template — Mermaid
+%% Screen/Flow: <screen or flow name>
+%% Renderer:    Kroki (mermaid)  |  wiki.js (Kroki plugin or native Mermaid module)
+%% Reviewed:    YYYY-MM-DD
+%%
+%% Use this template for:
+%%   - User flows between screens (flowchart TD/LR)
+%%   - Interaction sequences (sequenceDiagram)
+%%   - State machines for task status transitions (stateDiagram-v2)
+%%
+%% Screen boxes  → rectangular nodes  ["[ Label ]"]
+%% Actions/CTAs  → rounded nodes      (["( Label )"])
+%% Decisions     → rhombus nodes      {"{ Label }"}
+%%
+%% Embed in wiki.js (Kroki plugin):
+%%   ```kroki
+%%   mermaid
+%%   <paste diagram here>
+%%   ```
+%% =============================================================================
+
+%% --- Option A: Screen flow (flowchart) ---
+flowchart TD
+
+    %% Screens
+    INBOX["[ Inbox ]"]
+    TASK_LIST["[ Task List ]"]
+    TASK_DETAIL["[ Task Detail ]"]
+    CREATE_FORM["[ Create Task Form ]"]
+
+    %% Actions
+    NEW(["+ New Task"])
+    SUBMIT(["Submit"])
+    CANCEL(["Cancel"])
+
+    %% Decision
+    VALID{"Valid?"}
+
+    %% Flow
+    INBOX -->|"navigate"| TASK_LIST
+    TASK_LIST --> NEW
+    TASK_LIST -->|"click row"| TASK_DETAIL
+    NEW --> CREATE_FORM
+    CREATE_FORM --> SUBMIT
+    CREATE_FORM --> CANCEL
+    SUBMIT --> VALID
+    VALID -->|"yes"| TASK_LIST
+    VALID -->|"no — show errors"| CREATE_FORM
+    CANCEL --> TASK_LIST
+
+
+%% --- Option B: Task status state machine (uncomment to use) ---
+%% stateDiagram-v2
+%%     [*] --> ToDo : created
+%%     ToDo --> InProgress : start work
+%%     InProgress --> Done : complete
+%%     InProgress --> Blocked : blocker raised
+%%     Blocked --> InProgress : blocker resolved
+%%     InProgress --> WaitingForIT : needs IT
+%%     WaitingForIT --> InProgress : IT resolved
+%%     Done --> [*]
+
+
+%% --- Option C: Interaction sequence (uncomment to use) ---
+%% sequenceDiagram
+%%     actor User
+%%     participant UI as Web UI
+%%     participant API as REST API
+%%     participant AI as AI Worker
+%%
+%%     User->>UI: fills create-task form
+%%     UI->>API: POST /tasks
+%%     API->>AI: enrich task context
+%%     AI-->>API: suggested priority / category
+%%     API-->>UI: 201 Created
+%%     UI-->>User: task appears in list

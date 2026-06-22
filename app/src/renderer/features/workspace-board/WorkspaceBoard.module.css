@@ -1,0 +1,31 @@
+/* WorkspaceBoard */
+
+.issueCount {
+  color: var(--secondary-text-color, #444444);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.assignedBtn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--secondary-text-color, #444444);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.assignedBtn:hover {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+
+.assignedBtnActive {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}

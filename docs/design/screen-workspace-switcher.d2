@@ -1,0 +1,112 @@
+# =============================================================================
+# UI Wireframe — Workspace Switcher (open menu + New-workspace modal + Manage view)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/workspace-navigation.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com workspace switcher menu)
+# Related:     screen-workspace-navigation.d2 (the rail; this is the switcher chip expanded)
+#              screen-settings.d2 (Manage workspaces lives in the Settings area)
+#              (Cross-workspace drag and create/delete sequences are captured by the
+#               Mermaid flow files, not here — this file is layout-only.)
+#
+# What this depicts (one element at a time in the app; D2 stacks them):
+#   (1) OPEN switcher menu — workspace list + actions, incl. drag drop-target state
+#   (2) "+ New workspace" modal
+#   (3) "Manage workspaces…" view — rename / reorder / delete
+#   (4) Delete confirmation states — refuse-when-nonempty + type-to-confirm-when-empty
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# ---------------------------------------------------------------------------
+# (1) OPEN switcher menu — anchored under the rail's switcher chip
+# ---------------------------------------------------------------------------
+menu: "OPEN switcher menu" {
+  shape: rectangle
+  direction: down
+  # Vibe: Menu, anchored to the Dropdown chip in screen-workspace-navigation.d2.
+
+  ws_work: "✓  Work            📥   ← active" {
+    shape: rectangle
+    # Active workspace marked (✓). 📥 = contains an Inbox project (/inbox/i).
+    # Vibe: MenuItem, active state.
+  }
+  ws_personal: "   Personal" {shape: rectangle}
+  ws_client: "   Acme Client      ◳ drop here\n(highlighted ONLY while dragging a\nproject row → drops into its Unassigned)" {
+    shape: rectangle
+    # During a project drag the menu auto-opens; hovering a workspace name
+    # highlights it as a drop target. Vibe: MenuItem, drag-over state.
+  }
+  divider: "──────────────" {shape: rectangle}
+  new_ws: "+ New workspace" {shape: rectangle}
+  manage: "⚙ Manage workspaces…" {shape: rectangle}
+}
+
+# ---------------------------------------------------------------------------
+# (2) "+ New workspace" modal
+# ---------------------------------------------------------------------------
+new_modal: "“+ New workspace” modal" {
+  shape: rectangle
+  direction: down
+  # Vibe: Modal.
+  title: "New workspace" {shape: rectangle}
+  field: "Workspace name  [ ____________ ]" {
+    shape: rectangle
+    # Vibe: TextField. On submit: create workspace (no folders, no projects) + switch to it.
+  }
+  actions: "Cancel        Create" {
+    shape: rectangle
+    new_btn: "Create" {shape: oval}
+  }
+}
+
+# ---------------------------------------------------------------------------
+# (3) "Manage workspaces…" view (Settings area)
+# ---------------------------------------------------------------------------
+manage_view: "“Manage workspaces…” (in Settings)" {
+  shape: rectangle
+  direction: down
+  # Vibe: list with drag handles + per-row actions.
+
+  row_work: "⠿  Work        ( 2 projects )    Rename · Delete(disabled)" {
+    shape: rectangle
+    # ⠿ = drag handle (reorder → updates workspace.order). Delete disabled while
+    # the workspace still contains projects. Vibe: ListItem, IconButton, Tooltip.
+  }
+  row_personal: "⠿  Personal    ( 0 projects )    Rename · Delete" {shape: rectangle}
+  row_client: "⠿  Acme Client ( 5 projects )    Rename · Delete(disabled)" {shape: rectangle}
+}
+
+# ---------------------------------------------------------------------------
+# (4) Delete confirmation states
+# ---------------------------------------------------------------------------
+delete_blocked: "Delete — workspace NOT empty (refused)" {
+  shape: rectangle
+  direction: down
+  # Vibe: AlertDialog.
+  msg: "Move or remove all projects from this\nworkspace before deleting it." {shape: rectangle}
+  ok: "OK" {shape: oval}
+}
+
+delete_confirm: "Delete — workspace empty (confirm)" {
+  shape: rectangle
+  direction: down
+  # Vibe: AlertDialog with type-to-confirm guard.
+  prompt: "Type the workspace name to confirm:\n[ ____________ ]" {shape: rectangle}
+  actions: "Cancel     Delete (enabled only on exact match)" {
+    shape: rectangle
+    del_btn: "Delete" {shape: oval}
+  }
+}
+
+# --- Navigation (annotation only) ---
+menu.new_ws -> new_modal: "opens"
+menu.manage -> manage_view: "opens"
+manage_view.row_personal -> delete_confirm: "Delete (empty)"
+manage_view.row_work -> delete_blocked: "Delete (has projects)"

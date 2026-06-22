@@ -1,0 +1,53 @@
+/* BreakBanner — persistent thin bar shown during Pomodoro breaks */
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: var(--positive-color, #258750);
+  color: #fff;
+  flex-shrink: 0;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotShort {
+  background: #a8f0c8;
+}
+
+.dotLong {
+  background: #ffd580;
+}
+
+.label {
+  color: #fff !important;
+  font-size: 13px !important;
+}
+
+.countdown {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+  min-width: 40px;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

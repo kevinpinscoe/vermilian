@@ -1,0 +1,105 @@
+# =============================================================================
+# UI Wireframe — Settings view
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/settings.md
+# Inspiration: /home/acst/monday-screenshot.png (full-content settings chrome)
+# Related:     screen-workspace-navigation.d2 (gear icon in the rail footer opens this)
+#              screen-create-task-ai.d2 / screen-standup-report.d2 (gated on the AI keys here)
+#              screen-timer-focus.d2 (Pomodoro durations + worklog type configured here)
+#              ADR-0004 (safeStorage credential storage, Linux fail-closed)
+#              ADR-0006 (Claude model defaults: Haiku 4.5 create / Sonnet 4.6 stand-up)
+#
+# What this depicts: the full-content Settings view (replaces the board, NOT a
+# modal). Six section cards in order + a sticky Save/Cancel footer. Opens
+# automatically on first run until a YouTrack connection is confirmed. Drawn
+# beside it: the Linux keyring fail-closed banner and the confirm dialogs.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+view: "Settings — full content area  (gear in rail footer · Ctrl/Cmd+,)" {
+  shape: rectangle
+  direction: down
+  # First-run: opens automatically; no YouTrack API calls until connection confirmed.
+
+  connection: "① Connection (YouTrack)" {
+    shape: rectangle
+    direction: down
+    url: "YouTrack URL   [ https://youtrack.example.com ]  (trailing / stripped)" {shape: rectangle}
+    token: "API Token     [ •••••••• ] 👁   (masked; clear to change)" {shape: rectangle}
+    test: "Test connection  → GET /api/users/me\nBanner: ✓ Connected as <name> · 401 invalid · network unreachable" {shape: rectangle}
+  }
+
+  ai: "② AI (Claude)" {
+    shape: rectangle
+    direction: down
+    key: "Claude API Key      [ •••••••• ] 👁   (blank ⇒ AI features disabled)" {shape: rectangle}
+    model_create: "Model for task creation   [ claude-haiku-4-5-20251001 ]" {shape: rectangle}
+    model_standup: "Model for stand-up reports [ claude-sonnet-4-6 ]" {shape: rectangle}
+    test_ai: "Test connection  → minimal Claude request; result in inline Banner" {shape: rectangle}
+  }
+
+  timer: "③ Timer & Pomodoro" {
+    shape: rectangle
+    direction: down
+    durations: "Work [25] (5–120) · Short break [5] (1–60) · Long break [15] (1–120)\nLong-break frequency [4] (2–10, every Nth block)" {shape: rectangle}
+    toggles: "Sound on block end [on] · OS notifications [on]" {shape: rectangle}
+    worklog: "Default worklog type [ Development ▾ ]\n(from /api/admin/timeTrackingSettings/workItemTypes)" {shape: rectangle}
+    apply_note: "Applies to FUTURE timer starts; a running timer keeps its durations" {shape: rectangle}
+  }
+
+  daily: "④ Daily notes" {
+    shape: rectangle
+    direction: down
+    folder: "Daily notes folder  [ /path… ]  [ Browse… ]  (OS folder picker)" {shape: rectangle}
+    validate: "Validated on Save: must exist + be writable\n⚠ Folder does not exist or is not writable.\n(empty ⇒ Save-to-daily-notes disabled in stand-up)" {shape: rectangle}
+  }
+
+  appearance: "⑤ Appearance" {
+    shape: rectangle
+    direction: down
+    theme: "Theme  [ Light ][ Dark ][ System ]  (applies immediately, no Save)" {shape: rectangle}
+  }
+
+  advanced: "⑥ Advanced" {
+    shape: rectangle
+    direction: down
+    reset: "Reset to defaults  (non-credential settings only)" {shape: rectangle}
+    open_folder: "Open config folder  → userData in OS file manager" {shape: rectangle}
+  }
+
+  footer: "Sticky footer:        Cancel        Save" {
+    shape: rectangle
+    # Save → tokens via safeStorage.encryptString() to userData/credentials/
+    #        (youtrack.token.bin, claude.key.bin); non-creds → app-config.json (never tokens).
+    # Success → Toast “Settings saved.”
+    save: "Save" {shape: oval}
+  }
+}
+
+# --- Linux keyring fail-closed (ADR-0004) ---
+failclosed: "Linux keyring fail-closed (on Save)" {
+  shape: rectangle
+  direction: down
+  # safeStorage.getSelectedStorageBackend() == basic_text (no OS keyring)
+  banner: "Banner (danger) above footer:\nVermilian cannot securely store credentials on this system —\ninstall gnome-keyring or kwallet, or run in a session with a keyring.\n(credential fields NOT written; non-cred settings still save)" {shape: rectangle}
+}
+
+# --- Confirm dialogs ---
+dialogs: "Confirm dialogs" {
+  shape: rectangle
+  direction: down
+  discard: "Cancel w/ unsaved creds → AlertDialog:\n“Discard unsaved changes?”  [ Discard ] [ Keep editing ]" {shape: rectangle}
+  reset_confirm: "Reset to defaults → AlertDialog:\n“Reset all non-credential settings? Your YouTrack token and\nClaude API key will be kept.”  [ Reset ] [ Cancel ]" {shape: rectangle}
+}
+
+# --- Navigation (annotation only) ---
+view.advanced.reset -> dialogs.reset_confirm: "click"
+view.footer.save -> failclosed: "no OS keyring"

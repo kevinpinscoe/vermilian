@@ -1,0 +1,122 @@
+# =============================================================================
+# UI Wireframe — Workspace Navigation (left rail: switcher + folder tree)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/workspace-navigation.md
+# Inspiration: /home/acst/monday-screenshot.png (monday.com left rail / workspace switcher)
+# Related:     screen-project-board.d2 (this rail sits to the LEFT of that board)
+#              screen-workspace-switcher.d2 (the expanded switcher menu + Manage workspaces — to be drawn)
+#              screen-settings.d2 (footer gear target)
+#              (Drag/drop and navigation sequences are captured by the Mermaid flow
+#               files, not here — this file is layout-only.)
+#
+# What this depicts: the left rail in its three states side by side —
+#   (1) EXPANDED (default, full width)
+#   (2) COLLAPSED (icon-only strip, ~52px) with hover pop-outs
+#   (3) FRESH-INSTALL empty state (onboarding banner + single Unassigned folder)
+# D2 stacks these for clarity; only one is ever shown at a time in the app.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+# ---------------------------------------------------------------------------
+# (1) EXPANDED rail — the default full-width left rail
+# ---------------------------------------------------------------------------
+expanded: "EXPANDED rail (default, full width)" {
+  shape: rectangle
+  direction: down
+  # Vibe: Menu / NavigationBar as the rail container
+
+  hamburger: "☰  (collapse rail → icon strip)" {
+    shape: rectangle
+    # Vibe: IconButton. Collapsed/expanded state persists in local app data (per-machine).
+  }
+
+  switcher: "▾  Work            📥" {
+    shape: rectangle
+    # Vibe: Dropdown-styled chip. Shows active workspace name + Inbox indicator
+    # (📥) if the workspace contains a project whose name matches /inbox/i.
+    # Click opens the switcher menu — see screen-workspace-switcher.d2.
+  }
+
+  tree: "Folder tree (active workspace)" {
+    shape: rectangle
+    direction: down
+    # Vibe: NavigationItem rows; folders are coloured group headers with a chevron.
+
+    all_tasks: "★  All tasks in workspace" {
+      shape: rectangle
+      # Virtual entry above all folders → cross-project board, group-by Project.
+      # Only cross-project surface in MVP. Vibe: NavigationItem.
+    }
+
+    folder_fulfillment: "▾  Fulfillment" {
+      shape: rectangle
+      direction: down
+      # Collapsible (chevron). Expanded/collapsed state is per-machine UI state.
+      proj1: "📥  Inbox                ( 3 )   ← ACTIVE" {shape: rectangle}
+      proj2: "Order Pipeline          ( 12 )" {shape: rectangle}
+      proj3: "⚠ Legacy Sync           Remove · Restore" {shape: rectangle}
+      # ⚠ = project in config but no longer in YouTrack (reconcile on startup).
+      # Count badge = number of non-Done issues. Vibe: Counter / badge.
+    }
+
+    folder_merch: "▸  Merch Hub  — collapsed" {
+      shape: rectangle
+    }
+
+    new_folder: "+ New folder   (inline rename on create)" {
+      shape: rectangle
+      # Vibe: Button (tertiary). Right-click any folder → Rename / Move up / Move down /
+      # Delete folder (Delete disabled w/ tooltip unless folder has 0 projects).
+    }
+
+    unassigned: "Unassigned  ( 2 )\nprojects in YouTrack not yet placed —\ndrag into a folder, or onto another\nworkspace in the switcher menu" {
+      shape: rectangle
+      # Always pinned at the bottom of the active workspace's tree.
+    }
+  }
+
+  footer: "⚙ Settings        📥 Inbox" {
+    shape: rectangle
+    # Vibe: IconButton x2. Gear → screen-settings.d2; Inbox → Inbox project board.
+  }
+}
+
+# ---------------------------------------------------------------------------
+# (2) COLLAPSED icon strip (~52px) — same data, hover pop-outs
+# ---------------------------------------------------------------------------
+collapsed: "COLLAPSED strip (~52px)" {
+  shape: rectangle
+  direction: down
+
+  h: "☰" {shape: rectangle}
+  ws_initial: "(W)\nworkspace initial,\ntinted circle\n— hover → switcher popout" {shape: rectangle}
+  folder_icons: "▣\n▣\n▣\nfolder icons stacked\n— hover rail → full tree\noverlay (does not push board;\nclick outside to close)" {shape: rectangle}
+  f: "⚙  📥" {shape: rectangle}
+}
+
+# ---------------------------------------------------------------------------
+# (3) FRESH-INSTALL empty state
+# ---------------------------------------------------------------------------
+fresh: "FRESH-INSTALL empty state" {
+  shape: rectangle
+  direction: down
+
+  banner: "ⓘ Create your first workspace folder structure —\ndrag projects into folders or right-click to add folders.   [×]" {
+    shape: rectangle
+    # Vibe: Banner (info). Dismissible; dismissal is per-machine UI state.
+  }
+  default_ws: "▾  Workspace            (default, auto-created)" {shape: rectangle}
+  all_projects: "Unassigned\nALL YouTrack projects land here\nuntil the user organizes them" {shape: rectangle}
+}
+
+# --- One-at-a-time relationship (annotation only, not navigation) ---
+expanded.hamburger -> collapsed: "collapse"
+collapsed.h -> expanded: "expand"

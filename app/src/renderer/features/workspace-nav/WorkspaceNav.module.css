@@ -1,0 +1,599 @@
+/* WorkspaceNav — left rail */
+
+/* Layout slot — reserves the rail's width in the flex row. The rail itself is
+   absolutely positioned inside it so the collapsed rail can pop out to full width
+   on hover (overlaying the board) without pushing board content. */
+.railSlot {
+  position: relative;
+  width: 240px;
+  min-width: 240px;
+  /* No explicit height — an explicit height:100% on a flex item with an
+     indefinite-height parent collapses to 0 and overrides align-items:stretch,
+     which would zero out the absolutely-positioned rail's hit area. Let the
+     parent's default stretch give the slot its full height instead. */
+  align-self: stretch;
+  flex-shrink: 0;
+  transition: width 0.2s ease, min-width 0.2s ease;
+}
+
+.railSlotCollapsed {
+  width: 52px;
+  min-width: 52px;
+}
+
+.rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  height: 100%;
+  background: var(--nav-background-color, var(--allgrey-background-color));
+  border-right: 1px solid var(--ui-border-color);
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.railCollapsed {
+  width: 52px;
+}
+
+/* Hover fly-out: the collapsed rail expands to full width as a floating overlay.
+   Defined after .railCollapsed so its width wins the cascade when both apply. */
+.railFlyout {
+  width: 240px;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+  z-index: 50;
+}
+
+/* Hamburger */
+.railToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+/* Workspace switcher */
+.switcher {
+  position: relative;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.switcherButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nav-header-text-color, #111111);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.switcherButton:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.switcherLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspaceInitial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* Switcher dropdown */
+.switcherMenu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 8px;
+  right: 8px;
+  background: var(--dialog-background-color);
+  border: 1px solid var(--ui-border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.switcherMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  color: var(--primary-text-color, var(--nav-primary-text-color, #111111));
+}
+
+.switcherMenuItem:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.switcherMenuItemActive {
+  font-weight: 600;
+  color: var(--primary-color, #0073ea);
+}
+
+/* Project context menu */
+
+.contextMenu {
+  background: var(--primary-background-color);
+  border: 1px solid var(--ui-border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.14);
+  min-width: 200px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.contextMenuHeader {
+  padding: 6px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nav-primary-text-color, #111111);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--ui-border-color);
+  margin-bottom: 4px;
+}
+
+.contextMenuSection {
+  padding: 4px 12px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nav-secondary-text-color, #444444);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.contextMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--nav-primary-text-color, #111111);
+  text-align: left;
+  border-radius: 4px;
+}
+
+.contextMenuItem:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.contextMenuItemCurrent {
+  color: var(--nav-secondary-text-color, #444444);
+  cursor: default;
+}
+
+.contextMenuInitial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.contextMenuCheck {
+  margin-left: auto;
+  color: var(--primary-color, #0073ea);
+  font-size: 12px;
+}
+
+.contextMenuFolderIcon {
+  font-size: 11px;
+  color: var(--nav-secondary-text-color, #444444);
+  flex-shrink: 0;
+}
+
+.contextMenuItemDisabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.contextMenuItemDanger:hover {
+  background: var(--negative-color-selected, #fff0f2) !important;
+  color: var(--negative-color, #e2445c) !important;
+}
+
+/* Folder header — split into toggle button + name button for double-click rename */
+
+.folderToggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.folderNameBtn {
+  flex: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  min-width: 0;
+}
+
+.folderRenameInput {
+  flex: 1;
+  padding: 2px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  min-width: 0;
+  background: var(--primary-background-color);
+  color: var(--nav-primary-text-color, #111111);
+}
+
+/* Add folder row */
+
+.addFolderBtn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--nav-secondary-text-color, #444444);
+  text-align: left;
+}
+
+.addFolderBtn:hover {
+  color: var(--primary-color, #0073ea);
+}
+
+.addFolderForm {
+  padding: 4px 12px;
+}
+
+.addFolderInput {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  background: var(--primary-background-color);
+  color: var(--nav-primary-text-color, #111111);
+}
+
+/* Empty workspace hint */
+
+.emptyWorkspaceHint {
+  padding: 12px 16px;
+  color: var(--nav-secondary-text-color, #444444);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.switcherDivider {
+  height: 1px;
+  background: var(--ui-border-color);
+  margin: 4px 0;
+}
+
+.switcherNewBtn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--primary-color, #0073ea);
+}
+
+.switcherNewBtn:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.switcherManageBtn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.switcherManageBtn:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.switcherCreateForm {
+  padding: 6px 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.switcherCreateInput {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+  background: var(--primary-background-color);
+  color: var(--nav-primary-text-color, #111111);
+}
+
+.switcherCreateSubmit {
+  padding: 5px 10px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.switcherCreateSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.workspaceInitialSmall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Tree body */
+.treeBody {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+
+.loaderWrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.onboardingBanner {
+  padding: 8px 8px 4px;
+}
+
+/* All tasks virtual row */
+.allTasksRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.allTasksRow:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.allTasksLabel {
+  color: var(--nav-header-text-color, #444444);
+  font-style: italic;
+}
+
+/* Folders */
+.folder {
+  margin-bottom: 2px;
+}
+
+.folderHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 8px 4px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.folderHeader:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.folderChevron {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--nav-secondary-text-color, #444444);
+}
+
+.folderName {
+  color: var(--nav-secondary-text-color, #444444);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.unassignedLabel {
+  padding: 4px 16px 2px;
+  color: var(--nav-secondary-text-color, #444444);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  display: block;
+}
+
+/* Drag-and-drop */
+
+.sortableRow {
+  touch-action: none;
+}
+
+.projectRowDragging {
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.12));
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: grabbing !important;
+}
+
+/* Project rows */
+.projectRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 12px 5px 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 0;
+}
+
+.projectRow:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.projectRowActive {
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+}
+
+.projectRowActive .projectName {
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}
+
+.inboxDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive-color, #00c875);
+  flex-shrink: 0;
+}
+
+.issueCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.projectName {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--nav-primary-text-color, #111111);
+  font-size: 13px;
+}
+
+.collapsedProjectInitial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.06));
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nav-primary-text-color, #111111);
+}
+
+.emptyHint {
+  padding: 8px;
+}
+
+/* Footer */
+.navFooter {
+  flex-shrink: 0;
+}
+
+.footerButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+}
+
+/* Cross-board drag target highlight — shown when an issue is being dragged from a board */
+.projectRowCrossBoardTarget {
+  outline: 2px dashed var(--primary-color, #0073ea);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.projectRowCrossBoardTarget:hover {
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.1));
+}

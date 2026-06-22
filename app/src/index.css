@@ -1,0 +1,11 @@
+/* Global reset only. All component styling uses Vibe tokens / CSS modules. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-family, 'Figtree', Roboto, sans-serif);
+}

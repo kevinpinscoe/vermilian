@@ -1,0 +1,67 @@
+%%{init: {'theme': 'default'}}%%
+%% =============================================================================
+%% UI Flow — Create Task (AI / natural language): describe → extract → review
+%% Renderer:    Kroki (mermaid)  |  wiki.js (Kroki plugin or native Mermaid module)
+%% Reviewed:    2026-05-29
+%% Spec:        spec/features/create-task-ai.md
+%% Related:     screen-create-task-ai.d2 (the two screens this flow connects)
+%%              screen-create-task.d2 (review form == standard create form)
+%%              ADR-0006 (default extract model: claude-haiku-4-5-20251001)
+%% What this depicts: the single-shot extraction journey and every branch —
+%% API failure, unparseable JSON, clarification_needed, project-not-matched,
+%% and the submit success/failure. The Claude call runs in the Electron MAIN
+%% process so the API key never reaches the renderer.
+%% =============================================================================
+
+flowchart TD
+
+    AIBTN(["AI create  (disabled if no Claude API key)"])
+    INPUT["Describe your task — modal"]
+    GEN(["Generate"])
+    CALL["Electron MAIN: Claude extract (Haiku 4.5) — key never in renderer"]
+
+    APIOK{"API call succeeded?"}
+    PARSE{"Response parses as JSON?"}
+    CLAR{"clarification_needed set?"}
+    HASSUM{"summary present?"}
+
+    REVIEW["Review form — pre-filled, editable"]
+    PROJ{"Extracted project matched?"}
+    PROJERR(["inline error: select a project"])
+    REDESC(["Re-describe"])
+    SUBMIT(["Create"])
+    POST["POST /api/issues  + Date.now() stamp"]
+    SUBOK{"Created?"}
+    BOARD["Board — new task prepended + positive Toast"]
+
+    BAPI(["Banner danger: network / quota / invalid key"])
+    BPARSE(["Banner danger: could not parse — rephrase"])
+    BCLAR(["Banner info: clarification text — refine"])
+    BSUB(["Banner danger in modal — retry, data intact"])
+
+    AIBTN --> INPUT
+    INPUT --> GEN
+    GEN --> CALL
+    CALL --> APIOK
+    APIOK -->|"no"| BAPI
+    BAPI --> INPUT
+    APIOK -->|"yes"| PARSE
+    PARSE -->|"no"| BPARSE
+    BPARSE --> INPUT
+    PARSE -->|"yes"| CLAR
+    CLAR -->|"yes"| BCLAR
+    BCLAR --> INPUT
+    CLAR -->|"no"| HASSUM
+    HASSUM -->|"no"| BPARSE
+    HASSUM -->|"yes"| REVIEW
+    REVIEW --> REDESC
+    REDESC --> INPUT
+    REVIEW --> PROJ
+    PROJ -->|"no"| PROJERR
+    PROJERR --> REVIEW
+    PROJ -->|"yes"| SUBMIT
+    SUBMIT --> POST
+    POST --> SUBOK
+    SUBOK -->|"yes"| BOARD
+    SUBOK -->|"no"| BSUB
+    BSUB --> REVIEW

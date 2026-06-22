@@ -1,0 +1,791 @@
+/* ProjectBoard — main content panel */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--board-background-color, var(--primary-background-color));
+}
+
+/* Board header */
+.boardHeader {
+  padding: 16px 24px 0;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.boardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.boardTitle {
+  font-size: 22px !important;
+}
+
+.inboxBadge {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--positive-color, #00c875);
+  flex-shrink: 0;
+}
+
+.viewTabs {
+  display: flex;
+  gap: 0;
+}
+
+.viewTab {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  margin-bottom: -1px;
+}
+
+.viewTabActive {
+  color: var(--primary-color, #0073ea);
+  border-bottom-color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}
+
+
+/* New task button — plain element, no Vibe variable inheritance */
+.newTaskBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  background: #ff9900;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.newTaskBtn:hover {
+  background: #e68a00;
+}
+.newTaskBtn:active {
+  background: #cc7a00;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+/* Hide/show closed toggle */
+
+.closedToggle {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--primary-background-color);
+  color: var(--secondary-text-color, #444444);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.closedToggle:hover {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+
+.closedToggleActive {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}
+
+/* Group-by selector */
+
+.groupByWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.groupByLabel {
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+  white-space: nowrap;
+}
+
+.groupBySelect {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color, #111111);
+  cursor: pointer;
+  outline: none;
+}
+
+.groupBySelect:focus {
+  border-color: var(--primary-color, #0073ea);
+}
+
+/* Add task row (table view) */
+
+.addTaskRow td {
+  padding: 0;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.addTaskButton {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--secondary-text-color, #444444);
+  text-align: left;
+}
+
+.addTaskButton:hover {
+  color: var(--primary-color, #0073ea);
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.02));
+}
+
+.addTaskEditCell {
+  padding: 8px 16px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.addTaskInput {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  max-width: 320px;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color, #111111);
+}
+
+.addTaskSubmit {
+  padding: 5px 12px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.addTaskCancel {
+  padding: 5px 8px;
+  background: none;
+  color: var(--secondary-text-color, #444444);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.addTaskCancel:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+/* Filter bar */
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--secondary-background-color);
+  flex-shrink: 0;
+}
+
+.filterSection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #444444);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.filterPill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.12s, opacity 0.12s;
+  font-family: inherit;
+  line-height: 18px;
+}
+
+.filterPill:hover {
+  filter: brightness(0.9);
+}
+
+.filterPillActive {
+  border-color: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.filterPillDim {
+  opacity: 0.45;
+}
+
+.filterSep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color, #e0e0e0);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.filterClear {
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--secondary-text-color, #444444);
+  font-family: inherit;
+  margin-left: 4px;
+}
+
+.filterClear:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+  border-color: var(--secondary-text-color, #444444);
+}
+
+.filterSearch {
+  flex: 0 1 220px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  outline: none;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #111111);
+  font-family: inherit;
+}
+
+.filterSearch:focus {
+  border-color: var(--primary-color, #0073ea);
+}
+
+/* Sort menu */
+.sortWrap {
+  position: relative;
+}
+
+.sortMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+}
+
+.sortMenuRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+}
+
+.sortMenuLabel {
+  flex: 1;
+  font-size: 13px;
+  color: var(--primary-text-color, #111111);
+}
+
+.sortDirBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color, #e0e0e0);
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+}
+
+.sortDirBtn:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.sortDirActive {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.sortClear {
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 6px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  color: var(--primary-color, #0073ea);
+  font-family: inherit;
+}
+
+.sortClear:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.filteredEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 24px;
+}
+
+/* Loader / error */
+.loaderWrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 64px;
+  flex: 1;
+}
+
+.errorWrap {
+  padding: 16px 24px;
+}
+
+.emptyState {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 64px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+/* Table */
+.tableWrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.headerRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--board-background-color, var(--primary-background-color));
+}
+
+.th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  white-space: nowrap;
+}
+
+.thTask {
+  width: 40%;
+}
+
+.thSortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.thSortable:hover {
+  color: var(--primary-color, #0073ea);
+}
+
+.sortIcon {
+  font-size: 10px;
+  color: var(--secondary-text-color, #888);
+  margin-left: 2px;
+}
+
+/* Group header */
+.groupHeaderRow td {
+  padding: 0;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.groupHeaderRowDropTarget td {
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.06));
+}
+
+.groupHeaderButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--secondary-background-color);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.groupHeaderButton:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+/* Drop indicator — 2 px Vibe-tokened line */
+.dropIndicatorRow td {
+  padding: 0 !important;
+  height: 2px;
+  border: none;
+}
+
+.dropIndicatorLine {
+  height: 2px;
+  background: var(--primary-color, #0073ea);
+  border-radius: 1px;
+}
+
+.groupDot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.groupCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--border-color, #e0e0e0);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  margin-left: 4px;
+}
+
+/* Drag handle (appears on row hover) */
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 20px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s;
+  color: var(--secondary-text-color, #888);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandleVisible {
+  opacity: 1;
+}
+
+/* Drag overlay card */
+.dragOverlayCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--primary-background-color);
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  max-width: 360px;
+  pointer-events: none;
+}
+
+.dragOverlayId {
+  font-size: 11px;
+  color: var(--secondary-text-color, #888);
+  flex-shrink: 0;
+}
+
+.dragOverlayText {
+  font-size: 13px;
+  color: var(--primary-text-color, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Issue row */
+.issueRow {
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.issueRow:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.02));
+}
+
+.cell {
+  padding: 8px 12px;
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+.cellTask {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.issueId {
+  font-size: 11px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.issueSummary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+}
+
+/* Chip */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.emptyCell {
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  font-size: 13px;
+}
+
+.dateCell {
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  white-space: nowrap;
+}
+
+.link {
+  color: var(--primary-color, #0073ea);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* Inline editing */
+.cellEditable {
+  cursor: text;
+  border-radius: 3px;
+  transition: background 0.1s;
+  display: inline-block;
+  min-width: 1em;
+}
+
+.cellEditable:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.06));
+}
+
+.inlineInput {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color, #111111);
+}
+
+.summaryInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.inlineDateInput {
+  padding: 1px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color, #111111);
+  width: 130px;
+}
+
+/* Timer — play button (hover reveal) and active badge */
+.playBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.playBtnVisible {
+  opacity: 1;
+}
+
+.playBtn:hover {
+  background: var(--primary-selected-color, #e6f0ff);
+  color: var(--primary-color, #0073ea);
+}
+
+.timerBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--positive-color, #258750);
+  background: var(--positive-color-selected, #e6f9ef);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.notesCell {
+  font-size: 13px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  display: block;
+}
+
+/* Column drag handle (inside th) */
+.colDragHandle {
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s;
+  color: var(--secondary-text-color, #888);
+  font-size: 11px;
+  margin-right: 4px;
+  vertical-align: middle;
+  user-select: none;
+  touch-action: none;
+}
+
+.th:hover .colDragHandle {
+  opacity: 1;
+}
+
+.colDragHandle:active {
+  cursor: grabbing;
+}
+
+/* Vertical drop indicator on column headers */
+.thDropLeft {
+  border-left: 2px solid var(--primary-color, #0073ea);
+}
+
+.thDropRight {
+  border-right: 2px solid var(--primary-color, #0073ea);
+}
+
+/* Column resize handle — right edge of th */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--primary-color, #0073ea);
+  opacity: 0.4;
+}

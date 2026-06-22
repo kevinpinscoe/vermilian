@@ -1,0 +1,102 @@
+/* FocusOverlay — dim layer + centered timer card */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: all;
+}
+
+.card {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: all;
+}
+
+.taskId {
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: 12px !important;
+  letter-spacing: 0.5px;
+}
+
+.summary {
+  color: #fff !important;
+  text-align: center;
+  font-size: 15px !important;
+  line-height: 1.4;
+}
+
+.ringWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0;
+  width: 120px;
+  height: 120px;
+}
+
+.ringBg {
+  position: absolute;
+  inset: 0;
+}
+
+.timeDisplay {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 1;
+}
+
+.elapsed {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  line-height: 1;
+}
+
+.pausedBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.phaseLabel {
+  color: rgba(255, 255, 255, 0.8) !important;
+  font-size: 13px !important;
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.actionBtn {
+  /* Override Vibe button colours to work on the blue card */
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.actionBtn:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+}

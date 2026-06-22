@@ -1,0 +1,107 @@
+# =============================================================================
+# UI Wireframe — Project Board (Main table view, group-by Status)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-27
+# Spec:        spec/features/project-board.md
+# Inspiration: /home/acst/monday-screenshot.png (Kevin's Work Board — monday.com)
+# Related:     screen-workspace-navigation.d2 (left-rail detail)
+#              screen-board-settings.d2, screen-columns-panel.d2 (toolbar panels)
+#              screen-task-detail.d2 (row click), screen-create-task.d2 (+ New task)
+#              screen-timer-focus.d2 (▶ quick-start timer)
+#              (Navigation between screens is captured by the Mermaid flow files,
+#              not here — this file is layout-only.)
+#
+# What this depicts: the default board view (Main table, Group by Status) with
+# the left rail collapsed to its top-level regions. The Kanban (Board) view is
+# the same chrome with the table region replaced by a column-per-status layout;
+# not drawn separately.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+window: "Vermilian — Kevin's Work Board (left rail on the LEFT in actual layout; D2 stacks them for wireframe clarity)" {
+  shape: rectangle
+
+  # ---------------------------------------------------------------------------
+  # Left rail — full detail lives in screen-workspace-navigation.d2
+  # ---------------------------------------------------------------------------
+  left_rail: "Left rail" {
+    shape: rectangle
+    direction: down
+    # Vibe: Menu / NavigationBar
+    ws: "Workspace switcher ▾" {shape: rectangle}
+    tree: "Folder tree\n(projects — also drop target\nfor cross-board move)" {shape: rectangle}
+  }
+
+  # ---------------------------------------------------------------------------
+  # Main content
+  # ---------------------------------------------------------------------------
+  main: "Main content area" {
+    shape: rectangle
+    direction: down
+
+    header: "📥  Kevin's Work Board" {
+      shape: rectangle
+      # Vibe: Heading. Inbox icon shown when project name contains 'Inbox'.
+    }
+
+    view_tabs: "View tabs:  [ Main table* ]  [ Board ]  [ + ]" {
+      shape: rectangle
+      # Vibe: TabList — active view persisted per-board in _vermilian-config
+    }
+
+    toolbar: "Toolbar" {
+      shape: rectangle
+      direction: right
+      # Vibe: Button (primary), IconButton, MenuButton
+      new_task: "+ New task" {shape: oval}
+      controls: "Search  Person  Filter  Sort  Hide  Group by ▾  …" {shape: rectangle}
+    }
+
+    filter_bar: "Filter bar — visible only when Filter is active\n(dismissible chips + Clear all)" {
+      shape: rectangle
+      # Vibe: Chip
+    }
+
+    table: "Main table — sticky header row" {
+      shape: rectangle
+      direction: down
+      # Vibe: Table
+      col_headers: "Task | Ticket Num | Status | Category | Priority | Ticket link | Tracking link | Due Date" {shape: rectangle}
+
+      group_inbox: "▾  INBOX   (3)" {
+        shape: rectangle
+        direction: down
+        # Vibe: coloured group header, chevron, count badge
+        row1: "Task row — chips, ▶ quick-start on hover" {shape: rectangle}
+        row2: "Task row" {shape: rectangle}
+        add_inbox: "+ Add task  (inline)        Open full form ↗" {shape: rectangle}
+      }
+
+      group_inprog: "▾  TO DO / IN PROGRESS   (12)" {
+        shape: rectangle
+        direction: down
+        rows: "Task rows\n(drag to reorder; drag between groups updates Status)" {shape: rectangle}
+        add_inprog: "+ Add task        Open full form ↗" {shape: rectangle}
+      }
+
+      group_done: "▸  DONE   (47)  — collapsed by default" {
+        shape: rectangle
+      }
+    }
+
+    empty_state: "Empty state (mutually exclusive with table):\n'No tasks in this project yet.'  |  'No tasks match your filters.'" {
+      shape: rectangle
+    }
+
+    error_banner: "Vibe Banner (danger) — shown on fetch failure with Retry" {
+      shape: rectangle
+    }
+  }
+}

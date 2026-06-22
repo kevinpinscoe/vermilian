@@ -1,0 +1,102 @@
+.view {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll {
+  flex: 1;
+  padding: 24px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  margin-bottom: 8px;
+}
+
+.card {
+  border: 1px solid var(--ui-border-color);
+  border-radius: var(--border-radius-medium, 8px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: var(--primary-background-color);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--ui-border-color);
+  background-color: var(--primary-background-color);
+}
+
+.footerActions {
+  display: flex;
+  gap: 12px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.hint {
+  font-size: 12px !important;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444)) !important;
+}
+
+.hint code {
+  background: var(--surface-app-background-color, #f6f7fb);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.confirmText {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--primary-text-color, #111111);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

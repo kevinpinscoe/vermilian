@@ -1,0 +1,70 @@
+# =============================================================================
+# UI Wireframe — Task Timer: Break banner (interactive break state)
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-05-29
+# Spec:        spec/features/task-timer.md
+# Inspiration: /home/acst/monday-screenshot.png (board chrome shown interactive behind banner)
+# Related:     screen-timer-focus.d2 (the work-block focus card this alternates with)
+#              flow-timer-quit-dialog.mmd (quit protection — runs during break too)
+#              screen-settings.d2 (short/long break durations + long-break frequency)
+#
+# What this depicts: the Pomodoro BREAK state. Focus mode is DEACTIVATED — no dim
+# overlay, the app is fully interactive (user may browse other tasks). A slim
+# persistent banner pinned to the top of the window shows remaining break time +
+# Skip break. Drawn alongside: short vs long break variants, the OS notifications
+# at each transition, and the break-end re-engage of focus mode.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: down
+
+window: "Vermilian window — INTERACTIVE during break (no dim overlay)" {
+  shape: rectangle
+  direction: down
+
+  break_banner: "☕  Short break — 04:12 remaining        Skip break" {
+    shape: rectangle
+    # Slim Vibe Banner pinned to top of window. Persistent for the whole break.
+    # Live countdown; “Skip break” jumps straight to the next work block.
+  }
+
+  app_body: "Left rail + project board — fully clickable\n(browse/edit other tasks while on break)" {
+    shape: rectangle
+    direction: right
+    rail: "Left rail" {shape: rectangle}
+    board: "Project board\n(timed task's row still shows its ▶ badge)" {shape: rectangle}
+  }
+}
+
+# --- Long-break variant (every 4 work blocks) ---
+long_break: "Long-break variant" {
+  shape: rectangle
+  direction: down
+  banner: "🛋  Long break — 13:40 remaining        Skip break" {shape: rectangle}
+  note: "Replaces the short break after every 4 work blocks (configurable)" {shape: rectangle}
+}
+
+# --- OS notifications at transitions ---
+notifications: "OS notifications (native, outside the window)" {
+  shape: rectangle
+  direction: down
+  block_done: "🔔  Pomodoro complete — take a 5-minute break\n(+ soft sound; configurable to silent)" {shape: rectangle}
+  break_done: "🔔  Break complete — starting next 25-minute block on ‘<task>’" {shape: rectangle}
+}
+
+# --- Break-end transition back to focus ---
+reengage: "Break timer hits 0:00" {
+  shape: rectangle
+  direction: down
+  step: "→ break_done notification fires\n→ dim overlay RE-ENGAGES\n→ next work block starts automatically (see screen-timer-focus.d2)" {shape: rectangle}
+}
+
+# --- Navigation / lifecycle (annotation only) ---
+notifications.block_done -> window: "work block ends → break banner shown"
+window.break_banner -> reengage: "countdown → 0:00"
+reengage -> notifications.break_done: "fires"
