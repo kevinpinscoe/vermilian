@@ -6,7 +6,16 @@ An Electron desktop application that provides an enhanced frontend for a self-ho
 
 ## Status
 
-**Phase 2** — feature code in progress. Phase 1 SDD design is complete (feature specs, ADRs, wireframes, and the component architecture diagram). Phase 2 increment 1 (Foundation + Settings) is shipped: the renderer ↔ preload ↔ main IPC bridge, TanStack Query + Zustand wiring, `safeStorage`-backed credential storage with the Linux fail-closed check, the YouTrack and Claude clients used by Settings, and the full first-run Settings view.
+**Early development — not yet released.** Vermilian is in active development and is not yet
+feature-complete or packaged for general use. Expect rough edges and breaking changes; there are
+no published releases yet.
+
+- **Design:** complete — feature specs, Architecture Decision Records (ADRs), wireframes, and the
+  component architecture are in place.
+- **Implemented so far:** the app shell and process architecture (main / preload / renderer with a
+  secure IPC bridge), encrypted local credential storage, the YouTrack REST client, and the
+  first-run settings and connection flow.
+- **In progress:** the task and project board views that make up the core day-to-day interface.
 
 ## What it is
 
