@@ -26,45 +26,68 @@ Vermilian is a cross-platform desktop app that connects to your self-hosted YouT
 
 ## Installation
 
-Builds are published to [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and to package managers. Linux ships as an AppImage (one self-contained file, any modern x86_64 distribution).
+Each release is published to [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases)
+and to a package manager per platform. Pick your platform below.
 
 ### Linux — AppImage
 
-Download `Vermilian-*-x86_64.AppImage` from the latest release, then:
+Download `Vermilian-*-x86_64.AppImage` from the [latest release](https://github.com/kevinpinscoe/vermilian/releases/latest), then:
 
 ```bash
 chmod +x Vermilian-*-x86_64.AppImage
 ./Vermilian-*-x86_64.AppImage
 ```
 
-For a desktop menu entry, use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher).
+An AppImage is one self-contained file that runs on any modern x86_64 distribution — no install
+step. For a desktop menu entry, use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher).
 
-### macOS — Homebrew Cask or .dmg
+> **Raspberry Pi (arm64):** the x86_64 AppImage will not run on a Pi. Build a native arm64 AppImage
+> on a 64-bit Pi yourself — see [Target platforms](#target-platforms).
+
+### macOS — Homebrew Cask
+
+Requires [Homebrew](https://brew.sh). Add the tap once, then install the Cask:
 
 ```bash
-brew install --cask kevinpinscoe/tap/vermilian
+brew tap kevinpinscoe/tap                 # add the tap (one time)
+brew install --cask vermilian             # install Vermilian.app into /Applications
+
+# later:
+brew upgrade --cask vermilian             # update to the newest release
+brew uninstall --cask vermilian           # remove
 ```
 
-Or download the universal `.dmg` (Intel + Apple Silicon) from the release and drag **Vermilian** to Applications.
+The tap + Cask in one line also works: `brew install --cask kevinpinscoe/tap/vermilian`.
 
-> **Unsigned build:** Vermilian is not yet notarized with an Apple Developer ID, so Gatekeeper reports that the app "cannot be opened." The Homebrew Cask clears the quarantine flag for you. For the manual `.dmg`, run once:
+Prefer a manual install? Download the universal `.dmg` (Intel + Apple Silicon) from the release and
+drag **Vermilian** to Applications.
+
+> **Unsigned build:** Vermilian is not yet notarized with an Apple Developer ID, so Gatekeeper
+> reports that the app "cannot be opened" or "is damaged." The Homebrew Cask clears the quarantine
+> flag for you automatically. For the manual `.dmg`, run this once after dragging it in:
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Vermilian.app
 > ```
 
-### Windows — Scoop or installer
+### Windows — Scoop
+
+Requires [Scoop](https://scoop.sh). Add the bucket once, then install:
 
 ```powershell
-scoop bucket add kevinpinscoe https://github.com/kevinpinscoe/scoop-bucket
-scoop install vermilian
+scoop bucket add kevinpinscoe https://github.com/kevinpinscoe/scoop-bucket   # add the bucket (one time)
+scoop install vermilian                                                       # install
+
+# later:
+scoop update vermilian                                                        # update to the newest release
+scoop uninstall vermilian                                                     # remove
 ```
 
-Or download and run the Squirrel `Vermilian-*Setup.exe` from the release.
+Prefer a manual install? Download and run the Squirrel `Vermilian-*Setup.exe` from the release.
 
 ## Highlights
 
-These are the features that shape Vermilian. They are built and working; the app is functionally
-feature-complete against its spec and now in testing (see [Status](#status)):
+These are the features that shape Vermilian. They are built and working; the app is feature-complete
+against its spec and shipping as of v1.0.0 (see [Status](#status)):
 
 - **Pomodoro focus timer** — a single-task focus tool built around ADHD work patterns. Running
   a timer puts the app into a focus mode; stopping it logs the elapsed minutes as a YouTrack
