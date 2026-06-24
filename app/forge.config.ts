@@ -1,8 +1,9 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { MakerDeb } from '@electron-forge/maker-deb';
-import { MakerRpm } from '@electron-forge/maker-rpm';
+import { MakerDMG } from '@electron-forge/maker-dmg';
+import { MakerAppImage } from '@reforged/maker-appimage';
+import { PublisherGithub } from '@electron-forge/publisher-github';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -14,10 +15,31 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
+    // Windows: Squirrel auto-installer (.exe) for direct download,
+    // plus a portable .zip consumed by the Scoop manifest.
     new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
-    new MakerRpm({ options: { icon: './build/icon.png' } }),
-    new MakerDeb({ options: { icon: './build/icon.png' } }),
+    new MakerZIP({}, ['win32']),
+    // macOS: .dmg disk image — the installer, served direct and via Homebrew Cask.
+    new MakerDMG({ icon: './build/icon.icns' }, ['darwin']),
+    // Linux: AppImage only — one self-contained file, every distro, no repo index.
+    new MakerAppImage(
+      {
+        options: {
+          icon: './build/icon.png',
+          categories: ['Office', 'ProjectManagement'],
+        },
+      },
+      ['linux'],
+    ),
+  ],
+  publishers: [
+    new PublisherGithub({
+      repository: { owner: 'kevinpinscoe', name: 'vermilian' },
+      // Each OS runner uploads to the same draft release; the channels job
+      // flips it to published only after all platform builds succeed.
+      draft: true,
+      prerelease: false,
+    }),
   ],
   plugins: [
     new VitePlugin({

@@ -6,24 +6,60 @@ An Electron desktop application that provides an enhanced frontend for a self-ho
 
 ## Status
 
-**Functionally feature-complete against spec; in testing (early Phase 3).** Vermilian implements
-its core feature set and works end to end against a YouTrack instance. It is not yet a polished or
-released product — the remaining work is test coverage and polish, not core functionality, and
-there are no published releases yet.
+**v1.0.0 — first public release.** Vermilian is feature-complete against its specification and
+available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
+managers (see [Installation](#installation)).
 
 - **Built and working:** the monday.com-style task board (table + Kanban) with grouping, filtering,
   and sorting; the task detail panel with inline field editing; the full Pomodoro focus timer
   (state machine, focus-mode lock, quit protection, crash-recovery checkpointing, and an automatic
-  YouTrack worklog on stop); layered credential storage; and light/dark themes.
-- **Tested:** unit tests cover the core logic (including 28 for the timer state machine), alongside
-  a growing end-to-end (Playwright) suite over the board, detail panel, and settings.
-- **Remaining before release:** end-to-end coverage for the timer, AI, and stand-up flows; a few
-  empty states; a due-date range filter; search and person toolbar buttons; and a version-mismatch
-  banner.
+  YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage; and
+  light/dark themes.
+- **Tested:** unit tests cover the core logic (including 28 for the timer state machine), with an
+  end-to-end (Playwright) suite over the board, detail panel, settings, timer, AI, and stand-up
+  flows. Verified on Linux (Fedora 42); the macOS and Windows builds are published but less
+  extensively exercised.
 
 ## What it is
 
 Vermilian is a cross-platform desktop app that connects to your self-hosted YouTrack via its REST API and provides a focused, opinionated interface for daily task and project management. YouTrack is the backend and source of truth; Vermilian is the client.
+
+## Installation
+
+Builds are published to [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and to package managers. Linux ships as an AppImage (one self-contained file, any modern x86_64 distribution).
+
+### Linux — AppImage
+
+Download `Vermilian-*-x86_64.AppImage` from the latest release, then:
+
+```bash
+chmod +x Vermilian-*-x86_64.AppImage
+./Vermilian-*-x86_64.AppImage
+```
+
+For a desktop menu entry, use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher).
+
+### macOS — Homebrew Cask or .dmg
+
+```bash
+brew install --cask kevinpinscoe/tap/vermilian
+```
+
+Or download the universal `.dmg` (Intel + Apple Silicon) from the release and drag **Vermilian** to Applications.
+
+> **Unsigned build:** Vermilian is not yet notarized with an Apple Developer ID, so Gatekeeper reports that the app "cannot be opened." The Homebrew Cask clears the quarantine flag for you. For the manual `.dmg`, run once:
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Vermilian.app
+> ```
+
+### Windows — Scoop or installer
+
+```powershell
+scoop bucket add kevinpinscoe https://github.com/kevinpinscoe/scoop-bucket
+scoop install vermilian
+```
+
+Or download and run the Squirrel `Vermilian-*Setup.exe` from the release.
 
 ## Highlights
 
@@ -38,7 +74,9 @@ feature-complete against its spec and now in testing (see [Status](#status)):
   category chips, grouping, filtering, and sorting; table and Kanban views.
 - **Layered credential sources** — read your YouTrack token from a shell command (e.g. a secrets
   manager), a file path, or the OS keyring — whichever fits your setup.
-- **Cross-platform desktop** — Linux, macOS (Intel + Apple Silicon), Windows 11, and Raspberry Pi OS.
+- **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (universal `.dmg`, Intel + Apple
+  Silicon), and Windows. A Raspberry Pi / arm64 AppImage can be built from source (see
+  [Target platforms](#target-platforms)).
 
 ## Screenshots
 
@@ -66,12 +104,23 @@ feature-complete against its spec and now in testing (see [Status](#status)):
 
 ## Target platforms
 
-| Platform | Architecture |
-|---|---|
-| Linux (Fedora / Ubuntu) | x86_64 |
-| macOS | x86_64 + ARM (Apple Silicon) |
-| Windows 11 | x86_64 |
-| Raspberry Pi OS | ARM64 |
+| Platform | Artifact | Architecture | v1.0.0 |
+|---|---|---|---|
+| Linux (Fedora / Ubuntu) | AppImage | x86_64 | published |
+| macOS | `.dmg` (universal) | x86_64 + Apple Silicon | published |
+| Windows 11 | Squirrel installer + Scoop | x86_64 | published |
+| Raspberry Pi OS | AppImage | arm64 (64-bit only) | build from source |
+
+A Raspberry Pi (arm64) AppImage is not yet produced by CI. Build it natively on a 64-bit Pi:
+
+```bash
+cd app
+mise install && corepack enable pnpm
+pnpm install
+pnpm make            # → app/out/make/Vermilian-<ver>-arm64.AppImage
+```
+
+Automated arm64 builds (via a `ubuntu-24.04-arm` CI runner) are planned for a follow-up release.
 
 ## Tech stack
 
@@ -233,8 +282,8 @@ packagerConfig: {
   icon: './build/icon',   // no extension — forge picks the right format per platform
 },
 // ...
-new MakerDeb({ options: { icon: './build/icon.png' } }),
-new MakerRpm({ options: { icon: './build/icon.png' } }),
+new MakerDMG({ icon: './build/icon.icns' }, ['darwin']),
+new MakerAppImage({ options: { icon: './build/icon.png' } }, ['linux']),
 ```
 
 **3.** Set the runtime window icon in `app/src/main/window.ts` (shown in the taskbar/dock while the app is running, independently of the packaged installer icon):

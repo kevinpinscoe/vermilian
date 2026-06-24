@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | **Owner** | Kevin P. Inscoe |
-| **Last Updated** | 2026-05-22 |
+| **Last Updated** | 2026-06-24 |
 | **Last Tested** | 2026-05-22 |
 | **Expected Duration** | 2–5 min (first run); 15–30 s (subsequent runs) |
 | **Risk Level** | Low |
@@ -88,7 +88,9 @@ cd ~/Projects/private/vermilian/app
 pnpm make
 ```
 
-Output artifacts land in `app/out/make/`. On Fedora: `.deb` and `.rpm`.
+Output artifacts land in `app/out/make/`. On Fedora the maker produces an `.AppImage`
+(Linux ships AppImage only — see [Release process](#release-process)). On macOS it
+produces a `.dmg`; on Windows, a Squirrel `Setup.exe` plus a portable `.zip`.
 
 ---
 
@@ -130,6 +132,47 @@ pnpm start
 ```
 
 **Success criteria:** Electron window opens with "Vermilian — YouTrack desktop client" text; no errors in the DevTools console; Vite HMR active (editing `src/App.tsx` reloads the window without restart).
+
+---
+
+## Release process
+
+Releases are tag-driven. Pushing a signed `vMAJOR.MINOR.PATCH` tag triggers
+`.github/workflows/release.yml`, which:
+
+1. Builds the native artifact on each OS (matrix): Linux AppImage, universal macOS
+   `.dmg`, Windows Squirrel installer + portable `.zip`.
+2. Uploads them all to a single **draft** GitHub Release (electron-forge GitHub publisher).
+3. The `channels` job promotes the draft to published, then commits an updated
+   Homebrew **Cask** to `kevinpinscoe/homebrew-tap` and a **Scoop** manifest to
+   `kevinpinscoe/scoop-bucket`, both pointing at the new release assets.
+
+Linux ships AppImage only — `.deb`/`.rpm` are intentionally not produced, because the
+`apt`/`rpm` index repos store package files in git and ~100 MB Electron packages would
+bloat them. The macOS `.dmg` is unsigned (no Apple Developer ID); the Cask clears the
+Gatekeeper quarantine flag on install.
+
+### Required repo secrets
+
+| Secret | Purpose |
+|---|---|
+| `HOMEBREW_TAP_TOKEN` | Push the Cask commit to `homebrew-tap` |
+| `SCOOP_BUCKET_TOKEN` | Push the manifest commit to `scoop-bucket` |
+| `GITHUB_TOKEN` | Auto-injected; creates the release |
+
+### Cut a release
+
+```bash
+# 1. Bump app/package.json "version" to the new MAJOR.MINOR.PATCH
+# 2. Update CHANGELOG.md
+# 3. Commit (signed), then create and push a signed tag:
+git tag -s vX.Y.Z -m "Release vX.Y.Z"
+git push origin main
+git push origin vX.Y.Z          # this push triggers the release workflow
+```
+
+Verify the signed tag with `git tag -v vX.Y.Z`. Watch the run with
+`gh run watch --repo kevinpinscoe/vermilian`.
 
 ---
 

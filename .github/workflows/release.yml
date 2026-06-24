@@ -1,0 +1,178 @@
+name: Release
+
+# Triggered by a signed vMAJOR.MINOR.PATCH tag. Builds the native artifact on
+# each OS, uploads them all to a single DRAFT GitHub Release, then the `channels`
+# job publishes the release and updates the Homebrew Cask + Scoop manifest.
+#
+# Linux ships AppImage only (no .deb/.rpm — the apt/rpm index repos store package
+# files in git and an ~100 MB Electron package would bloat them). macOS ships an
+# unsigned .dmg (see README for the Gatekeeper workaround). Windows ships a
+# Squirrel installer plus a portable .zip for Scoop.
+#
+# NOTE: action refs below can be pinned to commit SHAs per the outside-repo
+# directive; tags are used here for readability.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & publish (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pinned runner images for reproducible release builds (avoid -latest drift):
+        #   ubuntu-24.04  -> Linux x86_64 AppImage
+        #   macos-14      -> Apple Silicon host; builds the universal .dmg (Intel + ARM)
+        #   windows-2022  -> Windows x86_64 Squirrel installer + portable .zip
+        # arm64 / Raspberry Pi (ubuntu-24.04-arm) is intentionally omitted until a
+        # native Pi build is verified — see README "Target platforms".
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # AppImage tooling (appimagetool) needs FUSE 2 on the Linux runner.
+      - name: Install AppImage build deps (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # macOS: build a single universal .dmg (Intel + Apple Silicon) so one
+      # artifact serves both architectures and the Cask needs one url/hash.
+      - name: Make & publish to draft release (universal macOS)
+        if: runner.os == 'macOS'
+        run: pnpm exec electron-forge publish --arch=universal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Make & publish to draft release
+        if: runner.os != 'macOS'
+        run: pnpm run publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  channels:
+    name: Publish release & update channels
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Promote draft release to published
+        run: gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+
+      - name: Download macOS + Windows artifacts
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --repo "$REPO" --dir dist \
+            --pattern '*.dmg' --pattern '*win32*.zip'
+          ls -la dist
+
+      - name: Compute version, asset names, and checksums
+        id: meta
+        run: |
+          VERSION="${TAG#v}"
+          DMG=$(cd dist && ls *.dmg | head -1)
+          WINZIP=$(cd dist && ls *win32*.zip | head -1)
+          DMG_SHA=$(sha256sum "dist/$DMG" | awk '{print $1}')
+          WIN_SHA=$(sha256sum "dist/$WINZIP" | awk '{print $1}')
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+          {
+            echo "version=$VERSION"
+            echo "dmg_url=$BASE/$DMG"
+            echo "dmg_sha=$DMG_SHA"
+            echo "win_url=$BASE/$WINZIP"
+            echo "win_sha=$WIN_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      # --- Homebrew Cask -------------------------------------------------------
+      - name: Update Homebrew tap (Cask)
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/kevinpinscoe/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          cat > tap/Casks/vermilian.rb <<EOF
+          cask "vermilian" do
+            version "${{ steps.meta.outputs.version }}"
+            sha256 "${{ steps.meta.outputs.dmg_sha }}"
+
+            url "${{ steps.meta.outputs.dmg_url }}"
+            name "Vermilian"
+            desc "monday.com-style desktop client for self-hosted JetBrains YouTrack"
+            homepage "https://github.com/kevinpinscoe/vermilian"
+
+            # Unsigned build — remove the quarantine attribute so Gatekeeper allows launch.
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/Vermilian.app"],
+                             sudo: false
+            end
+
+            app "Vermilian.app"
+
+            zap trash: [
+              "~/Library/Application Support/Vermilian",
+              "~/Library/Preferences/com.electron.vermilian.plist",
+              "~/Library/Saved Application State/com.electron.vermilian.savedState",
+            ]
+          end
+          EOF
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/vermilian.rb
+          git diff --cached --quiet || git commit -m "vermilian ${TAG}"
+          git push
+
+      # --- Scoop bucket --------------------------------------------------------
+      - name: Update Scoop bucket (manifest)
+        env:
+          SCOOP_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${SCOOP_TOKEN}@github.com/kevinpinscoe/scoop-bucket.git" bucket-repo
+          mkdir -p bucket-repo/bucket
+          cat > bucket-repo/bucket/vermilian.json <<EOF
+          {
+            "version": "${{ steps.meta.outputs.version }}",
+            "architecture": {
+              "64bit": {
+                "url": "${{ steps.meta.outputs.win_url }}",
+                "hash": "${{ steps.meta.outputs.win_sha }}",
+                "bin": "Vermilian.exe",
+                "shortcuts": [["Vermilian.exe", "Vermilian"]]
+              }
+            },
+            "homepage": "https://github.com/kevinpinscoe/vermilian",
+            "license": "GPL-3.0-or-later",
+            "description": "monday.com-style desktop client for self-hosted JetBrains YouTrack"
+          }
+          EOF
+          cd bucket-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/vermilian.json
+          git diff --cached --quiet || git commit -m "vermilian ${TAG}"
+          git push
