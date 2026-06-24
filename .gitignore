@@ -1,6 +1,7 @@
 # Playwright
 playwright-report/
 test-results/
+.shots/
 
 # Node / Electron / pnpm
 node_modules/
