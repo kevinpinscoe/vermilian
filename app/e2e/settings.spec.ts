@@ -44,6 +44,20 @@ test.describe('Settings view', () => {
     await expect(page.locator('[data-testid="nav-project"]').first()).toBeVisible();
   });
 
+  test('Save persists a changed setting and returns to the board', async () => {
+    await openSettings(page);
+    await page.getByPlaceholder('your.login').fill('e2e-user');
+    await page.locator('[data-testid="settings-save-btn"]').click();
+
+    // Save closes the view back to the board.
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeHidden();
+    await expect(page.locator('[data-testid="nav-project"]').first()).toBeVisible();
+
+    // Reopening shows the persisted value (writeConfig round-trips in E2E).
+    await openSettings(page);
+    await expect(page.getByPlaceholder('your.login')).toHaveValue('e2e-user');
+  });
+
   test('typing a credential then Cancel prompts to discard', async () => {
     await openSettings(page);
     await page.getByPlaceholder(TOKEN_FIELD).fill('new-secret-token');

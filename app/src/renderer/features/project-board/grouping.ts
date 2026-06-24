@@ -57,18 +57,54 @@ export function getGroupColorMap(groupBy: string, colors: EffectiveColors): Reco
 
 // ─── Filtering ────────────────────────────────────────────────────────────────
 
+export type DueDateMode = 'any' | 'before' | 'on' | 'after' | 'range';
+
 export interface FilterState {
   status: string[];
   priority: string[];
   category: string[];
   search: string; // free text over summary + idReadable
+  dueMode: DueDateMode;
+  dueFrom: string | null; // 'YYYY-MM-DD' — anchor for before/on/after, lower bound for range
+  dueTo: string | null;   // 'YYYY-MM-DD' — upper bound for range
 }
 
-export const EMPTY_FILTER: FilterState = { status: [], priority: [], category: [], search: '' };
+export const EMPTY_FILTER: FilterState = {
+  status: [], priority: [], category: [], search: '',
+  dueMode: 'any', dueFrom: null, dueTo: null,
+};
 
 export function filterCount(filter: FilterState): number {
   return filter.status.length + filter.priority.length + filter.category.length +
-    (filter.search.trim() ? 1 : 0);
+    (filter.search.trim() ? 1 : 0) +
+    (filter.dueMode !== 'any' ? 1 : 0);
+}
+
+// Local calendar day of an epoch-ms timestamp as 'YYYY-MM-DD'. Lexicographic
+// comparison of these strings matches chronological order, and using local
+// components keeps it consistent with how due dates are stored (local midnight).
+function epochToDayStr(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function matchesDue(dueDate: number | null, filter: FilterState): boolean {
+  if (filter.dueMode === 'any') return true;
+  if (dueDate == null) return false; // an active due filter excludes undated issues
+  const day = epochToDayStr(dueDate);
+  switch (filter.dueMode) {
+    case 'before': return filter.dueFrom != null && day < filter.dueFrom;
+    case 'on':     return filter.dueFrom != null && day === filter.dueFrom;
+    case 'after':  return filter.dueFrom != null && day > filter.dueFrom;
+    case 'range':
+      if (filter.dueFrom != null && day < filter.dueFrom) return false;
+      if (filter.dueTo != null && day > filter.dueTo) return false;
+      return filter.dueFrom != null || filter.dueTo != null;
+    default: return true;
+  }
 }
 
 export function applyFilter(issues: BoardIssue[], filter: FilterState): BoardIssue[] {
@@ -78,6 +114,7 @@ export function applyFilter(issues: BoardIssue[], filter: FilterState): BoardIss
     if (filter.priority.length > 0 && !filter.priority.includes(issue.fields.priority ?? '')) return false;
     if (filter.category.length > 0 && !filter.category.includes(issue.fields.category ?? '')) return false;
     if (q && !issue.summary.toLowerCase().includes(q) && !issue.idReadable.toLowerCase().includes(q)) return false;
+    if (!matchesDue(issue.fields.dueDate, filter)) return false;
     return true;
   });
 }

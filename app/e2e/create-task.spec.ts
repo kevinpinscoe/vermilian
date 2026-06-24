@@ -54,6 +54,22 @@ test.describe('Create-task modal', () => {
     await expect(todo.getByText('Created via the modal')).toBeVisible();
   });
 
+  test('an invalid Ticket link blocks Create and shows an error', async () => {
+    await page.locator('[data-testid="new-task-btn"]').click();
+    await page.locator(SUMMARY).fill('Task with a bad link');
+    await expect(page.locator(CREATE)).toBeEnabled();
+
+    // A non-URL value surfaces the error and disables Create.
+    await page.locator('#ct-ticket-link').fill('not-a-url');
+    await expect(page.getByText('Must be a valid URL.')).toBeVisible();
+    await expect(page.locator(CREATE)).toBeDisabled();
+
+    // A proper URL clears the error and re-enables Create.
+    await page.locator('#ct-ticket-link').fill('https://example.com/x');
+    await expect(page.getByText('Must be a valid URL.')).toBeHidden();
+    await expect(page.locator(CREATE)).toBeEnabled();
+  });
+
   test('Escape dismisses the modal without creating', async () => {
     const todo = page.locator('[data-testid="task-group"][data-group-val="To do"]');
     await page.locator('[data-testid="new-task-btn"]').click();

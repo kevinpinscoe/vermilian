@@ -33,6 +33,13 @@ test.describe('Board filter', () => {
     await expect(page.locator('[data-testid="filter-bar"]')).toBeHidden();
   });
 
+  test('Search button opens the filter bar and focuses the search input', async () => {
+    await expect(page.locator('[data-testid="filter-bar"]')).toBeHidden();
+    await page.locator('[data-testid="search-btn"]').click();
+    await expect(page.locator('[data-testid="filter-bar"]')).toBeVisible();
+    await expect(page.locator('[data-testid="filter-search"]')).toBeFocused();
+  });
+
   test('text search narrows the visible rows', async () => {
     const rows = page.locator('[data-testid="task-row"]');
     await expect(rows).toHaveCount(6);
@@ -60,6 +67,33 @@ test.describe('Board filter', () => {
     // Clear from the empty-state action restores the rows.
     await page.locator('[data-testid="filtered-empty"] >> text=Clear all filters').click();
     await expect(page.locator('[data-testid="task-row"]')).toHaveCount(6);
+  });
+
+  // TEST-1 is due 2026-06-10, TEST-2 is due 2026-06-20; the other 4 are undated.
+  test('Due date filter (before / after / range) narrows the visible rows', async () => {
+    const rows = page.locator('[data-testid="task-row"]');
+    await page.locator('[data-testid="filter-btn"]').click();
+
+    // Before 2026-06-15 → only the early-dated TEST-1.
+    await page.locator('[data-testid="filter-due-mode"]').selectOption('before');
+    await page.locator('[data-testid="filter-due-from"]').fill('2026-06-15');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-task-id', '0-e1-1');
+
+    // After 2026-06-15 → only the late-dated TEST-2.
+    await page.locator('[data-testid="filter-due-mode"]').selectOption('after');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-task-id', '0-e1-2');
+
+    // Range covering both dated issues → 2 rows; undated issues stay excluded.
+    await page.locator('[data-testid="filter-due-mode"]').selectOption('range');
+    await page.locator('[data-testid="filter-due-from"]').fill('2026-06-01');
+    await page.locator('[data-testid="filter-due-to"]').fill('2026-06-30');
+    await expect(rows).toHaveCount(2);
+
+    // Back to Any → all 6 rows return.
+    await page.locator('[data-testid="filter-due-mode"]').selectOption('any');
+    await expect(rows).toHaveCount(6);
   });
 });
 

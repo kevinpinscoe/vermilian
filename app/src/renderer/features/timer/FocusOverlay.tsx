@@ -137,10 +137,10 @@ export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoin
   }
 
   return (
-    <div className={styles.overlay}>
+    <div className={styles.overlay} data-testid="focus-overlay">
       <div className={styles.card} onClick={(e) => e.stopPropagation()}>
         {/* Task label */}
-        <Text type="text2" className={styles.taskId}>{timer.issueReadableId}</Text>
+        <Text type="text2" className={styles.taskId} data-testid="focus-task-id">{timer.issueReadableId}</Text>
         <Text type="text1" weight="bold" className={styles.summary}>
           {timer.summary}
         </Text>
@@ -153,10 +153,10 @@ export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoin
             </div>
           )}
           <div className={styles.timeDisplay}>
-            <span className={styles.elapsed}>
+            <span className={styles.elapsed} data-testid="focus-time">
               {timer.mode === 'pomodoro' ? fmtMs(remaining) : fmtMs(elapsed)}
             </span>
-            {isPaused && <span className={styles.pausedBadge}>PAUSED</span>}
+            {isPaused && <span className={styles.pausedBadge} data-testid="focus-paused">PAUSED</span>}
           </div>
         </div>
 
@@ -166,6 +166,7 @@ export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoin
         {/* Actions */}
         <div className={styles.actions}>
           <Button
+            data-testid="focus-pause-btn"
             kind="secondary"
             leftIcon={isPaused ? Play : Pause}
             onClick={isPaused ? resumeTimer : pauseTimer}
@@ -175,12 +176,13 @@ export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoin
           </Button>
 
           {timer.mode === 'pomodoro' && (
-            <Button kind="secondary" onClick={handleSkipToBreak} className={styles.actionBtn}>
+            <Button data-testid="focus-skip-break-btn" kind="secondary" onClick={handleSkipToBreak} className={styles.actionBtn}>
               Skip to break
             </Button>
           )}
 
           <Button
+            data-testid="focus-stop-btn"
             color="negative"
             onClick={handleStop}
             loading={stopping}

@@ -18,7 +18,7 @@ A board's column choices, colour palette overrides, group-by selection, and acti
 
 ### Toolbar
 
-- [ ] The toolbar sits directly below the view tabs and contains, left to right: `New task` (blue primary button), `Search`, `Person`, `Filter`, `Sort`, `Hide`, `Group by`, overflow (`…`).
+- [x] The toolbar sits directly below the view tabs and contains, left to right: `New task` (blue primary button), `AI create`, `Search`, `Filter`, `Sort`, `Hide`, `Group by`, `Settings`, `Refresh`. The `Search` button opens the filter bar and focuses its free-text search input. **`Person` is descoped from MVP** — this is a single-user YouTrack instance where every issue is assigned to the same person, so an assignee/person filter adds no practical value. Revisit if multi-user assignment is ever introduced.
 - [ ] `New task` opens the create-task modal (see `create-task.md`), pre-filled with this board's project and (if the project is an Inbox project) `Category = INBOX`.
 - [ ] `Group by` is a dropdown listing groupable fields: `Status`, `Category`, `Priority`, `Due Date` (buckets: Overdue / Today / This week / Later / No date), `None`. The selection is per-board and persists in the config Article. Default group-by is `Status`.
 - [ ] `Hide` opens a side panel of show/hide checkboxes for every available column (see `board-configuration.md`).
@@ -80,7 +80,7 @@ A board's column choices, colour palette overrides, group-by selection, and acti
 ### Filtering
 
 - [x] A filter bar appears between the toolbar and the table/board when `Filter` is active.
-- [~] Available filter controls: Priority (multi-select), Status (multi-select), Category (multi-select) — done as colour-coded pills; text search over Summary — done (also matches `idReadable`). **Still owed:** Due Date date-range control (Before / On / After / Range).
+- [x] Available filter controls: Priority (multi-select), Status (multi-select), Category (multi-select) — done as colour-coded pills; text search over Summary — done (also matches `idReadable`); Due Date control (Before / On / After / Range) — done.
 - [x] Active filters show as toggled pills; a `Clear all` button removes them.
 - [x] Filters apply instantly (no submit button) and are local to the current session — filter state is not persisted to the config Article.
 
@@ -90,8 +90,8 @@ A board's column choices, colour palette overrides, group-by selection, and acti
 - [ ] A Vibe `Loader` spinner is shown in the main content area while the first fetch is in progress.
 - [ ] A `Refresh` button in the overflow menu triggers a re-fetch (`queryClient.invalidateQueries`). The button shows a loading state while in flight.
 - [ ] If the API call fails, a Vibe `Banner` (danger) is shown with the error message and a `Retry` button. The existing task list (if cached) remains visible beneath it.
-- [~] Empty states:
-  - Project has no tasks at all: "No tasks in this project yet." — **still owed.**
+- [x] Empty states:
+  - Project has no tasks at all: "No tasks in this project yet." — **done.**
   - Project has tasks but the active filter excludes all: "No tasks match your filters." — **done** (with a `Clear all filters` action).
 
 ### Inbox indicator

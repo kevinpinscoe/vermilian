@@ -22,6 +22,10 @@ const PROJECTS: YouTrackProject[] = [
   { id: '0-e2', shortName: 'TST2', name: 'Test Project Two' },
   // Name contains "Inbox" so the board header / nav show the Inbox indicator.
   { id: '0-e3', shortName: 'INB', name: 'Team Inbox' },
+  // Deliberately has zero issues so the "No tasks in this project yet" empty
+  // state can be exercised. Kept last so existing .first()/.nth() nav selectors
+  // stay stable.
+  { id: '0-e4', shortName: 'EMP', name: 'Empty Project' },
 ];
 
 function emptyFields(over: Partial<BoardIssueFields>): BoardIssueFields {
@@ -39,18 +43,23 @@ interface FakeIssue extends BoardIssue {
 function makeIssues(): FakeIssue[] {
   const mk = (
     n: number, projectId: string, prefix: string, status: string, priority: string,
+    dueDate: number | null = null,
   ): FakeIssue => ({
     id: `${projectId}-${n}`,
     idReadable: `${prefix}-${n}`,
     summary: `${status} task ${n}`,
     resolved: null,
     projectId,
-    fields: emptyFields({ status, priority, category: 'TASK', ticket: `JIRA-${n}` }),
+    fields: emptyFields({ status, priority, category: 'TASK', ticket: `JIRA-${n}`, dueDate }),
   });
+  // Two TEST issues carry fixed due dates so the Due Date filter is testable:
+  // TEST-1 is before 2026-06-15, TEST-2 is after it; the rest are undated.
+  const DUE_EARLY = new Date('2026-06-10T00:00:00').getTime();
+  const DUE_LATE = new Date('2026-06-20T00:00:00').getTime();
   return [
     // TEST: 4 in "To do", 2 in "In Progress" → >=2 groups, >=3 in one group
-    mk(1, '0-e1', 'TEST', 'To do', 'Normal'),
-    mk(2, '0-e1', 'TEST', 'To do', 'Critical'),
+    mk(1, '0-e1', 'TEST', 'To do', 'Normal', DUE_EARLY),
+    mk(2, '0-e1', 'TEST', 'To do', 'Critical', DUE_LATE),
     mk(3, '0-e1', 'TEST', 'To do', 'Minor'),
     mk(4, '0-e1', 'TEST', 'To do', 'Major'),
     mk(5, '0-e1', 'TEST', 'In Progress', 'Normal'),
@@ -159,9 +168,21 @@ export async function postWorklog(
 }
 
 export async function getIssuesForStandup(
-  _url: string, _token: string, _projectShortNames: string[], _cutoffMs: number,
+  _url: string, _token: string, projectShortNames: string[], _cutoffMs: number,
 ): Promise<StandupIssues> {
-  return { done: [], inProgress: [], blocked: [] };
+  if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
+  // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has data.
+  return {
+    done: [
+      { idReadable: 'TEST-1', summary: 'Finished the login flow', status: 'Done', priority: 'Normal', notes: null, updatedMs: 0, loggedMinutesToday: 85 },
+    ],
+    inProgress: [
+      { idReadable: 'TEST-5', summary: 'Refactoring the API client', status: 'In Progress', priority: 'Critical', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
+    ],
+    blocked: [
+      { idReadable: 'TST2-2', summary: 'Waiting on a vendor response', status: 'BLOCKED', priority: 'Major', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
+    ],
+  };
 }
 
 // ─── _vermilian-config Article (in-memory) ──────────────────────────────────────

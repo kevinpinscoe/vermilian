@@ -284,6 +284,7 @@ function FolderContextMenu({
       </button>
       <button
         type="button"
+        data-testid="folder-menu-move-up"
         className={`${styles.contextMenuItem} ${!canMoveUp ? styles.contextMenuItemDisabled : ''}`}
         disabled={!canMoveUp}
         onClick={() => { if (canMoveUp) { onMoveUp(); onClose(); } }}
@@ -292,6 +293,7 @@ function FolderContextMenu({
       </button>
       <button
         type="button"
+        data-testid="folder-menu-move-down"
         className={`${styles.contextMenuItem} ${!canMoveDown ? styles.contextMenuItemDisabled : ''}`}
         disabled={!canMoveDown}
         onClick={() => { if (canMoveDown) { onMoveDown(); onClose(); } }}
@@ -451,7 +453,7 @@ function FolderSection({
           ) : (
             <button type="button" className={styles.folderNameBtn} onClick={onToggle}
               onDoubleClick={() => setRenaming(true)}>
-              <Text type="text2" weight="medium" className={styles.folderName}>{folder.name}</Text>
+              <Text type="text2" weight="medium" className={styles.folderName} data-testid="folder-name">{folder.name}</Text>
             </button>
           )}
         </div>

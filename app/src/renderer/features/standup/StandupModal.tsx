@@ -289,7 +289,7 @@ export function StandupModal({
               <Button kind="secondary" onClick={onClose} type="button">
                 Cancel
               </Button>
-              <Button onClick={generate}>Generate</Button>
+              <Button data-testid="standup-generate-btn" onClick={generate}>Generate</Button>
             </div>
           </div>
         </ModalContent>
@@ -341,6 +341,7 @@ export function StandupModal({
           )}
 
           <div
+            data-testid="standup-report-body"
             className={styles.markdownBody}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }}
           />

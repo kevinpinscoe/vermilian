@@ -147,12 +147,65 @@ describe('filterCount', () => {
   it('counts each selected value plus a non-empty search', () => {
     expect(filterCount(EMPTY_FILTER)).toBe(0);
     expect(
-      filterCount({ status: ['a', 'b'], priority: ['x'], category: [], search: 'q' }),
+      filterCount({ ...EMPTY_FILTER, status: ['a', 'b'], priority: ['x'], search: 'q' }),
     ).toBe(4);
   });
 
   it('does not count a whitespace-only search', () => {
     expect(filterCount({ ...EMPTY_FILTER, search: '  ' })).toBe(0);
+  });
+
+  it('counts an active due-date filter as one', () => {
+    expect(filterCount({ ...EMPTY_FILTER, dueMode: 'before', dueFrom: '2026-06-15' })).toBe(1);
+    expect(filterCount({ ...EMPTY_FILTER, dueMode: 'any' })).toBe(0);
+  });
+});
+
+// ─── applyFilter: due-date ────────────────────────────────────────────────────
+
+describe('applyFilter (due date)', () => {
+  // Stored due dates are local-midnight epochs, matching dateStrToEpoch.
+  const day = (s: string) => new Date(s + 'T00:00:00').getTime();
+  const issues = [
+    issue('early', { dueDate: day('2026-06-10') }),
+    issue('mid',   { dueDate: day('2026-06-15') }),
+    issue('late',  { dueDate: day('2026-06-20') }),
+    issue('none',  { dueDate: null }),
+  ];
+
+  it("'any' mode returns every issue, including undated", () => {
+    expect(applyFilter(issues, { ...EMPTY_FILTER, dueMode: 'any' })).toHaveLength(4);
+  });
+
+  it("'before' keeps only earlier-dated issues and drops undated", () => {
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'before', dueFrom: '2026-06-15' };
+    expect(applyFilter(issues, f).map((i) => i.id)).toEqual(['early']);
+  });
+
+  it("'on' keeps only the exact day", () => {
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'on', dueFrom: '2026-06-15' };
+    expect(applyFilter(issues, f).map((i) => i.id)).toEqual(['mid']);
+  });
+
+  it("'after' keeps only later-dated issues", () => {
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'after', dueFrom: '2026-06-15' };
+    expect(applyFilter(issues, f).map((i) => i.id)).toEqual(['late']);
+  });
+
+  it("'range' keeps inclusive between from and to", () => {
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'range', dueFrom: '2026-06-10', dueTo: '2026-06-15' };
+    expect(applyFilter(issues, f).map((i) => i.id)).toEqual(['early', 'mid']);
+  });
+
+  it("'range' with only a lower bound is open-ended upward", () => {
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'range', dueFrom: '2026-06-15', dueTo: null };
+    expect(applyFilter(issues, f).map((i) => i.id)).toEqual(['mid', 'late']);
+  });
+
+  it('an active due filter without any chosen date matches nothing dated arbitrarily', () => {
+    // before/on/after with no anchor date should not match anything.
+    const f: FilterState = { ...EMPTY_FILTER, dueMode: 'before', dueFrom: null };
+    expect(applyFilter(issues, f)).toHaveLength(0);
   });
 });
 

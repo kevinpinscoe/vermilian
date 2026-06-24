@@ -215,7 +215,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
               Cancel
             </Button>
           )}
-          <Button kind="primary" onClick={handleSave} loading={saving}>
+          <Button data-testid="settings-save-btn" kind="primary" onClick={handleSave} loading={saving}>
             Save
           </Button>
         </div>

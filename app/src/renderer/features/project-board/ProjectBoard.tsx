@@ -27,7 +27,7 @@ import {
 import {
   STATUS_ORDER, GROUP_FIELD_MAP, groupIssues, getGroupColorMap,
   applyFilter, filterCount, sortIssues, applyManualOrder, orderedUnique,
-  EMPTY_FILTER, type FilterState,
+  EMPTY_FILTER, type FilterState, type DueDateMode,
 } from './grouping';
 import styles from './ProjectBoard.module.css';
 
@@ -72,9 +72,10 @@ interface FilterBarProps {
   filter: FilterState;
   colors: EffectiveColors;
   onChange: (f: FilterState) => void;
+  searchRef?: React.Ref<HTMLInputElement>;
 }
 
-function FilterBar({ issues, filter, colors, onChange }: FilterBarProps) {
+function FilterBar({ issues, filter, colors, onChange, searchRef }: FilterBarProps) {
   const statusVals   = orderedUnique(issues.map((i) => i.fields.status),   STATUS_ORDER);
   const priorityVals = orderedUnique(issues.map((i) => i.fields.priority), PRIORITY_OPTIONS);
   const categoryVals = orderedUnique(issues.map((i) => i.fields.category), CATEGORY_OPTIONS);
@@ -92,6 +93,7 @@ function FilterBar({ issues, filter, colors, onChange }: FilterBarProps) {
   return (
     <div className={styles.filterBar} data-testid="filter-bar">
       <input
+        ref={searchRef}
         type="search"
         data-testid="filter-search"
         className={styles.filterSearch}
@@ -105,6 +107,49 @@ function FilterBar({ issues, filter, colors, onChange }: FilterBarProps) {
       <FilterSection label="Priority" values={priorityVals} active={filter.priority} colorMap={colors.Priority} onToggle={(v) => toggle('priority', v)} />
       {priorityVals.length > 0 && categoryVals.length > 0 && <span className={styles.filterSep} />}
       <FilterSection label="Category" values={categoryVals} active={filter.category} colorMap={colors.Category} onToggle={(v) => toggle('category', v)} />
+      <span className={styles.filterSep} />
+      <div className={styles.filterSection} data-testid="filter-due">
+        <span className={styles.filterLabel}>Due</span>
+        <select
+          data-testid="filter-due-mode"
+          className={styles.filterDueSelect}
+          value={filter.dueMode}
+          onChange={(e) => {
+            const dueMode = e.target.value as DueDateMode;
+            // Clear the upper bound when leaving range mode so the count is accurate.
+            onChange({ ...filter, dueMode, dueTo: dueMode === 'range' ? filter.dueTo : null });
+          }}
+        >
+          <option value="any">Any</option>
+          <option value="before">Before</option>
+          <option value="on">On</option>
+          <option value="after">After</option>
+          <option value="range">Range</option>
+        </select>
+        {filter.dueMode !== 'any' && (
+          <input
+            type="date"
+            data-testid="filter-due-from"
+            aria-label={filter.dueMode === 'range' ? 'Due from' : 'Due date'}
+            className={styles.filterDateInput}
+            value={filter.dueFrom ?? ''}
+            onChange={(e) => onChange({ ...filter, dueFrom: e.target.value || null })}
+          />
+        )}
+        {filter.dueMode === 'range' && (
+          <>
+            <span className={styles.filterLabel}>to</span>
+            <input
+              type="date"
+              data-testid="filter-due-to"
+              aria-label="Due to"
+              className={styles.filterDateInput}
+              value={filter.dueTo ?? ''}
+              onChange={(e) => onChange({ ...filter, dueTo: e.target.value || null })}
+            />
+          </>
+        )}
+      </div>
       {hasFilters && (
         <button type="button" className={styles.filterClear} onClick={() => onChange(EMPTY_FILTER)}>
           Clear all
@@ -254,6 +299,7 @@ function InlineDateCell({ value, onSave }: { value: number | null; onSave: (v: n
       <input
         ref={inputRef}
         type="date"
+        data-testid="due-date-input"
         className={styles.inlineDateInput}
         defaultValue={epochToDateStr(value)}
         onChange={(e) => { onSave(dateStrToEpoch(e.target.value)); savedRef.current = true; setEditing(false); }}
@@ -264,7 +310,7 @@ function InlineDateCell({ value, onSave }: { value: number | null; onSave: (v: n
     );
   }
   return (
-    <span className={`${styles.dateCell} ${styles.cellEditable}`} onClick={start}>
+    <span data-testid="due-date-cell" className={`${styles.dateCell} ${styles.cellEditable}`} onClick={start}>
       {formatDate(value)}
     </span>
   );
@@ -471,10 +517,11 @@ function IssueRow({
           ⠿
         </div>
         {isActiveTimer ? (
-          <span className={styles.timerBadge}>▶ {timerDisplay}</span>
+          <span data-testid="timer-badge" className={styles.timerBadge}>▶ {timerDisplay}</span>
         ) : (
           <button
             type="button"
+            data-testid="row-start-timer"
             className={`${styles.playBtn} ${hovered ? styles.playBtnVisible : ''}`}
             onClick={(e) => { e.stopPropagation(); onStartTimer(issue.id, issue.idReadable, issue.summary); }}
             title="Start timer"
@@ -947,8 +994,19 @@ export function ProjectBoard({
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [showFilter, setShowFilter] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  // The Search toolbar button opens the filter bar and focuses its search input;
+  // the input lives in the FilterBar child, so focus is deferred until it mounts.
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [localOrderByGroup, setLocalOrderByGroup] = useState<Record<string, string[]> | null>(null);
+
+  useEffect(() => {
+    if (showFilter && pendingSearchFocus) {
+      searchInputRef.current?.focus();
+      setPendingSearchFocus(false);
+    }
+  }, [showFilter, pendingSearchFocus]);
 
   const { data: issues, isLoading, isError, error, refetch } = useIssues(projectShortName, showClosed);
   const { data: boardConfig } = useBoardConfig(projectId);
@@ -1089,6 +1147,7 @@ export function ProjectBoard({
   const activeFilterCount = filterCount(filter);
   // All issues filtered out by active filters (vs. a genuinely empty board).
   const filteredEmpty = (issues?.length ?? 0) > 0 && filteredIssues.length === 0;
+  const projectEmpty = !!issues && issues.length === 0;
   const groups = groupIssues(filteredIssues, effectiveGroupBy);
   const groupColorMap = getGroupColorMap(effectiveGroupBy, colors);
 
@@ -1120,11 +1179,21 @@ export function ProjectBoard({
       <div className={styles.toolbar}>
         <button type="button" data-testid="new-task-btn" className={styles.newTaskBtn} onClick={onNewTask}>New task</button>
         <Tooltip content={hasClaudeKey ? 'AI create task' : 'Configure a Claude API key in Settings to use AI task creation.'}>
-          <Button size="small" kind="secondary" onClick={onAiCreate} disabled={!hasClaudeKey} leftIcon={Wand}>
+          <Button data-testid="ai-create-btn" size="small" kind="secondary" onClick={onAiCreate} disabled={!hasClaudeKey} leftIcon={Wand}>
             AI create
           </Button>
         </Tooltip>
         <div className={styles.toolbarSpacer} />
+
+        {/* Search — opens the filter bar and focuses its free-text search input */}
+        <Button
+          data-testid="search-btn"
+          size="small"
+          kind="tertiary"
+          onClick={() => { setShowFilter(true); setShowSort(false); setPendingSearchFocus(true); }}
+        >
+          Search
+        </Button>
 
         {/* Filter toggle */}
         <Button
@@ -1207,7 +1276,7 @@ export function ProjectBoard({
 
       {/* Filter bar — toggled by the Filter button; stays open while filters are active */}
       {!isLoading && !isError && issues && (showFilter || activeFilterCount > 0) && (
-        <FilterBar issues={issues} filter={filter} colors={colors} onChange={setFilter} />
+        <FilterBar issues={issues} filter={filter} colors={colors} onChange={setFilter} searchRef={searchInputRef} />
       )}
 
       {/* Content */}
@@ -1220,6 +1289,17 @@ export function ProjectBoard({
             title="Failed to load issues"
             text={(error as Error)?.message ?? 'An error occurred.'}
             onClose={() => refetch()}
+          />
+        </div>
+      )}
+
+      {/* Empty state when the project has no tasks at all */}
+      {!isLoading && !isError && projectEmpty && (
+        <div className={styles.filteredEmpty} data-testid="project-empty">
+          <AttentionBox
+            type="primary"
+            compact
+            text="No tasks in this project yet."
           />
         </div>
       )}
@@ -1238,7 +1318,7 @@ export function ProjectBoard({
         </div>
       )}
 
-      {!isLoading && !isError && issues && !isKanban && !filteredEmpty && (
+      {!isLoading && !isError && issues && !isKanban && !filteredEmpty && !projectEmpty && (
         <MainTableView
           issues={filteredIssues}
           groupBy={effectiveGroupBy}
@@ -1258,7 +1338,7 @@ export function ProjectBoard({
         />
       )}
 
-      {!isLoading && !isError && issues && isKanban && !filteredEmpty && (
+      {!isLoading && !isError && issues && isKanban && !filteredEmpty && !projectEmpty && (
         <KanbanView
           groups={groups}
           groupColorMap={groupColorMap}

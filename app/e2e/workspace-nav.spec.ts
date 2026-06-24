@@ -1,6 +1,6 @@
 /**
  * Workspace navigation (bucket 1: create/rename folders, fresh-install banner,
- * Manage workspaces). Runs against the in-memory fake YouTrack (2 projects,
+ * Manage workspaces). Runs against the in-memory fake YouTrack (4 projects,
  * placed in a single "Unassigned" folder of a default "Workspace" on first run).
  */
 
@@ -25,7 +25,7 @@ test.describe('Workspace navigation', () => {
 
   test('fresh install shows the onboarding banner and all projects', async () => {
     await expect(page.locator('[data-testid="attention-box"]')).toBeVisible();
-    await expect(page.locator('[data-testid="nav-project"]')).toHaveCount(3);
+    await expect(page.locator('[data-testid="nav-project"]')).toHaveCount(4);
   });
 
   test('add folder creates a folder in the tree', async () => {
@@ -57,7 +57,7 @@ test.describe('Workspace navigation', () => {
     const rows = page.locator('[data-testid="workspace-row"]');
     await expect(rows).toHaveCount(2);
 
-    // The original "Workspace" still holds the 2 projects → deleting it is blocked.
+    // The original "Workspace" still holds the projects → deleting it is blocked.
     await page.locator('[data-testid="workspace-row"][data-ws-name="Workspace"] [data-testid="workspace-delete"]').click();
     await expect(page.locator('[data-testid="ws-delete-blocked"]')).toBeVisible();
   });

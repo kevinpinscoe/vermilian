@@ -15,6 +15,10 @@ async function addFolder(page: Page, name: string) {
   await expect(page.locator('nav').getByText(name, { exact: true })).toBeVisible();
 }
 
+function folderNames(page: Page): Promise<string[]> {
+  return page.locator('[data-testid="folder-name"]').allTextContents();
+}
+
 test.describe('Workspace folders and rail', () => {
   let app: ElectronApplication;
   let page: Page;
@@ -47,6 +51,24 @@ test.describe('Workspace folders and rail', () => {
     await page.locator('[data-testid="folder-menu-delete"]').click();
 
     await expect(page.locator('nav').getByText('Temp', { exact: true })).toHaveCount(0);
+  });
+
+  test('Move up reorders a folder above its sibling', async () => {
+    await addFolder(page, 'Alpha');
+    await addFolder(page, 'Beta');
+
+    // Beta was added after Alpha, so Alpha precedes Beta.
+    const before = await folderNames(page);
+    expect(before.indexOf('Alpha')).toBeLessThan(before.indexOf('Beta'));
+
+    await page.locator('nav').getByText('Beta', { exact: true }).click({ button: 'right' });
+    await page.locator('[data-testid="folder-menu-move-up"]').click();
+
+    // Beta now precedes Alpha.
+    await expect.poll(async () => {
+      const n = await folderNames(page);
+      return n.indexOf('Beta') < n.indexOf('Alpha');
+    }).toBe(true);
   });
 
   test('the hamburger collapses and re-expands the rail', async () => {

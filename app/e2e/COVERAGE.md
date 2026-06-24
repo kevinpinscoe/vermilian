@@ -25,7 +25,7 @@ notifications, or the timer worklog round-trip.
 | Workspace switcher — create / Manage | ✅ E2E | `workspace-nav.spec.ts` (create workspace, Manage lists + blocks delete) |
 | Folder management — add folder | ✅ E2E | `workspace-nav.spec.ts` (add folder) |
 | Folder management — rename / delete | ✅ E2E | `workspace-folders.spec.ts` |
-| Folder management — move up/down | ⬜ Gap | — |
+| Folder management — move up/down | ✅ E2E | `workspace-folders.spec.ts` |
 | Project assignment (drag between folders / across workspaces) | ✋ Manual | dnd-kit drag; `TESTING.md` |
 | Empty-state / onboarding banner | ✅ E2E | `workspace-nav.spec.ts` (fresh-install banner) |
 
@@ -34,6 +34,7 @@ notifications, or the timer worklog round-trip.
 |---|---|---|
 | Board entry, header project name, view tabs | ✅ E2E | `board-header.spec.ts` (name), `board-interactions.spec.ts` (kanban tab) |
 | Toolbar buttons present; New task opens modal | ✅ E2E | `board-toolbar-groups.spec.ts`, `create-task.spec.ts` |
+| Search button opens filter bar + focuses search (Person descoped from MVP) | ✅ E2E | `board-filter-sort.spec.ts` |
 | Group by (regroup + options) | ✅ E2E | `board-interactions.spec.ts` (regroup) |
 | Main table — group headers, count badge | ✅ E2E | implied by `group-header` assertions |
 | Main table — group collapse/expand chevron | ✅ E2E | `board-toolbar-groups.spec.ts` |
@@ -42,7 +43,7 @@ notifications, or the timer worklog round-trip.
 | Click row opens detail | ✅ E2E | `board-interactions.spec.ts`, `detail-panel.spec.ts` |
 | Inline edit — summary text cell | ✅ E2E | `board-interactions.spec.ts` |
 | Inline edit — chip cells (Status/Priority/Category) | ✅ E2E | `inline-chip-edit.spec.ts` |
-| Inline edit — Due Date picker | ⬜ Gap | — |
+| Inline edit — Due Date picker | ✅ E2E | `board-interactions.spec.ts` (sets a date on an undated task) |
 | Quick-add `+ Add task` (Enter creates, Esc cancels) | ✅ E2E | `quick-add.spec.ts` |
 | Kanban view render + columns | ✅ E2E | `board-interactions.spec.ts` |
 | Kanban drag between columns | ✋ Manual | `TESTING.md` |
@@ -50,7 +51,8 @@ notifications, or the timer worklog round-trip.
 | DnD reorder within group | ✋ Manual | `dnd.spec.ts` fixmes + `TESTING.md` |
 | DnD cross-board (highlight, confirm, cancel, same-project no-op) | ✅ E2E | `dnd.spec.ts` (cross-board) |
 | Filtering (bar, pills, search, clear, empty state) | ✅ E2E | `board-filter-sort.spec.ts` |
-| Due Date range filter | ⬜ Gap (also unbuilt) | — |
+| Empty state — project has no tasks ("No tasks in this project yet") | ✅ E2E | `empty-state.spec.ts` (Empty Project fixture) |
+| Due Date range filter (Before / On / After / Range) | ✅ E2E | `board-filter-sort.spec.ts` (dated TEST fixtures) |
 | Data loading — Loader / Refresh / error Banner | ⬜ Gap | — |
 | Inbox indicator (board header) | ✅ E2E | `board-header.spec.ts` (Team Inbox fixture) |
 
@@ -92,7 +94,7 @@ notifications, or the timer worklog round-trip.
 | Appearance — theme switch | ✅ E2E | `theme.spec.ts` (dark toggle) |
 | Advanced — reset to defaults / open config folder | ⬜ Gap / 🚫 (open folder) | — |
 | Cancel returns to board + discard-unsaved-credentials guard | ✅ E2E | `settings.spec.ts` |
-| Save writes config + "Settings saved" toast | ⬜ Gap | — |
+| Save persists config + returns to board | ✅ E2E | `settings.spec.ts` (change → Save → reopen; "Settings saved" toast flashes before close → manual) |
 | Credential storage (safeStorage, fail-closed) | 🚫 Out of harness | keyring |
 | Friendly error messages | 🧪 Unit | `errors.test.ts` |
 
@@ -101,7 +103,7 @@ notifications, or the timer worklog round-trip.
 |---|---|---|
 | Open form (New task button / modal / Esc dismiss) | ✅ E2E | `create-task.spec.ts` |
 | Validation — Summary required (Create disabled) | ✅ E2E | `create-task.spec.ts` |
-| Validation — URL format | ⬜ Gap | — |
+| Validation — URL format | ✅ E2E | `create-task.spec.ts` (bad Ticket link blocks Create) |
 | Submission — happy-path create | ✅ E2E | `create-task.spec.ts` |
 | Project context / Inbox default category | ⬜ Gap | — |
 | Date time entered auto-stamp | 🧪 Unit | `youtrack.test.ts` (createIssue stamps it) |
@@ -109,28 +111,33 @@ notifications, or the timer worklog round-trip.
 ## create-task-ai.md
 | Section | Status | Where |
 |---|---|---|
-| Entry point / gating (disabled without key) | ⬜ Gap (gating) | — |
-| Input dialog / Generate | 🚫 Out of harness | Claude call |
+| Entry point / gating (disabled without key) | ⬜ Gap (gating) | — (e2e always seeds a key) |
+| Input → Generate → review → create (happy path) | ✅ E2E | `ai-create.spec.ts` (fake Claude) |
+| Clarification path (too-vague input) | ✅ E2E | `ai-create.spec.ts` |
 | Claude API call + JSON extraction | 🧪 Unit | `aiExtract.test.ts` (project match) |
-| Review/edit form | 🚫 Out of harness | downstream of Claude |
-| Error handling | 🚫 Out of harness | — |
+| Error handling | 🚫 Out of harness | real-API failures |
 
 ## task-timer.md
 | Section | Status | Where |
 |---|---|---|
 | Timer math (elapsed, total, format) | 🧪 Unit | `timer.test.ts` |
 | Store state machine (start/pause/resume/advance/clear) | 🧪 Unit | `timer.test.ts` |
-| Focus mode / break banner / Pomodoro chaining | 🚫 Out of harness | timers + overlay |
-| Worklog on stop | 🚫 Out of harness | YouTrack worklog |
-| Quit protection / forced-exit recovery | 🚫 Out of harness | Electron lifecycle |
-| Board / detail timer indicators | ⬜ Gap | — |
+| Start (detail + row ▶) → focus overlay + countdown | ✅ E2E | `timer.spec.ts` |
+| Pause / resume (PAUSED badge) | ✅ E2E | `timer.spec.ts` |
+| Skip to break → break banner → skip break → back to work | ✅ E2E | `timer.spec.ts` |
+| Stop & log (clears timer, "Logged N min" toast) | ✅ E2E | `timer.spec.ts` (fake worklog) |
+| Auto phase completion on elapsed (time-based) | 🧪 Unit | `timer.test.ts` (driven by skip in e2e) |
+| Worklog POST to YouTrack | 🚫 Out of harness | real worklog API |
+| Quit protection / forced-exit recovery | 🚫 Out of harness | Electron lifecycle (exercised indirectly in afterEach) |
+| Active-timer row badge | ✅ E2E | `timer.spec.ts` (▶ badge replaces play button) |
 
 ## standup-report.md
 | Section | Status | Where |
 |---|---|---|
 | Task fetch + status bucketing/cutoff | 🧪 Unit | `youtrack.test.ts` (getIssuesForStandup) |
 | Prompt assembly (sections, duration, omit-empty) | 🧪 Unit | `standupPrompt.test.ts` |
-| Entry/gating, scope/window, panel render, copy, save | 🚫 Out of harness | Claude + OS clipboard/file |
+| Config → Generate → report render | ✅ E2E | `standup.spec.ts` (fake Claude) |
+| Scope/window selectors, copy, save-to-file | 🚫 Out of harness | OS clipboard / file dialog |
 
 ---
 
@@ -147,10 +154,20 @@ Ordered by value. Each is reachable with the current fake harness (may need a `d
 8. ~~Settings view~~ — ✅ done (`settings.spec.ts`): open, sections, Cancel-to-board, discard guard. (Save→toast still uncovered — needs the E2E config-save path verified.)
 9. ~~Board header project name + Inbox indicator~~ — ✅ done (`board-header.spec.ts`; added a "Team Inbox" fixture project).
 
-**All roadmap gaps are filled.** Smaller leftovers remain as ⬜ in the tables
-above (folder move up/down, settings Save→toast, create-task URL-format
-validation, Due-Date range filter) — minor, pick up opportunistically.
+**All roadmap gaps are filled**, and the previously-noted minor leftovers
+(folder move up/down, settings Save persistence, create-task URL-format
+validation, inline Due-Date picker, active-timer row badge) are now ✅ E2E.
+The remaining ⬜ in the tables above (left-rail layout assertions, data-loading
+Loader/Refresh/error banner, keyboard nav, column width input / colour editor /
+views-tab / reset-board, Timer&Pomodoro inputs, Advanced reset, Inbox default
+category, AI gating-without-key) are lower-value or out-of-harness — pick up
+opportunistically.
 
-Out-of-harness criteria (Claude, OS dialogs, keyring, timer worklog, real API failures)
-are covered at the unit level where the logic is pure, and otherwise belong to manual
-verification (`TESTING.md`) until the fake harness grows fault-injection / Claude stubs.
+The AI-create and stand-up happy paths now run against an in-memory **fake Claude**
+(`src/main/api/fakeClaude.ts`, swapped in by `claudeClient.ts` under `VERMILIAN_E2E=1`),
+so they are E2E-covered. The timer flow (start → pause/resume → skip to break → skip
+break → stop & log) is E2E too — phase transitions are driven by the explicit Skip
+controls, since the real durations are minutes long. Remaining out-of-harness criteria
+(OS dialogs, keyring, the real worklog POST, real-API failures) are covered at the unit
+level where the logic is pure, and otherwise belong to manual verification (`TESTING.md`)
+until the fake harness grows fault-injection.

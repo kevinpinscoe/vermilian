@@ -352,6 +352,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           }
         >
           <Button
+            data-testid="standup-btn"
             size="small"
             kind="tertiary"
             leftIcon={Sun}

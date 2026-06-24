@@ -315,6 +315,23 @@
   border-color: var(--primary-color, #0073ea);
 }
 
+.filterDueSelect,
+.filterDateInput {
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  outline: none;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #111111);
+  font-family: inherit;
+}
+
+.filterDueSelect:focus,
+.filterDateInput:focus {
+  border-color: var(--primary-color, #0073ea);
+}
+
 /* Sort menu */
 .sortWrap {
   position: relative;

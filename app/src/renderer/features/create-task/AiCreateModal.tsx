@@ -201,6 +201,7 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
                 Cancel
               </Button>
               <Button
+                data-testid="ai-generate-btn"
                 onClick={handleGenerate}
                 disabled={!description.trim() || generating}
                 loading={generating}
@@ -249,7 +250,7 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
             <Button kind="secondary" onClick={onClose} type="button" disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canCreate} loading={submitting}>
+            <Button data-testid="ai-create-submit" type="submit" disabled={!canCreate} loading={submitting}>
               {submitting ? 'Creating…' : 'Create'}
             </Button>
           </div>

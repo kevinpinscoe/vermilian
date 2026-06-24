@@ -48,6 +48,18 @@ test.describe('Board interactions', () => {
     await expect(row.locator('[data-testid="summary-cell"]')).toHaveText('Renamed in e2e');
   });
 
+  test('inline Due Date cell sets a date on an undated task', async () => {
+    // TEST-3 (0-e1-3) starts undated → the cell shows the em-dash placeholder.
+    const cell = page.locator('[data-task-id="0-e1-3"] [data-testid="due-date-cell"]');
+    await expect(cell).toHaveText('—');
+
+    await cell.click();
+    await page.locator('[data-task-id="0-e1-3"] [data-testid="due-date-input"]').fill('2026-07-15');
+
+    // onChange saves and closes the editor; the cell now shows a formatted date.
+    await expect(page.locator('[data-task-id="0-e1-3"] [data-testid="due-date-cell"]')).not.toHaveText('—');
+  });
+
   test('clicking a row opens the detail panel', async () => {
     await expect(page.locator('[data-testid="task-detail-panel"]')).toBeHidden();
     await page.locator('[data-task-id="0-e1-1"] [data-testid="issue-id"]').click();

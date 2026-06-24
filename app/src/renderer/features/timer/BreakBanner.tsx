@@ -71,19 +71,19 @@ export function BreakBanner({ pomodoro, onStopAndLog }: BreakBannerProps) {
   }
 
   return (
-    <div className={styles.banner}>
+    <div className={styles.banner} data-testid="break-banner">
       <div className={styles.left}>
         <span className={`${styles.dot} ${isLong ? styles.dotLong : styles.dotShort}`} />
         <Text type="text2" weight="medium" className={styles.label}>
           {isLong ? 'Long break' : 'Short break'} — {timer.issueReadableId}
         </Text>
-        <span className={styles.countdown}>{fmtMs(remaining)}</span>
+        <span className={styles.countdown} data-testid="break-time">{fmtMs(remaining)}</span>
       </div>
       <div className={styles.right}>
-        <Button size="small" kind="secondary" onClick={() => advanceToWork()}>
+        <Button data-testid="break-skip-btn" size="small" kind="secondary" onClick={() => advanceToWork()}>
           Skip break
         </Button>
-        <Button size="small" color="negative" onClick={handleStop} loading={stopping}>
+        <Button data-testid="break-stop-btn" size="small" color="negative" onClick={handleStop} loading={stopping}>
           Stop &amp; log
         </Button>
       </div>

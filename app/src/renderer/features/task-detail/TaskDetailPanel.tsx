@@ -492,6 +492,7 @@ export function TaskDetailPanel({
             </Button>
           ) : (
             <Button
+              data-testid="detail-start-timer"
               size="small"
               kind="secondary"
               leftIcon={Play}

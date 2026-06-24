@@ -37,7 +37,7 @@ import {
 import { readWorkspaceConfig, writeWorkspaceConfig } from './services/workspaceConfig';
 import { youtrack } from './api/client';
 import { IS_E2E } from './e2e';
-import * as claude from './api/claude';
+import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
