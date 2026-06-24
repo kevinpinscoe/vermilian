@@ -89,20 +89,19 @@ rm -rf /tmp/test-vermilian
 5. Copy the token immediately (it is only shown once)
 6. Store it securely — **never commit it**.
 
-Token is stored in OpenBao at `app/YouTrack` (field: `token`).
+Store the YouTrack permanent token in whatever secret manager you use (a password manager, your OS keyring, or a secrets vault). The verification snippet below assumes you can export it into the shell.
 
 ---
 
 ### Step 0.5 — Verify YouTrack REST API access
 
 ```bash
-export BAO_ADDR=https://openbao.example.com
-export BAO_TOKEN=$(cat ~/.environment/.vault-token)
-YOUTRACK_TOKEN=$(bao kv get -field=token -mount=app YouTrack)
+export YOUTRACK_URL=https://youtrack.example.com
+export YOUTRACK_TOKEN=<your-youtrack-permanent-token>
 curl -s \
   -H "Authorization: Bearer ${YOUTRACK_TOKEN}" \
   -H "Accept: application/json" \
-  "https://youtrack.example.com/api/issues?fields=id,summary&\$top=3"
+  "${YOUTRACK_URL}/api/issues?fields=id,summary&\$top=3"
 ```
 
 **Expected:** a JSON array, e.g. `[{"id":"KP-1","summary":"..."},...]`

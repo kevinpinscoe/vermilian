@@ -136,8 +136,8 @@ describe('getIssues', () => {
 
 describe('getCurrentUser', () => {
   it('prefers fullName, then name, then login', async () => {
-    fetchMock.mockResolvedValueOnce(jsonRes({ login: 'k', name: 'Kev', fullName: 'Kevin Inscoe' }));
-    expect(await getCurrentUser(URL, TOKEN)).toBe('Kevin Inscoe');
+    fetchMock.mockResolvedValueOnce(jsonRes({ login: 'k', name: 'Kev', fullName: 'Ada Lovelace' }));
+    expect(await getCurrentUser(URL, TOKEN)).toBe('Ada Lovelace');
 
     fetchMock.mockResolvedValueOnce(jsonRes({ login: 'k', name: 'Kev' }));
     expect(await getCurrentUser(URL, TOKEN)).toBe('Kev');
