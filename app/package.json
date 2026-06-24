@@ -1,7 +1,7 @@
 {
   "name": "vermilian",
   "productName": "Vermilian",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "monday.com-style Electron desktop client for self-hosted JetBrains YouTrack",
   "main": ".vite/build/main.js",
   "private": true,

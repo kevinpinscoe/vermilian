@@ -7,16 +7,16 @@ import { useThemeStore } from './stores/theme';
 import styles from './App.module.css';
 
 export function App() {
-  const config = useConfig();
-  const credStatus = useCredentialStatus();
+  const { data: configData, isLoading: configLoading } = useConfig();
+  const { data: credData, isLoading: credLoading } = useCredentialStatus();
   const initTheme = useThemeStore((s) => s.init);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    if (config.data) initTheme(config.data.theme);
-  }, [config.data, initTheme]);
+    if (configData) initTheme(configData.theme);
+  }, [configData, initTheme]);
 
-  if (config.isLoading || credStatus.isLoading) {
+  if (configLoading || credLoading) {
     return (
       <div className={styles.center}>
         <Loader size={40} />
@@ -25,7 +25,7 @@ export function App() {
   }
 
   const connected =
-    Boolean(config.data?.youtrackUrl) && Boolean(credStatus.data?.hasYouTrackToken);
+    Boolean(configData?.youtrackUrl) && Boolean(credData?.hasYouTrackToken);
 
   if (!connected || showSettings) {
     return <SettingsView canCancel={connected} onClose={() => setShowSettings(false)} />;
