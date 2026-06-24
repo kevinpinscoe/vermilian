@@ -13,23 +13,35 @@ import fs from 'fs';
 // src/main/api/fakeYouTrack.ts). Each launch also gets a fresh --user-data-dir
 // so config/credential state never leaks between tests or touches the real
 // user profile.
+const ELECTRON_ARGS = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--disable-gpu-compositing',
+  '--in-process-gpu',
+];
+
+const EXECUTABLE = path.join(__dirname, '../../out/Vermilian-linux-x64/Vermilian');
+
+function freshUserDataDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
+}
+
 export async function launchApp(): Promise<ElectronApplication> {
-  const executablePath = path.join(
-    __dirname,
-    '../../out/Vermilian-linux-x64/Vermilian',
-  );
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
   return electron.launch({
-    executablePath,
-    args: [
-      `--user-data-dir=${userDataDir}`,
-      // Allow running under a headless X server (xvfb) without a usable GPU.
-      '--no-sandbox',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-gpu-compositing',
-      '--in-process-gpu',
-    ],
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1' },
+  });
+}
+
+// Launches with e2e credential mocks but without the pre-seeded youtrackUrl,
+// so the app starts in unconfigured (first-run) state. Use this to test the
+// settings → save → navigate-to-board flow.
+export async function launchAppUnconfigured(): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_UNCONFIGURED: '1' },
   });
 }

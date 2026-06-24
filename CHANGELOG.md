@@ -5,6 +5,25 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-06-24
+
+### Fixed
+
+- Query keys used by `useConfig()` and `useCredentialStatus()` are now exported
+  constants (`CONFIG_QUERY_KEY`, `CRED_STATUS_QUERY_KEY`) in `settings/api.ts`.
+  `SettingsView` imports and uses the same constants for `invalidateQueries`,
+  eliminating any risk of future key drift. Unit tests added to lock the values.
+
+### Added
+
+- `e2e/first-run.spec.ts`: Playwright tests covering the unconfigured first-run
+  flow — settings screen appears automatically, Cancel is absent, and Save with
+  a YouTrack URL navigates to the main board.
+- `VERMILIAN_E2E_UNCONFIGURED=1` env flag for e2e tests that need to exercise
+  the app in an unconfigured state without the normal URL seed.
+- `CLAUDE.md` at project root documenting the release checklist, testing
+  requirements, and query-key conventions.
+
 ## [1.0.3] - 2026-06-24
 
 ### Fixed
@@ -68,6 +87,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.0.4]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.4
 [1.0.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.3
 [1.0.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.2
 [1.0.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.1

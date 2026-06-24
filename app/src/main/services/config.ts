@@ -28,7 +28,10 @@ export async function readConfig(): Promise<AppConfig> {
     cfg = { ...DEFAULT_CONFIG };
   }
   // Under e2e, present as "connected" so AppShell renders without a real backend.
-  if (IS_E2E && !cfg.youtrackUrl) cfg = { ...cfg, youtrackUrl: 'http://e2e.local' };
+  // Set VERMILIAN_E2E_UNCONFIGURED=1 to skip this seed and test the first-run flow.
+  if (IS_E2E && !cfg.youtrackUrl && !process.env.VERMILIAN_E2E_UNCONFIGURED) {
+    cfg = { ...cfg, youtrackUrl: 'http://e2e.local' };
+  }
   return cfg;
 }
 

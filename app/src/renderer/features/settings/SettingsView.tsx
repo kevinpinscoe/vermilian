@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalHeader } from '@vibe/core';
 import type { AppConfig } from '../../../shared/config';
 import { DEFAULT_CONFIG } from '../../../shared/config';
-import { useConfig, useCredentialStatus } from './api';
+import { useConfig, useCredentialStatus, CONFIG_QUERY_KEY, CRED_STATUS_QUERY_KEY } from './api';
 import type { SettingsDraft, TestState } from './types';
 import { friendlyYouTrackError, friendlyClaudeError } from './errors';
 import { ConnectionSection } from './sections/ConnectionSection';
@@ -141,8 +141,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
       if (!r.ok) insecure = true;
     }
 
-    await qc.invalidateQueries({ queryKey: ['config'] });
-    await qc.invalidateQueries({ queryKey: ['cred-status'] });
+    await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+    await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
     setSaving(false);
 
     if (insecure) {
