@@ -59,8 +59,8 @@ brew uninstall --cask vermilian           # remove
 
 The tap + Cask in one line also works: `brew install --cask kevinpinscoe/tap/vermilian`.
 
-Prefer a manual install? Download the universal `.dmg` (Intel + Apple Silicon) from the release and
-drag **Vermilian** to Applications.
+Prefer a manual install? Download the Apple Silicon (arm64) `.dmg` from the release and
+drag **Vermilian** to Applications. (Intel Macs are not yet served — see [Target platforms](#target-platforms).)
 
 > **Unsigned build:** Vermilian is not yet notarized with an Apple Developer ID, so Gatekeeper
 > reports that the app "cannot be opened" or "is damaged." The Homebrew Cask clears the quarantine
@@ -97,8 +97,8 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
   category chips, grouping, filtering, and sorting; table and Kanban views.
 - **Layered credential sources** — read your YouTrack token from a shell command (e.g. a secrets
   manager), a file path, or the OS keyring — whichever fits your setup.
-- **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (universal `.dmg`, Intel + Apple
-  Silicon), and Windows. A Raspberry Pi / arm64 AppImage can be built from source (see
+- **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (Apple Silicon `.dmg`), and Windows.
+  Intel macOS and Raspberry Pi / arm64 Linux can be built from source (see
   [Target platforms](#target-platforms)).
 
 ## Screenshots
@@ -130,20 +130,25 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
 | Platform | Artifact | Architecture | v1.0.0 |
 |---|---|---|---|
 | Linux (Fedora / Ubuntu) | AppImage | x86_64 | published |
-| macOS | `.dmg` (universal) | x86_64 + Apple Silicon | published |
+| macOS (Apple Silicon) | `.dmg` | arm64 | published |
 | Windows 11 | Squirrel installer + Scoop | x86_64 | published |
+| macOS (Intel) | `.dmg` | x86_64 | build from source |
 | Raspberry Pi OS | AppImage | arm64 (64-bit only) | build from source |
 
-A Raspberry Pi (arm64) AppImage is not yet produced by CI. Build it natively on a 64-bit Pi:
+CI currently publishes Linux x86_64, macOS arm64, and Windows x86_64. The other two
+architectures build natively from source with the same command (run on the target machine):
 
 ```bash
 cd app
 mise install && corepack enable pnpm
 pnpm install
-pnpm make            # → app/out/make/Vermilian-<ver>-arm64.AppImage
+pnpm make
+# Intel Mac  → app/out/make/Vermilian-<ver>-x64.dmg
+# 64-bit Pi  → app/out/make/AppImage/x64/Vermilian-<ver>-arm64.AppImage
 ```
 
-Automated arm64 builds (via a `ubuntu-24.04-arm` CI runner) are planned for a follow-up release.
+Automated Intel-macOS (`macos-13`) and arm64-Linux (`ubuntu-24.04-arm`) runners are planned for a
+follow-up release.
 
 ## Tech stack
 

@@ -28,7 +28,7 @@ jobs:
       matrix:
         # Pinned runner images for reproducible release builds (avoid -latest drift):
         #   ubuntu-24.04  -> Linux x86_64 AppImage
-        #   macos-14      -> Apple Silicon host; builds the universal .dmg (Intel + ARM)
+        #   macos-14      -> Apple Silicon; builds the arm64 .dmg
         #   windows-2022  -> Windows x86_64 Squirrel installer + portable .zip
         # arm64 / Raspberry Pi (ubuntu-24.04-arm) is intentionally omitted until a
         # native Pi build is verified — see README "Target platforms".
@@ -57,16 +57,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # macOS: build a single universal .dmg (Intel + Apple Silicon) so one
-      # artifact serves both architectures and the Cask needs one url/hash.
-      - name: Make & publish to draft release (universal macOS)
-        if: runner.os == 'macOS'
-        run: pnpm exec electron-forge publish --arch=universal
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      # macOS builds native arm64 (the macos-14 host arch); Linux x86_64; Windows x86_64.
       - name: Make & publish to draft release
-        if: runner.os != 'macOS'
         run: pnpm run publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,6 +115,8 @@ jobs:
             name "Vermilian"
             desc "monday.com-style desktop client for self-hosted JetBrains YouTrack"
             homepage "https://github.com/kevinpinscoe/vermilian"
+
+            depends_on arch: :arm64
 
             # Unsigned build — remove the quarantine attribute so Gatekeeper allows launch.
             postflight do

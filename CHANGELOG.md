@@ -19,9 +19,9 @@ First public release. Vermilian is feature-complete against its specification.
   a file path, or the OS keyring.
 - Light and dark themes.
 - AI and daily stand-up flows.
-- Distribution: Linux AppImage, universal macOS `.dmg` (Homebrew Cask), and a
-  Windows Squirrel installer (Scoop), published from a tag-driven GitHub Actions
-  release workflow.
+- Distribution: Linux x86_64 AppImage, Apple Silicon macOS `.dmg` (Homebrew Cask),
+  and a Windows Squirrel installer (Scoop), published from a tag-driven GitHub
+  Actions release workflow. Intel macOS and arm64 Linux build from source.
 
 ### Notes
 
