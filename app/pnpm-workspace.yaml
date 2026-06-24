@@ -3,6 +3,10 @@ blockExoticSubdeps: false
 allowBuilds:
   electron-winstaller: true
   esbuild: true
+  # Native deps of @electron-forge/maker-dmg (macOS .dmg). pnpm 11 blocks their
+  # build scripts by default, which exits non-zero (ERR_PNPM_IGNORED_BUILDS).
+  fs-xattr: true
+  macos-alias: true
 # Vitest 2.x otherwise pulls a nested Vite 8 (rolldown/oxc) whose SSR transform
 # is incompatible with it (ReferenceError: __vite_ssr_exportName__). Pin the
 # whole tree to the Vite 5 the app already builds with.

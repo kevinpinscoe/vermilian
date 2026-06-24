@@ -25,6 +25,10 @@ const config: ForgeConfig = {
     new MakerAppImage(
       {
         options: {
+          // The packaged executable is named after productName ("Vermilian"),
+          // but the maker defaults `bin` to the lowercase package name. Point it
+          // at the actual binary or the AppImage make step fails.
+          bin: 'Vermilian',
           icon: './build/icon.png',
           categories: ['Office', 'ProjectManagement'],
         },
