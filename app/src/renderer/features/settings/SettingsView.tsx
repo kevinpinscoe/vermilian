@@ -151,7 +151,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
     }
     setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '' } : d));
     setSavedToast(true);
-    if (canCancel) onClose();
+    onClose();
   }
 
   async function handleReset() {
@@ -187,6 +187,14 @@ export function SettingsView({ canCancel, onClose }: Props) {
       <div className={styles.scroll}>
         <Heading className={styles.header}>Settings</Heading>
 
+        {!canCancel && (
+          <AttentionBox
+            type="informative"
+            title="Connect your YouTrack instance to get started"
+            text="Enter your YouTrack URL and a permanent token below, then click Save."
+          />
+        )}
+
         {failClosed && <AttentionBox type="negative" title="Credentials not saved" text={failClosed} />}
 
         <ConnectionSection draft={draft} update={update} hasToken={cred.hasYouTrackToken} onTest={testYouTrack} test={ytTest} />
@@ -199,7 +207,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
       <div className={styles.footer}>
         <Button kind="tertiary" color="negative" onClick={() => window.vermilian.quitApp()} disabled={saving}>
-          Exit
+          {canCancel ? 'Exit' : 'Quit Vermilian'}
         </Button>
         <div className={styles.footerActions}>
           {canCancel && (
