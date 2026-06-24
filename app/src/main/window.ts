@@ -9,7 +9,7 @@ export function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    icon: path.join(__dirname, '../../build/icon.png'),
+    icon: path.join(process.resourcesPath, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

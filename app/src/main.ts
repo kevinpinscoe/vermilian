@@ -1,5 +1,4 @@
 import { app, BrowserWindow } from 'electron';
-import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { createWindow, registerQuitProtection } from './main/window';
 import { registerIpc } from './main/ipc';
@@ -9,9 +8,6 @@ if (started) {
 }
 
 app.on('ready', () => {
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, '../../build/icon.png'));
-  }
   registerIpc();
   registerQuitProtection();
   createWindow();
