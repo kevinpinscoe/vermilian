@@ -5,6 +5,18 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-06-25
+
+### Fixed
+
+- `saveSecret` no longer bails out early on macOS when
+  `safeStorage.isEncryptionAvailable()` returns `false`. On macOS 26 (Tahoe)
+  the API can incorrectly return `false` even though `encryptString()` still
+  succeeds; the early-exit check meant tokens pasted into Source 3 were never
+  written and the "Credentials not saved" error was shown on every Save. The
+  guard is now Linux-only (where no keyring daemon genuinely prevents
+  encryption). The existing try/catch handles failures on all platforms.
+
 ## [1.0.5] - 2026-06-25
 
 ### Fixed

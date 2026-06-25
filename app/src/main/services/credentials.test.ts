@@ -58,8 +58,14 @@ describe('saveSecret', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('returns { ok: false } when isEncryptionAvailable returns false', async () => {
+  it('returns { ok: false } when isEncryptionAvailable returns false and encryptString throws', async () => {
+    // Reflects real Electron behaviour: when isEncryptionAvailable() is false,
+    // encryptString() throws rather than succeeding. saveSecret() must not
+    // bail out before trying (macOS 26 bug: API returns false but encryption works).
     (electron.safeStorage.isEncryptionAvailable as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('Encryption not available');
+    });
 
     const { saveSecret } = await getModule();
     const result = await saveSecret('test.bin', 'my-token');

@@ -72,6 +72,12 @@
   gap: 12px;
 }
 
+.version {
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  user-select: text;
+}
+
 .grow {
   flex: 1;
 }

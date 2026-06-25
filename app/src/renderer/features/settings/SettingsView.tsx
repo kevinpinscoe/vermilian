@@ -214,6 +214,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
         <Button kind="tertiary" color="negative" onClick={() => window.vermilian.quitApp()} disabled={saving}>
           {canCancel ? 'Exit' : 'Quit Vermilian'}
         </Button>
+        <span className={styles.version}>v{__APP_VERSION__}</span>
         <div className={styles.footerActions}>
           {canCancel && (
             <Button

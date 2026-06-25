@@ -57,12 +57,13 @@ export async function saveSecret(
   filename: string,
   plaintext: string,
 ): Promise<{ ok: boolean; backend?: string }> {
-  if (!isSecure()) {
+  // On Linux without a secure keyring backend, bail early — there is nothing
+  // to try. On macOS and Windows the OS always provides encryption so we skip
+  // the isSecure() guard: macOS 26 / some Electron builds return false from
+  // isEncryptionAvailable() even though encryptString() still succeeds.
+  if (process.platform === 'linux' && !isSecure()) {
     return { ok: false, backend: getBackend() };
   }
-  // encryptString can throw on macOS (e.g. Keychain access denied on unsigned
-  // builds or newer macOS versions). Catch here so callers get { ok: false }
-  // and can surface a clear error rather than silently aborting.
   try {
     const encrypted = safeStorage.encryptString(plaintext.trim());
     await atomicWrite(path.join(credentialsDir(), filename), encrypted);
