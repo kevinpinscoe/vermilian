@@ -40,7 +40,10 @@ function draftFromConfig(c: AppConfig): SettingsDraft {
 }
 
 const FAIL_CLOSED_MSG =
-  'Vermilian could not securely store your credentials. On macOS, ensure Keychain Access is available. On Linux, install gnome-keyring or kwallet.';
+  'Vermilian could not store your credentials. On Linux, install gnome-keyring or kwallet. On macOS, try restarting the app.';
+
+const PLAINTEXT_SAVE_MSG =
+  'Credentials saved, but system encryption is unavailable — tokens are stored as plain text with owner-only file permissions in your app data folder.';
 
 export function SettingsView({ canCancel, onClose }: Props) {
   const { data: config } = useConfig();
@@ -50,6 +53,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [failClosed, setFailClosed] = useState<string | null>(null);
+  const [plaintextWarn, setPlaintextWarn] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [worklogTypes, setWorklogTypes] = useState<string[]>(['Development']);
   const [ytTest, setYtTest] = useState<TestState>({ status: 'idle' });
@@ -114,6 +118,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
     if (!draft) return;
     setSaving(true);
     setFailClosed(null);
+    setPlaintextWarn(false);
 
     try {
       await window.vermilian.saveConfig({
@@ -132,26 +137,33 @@ export function SettingsView({ canCancel, onClose }: Props) {
         dailyNotesFolder: draft.dailyNotesFolder,
       });
 
-      let insecure = false;
+      let saveFailed = false;
+      let usedPlaintext = false;
       if (draft.youtrackToken) {
         const r = await window.vermilian.saveYouTrackToken(draft.youtrackToken);
-        if (!r.ok) insecure = true;
+        if (!r.ok) saveFailed = true;
+        else if (r.secure === false) usedPlaintext = true;
       }
       if (draft.claudeKey) {
         const r = await window.vermilian.saveClaudeKey(draft.claudeKey);
-        if (!r.ok) insecure = true;
+        if (!r.ok) saveFailed = true;
+        else if (r.secure === false) usedPlaintext = true;
       }
 
       await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
       setSaving(false);
 
-      if (insecure) {
+      if (saveFailed) {
         setFailClosed(FAIL_CLOSED_MSG);
         return;
       }
       setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '' } : d));
-      setSavedToast(true);
+      if (usedPlaintext) {
+        setPlaintextWarn(true);
+      } else {
+        setSavedToast(true);
+      }
       onClose();
     } catch {
       setSaving(false);
@@ -238,6 +250,12 @@ export function SettingsView({ canCancel, onClose }: Props) {
       {savedToast && (
         <Toast open={savedToast} type="positive" autoHideDuration={3000} onClose={() => setSavedToast(false)}>
           Settings saved.
+        </Toast>
+      )}
+
+      {plaintextWarn && (
+        <Toast open={plaintextWarn} type="warning" autoHideDuration={8000} onClose={() => setPlaintextWarn(false)}>
+          {PLAINTEXT_SAVE_MSG}
         </Toast>
       )}
 

@@ -52,6 +52,7 @@ export interface CredentialStatus {
 
 export interface SaveSecretResult {
   ok: boolean;
+  secure?: boolean; // true = encrypted via safeStorage; false = plain-text fallback (0o600 file)
   backend?: string;
 }
 

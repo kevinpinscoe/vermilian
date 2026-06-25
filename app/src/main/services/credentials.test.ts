@@ -1,10 +1,3 @@
-/**
- * Regression test for the safeStorage persistence bug:
- *   If safeStorage.encryptString() throws (e.g. macOS Keychain access denied
- *   on unsigned/dev builds or macOS 26+), saveSecret was propagating the
- *   exception instead of returning { ok: false }. The caller (handleSave) had
- *   no try-catch, so the save silently aborted and the token was never written.
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -24,6 +17,7 @@ vi.mock('node:fs', () => ({
     rename: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn(),
     access: vi.fn(),
+    unlink: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -45,39 +39,44 @@ describe('saveSecret', () => {
     (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (fs.promises.rename as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (fs.promises.unlink as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   });
 
-  it('returns { ok: false } instead of throwing when encryptString throws', async () => {
-    (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error('errSecMissingEntitlement: Keychain access denied');
-    });
-
-    const { saveSecret } = await getModule();
-    // Must NOT throw — must return { ok: false }
-    const result = await saveSecret('test.bin', 'my-token');
-    expect(result.ok).toBe(false);
-  });
-
-  it('returns { ok: false } when isEncryptionAvailable returns false and encryptString throws', async () => {
-    // Reflects real Electron behaviour: when isEncryptionAvailable() is false,
-    // encryptString() throws rather than succeeding. saveSecret() must not
-    // bail out before trying (macOS 26 bug: API returns false but encryption works).
-    (electron.safeStorage.isEncryptionAvailable as ReturnType<typeof vi.fn>).mockReturnValue(false);
-    (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error('Encryption not available');
-    });
-
-    const { saveSecret } = await getModule();
-    const result = await saveSecret('test.bin', 'my-token');
-    expect(result.ok).toBe(false);
-  });
-
-  it('returns { ok: true } when encryption and file write succeed', async () => {
+  it('returns { ok: true, secure: true } when encryption succeeds', async () => {
     const fakeBuffer = Buffer.from('encrypted-data');
     (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockReturnValue(fakeBuffer);
 
     const { saveSecret } = await getModule();
     const result = await saveSecret('test.bin', 'my-token');
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, secure: true });
+  });
+
+  it('falls back to plain-text file and returns { ok: true, secure: false } when encryptString throws', async () => {
+    // macOS 26: encryptString() throws even though isEncryptionAvailable() may return true.
+    (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('errSecMissingEntitlement: Keychain access denied');
+    });
+
+    const { saveSecret } = await getModule();
+    const result = await saveSecret('test.bin', 'my-token');
+    expect(result.ok).toBe(true);
+    expect(result.secure).toBe(false);
+    // Plain-text file should have been written
+    expect(fs.promises.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('test.txt'),
+      expect.any(Buffer),
+      expect.objectContaining({ mode: 0o600 }),
+    );
+  });
+
+  it('returns { ok: false } when both encryption and plaintext write fail', async () => {
+    (electron.safeStorage.encryptString as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('Encryption not available');
+    });
+    (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('EACCES'));
+
+    const { saveSecret } = await getModule();
+    const result = await saveSecret('test.bin', 'my-token');
+    expect(result.ok).toBe(false);
   });
 });

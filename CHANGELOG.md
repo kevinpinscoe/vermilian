@@ -5,6 +5,19 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-06-25
+
+### Fixed
+
+- When `safeStorage` encryption is completely unavailable (e.g. macOS 26 /
+  Tahoe where Electron's keychain integration may fail entirely), `saveSecret`
+  now falls back to a plain-text file with owner-only permissions (`0o600`) in
+  the app data folder. The save succeeds and a warning toast informs the user
+  that encryption was unavailable. Previously the save returned `{ ok: false }`
+  and the token was never written, blocking first-run configuration.
+- `loadSecret` now checks the plain-text fallback file when the encrypted blob
+  is absent or unreadable, so tokens survive across restarts.
+
 ## [1.0.6] - 2026-06-25
 
 ### Fixed

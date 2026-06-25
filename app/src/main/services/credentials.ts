@@ -51,32 +51,51 @@ async function atomicWrite(file: string, data: Buffer): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-// ─── Source 3: safeStorage (original approach) ────────────────────────────────
+// ─── Source 3: safeStorage (encrypted) with plain-text fallback ──────────────
+
+// Plain-text fallback path — used when safeStorage encryption is unavailable
+// (e.g. macOS 26 with unsigned/Electron builds). Mode 0o600 restricts access
+// to the owning user, matching the security model of ~/.netrc.
+function plaintextPath(filename: string): string {
+  return path.join(credentialsDir(), filename.replace(/\.bin$/, '.txt'));
+}
 
 export async function saveSecret(
   filename: string,
   plaintext: string,
-): Promise<{ ok: boolean; backend?: string }> {
-  // On Linux without a secure keyring backend, bail early — there is nothing
-  // to try. On macOS and Windows the OS always provides encryption so we skip
-  // the isSecure() guard: macOS 26 / some Electron builds return false from
-  // isEncryptionAvailable() even though encryptString() still succeeds.
+): Promise<{ ok: boolean; secure?: boolean; backend?: string }> {
+  // On Linux without a keyring daemon there is genuinely nothing to try.
   if (process.platform === 'linux' && !isSecure()) {
     return { ok: false, backend: getBackend() };
   }
+  // Attempt safeStorage encryption. On macOS 26, isEncryptionAvailable() may
+  // return false or encryptString() may throw even though the OS has a keychain
+  // — fall through to the plain-text fallback rather than blocking the user.
   try {
     const encrypted = safeStorage.encryptString(plaintext.trim());
     await atomicWrite(path.join(credentialsDir(), filename), encrypted);
-    return { ok: true };
+    await fs.unlink(plaintextPath(filename)).catch(() => {});
+    return { ok: true, secure: true };
+  } catch { /* fall through to plaintext */ }
+  // Plain-text fallback with owner-only permissions (0o600 via atomicWrite).
+  try {
+    await atomicWrite(plaintextPath(filename), Buffer.from(plaintext.trim(), 'utf-8'));
+    return { ok: true, secure: false, backend: getBackend() };
   } catch {
     return { ok: false, backend: getBackend() };
   }
 }
 
 export async function loadSecret(filename: string): Promise<string | null> {
+  // Try encrypted blob first.
   try {
     const buf = await fs.readFile(path.join(credentialsDir(), filename));
     const val = safeStorage.decryptString(buf).trim();
+    return val || null;
+  } catch { /* fall through */ }
+  // Try plain-text fallback.
+  try {
+    const val = (await fs.readFile(plaintextPath(filename), 'utf-8')).trim();
     return val || null;
   } catch {
     return null;
