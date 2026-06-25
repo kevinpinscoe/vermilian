@@ -36,3 +36,4 @@ dist/
 **/.obsidian/workspace.json
 **/.obsidian/graph.json
 **/.obsidian/plugins/*/data.json
+bugs.md
