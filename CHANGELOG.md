@@ -5,6 +5,23 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-06-25
+
+### Fixed
+
+- `saveSecret` in `credentials.ts` now catches exceptions from
+  `safeStorage.encryptString()` and returns `{ ok: false }` instead of
+  propagating. On macOS 26 (Tahoe) and unsigned dev builds, Keychain access can
+  be denied at the call site even when `isEncryptionAvailable()` returns true;
+  the unhandled exception was silently aborting `handleSave` in the renderer,
+  leaving the Save button in a stuck loading state so the user would force-quit
+  before the token was written.
+- `handleSave` in `SettingsView.tsx` now wraps all IPC calls in a try-catch so
+  any unexpected rejection surfaces as a visible error banner rather than
+  silently breaking the save flow.
+- Updated the "credentials not saved" error message to mention both macOS
+  Keychain and Linux keyring — the old message only mentioned Linux tools.
+
 ## [1.0.4] - 2026-06-24
 
 ### Fixed

@@ -60,9 +60,16 @@ export async function saveSecret(
   if (!isSecure()) {
     return { ok: false, backend: getBackend() };
   }
-  const encrypted = safeStorage.encryptString(plaintext.trim());
-  await atomicWrite(path.join(credentialsDir(), filename), encrypted);
-  return { ok: true };
+  // encryptString can throw on macOS (e.g. Keychain access denied on unsigned
+  // builds or newer macOS versions). Catch here so callers get { ok: false }
+  // and can surface a clear error rather than silently aborting.
+  try {
+    const encrypted = safeStorage.encryptString(plaintext.trim());
+    await atomicWrite(path.join(credentialsDir(), filename), encrypted);
+    return { ok: true };
+  } catch {
+    return { ok: false, backend: getBackend() };
+  }
 }
 
 export async function loadSecret(filename: string): Promise<string | null> {

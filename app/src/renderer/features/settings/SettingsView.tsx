@@ -40,7 +40,7 @@ function draftFromConfig(c: AppConfig): SettingsDraft {
 }
 
 const FAIL_CLOSED_MSG =
-  'Vermilian cannot securely store credentials on this system — install gnome-keyring or kwallet, or run Vermilian on a session with a keyring available.';
+  'Vermilian could not securely store your credentials. On macOS, ensure Keychain Access is available. On Linux, install gnome-keyring or kwallet.';
 
 export function SettingsView({ canCancel, onClose }: Props) {
   const { data: config } = useConfig();
@@ -115,43 +115,48 @@ export function SettingsView({ canCancel, onClose }: Props) {
     setSaving(true);
     setFailClosed(null);
 
-    await window.vermilian.saveConfig({
-      youtrackUrl: draft.youtrackUrl.trim().replace(/\/+$/, ''),
-      youtrackLogin: draft.youtrackLogin.trim(),
-      youtrackTokenCommand: draft.youtrackTokenCommand.trim(),
-      youtrackTokenFile: draft.youtrackTokenFile.trim(),
-      claudeKeyCommand: draft.claudeKeyCommand.trim(),
-      claudeKeyFile: draft.claudeKeyFile.trim(),
-      modelForCreate: draft.modelForCreate,
-      modelForStandup: draft.modelForStandup,
-      pomodoro: draft.pomodoro,
-      soundOnBlockEnd: draft.soundOnBlockEnd,
-      osNotifications: draft.osNotifications,
-      defaultWorklogType: draft.defaultWorklogType,
-      dailyNotesFolder: draft.dailyNotesFolder,
-    });
+    try {
+      await window.vermilian.saveConfig({
+        youtrackUrl: draft.youtrackUrl.trim().replace(/\/+$/, ''),
+        youtrackLogin: draft.youtrackLogin.trim(),
+        youtrackTokenCommand: draft.youtrackTokenCommand.trim(),
+        youtrackTokenFile: draft.youtrackTokenFile.trim(),
+        claudeKeyCommand: draft.claudeKeyCommand.trim(),
+        claudeKeyFile: draft.claudeKeyFile.trim(),
+        modelForCreate: draft.modelForCreate,
+        modelForStandup: draft.modelForStandup,
+        pomodoro: draft.pomodoro,
+        soundOnBlockEnd: draft.soundOnBlockEnd,
+        osNotifications: draft.osNotifications,
+        defaultWorklogType: draft.defaultWorklogType,
+        dailyNotesFolder: draft.dailyNotesFolder,
+      });
 
-    let insecure = false;
-    if (draft.youtrackToken) {
-      const r = await window.vermilian.saveYouTrackToken(draft.youtrackToken);
-      if (!r.ok) insecure = true;
-    }
-    if (draft.claudeKey) {
-      const r = await window.vermilian.saveClaudeKey(draft.claudeKey);
-      if (!r.ok) insecure = true;
-    }
+      let insecure = false;
+      if (draft.youtrackToken) {
+        const r = await window.vermilian.saveYouTrackToken(draft.youtrackToken);
+        if (!r.ok) insecure = true;
+      }
+      if (draft.claudeKey) {
+        const r = await window.vermilian.saveClaudeKey(draft.claudeKey);
+        if (!r.ok) insecure = true;
+      }
 
-    await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-    await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
-    setSaving(false);
+      await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+      await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
+      setSaving(false);
 
-    if (insecure) {
-      setFailClosed(FAIL_CLOSED_MSG);
-      return;
+      if (insecure) {
+        setFailClosed(FAIL_CLOSED_MSG);
+        return;
+      }
+      setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '' } : d));
+      setSavedToast(true);
+      onClose();
+    } catch {
+      setSaving(false);
+      setFailClosed('Save failed unexpectedly. Please try again.');
     }
-    setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '' } : d));
-    setSavedToast(true);
-    onClose();
   }
 
   async function handleReset() {
