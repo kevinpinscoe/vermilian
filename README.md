@@ -4,6 +4,14 @@
 
 An Electron desktop application that provides an enhanced frontend for a self-hosted [JetBrains YouTrack](https://www.jetbrains.com/youtrack/) instance.
 
+Vermilian features a high-density work queue for triaging and managing YouTrack tasks across table and Kanban views.
+
+I decided not to design yet another project-management backend because YouTrack already manages the projects and workflows I need.
+
+So I created Vermilian as a better frontend alternative with a dense work queue, table view, task popouts, and a Pomodoro timer.
+
+Vermilian also features a fully functional Kanban board for quick task review.
+
 ## Status
 
 **v1.0.0 — first public release.** Vermilian is feature-complete against its specification and
