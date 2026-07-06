@@ -1,3 +1,11 @@
+---
+title: RUNBOOK.md — Vermilian
+tags: [runbook, operations]
+vault_link: runbooks/home-kinscoe-projects-public-vermilian.md
+source_path: /home/kinscoe/Projects/public/vermilian/RUNBOOK.md
+---
+
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-projects-public-vermilian.md` (symlink → this file).
 # RUNBOOK.md — Vermilian
 
 ## Metadata
