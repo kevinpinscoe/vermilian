@@ -5,9 +5,10 @@ name: Release
 # job publishes the release and updates the Homebrew Cask + Scoop manifest.
 #
 # Linux ships AppImage only (no .deb/.rpm — the apt/rpm index repos store package
-# files in git and an ~100 MB Electron package would bloat them). macOS ships an
-# unsigned .dmg (see README for the Gatekeeper workaround). Windows ships a
-# Squirrel installer plus a portable .zip for Scoop.
+# files in git and an ~100 MB Electron package would bloat them), built for both
+# x86_64 and arm64 (Raspberry Pi 5 / Apple-on-Linux). macOS ships an unsigned .dmg
+# (see README for the Gatekeeper workaround). Windows ships a Squirrel installer
+# plus a portable .zip for Scoop.
 #
 # NOTE: action refs below can be pinned to commit SHAs per the outside-repo
 # directive; tags are used here for readability.
@@ -27,12 +28,13 @@ jobs:
       fail-fast: false
       matrix:
         # Pinned runner images for reproducible release builds (avoid -latest drift):
-        #   ubuntu-24.04  -> Linux x86_64 AppImage
-        #   macos-14      -> Apple Silicon; builds the arm64 .dmg
-        #   windows-2022  -> Windows x86_64 Squirrel installer + portable .zip
-        # arm64 / Raspberry Pi (ubuntu-24.04-arm) is intentionally omitted until a
-        # native Pi build is verified — see README "Target platforms".
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        #   ubuntu-24.04      -> Linux x86_64 AppImage
+        #   ubuntu-24.04-arm  -> Linux arm64 AppImage (Raspberry Pi 5)
+        #   macos-14          -> Apple Silicon; builds the arm64 .dmg
+        #   windows-2022      -> Windows x86_64 Squirrel installer + portable .zip
+        # @reforged/maker-appimage builds for the host arch, so the arm runner
+        # yields an arm64 AppImage with no extra config.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
