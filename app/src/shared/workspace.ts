@@ -2,6 +2,9 @@
 // VermilianConfig is cached in userData/workspace-config.json (local, offline-safe)
 // and synced to the _vermilian-config YouTrack Article (see services/articleConfig.ts).
 
+import { FIELD_DEFS, type BoardIssueFields } from './fields';
+export type { BoardIssueFields };
+
 export interface WorkspaceFolder {
   id: string;
   name: string;
@@ -30,47 +33,17 @@ export interface YouTrackProject {
   shortName: string;
 }
 
-// Per-issue custom-field snapshot used by both the board and the detail panel.
-// notes and dateTimeEntered are null in the board query (not requested) and
-// populated by the detail query.
-export interface BoardIssueFields {
-  status: string | null;
-  priority: string | null;
-  category: string | null;
-  dueDate: number | null; // epoch ms
-  ticket: string | null;
-  ticketLink: string | null;
-  trackingLink: string | null;
-  notes: string | null;
-  dateTimeEntered: number | null; // epoch ms
-  assignee: string | null; // YouTrack login of the assignee (SingleUserIssueCustomField)
-}
+// BoardIssueFields (the per-issue custom-field snapshot used by both the
+// board and the detail panel) is now derived from FIELD_DEFS — see
+// shared/fields.ts. notes and dateTimeEntered are null in the board query
+// (not requested) and populated by the detail query.
 
-// Known dropdown values (hardcoded; match the hosted YouTrack instance).
-export const STATUS_OPTIONS = [
-  'To do', 'In Progress', 'Working on it', 'Waiting for IT', 'BLOCKED',
-  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource', 'Done',
-] as const;
-
-export const PRIORITY_OPTIONS = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'] as const;
-
-export const CATEGORY_OPTIONS = ['INBOX', 'BUG', 'FEATURE', 'TASK'] as const;
-
-// Mapping from our field keys to YouTrack API field descriptors.
-export const FIELD_TYPE_MAP: Record<
-  string,
-  { ytName: string; $type: string; kind: 'enum' | 'state' | 'date' | 'text' }
-> = {
-  status: { ytName: 'Status', $type: 'StateIssueCustomField', kind: 'state' },
-  priority: { ytName: 'Priority', $type: 'SingleEnumIssueCustomField', kind: 'enum' },
-  category: { ytName: 'Category', $type: 'SingleEnumIssueCustomField', kind: 'enum' },
-  dueDate: { ytName: 'Due Date', $type: 'DateIssueCustomField', kind: 'date' },
-  ticket: { ytName: 'Ticket', $type: 'SimpleIssueCustomField', kind: 'text' },
-  ticketLink: { ytName: 'Ticket link', $type: 'SimpleIssueCustomField', kind: 'text' },
-  trackingLink: { ytName: 'Tracking link', $type: 'SimpleIssueCustomField', kind: 'text' },
-  notes: { ytName: 'Notes', $type: 'TextIssueCustomField', kind: 'text' },
-  dateTimeEntered: { ytName: 'Date time entered', $type: 'DateIssueCustomField', kind: 'date' },
-};
+// Known dropdown values, re-exported from FIELD_DEFS for the existing import
+// sites (TaskForm, WorkspaceBoard, grouping, TaskDetailPanel, KanbanView,
+// ProjectBoard) — unchanged shape, still `as const` string tuples.
+export const STATUS_OPTIONS = FIELD_DEFS.status.options;
+export const PRIORITY_OPTIONS = FIELD_DEFS.priority.options;
+export const CATEGORY_OPTIONS = FIELD_DEFS.category.options;
 
 export interface BoardIssue {
   id: string;

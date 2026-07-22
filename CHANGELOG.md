@@ -5,6 +5,47 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-22
+
+### Added
+
+- Field-definition registry (`src/shared/fields.ts`) as the single source of
+  truth for every known YouTrack custom field, replacing eight independently
+  hand-maintained lists.
+- 13 new YouTrack custom fields: Ghostty tab name, Repo URL, Working branch,
+  Tracking file URL, TODO file URL, Project health, Progress percent, Next
+  status due, Reporting cadence, Base branch, Pull request URL, Artifact URL,
+  and Last reported commit. All are hidden by default; only Repo URL is
+  creatable from the new-task form.
+- A `number` field editor (0–100, clamped on commit) for Progress percent,
+  backed by a new `integer` wire kind for raw-numeric custom fields.
+
+### Fixed
+
+- Category and Notes custom fields were declared with the wrong YouTrack
+  `$type` (`SingleEnumIssueCustomField`/`TextIssueCustomField` instead of
+  `StateIssueCustomField`/`SimpleIssueCustomField`), which broke writes to
+  those two fields.
+- Assignee was missing from the field type map entirely, so patching it threw
+  "Unknown field".
+- Knowledge Base article creation now sends the required `project` field. On
+  YouTrack 2026.2 every article must belong to a project; the previous
+  `{summary, content}`-only request returned `400 Article.project-is-invalid`
+  (surfaced as the "Could not sync configuration — retrying." toast).
+
+### Changed
+
+- Renamed the `trackingLink` field to `relatedLink` throughout (key, YouTrack
+  lookup, and UI label) to match the "Related link" rename on the YouTrack
+  instance.
+
+## [1.0.8] - 2026-07-17
+
+### Added
+
+- CI release workflow now builds an arm64 Linux AppImage (on `ubuntu-24.04-arm`)
+  alongside the existing release targets.
+
 ## [1.0.7] - 2026-06-25
 
 ### Fixed

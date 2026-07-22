@@ -22,8 +22,10 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
     makeDefaultFormState(projects, defaultProjectId),
   );
 
-  const { summaryEmpty, ticketLinkInvalid, trackingLinkInvalid } = validateForm(form);
-  const canCreate = !summaryEmpty && !ticketLinkInvalid && !trackingLinkInvalid && !loading;
+  const { summaryEmpty, projectEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } =
+    validateForm(form);
+  const canCreate =
+    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !loading;
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -43,8 +45,9 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
       dueDate,
       ticket: form.ticket.trim() || null,
       ticketLink: form.ticketLink.trim() || null,
-      trackingLink: form.trackingLink.trim() || null,
+      relatedLink: form.relatedLink.trim() || null,
       notes: form.notes.trim() || null,
+      repoUrl: form.repoUrl.trim() || null,
     });
 
     setLoading(false);

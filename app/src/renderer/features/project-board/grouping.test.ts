@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
+import { FIELD_KEYS } from '../../../shared/fields';
 import type { EffectiveColors } from './KanbanView';
 import {
   STATUS_ORDER,
@@ -17,24 +18,13 @@ import {
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 function issue(id: string, fields: Partial<BoardIssueFields> = {}, summary = id): BoardIssue {
+  const emptyFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, null])) as BoardIssueFields;
   return {
     id,
     idReadable: id.toUpperCase(),
     summary,
     resolved: null,
-    fields: {
-      status: null,
-      priority: null,
-      category: null,
-      dueDate: null,
-      ticket: null,
-      ticketLink: null,
-      trackingLink: null,
-      notes: null,
-      dateTimeEntered: null,
-      assignee: null,
-      ...fields,
-    },
+    fields: { ...emptyFields, ...fields },
   };
 }
 

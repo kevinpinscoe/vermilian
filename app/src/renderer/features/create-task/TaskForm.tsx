@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Text } from '@vibe/core';
 import type { YouTrackProject } from '../../../shared/workspace';
 import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
+import { CREATABLE_FIELD_DEFS } from '../../../shared/fields';
 import styles from './CreateTaskModal.module.css';
 
 export interface FormState {
@@ -13,8 +14,9 @@ export interface FormState {
   dueDate: string;
   ticket: string;
   ticketLink: string;
-  trackingLink: string;
+  relatedLink: string;
   notes: string;
+  repoUrl: string;
 }
 
 function isInboxProject(projects: YouTrackProject[], projectId: string): boolean {
@@ -22,38 +24,57 @@ function isInboxProject(projects: YouTrackProject[], projectId: string): boolean
   return Boolean(p && p.name.toLowerCase().includes('inbox'));
 }
 
-function isValidUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s);
-}
+// status/priority need a non-empty create-form default; every other creatable
+// field defaults to ''. Same escape-hatch pattern as project/category's
+// side-effecting onChange handlers below — not a registry concern.
+const FORM_DEFAULT_OVERRIDES: Partial<Record<string, string>> = {
+  status: 'To do',
+  priority: 'Normal',
+};
 
 export function makeDefaultFormState(
   projects: YouTrackProject[],
   defaultProjectId: string | null,
 ): FormState {
+  // Only trust an explicit, verified active project. Guessing a fallback
+  // (e.g. the first project in YouTrack's unsorted /api/admin/projects
+  // response) risks silently landing on an unconfigured/demo project whose
+  // Status or Category bundle doesn't match ours — better to make the user
+  // choose explicitly than fail with a confusing YouTrack API error.
   const pid =
-    defaultProjectId && projects.find((p) => p.id === defaultProjectId)
-      ? defaultProjectId
-      : (projects[0]?.id ?? '');
+    defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '';
   const inbox = isInboxProject(projects, pid);
+  const base = Object.fromEntries(
+    CREATABLE_FIELD_DEFS.map((d) => [d.key, FORM_DEFAULT_OVERRIDES[d.key] ?? '']),
+  ) as Omit<FormState, 'summary' | 'projectId'>;
   return {
+    ...base,
     summary: '',
     projectId: pid,
-    status: 'To do',
-    priority: 'Normal',
-    category: inbox ? 'INBOX' : '',
-    dueDate: '',
-    ticket: '',
-    ticketLink: '',
-    trackingLink: '',
-    notes: '',
+    category: inbox ? 'INBOX' : base.category,
   };
 }
 
-export function validateForm(form: FormState) {
-  return {
+export function validateForm(form: FormState): {
+  summaryEmpty: boolean;
+  projectEmpty: boolean;
+  ticketLinkInvalid: boolean;
+  relatedLinkInvalid: boolean;
+  repoUrlInvalid: boolean;
+} {
+  const formValues = form as unknown as Record<string, string>;
+  const result: Record<string, boolean> = {
     summaryEmpty: !form.summary.trim(),
-    ticketLinkInvalid: Boolean(form.ticketLink && !isValidUrl(form.ticketLink)),
-    trackingLinkInvalid: Boolean(form.trackingLink && !isValidUrl(form.trackingLink)),
+    projectEmpty: !form.projectId,
+  };
+  for (const def of CREATABLE_FIELD_DEFS) {
+    if (!def.validate) continue;
+    const value = formValues[def.key];
+    result[`${def.key}Invalid`] = Boolean(value && def.validate(value));
+  }
+  return result as {
+    summaryEmpty: boolean; projectEmpty: boolean; ticketLinkInvalid: boolean;
+    relatedLinkInvalid: boolean; repoUrlInvalid: boolean;
   };
 }
 
@@ -80,7 +101,7 @@ export function TaskForm({
   const [inboxCategoryNote, setInboxCategoryNote] = useState(false);
   const [categoryTouched, setCategoryTouched] = useState(false);
 
-  const { summaryEmpty, ticketLinkInvalid, trackingLinkInvalid } = validateForm(form);
+  const { summaryEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } = validateForm(form);
 
   useEffect(() => {
     if (autoFocusSummary) summaryRef.current?.focus();
@@ -152,6 +173,7 @@ export function TaskForm({
           onChange={(e) => handleProjectChange(e.target.value)}
           disabled={loading}
         >
+          {!form.projectId && <option value="">Select a project…</option>}
           {projectsSorted.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -279,21 +301,38 @@ export function TaskForm({
         {ticketLinkInvalid && <span className={styles.fieldError}>Must be a valid URL.</span>}
       </div>
 
-      {/* Tracking link */}
+      {/* Related link */}
       <div className={styles.fieldGroup}>
-        <label className={styles.label} htmlFor="ct-tracking-link">
-          Tracking link
+        <label className={styles.label} htmlFor="ct-related-link">
+          Related link
         </label>
         <input
-          id="ct-tracking-link"
+          id="ct-related-link"
           type="url"
-          className={`${styles.input} ${trackingLinkInvalid ? styles.inputError : ''}`}
-          value={form.trackingLink}
-          onChange={(e) => set('trackingLink', e.target.value)}
+          className={`${styles.input} ${relatedLinkInvalid ? styles.inputError : ''}`}
+          value={form.relatedLink}
+          onChange={(e) => set('relatedLink', e.target.value)}
           placeholder="https://..."
           disabled={loading}
         />
-        {trackingLinkInvalid && <span className={styles.fieldError}>Must be a valid URL.</span>}
+        {relatedLinkInvalid && <span className={styles.fieldError}>Must be a valid URL.</span>}
+      </div>
+
+      {/* Repo URL */}
+      <div className={styles.fieldGroup}>
+        <label className={styles.label} htmlFor="ct-repo-url">
+          Repo URL
+        </label>
+        <input
+          id="ct-repo-url"
+          type="url"
+          className={`${styles.input} ${repoUrlInvalid ? styles.inputError : ''}`}
+          value={form.repoUrl}
+          onChange={(e) => set('repoUrl', e.target.value)}
+          placeholder="https://..."
+          disabled={loading}
+        />
+        {repoUrlInvalid && <span className={styles.fieldError}>Must be a valid URL.</span>}
       </div>
 
       {/* Notes */}

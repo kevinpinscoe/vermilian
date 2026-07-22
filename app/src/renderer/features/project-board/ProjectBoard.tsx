@@ -12,6 +12,7 @@ import { Loader, Text, Heading, AttentionBox, Button, Tooltip } from '@vibe/core
 import { Wand, Play, Settings } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
 import { PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
+import { getFieldDef, type ColumnFieldKey } from '../../../shared/fields';
 import type { BoardColumnConfig, BoardColors, BoardSortConfig, ColumnField } from '../../../shared/boardConfig';
 import { COLUMN_LABELS, defaultBoardConfig, defaultBoardView, defaultKanbanView } from '../../../shared/boardConfig';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
@@ -316,7 +317,61 @@ function InlineDateCell({ value, onSave }: { value: number | null; onSave: (v: n
   );
 }
 
+// ─── Inline number cell ───────────────────────────────────────────────────────
+
+function clampPercent(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function InlineNumberCell({ value, onSave }: { value: number | null; onSave: (v: number | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+
+  function start(e: React.MouseEvent) { e.stopPropagation(); setDraft(value === null ? '' : String(value)); setEditing(true); }
+  function commit() { onSave(clampPercent(draft)); setEditing(false); }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number"
+        min={0}
+        max={100}
+        step={1}
+        className={styles.inlineDateInput}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+          e.stopPropagation();
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+  return (
+    <span className={`${styles.dateCell} ${styles.cellEditable}`} onClick={start}>
+      {value === null ? '—' : `${value}%`}
+    </span>
+  );
+}
+
 // ─── Render cell ──────────────────────────────────────────────────────────────
+
+// Only fields with editor: 'select' are chip-rendered today (status/priority/category);
+// each needs its own colour map from EffectiveColors, keyed by the field's YouTrack label.
+const CHIP_COLOR_KEY: Partial<Record<ColumnFieldKey, keyof EffectiveColors>> = {
+  status: 'Status',
+  priority: 'Priority',
+  category: 'Category',
+};
 
 function renderCell(
   issue: BoardIssue,
@@ -324,46 +379,33 @@ function renderCell(
   colors: EffectiveColors,
   onPatch?: (issueId: string, field: string, value: string | number | null) => void,
 ): React.ReactNode {
-  switch (field) {
-    case 'status':
+  if (field === 'summary') return <span className={styles.emptyCell}>—</span>; // handled by IssueRow instead
+  const def = getFieldDef(field);
+  const value = issue.fields[field];
+  const save = (v: string | number | null) => onPatch?.(issue.id, field, v);
+
+  switch (def.editor) {
+    case 'select': {
+      const colorKey = CHIP_COLOR_KEY[field];
       return (
         <ChipCell
-          value={issue.fields.status}
-          colorMap={colors.Status}
-          field="status"
-          onEdit={onPatch ? (v) => onPatch(issue.id, 'status', v) : undefined}
+          value={value as string | null}
+          colorMap={colorKey ? colors[colorKey] : {}}
+          field={field}
+          onEdit={onPatch ? (v) => save(v) : undefined}
         />
       );
-    case 'priority':
-      return (
-        <ChipCell
-          value={issue.fields.priority}
-          colorMap={colors.Priority}
-          field="priority"
-          onEdit={onPatch ? (v) => onPatch(issue.id, 'priority', v) : undefined}
-        />
-      );
-    case 'category':
-      return (
-        <ChipCell
-          value={issue.fields.category}
-          colorMap={colors.Category}
-          field="category"
-          onEdit={onPatch ? (v) => onPatch(issue.id, 'category', v) : undefined}
-        />
-      );
-    case 'dueDate':
-      return <InlineDateCell value={issue.fields.dueDate} onSave={(v) => onPatch?.(issue.id, 'dueDate', v)} />;
-    case 'ticket':
-      return <InlineTextCell value={issue.fields.ticket} onSave={(v) => onPatch?.(issue.id, 'ticket', v)} />;
-    case 'ticketLink':
-      return <InlineTextCell value={issue.fields.ticketLink} onSave={(v) => onPatch?.(issue.id, 'ticketLink', v)} asLink />;
-    case 'trackingLink':
-      return <InlineTextCell value={issue.fields.trackingLink} onSave={(v) => onPatch?.(issue.id, 'trackingLink', v)} asLink />;
-    case 'notes':
-      return <InlineTextCell value={issue.fields.notes} onSave={(v) => onPatch?.(issue.id, 'notes', v)} />;
-    case 'dateTimeEntered':
-      return <Text type="text2" className={styles.dateCell}>{formatDate(issue.fields.dateTimeEntered)}</Text>;
+    }
+    case 'date':
+      return <InlineDateCell value={value as number | null} onSave={(v) => save(v)} />;
+    case 'number':
+      return <InlineNumberCell value={value as number | null} onSave={(v) => save(v)} />;
+    case 'link':
+      return <InlineTextCell value={value as string | null} onSave={(v) => save(v)} asLink />;
+    case 'text':
+      return <InlineTextCell value={value as string | null} onSave={(v) => save(v)} />;
+    case 'readonly':
+      return <Text type="text2" className={styles.dateCell}>{formatDate(value as number | null)}</Text>;
     default:
       return <span className={styles.emptyCell}>—</span>;
   }
@@ -1045,8 +1087,9 @@ export function ProjectBoard({
       dueDate: null,
       ticket: null,
       ticketLink: null,
-      trackingLink: null,
+      relatedLink: null,
       notes: null,
+      repoUrl: null,
     });
   }
 

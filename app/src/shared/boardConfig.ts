@@ -1,36 +1,20 @@
 // Board configuration types — stored in the _vermilian-config YouTrack Article.
 
 import type { VermilianConfig } from './workspace';
+import { FIELD_KEYS, getFieldDef, type ColumnFieldKey } from './fields';
 
 // ─── Column ───────────────────────────────────────────────────────────────────
 
-export const ALL_COLUMN_FIELDS = [
-  'summary',
-  'status',
-  'priority',
-  'category',
-  'dueDate',
-  'ticket',
-  'ticketLink',
-  'trackingLink',
-  'notes',
-  'dateTimeEntered',
-] as const;
+const COLUMN_FIELD_KEYS = FIELD_KEYS.filter((k) => getFieldDef(k).column) as ColumnFieldKey[];
+
+export const ALL_COLUMN_FIELDS = ['summary', ...COLUMN_FIELD_KEYS] as const;
 
 export type ColumnField = (typeof ALL_COLUMN_FIELDS)[number];
 
 export const COLUMN_LABELS: Record<ColumnField, string> = {
   summary: 'Summary',
-  status: 'Status',
-  priority: 'Priority',
-  category: 'Category',
-  dueDate: 'Due Date',
-  ticket: 'Ticket #',
-  ticketLink: 'Ticket link',
-  trackingLink: 'Tracking link',
-  notes: 'Notes',
-  dateTimeEntered: 'Date entered',
-};
+  ...Object.fromEntries(COLUMN_FIELD_KEYS.map((k) => [k, getFieldDef(k).label])),
+} as Record<ColumnField, string>;
 
 export interface BoardColumnConfig {
   field: ColumnField;
@@ -89,9 +73,22 @@ export const DEFAULT_COLUMNS: BoardColumnConfig[] = [
   { field: 'dueDate',         width: 110, visible: true  },
   { field: 'ticket',          width: 100, visible: true  },
   { field: 'ticketLink',      width: 120, visible: false },
-  { field: 'trackingLink',    width: 120, visible: false },
+  { field: 'relatedLink',     width: 120, visible: false },
   { field: 'notes',           width: 200, visible: false },
   { field: 'dateTimeEntered', width: 150, visible: false },
+  { field: 'ghosttyTabName',     width: 140, visible: false },
+  { field: 'repoUrl',            width: 140, visible: false },
+  { field: 'workingBranch',      width: 130, visible: false },
+  { field: 'trackingFileUrl',    width: 150, visible: false },
+  { field: 'todoFileUrl',        width: 140, visible: false },
+  { field: 'projectHealth',      width: 110, visible: false },
+  { field: 'progressPercent',    width: 90,  visible: false },
+  { field: 'nextStatusDue',      width: 110, visible: false },
+  { field: 'reportingCadence',   width: 120, visible: false },
+  { field: 'baseBranch',         width: 130, visible: false },
+  { field: 'pullRequestUrl',     width: 140, visible: false },
+  { field: 'artifactUrl',        width: 140, visible: false },
+  { field: 'lastReportedCommit', width: 150, visible: false },
 ];
 
 export function defaultBoardView(): BoardViewConfig {

@@ -106,8 +106,9 @@ export interface CreateIssueArgs {
   dueDate: number | null;
   ticket: string | null;
   ticketLink: string | null;
-  trackingLink: string | null;
+  relatedLink: string | null;
   notes: string | null;
+  repoUrl: string | null;
 }
 
 export interface CreateIssueResult {

@@ -4,6 +4,7 @@
 // deterministic fixtures and mutations never leave the process.
 
 import type { BoardIssue, BoardIssueFields, IssueDetail } from '../../shared/workspace';
+import { FIELD_KEYS } from '../../shared/fields';
 import type {
   YouTrackProject,
   CreateIssuePayload,
@@ -29,11 +30,8 @@ const PROJECTS: YouTrackProject[] = [
 ];
 
 function emptyFields(over: Partial<BoardIssueFields>): BoardIssueFields {
-  return {
-    status: null, priority: null, category: null, dueDate: null,
-    ticket: null, ticketLink: null, trackingLink: null, notes: null,
-    dateTimeEntered: null, assignee: null, ...over,
-  };
+  const base = Object.fromEntries(FIELD_KEYS.map((k) => [k, null])) as BoardIssueFields;
+  return { ...base, ...over };
 }
 
 interface FakeIssue extends BoardIssue {
@@ -150,7 +148,7 @@ export async function createIssue(
     fields: emptyFields({
       status: payload.status, priority: payload.priority, category: payload.category,
       dueDate: payload.dueDate, ticket: payload.ticket, ticketLink: payload.ticketLink,
-      trackingLink: payload.trackingLink, notes: payload.notes,
+      relatedLink: payload.relatedLink, notes: payload.notes, repoUrl: payload.repoUrl,
     }),
   };
   issues.push(issue);

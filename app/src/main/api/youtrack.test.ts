@@ -90,7 +90,7 @@ describe('getIssues', () => {
             { name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } },
             { name: 'Due Date', $type: 'DateIssueCustomField', value: 1700000000000 },
             { name: 'Ticket', $type: 'SimpleIssueCustomField', value: 'JIRA-9' },
-            { name: 'Notes', $type: 'TextIssueCustomField', value: { text: 'a note' } },
+            { name: 'Notes', $type: 'SimpleIssueCustomField', value: 'a note' },
             { name: 'Assignee', $type: 'SingleUserIssueCustomField', value: { login: 'kevin' } },
           ],
         },
@@ -110,13 +110,68 @@ describe('getIssues', () => {
           dueDate: 1700000000000,
           ticket: 'JIRA-9',
           ticketLink: null,
-          trackingLink: null,
+          relatedLink: null,
           notes: 'a note',
           dateTimeEntered: null,
           assignee: 'kevin',
+          ghosttyTabName: null,
+          repoUrl: null,
+          workingBranch: null,
+          trackingFileUrl: null,
+          todoFileUrl: null,
+          projectHealth: null,
+          progressPercent: null,
+          nextStatusDue: null,
+          reportingCadence: null,
+          baseBranch: null,
+          pullRequestUrl: null,
+          artifactUrl: null,
+          lastReportedCommit: null,
         },
       },
     ]);
+  });
+
+  it('resolves the right field when two custom fields share a display name but differ by $type', async () => {
+    // The live instance carries duplicate "Status" prototypes: one StateIssueCustomField
+    // (the one actually in use, attached to every project) and one orphaned text
+    // prototype attached to nothing. Extraction must resolve by name AND $type together.
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1',
+          idReadable: 'TST-1',
+          summary: 'Hello',
+          resolved: null,
+          customFields: [
+            { name: 'Status', $type: 'TextIssueCustomField', value: { text: 'stale orphaned value' } },
+            { name: 'Status', $type: 'StateIssueCustomField', value: { name: 'In Progress' } },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].fields.status).toBe('In Progress');
+  });
+
+  it('extracts a raw numeric custom field (Progress percent) as a number, not null', async () => {
+    // Regression: parseFieldStringValue only matches typeof === 'string', so a
+    // raw numeric value would silently extract as null without the integer wire.
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1',
+          idReadable: 'TST-1',
+          summary: 'Hello',
+          resolved: null,
+          customFields: [
+            { name: 'Progress percent', $type: 'SimpleIssueCustomField', value: 10 },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].fields.progressPercent).toBe(10);
   });
 
   it('URL-encodes the project query', async () => {
@@ -237,11 +292,39 @@ describe('patchIssue', () => {
     });
   });
 
-  it('wraps text fields in { text }', async () => {
+  it('sends a raw unwrapped integer for Progress percent', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '1' }));
+    await patchIssue(URL, TOKEN, '1', 'progressPercent', 42);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      customFields: [{ name: 'Progress percent', $type: 'SimpleIssueCustomField', value: 42 }],
+    });
+  });
+
+  it('sends notes as a raw string, not the old { text } wrapper', async () => {
+    // BUG-005: notes is a SimpleIssueCustomField on the live instance, not
+    // TextIssueCustomField — the { text } wrapper was a type mismatch.
     fetchMock.mockResolvedValueOnce(jsonRes({ id: '1' }));
     await patchIssue(URL, TOKEN, '1', 'notes', 'hello');
     expect(JSON.parse(lastCall()[1].body as string)).toEqual({
-      customFields: [{ name: 'Notes', $type: 'TextIssueCustomField', value: { text: 'hello' } }],
+      customFields: [{ name: 'Notes', $type: 'SimpleIssueCustomField', value: 'hello' }],
+    });
+  });
+
+  it('sends category as a state value ({ name }), not the old enum shape', async () => {
+    // BUG-005: category is a StateIssueCustomField on the live instance, not
+    // SingleEnumIssueCustomField.
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '1' }));
+    await patchIssue(URL, TOKEN, '1', 'category', 'TASK');
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      customFields: [{ name: 'Category', $type: 'StateIssueCustomField', value: { name: 'TASK' } }],
+    });
+  });
+
+  it('patches relatedLink under its renamed field, Related link', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '1' }));
+    await patchIssue(URL, TOKEN, '1', 'relatedLink', 'https://example.com');
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      customFields: [{ name: 'Related link', $type: 'SimpleIssueCustomField', value: 'https://example.com' }],
     });
   });
 
@@ -279,8 +362,9 @@ describe('createIssue', () => {
       dueDate: null,
       ticket: null,
       ticketLink: null,
-      trackingLink: null,
+      relatedLink: null,
       notes: 'note body',
+      repoUrl: null,
     });
     expect(result).toEqual({ id: '5', idReadable: 'TST-5' });
 
@@ -293,5 +377,67 @@ describe('createIssue', () => {
     expect(names).toContain('Date time entered');
     expect(names).not.toContain('Priority');
     expect(names).not.toContain('Category');
+  });
+
+  it('sends notes as a raw string in the create payload too', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
+    await createIssue(URL, TOKEN, {
+      projectId: '0-1',
+      summary: 'New task',
+      status: null,
+      priority: null,
+      category: null,
+      dueDate: null,
+      ticket: null,
+      ticketLink: null,
+      relatedLink: null,
+      notes: 'note body',
+      repoUrl: null,
+    });
+    const body = JSON.parse(lastCall()[1].body as string);
+    const notesField = body.customFields.find((f: { name: string }) => f.name === 'Notes');
+    expect(notesField).toEqual({ name: 'Notes', $type: 'SimpleIssueCustomField', value: 'note body' });
+  });
+
+  it('sends category as a state value in the create payload too', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
+    await createIssue(URL, TOKEN, {
+      projectId: '0-1',
+      summary: 'New task',
+      status: null,
+      priority: null,
+      category: 'TASK',
+      dueDate: null,
+      ticket: null,
+      ticketLink: null,
+      relatedLink: null,
+      notes: null,
+      repoUrl: null,
+    });
+    const body = JSON.parse(lastCall()[1].body as string);
+    const categoryField = body.customFields.find((f: { name: string }) => f.name === 'Category');
+    expect(categoryField).toEqual({ name: 'Category', $type: 'StateIssueCustomField', value: { name: 'TASK' } });
+  });
+
+  it('includes Repo URL when set — the only creatable field among the 13 added later', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
+    await createIssue(URL, TOKEN, {
+      projectId: '0-1',
+      summary: 'New task',
+      status: null,
+      priority: null,
+      category: null,
+      dueDate: null,
+      ticket: null,
+      ticketLink: null,
+      relatedLink: null,
+      notes: null,
+      repoUrl: 'https://git.example.com/kinscoe/vermilian',
+    });
+    const body = JSON.parse(lastCall()[1].body as string);
+    const repoUrlField = body.customFields.find((f: { name: string }) => f.name === 'Repo URL');
+    expect(repoUrlField).toEqual({
+      name: 'Repo URL', $type: 'SimpleIssueCustomField', value: 'https://git.example.com/kinscoe/vermilian',
+    });
   });
 });

@@ -36,6 +36,10 @@ describe('saveSecret', () => {
 
     // Default: encryption available, all fs ops succeed
     (electron.safeStorage.isEncryptionAvailable as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    // resetAllMocks() above wipes the module-mock implementation, so restore it here.
+    // On Linux isSecure() depends on this backend being a recognised secure one;
+    // without it saveSecret takes the Linux early-return and the fallback path never runs.
+    (electron.safeStorage.getSelectedStorageBackend as ReturnType<typeof vi.fn>).mockReturnValue('gnome_libsecret');
     (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (fs.promises.rename as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);

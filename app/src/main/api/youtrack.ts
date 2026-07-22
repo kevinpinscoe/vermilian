@@ -136,7 +136,16 @@ interface RawIssue {
 }
 
 import type { BoardIssue, IssueDetail } from '../../shared/workspace';
-import { FIELD_TYPE_MAP } from '../../shared/workspace';
+import {
+  FIELD_DEFS,
+  FIELD_KEYS,
+  CREATABLE_FIELD_DEFS,
+  getFieldDef,
+  toYouTrackValue,
+  type FieldDef,
+  type FieldKey,
+  type BoardIssueFields,
+} from '../../shared/fields';
 
 const ISSUE_FIELDS =
   'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login))';
@@ -159,30 +168,27 @@ function parseFieldNumberValue(field: RawCustomField): number | null {
   return null;
 }
 
-function extractAssigneeLogin(fields: RawCustomField[]): string | null {
-  const field = fields.find(
-    (f) => f.name === 'Assignee' && f.$type === 'SingleUserIssueCustomField',
-  );
-  if (!field || !field.value) return null;
-  const val = field.value as Record<string, unknown>;
-  return typeof val['login'] === 'string' ? val['login'] : null;
+// Resolves by name AND $type, not name alone — the live instance carries
+// duplicate-name prototypes (e.g. two "Status" fields, one StateIssueCustomField
+// attached everywhere and one orphaned text prototype attached to nothing).
+function extractFieldValue(fields: RawCustomField[], def: FieldDef): string | number | null {
+  const raw =
+    fields.find((f) => f.name === def.ytName && f.$type === def.$type) ??
+    { name: def.ytName, $type: def.$type, value: null };
+  if (def.wire === 'user') {
+    const val = raw.value as Record<string, unknown> | null;
+    return typeof val?.['login'] === 'string' ? (val['login'] as string) : null;
+  }
+  if (def.wire === 'date' || def.wire === 'integer') return parseFieldNumberValue(raw);
+  return parseFieldStringValue(raw);
 }
 
-function extractFields(fields: RawCustomField[]) {
-  const get = (name: string): RawCustomField =>
-    fields.find((f) => f.name === name) ?? { name, $type: '', value: null };
-  return {
-    status: parseFieldStringValue(get('Status')),
-    priority: parseFieldStringValue(get('Priority')),
-    category: parseFieldStringValue(get('Category')),
-    dueDate: parseFieldNumberValue(get('Due Date')),
-    ticket: parseFieldStringValue(get('Ticket')),
-    ticketLink: parseFieldStringValue(get('Ticket link')),
-    trackingLink: parseFieldStringValue(get('Tracking link')),
-    notes: parseFieldStringValue(get('Notes')),
-    dateTimeEntered: parseFieldNumberValue(get('Date time entered')),
-    assignee: extractAssigneeLogin(fields),
-  };
+function extractFields(fields: RawCustomField[]): BoardIssueFields {
+  const result = {} as Record<FieldKey, string | number | null>;
+  for (const key of FIELD_KEYS) {
+    result[key] = extractFieldValue(fields, getFieldDef(key));
+  }
+  return result as unknown as BoardIssueFields;
 }
 
 export async function getIssues(
@@ -256,23 +262,13 @@ export async function patchIssue(
     return;
   }
 
-  const config = FIELD_TYPE_MAP[field];
-  if (!config) throw new Error(`Unknown field: ${field}`);
-
-  let ytValue: unknown;
-  if (config.kind === 'enum' || config.kind === 'state') {
-    ytValue = value !== null ? { name: value } : null;
-  } else if (config.$type === 'TextIssueCustomField') {
-    // TextIssueCustomField wraps its value in { text: "..." } — plain string is a type mismatch
-    ytValue = value !== null ? { text: value } : null;
-  } else {
-    ytValue = value; // date (number | null) or SimpleIssueCustomField (string | null)
-  }
+  const def = FIELD_DEFS[field as FieldKey];
+  if (!def) throw new Error(`Unknown field: ${field}`);
 
   await request(url, token, `/api/issues/${issueId}?fields=id`, {
     method: 'POST',
     body: JSON.stringify({
-      customFields: [{ name: config.ytName, $type: config.$type, value: ytValue }],
+      customFields: [{ name: def.ytName, $type: def.$type, value: toYouTrackValue(def, value) }],
     }),
   });
 }
@@ -302,8 +298,9 @@ export interface CreateIssuePayload {
   dueDate: number | null;
   ticket: string | null;
   ticketLink: string | null;
-  trackingLink: string | null;
+  relatedLink: string | null;
   notes: string | null;
+  repoUrl: string | null;
 }
 
 export interface CreateIssueResult {
@@ -317,25 +314,19 @@ export async function createIssue(
   payload: CreateIssuePayload,
 ): Promise<CreateIssueResult> {
   // Only include fields with actual values — sending null with a mismatched $type triggers
-  // a YouTrack "type mismatch" error even when the value is null.
+  // a YouTrack "type mismatch" error even when the value is null. Date fields use an explicit
+  // null/undefined check (0 would be a legitimate, if unlikely, epoch value); every other
+  // creatable field uses a truthy check, matching the payload's own empty-string-means-unset
+  // convention.
+  const payloadValues = payload as unknown as Record<string, string | number | null>;
   const customFields: Array<{ name: string; $type: string; value: unknown }> = [];
 
-  if (payload.status)
-    customFields.push({ name: 'Status', $type: 'StateIssueCustomField', value: { name: payload.status } });
-  if (payload.priority)
-    customFields.push({ name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: payload.priority } });
-  if (payload.category)
-    customFields.push({ name: 'Category', $type: 'SingleEnumIssueCustomField', value: { name: payload.category } });
-  if (payload.dueDate !== null && payload.dueDate !== undefined)
-    customFields.push({ name: 'Due Date', $type: 'DateIssueCustomField', value: payload.dueDate });
-  if (payload.ticket)
-    customFields.push({ name: 'Ticket', $type: 'SimpleIssueCustomField', value: payload.ticket });
-  if (payload.ticketLink)
-    customFields.push({ name: 'Ticket link', $type: 'SimpleIssueCustomField', value: payload.ticketLink });
-  if (payload.trackingLink)
-    customFields.push({ name: 'Tracking link', $type: 'SimpleIssueCustomField', value: payload.trackingLink });
-  if (payload.notes)
-    customFields.push({ name: 'Notes', $type: 'TextIssueCustomField', value: { text: payload.notes } });
+  for (const def of CREATABLE_FIELD_DEFS) {
+    const value = payloadValues[def.key];
+    const include = def.wire === 'date' ? value !== null && value !== undefined : Boolean(value);
+    if (!include) continue;
+    customFields.push({ name: def.ytName, $type: def.$type, value: toYouTrackValue(def, value) });
+  }
   customFields.push({ name: 'Date time entered', $type: 'DateIssueCustomField', value: Date.now() });
 
   return request<CreateIssueResult>(url, token, '/api/issues?fields=id,idReadable', {
@@ -363,6 +354,17 @@ export async function postWorklog(
   minutes: number,
   worklogType: string,
 ): Promise<void> {
+  // Unlike other bundle-backed fields, this instance's timeTracking/workItems
+  // endpoint rejects a name-only { name } reference: "YouTrack is unable to
+  // locate an WorkItemType-type entity unless its ID is also provided." Resolve
+  // the configured type name to its id first.
+  const types = await request<WorkItemType[]>(
+    url,
+    token,
+    '/api/admin/timeTrackingSettings/workItemTypes?fields=id,name',
+  );
+  const type = types.find((t) => t.name === worklogType);
+
   await request<unknown>(
     url,
     token,
@@ -372,7 +374,7 @@ export async function postWorklog(
       body: JSON.stringify({
         duration: { minutes },
         date: Date.now(),
-        type: { name: worklogType },
+        type: type ? { id: type.id } : { name: worklogType },
       }),
     },
   );
@@ -486,6 +488,9 @@ export async function getIssuesForStandup(
 
 const ARTICLE_SUMMARY = '_vermilian-config';
 const ARTICLE_FIELDS = 'id,summary,content,updated';
+// This YouTrack instance requires every Article to belong to a project.
+// VERM (id 0-33) is a dedicated project created to own the config article.
+const ARTICLE_PROJECT_SHORT_NAME = 'VERM';
 
 interface RawArticle {
   id: string;
@@ -530,7 +535,11 @@ export async function createVermilianArticle(
       `/api/articles?fields=${ARTICLE_FIELDS}`,
       {
         method: 'POST',
-        body: JSON.stringify({ summary: ARTICLE_SUMMARY, content }),
+        body: JSON.stringify({
+          summary: ARTICLE_SUMMARY,
+          content,
+          project: { shortName: ARTICLE_PROJECT_SHORT_NAME },
+        }),
       },
     );
     return { id: result.id, content: result.content ?? content, updated: result.updated ?? 0 };

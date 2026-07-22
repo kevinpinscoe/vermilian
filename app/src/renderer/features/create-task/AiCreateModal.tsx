@@ -29,10 +29,11 @@ function buildFormFromFields(
   projects: YouTrackProject[],
   defaultProjectId: string | null,
 ): FormState {
+  // No guess-fallback to projects[0] — an unverified default risks silently
+  // landing on an unconfigured/demo project whose Status or Category bundle
+  // doesn't match ours. Require an explicit, verified active project.
   const fallbackProjectId =
-    (defaultProjectId && projects.find((p) => p.id === defaultProjectId)
-      ? defaultProjectId
-      : null) ?? projects[0]?.id ?? '';
+    defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '';
 
   return {
     summary: fields.summary,
@@ -43,8 +44,9 @@ function buildFormFromFields(
     dueDate: fields.dueDate ?? '',
     ticket: fields.ticket ?? '',
     ticketLink: '',
-    trackingLink: '',
+    relatedLink: '',
     notes: fields.notes ?? '',
+    repoUrl: '',
   };
 }
 
@@ -60,15 +62,17 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
 
   const [form, setForm] = useState<FormState>({
     summary: '',
-    projectId: defaultProjectId ?? projects[0]?.id ?? '',
+    projectId:
+      defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '',
     priority: 'Normal',
     status: 'To do',
     category: '',
     dueDate: '',
     ticket: '',
     ticketLink: '',
-    trackingLink: '',
+    relatedLink: '',
     notes: '',
+    repoUrl: '',
   });
   const [projectMatchError, setProjectMatchError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -114,8 +118,11 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
-    const { summaryEmpty, ticketLinkInvalid, trackingLinkInvalid } = validateForm(form);
-    if (summaryEmpty || ticketLinkInvalid || trackingLinkInvalid || submitting) return;
+    const { summaryEmpty, projectEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } =
+      validateForm(form);
+    if (summaryEmpty || projectEmpty || ticketLinkInvalid || relatedLinkInvalid || repoUrlInvalid || submitting) {
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
@@ -131,8 +138,9 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
       dueDate,
       ticket: form.ticket.trim() || null,
       ticketLink: form.ticketLink.trim() || null,
-      trackingLink: form.trackingLink.trim() || null,
+      relatedLink: form.relatedLink.trim() || null,
       notes: form.notes.trim() || null,
+      repoUrl: form.repoUrl.trim() || null,
     });
 
     setSubmitting(false);
@@ -153,8 +161,10 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     onClose();
   }
 
-  const { summaryEmpty, ticketLinkInvalid, trackingLinkInvalid } = validateForm(form);
-  const canCreate = !summaryEmpty && !ticketLinkInvalid && !trackingLinkInvalid && !submitting;
+  const { summaryEmpty, projectEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } =
+    validateForm(form);
+  const canCreate =
+    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !submitting;
 
   // ─── Input step ─────────────────────────────────────────────────────────────
 

@@ -3,24 +3,34 @@ import { Loader, Text, AttentionBox, Button, IconButton } from '@vibe/core';
 import { CloseSmall, Delete, Play } from '@vibe/icons';
 import type { IssueDetail } from '../../../shared/workspace';
 import type { BoardIssueFields } from '../../../shared/workspace';
-import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
+import { FIELD_KEYS, getFieldDef, type FieldKey } from '../../../shared/fields';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS, getContrastColor } from '../project-board/colors';
 import { useIssueDetail, usePatchIssue, useDeleteIssue } from './api';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useQueryClient } from '@tanstack/react-query';
 import styles from './TaskDetailPanel.module.css';
 
-// ─── Shared option lists ──────────────────────────────────────────────────────
-
-const STATUS_LIST = [...STATUS_OPTIONS];
-const PRIORITY_LIST = [...PRIORITY_OPTIONS];
-const CATEGORY_LIST = [...CATEGORY_OPTIONS];
+// Fields with a detailOrder, sorted by it — derived from FIELD_DEFS rather than
+// hand-listed. This also fixes dateTimeEntered's previous silent omission
+// (it had no fieldName prop and was excluded from Enter-key tab-through).
+const DETAIL_FIELD_KEYS: FieldKey[] = FIELD_KEYS
+  .filter((k) => getFieldDef(k).detailOrder !== undefined)
+  .sort((a, b) => (getFieldDef(a).detailOrder ?? 0) - (getFieldDef(b).detailOrder ?? 0));
 
 // Field advance order for Enter-key navigation
-const ADVANCE_ORDER = [
-  'summary', 'status', 'priority', 'category', 'dueDate',
-  'ticket', 'ticketLink', 'trackingLink', 'notes',
-];
+const ADVANCE_ORDER = ['summary', ...DETAIL_FIELD_KEYS];
+
+// Per-field cosmetics that don't belong in the data-only field registry.
+const TEXT_PLACEHOLDERS: Partial<Record<FieldKey, string>> = {
+  ticket: '—',
+  notes: 'Add notes…',
+};
+const MULTILINE_KEYS = new Set<FieldKey>(['notes']);
+const SELECT_COLOR_MAPS: Partial<Record<FieldKey, Record<string, string>>> = {
+  status: STATUS_COLORS,
+  priority: PRIORITY_COLORS,
+  category: CATEGORY_COLORS,
+};
 
 // ─── Inline field editors ─────────────────────────────────────────────────────
 
@@ -199,6 +209,63 @@ function DateField({ value, onSave, onEnter }: DateFieldProps) {
       }}
       onBlur={() => setEditing(false)}
       onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+      autoFocus
+    />
+  );
+}
+
+interface NumberFieldProps {
+  value: number | null;
+  onSave: (v: number | null) => void;
+  onEnter?: () => void;
+}
+
+function clampPercent(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function NumberField({ value, onSave, onEnter }: NumberFieldProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+
+  function commit() {
+    setEditing(false);
+    onSave(clampPercent(draft));
+  }
+
+  function revert() {
+    setEditing(false);
+    setDraft(value === null ? '' : String(value));
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={`${styles.fieldValue} ${styles.fieldValueEditable}`}
+        onClick={() => { setDraft(value === null ? '' : String(value)); setEditing(true); }}
+      >
+        {value === null ? <span className={styles.fieldPlaceholder}>—</span> : `${value}%`}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={100}
+      step={1}
+      className={styles.fieldInput}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { commit(); onEnter?.(); }
+        if (e.key === 'Escape') revert();
+      }}
       autoFocus
     />
   );
@@ -384,77 +451,71 @@ export function TaskDetailPanel({
   function renderFields(f: BoardIssueFields) {
     return (
       <>
-        <FieldRow label="Status" fieldName="status">
-          <SelectField
-            value={f.status}
-            options={STATUS_LIST}
-            colorMap={STATUS_COLORS}
-            onSave={(v) => patch('status', v)}
-            onEnter={() => advanceField('status')}
-          />
-        </FieldRow>
-        <FieldRow label="Priority" fieldName="priority">
-          <SelectField
-            value={f.priority}
-            options={PRIORITY_LIST}
-            colorMap={PRIORITY_COLORS}
-            onSave={(v) => patch('priority', v)}
-            onEnter={() => advanceField('priority')}
-          />
-        </FieldRow>
-        <FieldRow label="Category" fieldName="category">
-          <SelectField
-            value={f.category}
-            options={CATEGORY_LIST}
-            colorMap={CATEGORY_COLORS}
-            onSave={(v) => patch('category', v)}
-            onEnter={() => advanceField('category')}
-          />
-        </FieldRow>
-        <FieldRow label="Due Date" fieldName="dueDate">
-          <DateField
-            value={f.dueDate}
-            onSave={(v) => patch('dueDate', v)}
-            onEnter={() => advanceField('dueDate')}
-          />
-        </FieldRow>
-        <FieldRow label="Ticket" fieldName="ticket">
-          <TextField
-            value={f.ticket}
-            placeholder="—"
-            onSave={(v) => patch('ticket', v)}
-            onEnter={() => advanceField('ticket')}
-          />
-        </FieldRow>
-        <FieldRow label="Ticket link" fieldName="ticketLink">
-          <LinkField
-            value={f.ticketLink}
-            onSave={(v) => patch('ticketLink', v)}
-            onEnter={() => advanceField('ticketLink')}
-          />
-        </FieldRow>
-        <FieldRow label="Tracking link" fieldName="trackingLink">
-          <LinkField
-            value={f.trackingLink}
-            onSave={(v) => patch('trackingLink', v)}
-            onEnter={() => advanceField('trackingLink')}
-          />
-        </FieldRow>
-        <FieldRow label="Notes" fieldName="notes">
-          <TextField
-            value={f.notes}
-            placeholder="Add notes…"
-            multiline
-            onSave={(v) => patch('notes', v)}
-          />
-        </FieldRow>
-        <FieldRow label="Date entered">
-          <TextField
-            value={f.dateTimeEntered ? new Date(f.dateTimeEntered).toLocaleString() : null}
-            readOnly
-            onSave={() => { /* read-only */ }}
-          />
-        </FieldRow>
+        {DETAIL_FIELD_KEYS.map((key) => {
+          const def = getFieldDef(key);
+          const value = f[key];
+
+          if (def.editor === 'readonly') {
+            return (
+              <FieldRow key={key} label={def.label} fieldName={key}>
+                <TextField
+                  value={value ? new Date(value as number).toLocaleString() : null}
+                  readOnly
+                  onSave={() => { /* read-only */ }}
+                />
+              </FieldRow>
+            );
+          }
+
+          const onSave = (v: string | number | null) => patch(key, v);
+          const onEnter = () => advanceField(key);
+
+          switch (def.editor) {
+            case 'select':
+              return (
+                <FieldRow key={key} label={def.label} fieldName={key}>
+                  <SelectField
+                    value={value as string | null}
+                    options={[...(def.options ?? [])]}
+                    colorMap={SELECT_COLOR_MAPS[key]}
+                    onSave={onSave}
+                    onEnter={onEnter}
+                  />
+                </FieldRow>
+              );
+            case 'date':
+              return (
+                <FieldRow key={key} label={def.label} fieldName={key}>
+                  <DateField value={value as number | null} onSave={onSave} onEnter={onEnter} />
+                </FieldRow>
+              );
+            case 'number':
+              return (
+                <FieldRow key={key} label={def.label} fieldName={key}>
+                  <NumberField value={value as number | null} onSave={onSave} onEnter={onEnter} />
+                </FieldRow>
+              );
+            case 'link':
+              return (
+                <FieldRow key={key} label={def.label} fieldName={key}>
+                  <LinkField value={value as string | null} onSave={onSave} onEnter={onEnter} />
+                </FieldRow>
+              );
+            case 'text':
+            default:
+              return (
+                <FieldRow key={key} label={def.label} fieldName={key}>
+                  <TextField
+                    value={value as string | null}
+                    placeholder={TEXT_PLACEHOLDERS[key]}
+                    multiline={MULTILINE_KEYS.has(key)}
+                    onSave={onSave}
+                    onEnter={MULTILINE_KEYS.has(key) ? undefined : onEnter}
+                  />
+                </FieldRow>
+              );
+          }
+        })}
       </>
     );
   }

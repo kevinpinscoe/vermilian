@@ -37,3 +37,6 @@ dist/
 **/.obsidian/graph.json
 **/.obsidian/plugins/*/data.json
 bugs.md
+
+# Local dev helper — fixes a stuck fnm node version in long-lived shells; not app code
+fix-node-version.sh

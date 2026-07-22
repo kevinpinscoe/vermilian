@@ -19,10 +19,19 @@ export const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
+  PROJECT: '#579BFC',
+  OPS: '#FDAB3D',
+  COMPANY: '#7E3FF2',
+  SERVICE: '#00C875',
+  PRODUCTIVITY: '#FFCB00',
   INBOX: '#A25DDC',
-  BUG: '#E2445C',
-  FEATURE: '#00C875',
-  TASK: '#579BFC',
+  ADMIN: '#808080',
+  RELEASE: '#66CCFF',
+  FINOPS: '#037F4C',
+  SECURITY: '#E2445C',
+  INGEST: '#FF642E',
+  HACKATHON: '#FF158A',
+  Playbook: '#BB3354',
 };
 
 export function getContrastColor(hex: string): string {
