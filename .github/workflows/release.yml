@@ -1,8 +1,15 @@
 name: Release
 
-# Triggered by a signed vMAJOR.MINOR.PATCH tag. Builds the native artifact on
-# each OS, uploads them all to a single DRAFT GitHub Release, then the `channels`
-# job publishes the release and updates the Homebrew Cask + Scoop manifest.
+# Triggered by a signed vMAJOR.MINOR.PATCH tag. The `create-release` job first
+# creates a single DRAFT GitHub Release, then the build matrix builds the native
+# artifact on each OS and uploads them all into that one draft, then the
+# `channels` job publishes the release and updates the Homebrew Cask + Scoop
+# manifest.
+#
+# The create-release job exists to prevent a race: without a pre-created draft,
+# each concurrent `pnpm run publish` finds no release for the tag and creates its
+# own draft (GitHub permits multiple drafts per tag), scattering the platform
+# artifacts across several drafts so only one gets promoted.
 #
 # Linux ships AppImage only (no .deb/.rpm — the apt/rpm index repos store package
 # files in git and an ~100 MB Electron package would bloat them), built for both
@@ -22,8 +29,30 @@ permissions:
   contents: write
 
 jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      # Create the single draft release before the build matrix fans out, so every
+      # build job's `pnpm run publish` finds and reuses it instead of racing to
+      # create its own. Idempotent: reuse an existing release for the tag if one
+      # is already present (e.g. on a re-run).
+      - name: Create draft release if absent
+        run: |
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — reusing."
+          else
+            gh release create "$TAG" --repo "$REPO" --draft --title "$TAG" \
+              --notes "Automated release $TAG. See CHANGELOG.md for details."
+          fi
+
   build:
     name: Build & publish (${{ matrix.os }})
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
