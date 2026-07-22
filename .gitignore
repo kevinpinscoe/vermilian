@@ -40,3 +40,7 @@ bugs.md
 
 # Local dev helper — fixes a stuck fnm node version in long-lived shells; not app code
 fix-node-version.sh
+
+# Private working material — bug logs, plans, specs, scratch, screenshots.
+# Kept alongside the public repo but never pushed to public GitHub.
+private/
