@@ -47,6 +47,22 @@ matching `v[0-9]+.[0-9]+.[0-9]+`, builds all three platforms, and pushes the
 Homebrew Cask and Scoop manifest automatically. Never push a tag before the PR
 is merged.
 
+## Host install / config runbook
+
+The host-side lifecycle for Vermilian — AppImage install/update on FLDW, the
+`~/Applications` symlink layout, `checksums.txt` download verification, the KDE
+Plasma 6 taskbar icon fix, and troubleshooting — is documented in a runbook on
+the private Gitea `app-configuration` repo:
+
+`~/Projects/private/app-configuration/apps/vermilian/RUNBOOK.md`
+
+**Whenever you make a change that affects how Vermilian is installed, updated,
+configured, or integrated on a host** — the release-asset layout, distribution
+channels, desktop-launcher or icon handling, or a new troubleshooting step —
+update that `RUNBOOK.md` in the same effort (commit + push to Gitea, and re-run
+the PKM `link-runbooks.sh --apply` if the file is new) so it never drifts from
+reality.
+
 ## Architecture
 
 Vermilian is a standard Electron app using Vite + Electron Forge. The key constraint is the **process boundary**: the renderer cannot call Node/Electron APIs directly.
