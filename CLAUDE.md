@@ -31,12 +31,15 @@ Standard flow for `vX.Y.Z`:
 2. Bump `app/package.json` `"version"` to match the tag
 3. Add a `CHANGELOG.md` entry (Keep a Changelog format) — required for every
    release, including patches
-4. Branch: `git switch -c release/vX.Y.Z`
-5. Commit version + changelog + code together (commits are SSH-signed), then
-   `git push -u origin release/vX.Y.Z`
-6. Open a PR to `main`: `gh pr create --base main --fill`
-7. Wait for the PR to be approved and merged
-8. Only after merge, tag `main` with a signed tag and push it:
+4. Update `README.md` — bump the **Status** section to the new version and add
+   any user-facing change to the "Built and working"/"Tested" lists. The README
+   must never lag the released version.
+5. Branch: `git switch -c release/vX.Y.Z`
+6. Commit version + changelog + README + code together (commits are SSH-signed),
+   then `git push -u origin release/vX.Y.Z`
+7. Open a PR to `main`: `gh pr create --base main --fill`
+8. Wait for the PR to be approved and merged
+9. Only after merge, tag `main` with a signed tag and push it:
    `git switch main && git pull && git tag -s vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`
 
 Pushing the tag is what triggers a release — the CI workflow fires on tags
