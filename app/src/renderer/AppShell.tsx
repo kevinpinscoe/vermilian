@@ -333,8 +333,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           Validate Estimates, Requirements, and Milestones; Identify, Log Issues, Assign Next steps
         </span>
         <SearchBar
-          projectShortName={activeProjectShortName}
-          projectName={activeProject?.name ?? null}
+          projectShortNames={activeProjectShortName ? [activeProjectShortName] : workspaceShortNames}
+          scopeLabel={activeProject?.name ?? workspaceName}
           onSelectIssue={(id) => setSelectedIssue(id)}
         />
         <div className={styles.topBarSpacer} />

@@ -112,13 +112,17 @@ export async function getIssues(
 }
 
 export async function searchIssues(
-  _url: string, _token: string, projectShortName: string, userQuery: string,
+  _url: string, _token: string, projectShortNames: string[], userQuery: string,
 ): Promise<BoardIssue[]> {
-  const proj = projectByShortName(projectShortName);
   const terms = userQuery.trim().toLowerCase();
-  if (!proj || !terms) return [];
+  const projectIds = new Set(
+    projectShortNames
+      .map((sn) => projectByShortName(sn)?.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  if (!projectIds.size || !terms) return [];
   return issues
-    .filter((i) => i.projectId === proj.id)
+    .filter((i) => projectIds.has(i.projectId))
     .filter(
       (i) =>
         i.summary.toLowerCase().includes(terms) ||

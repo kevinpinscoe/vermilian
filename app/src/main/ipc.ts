@@ -252,7 +252,7 @@ export function registerIpc(): void {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
-    return youtrack.searchIssues(cfg.youtrackUrl, token, args.projectShortName, args.query);
+    return youtrack.searchIssues(cfg.youtrackUrl, token, args.projectShortNames, args.query);
   });
 
   ipcMain.handle(IPC.openExternalUrl, async (_e, url: string): Promise<void> => {

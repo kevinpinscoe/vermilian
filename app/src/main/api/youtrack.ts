@@ -220,15 +220,16 @@ export async function getIssues(
   return raw.map(rawToBoardIssue);
 }
 
-// Free-text issue search, scoped to a single project. Returns at most 50
-// matches (ranked by YouTrack relevance) so the results dropdown stays bounded.
+// Free-text issue search, scoped to one or more projects (the active project,
+// or every project in the active workspace). Returns at most 50 matches (ranked
+// by YouTrack relevance) so the results dropdown stays bounded.
 export async function searchIssues(
   url: string,
   token: string,
-  projectShortName: string,
+  projectShortNames: string[],
   userQuery: string,
 ): Promise<BoardIssue[]> {
-  const q = buildIssueSearchQuery(projectShortName, userQuery);
+  const q = buildIssueSearchQuery(projectShortNames, userQuery);
   if (!q) return [];
   const query = encodeURIComponent(q);
   const raw = await request<RawIssue[]>(
