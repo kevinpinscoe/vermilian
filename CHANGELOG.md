@@ -5,6 +5,22 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-07-23
+
+### Security
+
+- Pinned patched versions of vulnerable transitive dev-toolchain dependencies
+  via `pnpm-workspace.yaml` overrides: `tar` 6.2.1→7.5.21 (node-tar path/hardlink
+  traversal advisories), `undici` 7.25.0→7.28.0, `tmp` 0.0.33→0.2.7, `js-yaml`
+  4.1.1→4.3.0, `@babel/core` 7.29.0→7.29.7, and deduped `postcss` to 8.5.15.
+  This clears 20 Dependabot alerts (including the two critical vitest UI RCE
+  alerts, already resolved by the 3.2.7 bump). None of these packages ship in
+  the packaged app — Electron Forge bundles only `dependencies`, and all of the
+  above are build/test/CLI tooling. The `electron-forge package` build
+  (including native-dependency rebuild) was verified against the bumped `tar`.
+  The remaining vite-tree advisories require a vite 5→6 major upgrade and are
+  deferred to a separate change.
+
 ## [1.1.1] - 2026-07-23
 
 ### Added
@@ -178,6 +194,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.1.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.2
 [1.1.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.1
 [1.1.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.0
 [1.0.4]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.4

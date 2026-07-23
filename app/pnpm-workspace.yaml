@@ -12,3 +12,12 @@ allowBuilds:
 # whole tree to the Vite 5 the app already builds with.
 overrides:
   vite: ^5.4.21
+  # Security (Dependabot) — pin patched versions of transitive dev-toolchain
+  # deps. None of these ship in the packaged app (electron-forge bundles only
+  # `dependencies`); they are build/test/CLI tooling only.
+  undici: ^7.28.0
+  tmp: ^0.2.6
+  tar: ^7.5.18
+  js-yaml: ^4.2.0
+  "@babel/core": ^7.29.6
+  postcss: ^8.5.10
