@@ -5,6 +5,19 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-07-23
+
+### Security
+
+- Pinned patched versions of two more vulnerable transitive dev-toolchain
+  dependencies via `pnpm-workspace.yaml` overrides: `fast-uri` 3.1.2→3.1.4 (host
+  confusion via backslash authority delimiter / failed IDN canonicalization,
+  GHSA-v2hh-gcrm-f6hx, GHSA-4c8g-83qw-93j6) and `brace-expansion` 1.1.14→1.1.16
+  and 2.1.0→2.1.2 (exponential-time ReDoS on consecutive non-expanding `{}`
+  groups, GHSA-3jxr-9vmj-r5cp). Neither ships in the packaged app — both are
+  deep build/lint tooling transitives. The remaining open advisories are all in
+  the vite tree and require the deferred vite 5→6 major upgrade.
+
 ## [1.1.2] - 2026-07-23
 
 ### Security
@@ -194,6 +207,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.1.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.3
 [1.1.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.2
 [1.1.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.1
 [1.1.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.0
