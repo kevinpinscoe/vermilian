@@ -34,6 +34,13 @@
   flex: 1;
 }
 
+.version {
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  user-select: text;
+  white-space: nowrap;
+}
+
 /* Rail + content row */
 .body {
   display: flex;

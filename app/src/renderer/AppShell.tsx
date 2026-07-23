@@ -332,6 +332,9 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           Validate Estimates, Requirements, and Milestones; Identify, Log Issues, Assign Next steps
         </span>
         <div className={styles.topBarSpacer} />
+        <span className={styles.version} title="Vermilian version">
+          v{__APP_VERSION__}
+        </span>
         <Tooltip
           content="Exit Vermilian"
         >

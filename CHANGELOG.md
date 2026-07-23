@@ -5,6 +5,14 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-23
+
+### Added
+
+- The application version is now shown in the top bar, immediately to the left
+  of the Exit button (e.g. `v1.1.1`). It is sourced from `package.json` at build
+  time, so it always matches the released tag.
+
 ## [1.1.0] - 2026-07-22
 
 ### Added
@@ -170,6 +178,8 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.1.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.1
+[1.1.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.0
 [1.0.4]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.4
 [1.0.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.3
 [1.0.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.0.2
