@@ -5,6 +5,28 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-07-23
+
+### Fixed
+
+- The top-bar issue search is no longer disabled (with a "blocked"/not-allowed
+  cursor) on the All-tasks / workspace view. When no single project is selected
+  it now searches across every project in the active workspace; when a project
+  is selected it stays scoped to that project. The `searchIssues` IPC now takes
+  a list of project short names, and the query builder joins them
+  (`project: {A},{B} <terms>`).
+
+### Security
+
+- Upgraded `vite` 5.4.21 → 6.4.3 and pinned `esbuild` ≥ 0.25.0 via
+  `pnpm-workspace.yaml` overrides, clearing the four remaining Dependabot
+  advisories: vite GHSA-fx2h-pf6j-xcff (high, `server.fs.deny` bypass),
+  GHSA-v6wh-96g9-6wx3, GHSA-4w7w-66w2-5vf9, and esbuild GHSA-67mh-4wv8-2f99.
+  All four were dev-toolchain only and never shipped in the packaged app
+  (Electron Forge bundles only `dependencies`). `pnpm audit` is now clean.
+  Verified with a full `electron-forge package` build — `@electron-forge/plugin-vite@7.11`
+  has no vite peer/dep pin and `@vitejs/plugin-react@4.7` supports vite 6.
+
 ## [1.2.0] - 2026-07-23
 
 ### Added
@@ -221,6 +243,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.2.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.1
 [1.2.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.0
 [1.1.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.3
 [1.1.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.2

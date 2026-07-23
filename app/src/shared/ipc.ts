@@ -88,7 +88,9 @@ export interface GetIssuesArgs {
 }
 
 export interface SearchIssuesArgs {
-  projectShortName: string; // scope — search is restricted to this project
+  // Scope — one short name (active project) or many (all projects in the active
+  // workspace). Search is restricted to these projects.
+  projectShortNames: string[];
   query: string; // user's free-text terms
 }
 
