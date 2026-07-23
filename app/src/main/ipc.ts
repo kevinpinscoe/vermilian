@@ -9,6 +9,7 @@ import {
   type TestClaudeResult,
   type GetWorklogTypesArgs,
   type GetIssuesArgs,
+  type SearchIssuesArgs,
   type PatchIssueArgs,
   type MoveIssueArgs,
   type CreateIssueArgs,
@@ -245,6 +246,13 @@ export function registerIpc(): void {
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
     return youtrack.getIssues(cfg.youtrackUrl, token, args.projectShortName, args.includeResolved);
+  });
+
+  ipcMain.handle(IPC.searchIssues, async (_e, args: SearchIssuesArgs) => {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (!cfg.youtrackUrl || !token) return [];
+    return youtrack.searchIssues(cfg.youtrackUrl, token, args.projectShortName, args.query);
   });
 
   ipcMain.handle(IPC.openExternalUrl, async (_e, url: string): Promise<void> => {

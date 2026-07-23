@@ -111,6 +111,22 @@ export async function getIssues(
     .map(toBoardIssue);
 }
 
+export async function searchIssues(
+  _url: string, _token: string, projectShortName: string, userQuery: string,
+): Promise<BoardIssue[]> {
+  const proj = projectByShortName(projectShortName);
+  const terms = userQuery.trim().toLowerCase();
+  if (!proj || !terms) return [];
+  return issues
+    .filter((i) => i.projectId === proj.id)
+    .filter(
+      (i) =>
+        i.summary.toLowerCase().includes(terms) ||
+        i.idReadable.toLowerCase().includes(terms),
+    )
+    .map(toBoardIssue);
+}
+
 export async function getIssueDetail(_url: string, _token: string, issueId: string): Promise<IssueDetail> {
   const i = issues.find((x) => x.id === issueId || x.idReadable === issueId);
   if (!i) throw { status: 404, message: 'Issue not found' };

@@ -33,6 +33,7 @@ export const IPC = {
   getWorkspaceConfig: 'workspace:getConfig',
   saveWorkspaceConfig: 'workspace:saveConfig',
   getIssues: 'youtrack:getIssues',
+  searchIssues: 'youtrack:searchIssues',
   openExternalUrl: 'shell:openExternalUrl',
   quitApp: 'app:quit',
   // Issue CRUD
@@ -84,6 +85,11 @@ export interface TestClaudeResult {
 export interface GetIssuesArgs {
   projectShortName: string;
   includeResolved?: boolean; // default false — server filters to #Unresolved
+}
+
+export interface SearchIssuesArgs {
+  projectShortName: string; // scope — search is restricted to this project
+  query: string; // user's free-text terms
 }
 
 export interface PatchIssueArgs {
@@ -240,6 +246,7 @@ export interface VermilianAPI {
   openExternalUrl(url: string): Promise<void>;
   saveWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean }>;
   getIssues(args: GetIssuesArgs): Promise<BoardIssue[]>;
+  searchIssues(args: SearchIssuesArgs): Promise<BoardIssue[]>;
   // Issue CRUD
   getIssueDetail(issueId: string): Promise<import('./workspace').IssueDetail>;
   patchIssue(args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }>;

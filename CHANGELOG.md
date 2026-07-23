@@ -5,6 +5,20 @@ All notable changes to Vermilian are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-23
+
+### Added
+
+- Issue search in the top bar, scoped to the active project. Typing debounced
+  free-text terms queries YouTrack (`project: <shortName> <terms>`, capped at 50
+  matches) and shows a results dropdown; selecting a result opens the issue in
+  the detail panel. Handles the empty-query, no-results, and API-failure states,
+  and disables with a "Select a project to search" hint when no project is
+  active. YouTrack remains the source of truth — no local index. Backed by the
+  e2e fake YouTrack (substring match on summary / readable id) so the flow is
+  testable without network calls. New `youtrack:searchIssues` IPC channel; pure
+  query builder in `shared/search.ts` with unit tests plus an e2e flow spec.
+
 ## [1.1.3] - 2026-07-23
 
 ### Security
@@ -207,6 +221,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.2.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.0
 [1.1.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.3
 [1.1.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.2
 [1.1.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.1

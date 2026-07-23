@@ -21,16 +21,28 @@ Run a single unit test file:
 pnpm vitest run src/renderer/features/settings/api.test.ts
 ```
 
-## Release checklist
+## Release workflow
 
-Before tagging any `vX.Y.Z`:
+Every release ships through a branch + PR — never a direct push to `main`.
+Standard flow for `vX.Y.Z`:
 
-1. `pnpm test` — all tests green
+1. `pnpm test` — all tests green (also `pnpm test:e2e` when the change touches
+   the main/preload/renderer boundary)
 2. Bump `app/package.json` `"version"` to match the tag
-3. Add a `CHANGELOG.md` entry (Keep a Changelog format) — required for every release, including patches
-4. Commit version + changelog together, then `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin main vX.Y.Z`
+3. Add a `CHANGELOG.md` entry (Keep a Changelog format) — required for every
+   release, including patches
+4. Branch: `git switch -c release/vX.Y.Z`
+5. Commit version + changelog + code together (commits are SSH-signed), then
+   `git push -u origin release/vX.Y.Z`
+6. Open a PR to `main`: `gh pr create --base main --fill`
+7. Wait for the PR to be approved and merged
+8. Only after merge, tag `main` with a signed tag and push it:
+   `git switch main && git pull && git tag -s vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`
 
-The CI release workflow fires on tags matching `v[0-9]+.[0-9]+.[0-9]+`, builds all three platforms, and pushes the Homebrew Cask and Scoop manifest automatically.
+Pushing the tag is what triggers a release — the CI workflow fires on tags
+matching `v[0-9]+.[0-9]+.[0-9]+`, builds all three platforms, and pushes the
+Homebrew Cask and Scoop manifest automatically. Never push a tag before the PR
+is merged.
 
 ## Architecture
 
