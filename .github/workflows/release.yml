@@ -3,8 +3,8 @@ name: Release
 # Triggered by a signed vMAJOR.MINOR.PATCH tag. The `create-release` job first
 # creates a single DRAFT GitHub Release, then the build matrix builds the native
 # artifact on each OS and uploads them all into that one draft, then the
-# `channels` job publishes the release and updates the Homebrew Cask + Scoop
-# manifest.
+# `channels` job publishes the release, uploads a `checksums.txt` covering every
+# asset, and updates the Homebrew Cask + Scoop manifest.
 #
 # The create-release job exists to prevent a race: without a pre-created draft,
 # each concurrent `pnpm run publish` finds no release for the tag and creates its
@@ -105,6 +105,20 @@ jobs:
     steps:
       - name: Promote draft release to published
         run: gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+
+      # Publish a single SHA-256 manifest covering every release asset so users
+      # can verify their download: `sha256sum -c checksums.txt`. Runs after the
+      # build matrix (needs: build), so all platform artifacts are present.
+      - name: Generate and upload checksums.txt
+        run: |
+          mkdir -p sums
+          gh release download "$TAG" --repo "$REPO" --dir sums
+          cd sums
+          rm -f checksums.txt   # never checksum a prior manifest (idempotent re-runs)
+          sha256sum * > checksums.txt
+          gh release upload "$TAG" --repo "$REPO" checksums.txt --clobber
+          echo "=== checksums.txt ==="
+          cat checksums.txt
 
       - name: Download macOS + Windows artifacts
         run: |
