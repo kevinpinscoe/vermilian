@@ -136,6 +136,7 @@ interface RawIssue {
 }
 
 import type { BoardIssue, IssueDetail } from '../../shared/workspace';
+import { buildIssueSearchQuery } from '../../shared/search';
 import {
   FIELD_DEFS,
   FIELD_KEYS,
@@ -191,6 +192,16 @@ function extractFields(fields: RawCustomField[]): BoardIssueFields {
   return result as unknown as BoardIssueFields;
 }
 
+function rawToBoardIssue(issue: RawIssue): BoardIssue {
+  return {
+    id: issue.id,
+    idReadable: issue.idReadable,
+    summary: issue.summary,
+    resolved: issue.resolved ?? null,
+    fields: extractFields(issue.customFields ?? []),
+  };
+}
+
 export async function getIssues(
   url: string,
   token: string,
@@ -206,13 +217,26 @@ export async function getIssues(
     token,
     `/api/issues?fields=${ISSUE_FIELDS}&query=${query}&$top=1000`,
   );
-  return raw.map((issue) => ({
-    id: issue.id,
-    idReadable: issue.idReadable,
-    summary: issue.summary,
-    resolved: issue.resolved ?? null,
-    fields: extractFields(issue.customFields ?? []),
-  }));
+  return raw.map(rawToBoardIssue);
+}
+
+// Free-text issue search, scoped to a single project. Returns at most 50
+// matches (ranked by YouTrack relevance) so the results dropdown stays bounded.
+export async function searchIssues(
+  url: string,
+  token: string,
+  projectShortName: string,
+  userQuery: string,
+): Promise<BoardIssue[]> {
+  const q = buildIssueSearchQuery(projectShortName, userQuery);
+  if (!q) return [];
+  const query = encodeURIComponent(q);
+  const raw = await request<RawIssue[]>(
+    url,
+    token,
+    `/api/issues?fields=${ISSUE_FIELDS}&query=${query}&$top=50`,
+  );
+  return raw.map(rawToBoardIssue);
 }
 
 // --- Issue detail (all fields including Notes, Date time entered) ---

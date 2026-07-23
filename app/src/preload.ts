@@ -12,6 +12,7 @@ import {
   type TestClaudeArgs,
   type GetWorklogTypesArgs,
   type GetIssuesArgs,
+  type SearchIssuesArgs,
   type PatchIssueArgs,
   type MoveIssueArgs,
   type CreateIssueArgs,
@@ -66,6 +67,7 @@ const api: VermilianAPI = {
   saveWorkspaceConfig: (config: VermilianConfig) =>
     ipcRenderer.invoke(IPC.saveWorkspaceConfig, config),
   getIssues: (args: GetIssuesArgs) => ipcRenderer.invoke(IPC.getIssues, args),
+  searchIssues: (args: SearchIssuesArgs) => ipcRenderer.invoke(IPC.searchIssues, args),
   openExternalUrl: (url: string) => ipcRenderer.invoke(IPC.openExternalUrl, url),
   getIssueDetail: (issueId: string) => ipcRenderer.invoke(IPC.getIssueDetail, issueId),
   patchIssue: (args: PatchIssueArgs) => ipcRenderer.invoke(IPC.patchIssue, args),

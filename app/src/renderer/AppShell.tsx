@@ -11,6 +11,7 @@ import { AiCreateModal } from './features/create-task/AiCreateModal';
 import { StandupModal } from './features/standup/StandupModal';
 import { FocusOverlay } from './features/timer/FocusOverlay';
 import { BreakBanner } from './features/timer/BreakBanner';
+import { SearchBar } from './features/search/SearchBar';
 import { useWorkspaceStore } from './stores/workspace';
 import { useTimerStore, getTotalWorkMs } from './stores/timer';
 import { useToastStore } from './stores/toast';
@@ -331,6 +332,11 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         <span className={styles.topBarTagline}>
           Validate Estimates, Requirements, and Milestones; Identify, Log Issues, Assign Next steps
         </span>
+        <SearchBar
+          projectShortName={activeProjectShortName}
+          projectName={activeProject?.name ?? null}
+          onSelectIssue={(id) => setSelectedIssue(id)}
+        />
         <div className={styles.topBarSpacer} />
         <span className={styles.version} title="Vermilian version">
           v{__APP_VERSION__}
