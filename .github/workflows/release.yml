@@ -43,13 +43,15 @@ jobs:
 
       # Pull this version's section out of CHANGELOG.md so the release body holds
       # the actual notes rather than a pointer to the file. Keep a Changelog
-      # format: the section runs from "## [X.Y.Z]" to the next "## [" heading.
+      # format: the section runs from "## [X.Y.Z]" to the next "## [" heading —
+      # or, for the oldest entry, to the trailing "[X.Y.Z]: <url>" link block.
       - name: Extract release notes from CHANGELOG.md
         run: |
           VERSION="${TAG#v}"
           if awk -v v="## [$VERSION]" '
-                index($0, v) == 1 { found = 1; next }
+                index($0, v) == 1  { found = 1; next }
                 found && /^## \[/  { exit }
+                found && /^\[[0-9]+\.[0-9]+\.[0-9]+\]:/ { exit }
                 found              { print }
               ' CHANGELOG.md | sed '/./,$!d' > /tmp/notes.md && [ -s /tmp/notes.md ]; then
             echo "Extracted $(wc -l < /tmp/notes.md) lines of notes for $VERSION."
