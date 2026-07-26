@@ -37,6 +37,29 @@ jobs:
       TAG: ${{ github.ref_name }}
       REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.ref_name }}
+
+      # Pull this version's section out of CHANGELOG.md so the release body holds
+      # the actual notes rather than a pointer to the file. Keep a Changelog
+      # format: the section runs from "## [X.Y.Z]" to the next "## [" heading.
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VERSION="${TAG#v}"
+          if awk -v v="## [$VERSION]" '
+                index($0, v) == 1 { found = 1; next }
+                found && /^## \[/  { exit }
+                found              { print }
+              ' CHANGELOG.md | sed '/./,$!d' > /tmp/notes.md && [ -s /tmp/notes.md ]; then
+            echo "Extracted $(wc -l < /tmp/notes.md) lines of notes for $VERSION."
+          else
+            echo "No CHANGELOG.md section for $VERSION — falling back to a pointer."
+            printf 'Release %s. See [CHANGELOG.md](../../blob/main/CHANGELOG.md) for details.\n' \
+              "$TAG" > /tmp/notes.md
+          fi
+          cat /tmp/notes.md
+
       # Create the single draft release before the build matrix fans out, so every
       # build job's `pnpm run publish` finds and reuses it instead of racing to
       # create its own. Idempotent: reuse an existing release for the tag if one
@@ -47,7 +70,7 @@ jobs:
             echo "Release $TAG already exists — reusing."
           else
             gh release create "$TAG" --repo "$REPO" --draft --title "$TAG" \
-              --notes "Automated release $TAG. See CHANGELOG.md for details."
+              --notes-file /tmp/notes.md
           fi
 
   build:

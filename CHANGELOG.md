@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Release bodies now contain this file's section for the released
+  version, extracted by the release workflow, instead of the generic
+  "Automated release vX.Y.Z. See CHANGELOG.md for details." pointer. Releases
+  published before this change were backfilled the same way. If a tag has no
+  matching `CHANGELOG.md` section, the workflow falls back to a link.
+
 ### Added
 
 - Every GitHub Release now includes a `checksums.txt` — a SHA-256 manifest of
