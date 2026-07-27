@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # The Electron app is the only thing here with a dependency manifest —
+  # app/package.json and app/pnpm-lock.yaml. cli/ holds no manifest.
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
