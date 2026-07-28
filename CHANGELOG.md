@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-07-28
+
 ### Changed
+
+- Electron 42.2.0 → **43.2.0**. This is the runtime the app ships on, so it
+  carries the upstream Chromium and Node updates for every platform build.
+  Verified with the full end-to-end suite against the packaged binary.
+
+- Updated the UI and API libraries the app ships: `@vibe/core` 4.2.1 → 4.5.3,
+  `@vibe/icons` 4.0.0 → 4.1.0, and `@anthropic-ai/sdk` 0.100.0 → 0.115.0.
+
+- Updated development tooling: the Playwright group (`@playwright/test` and
+  `playwright-core`, which must move together) to 1.62.0, and
+  `@tanstack/react-query-devtools` to 5.101.4.
 
 - Dependabot no longer proposes `vite` major bumps. The `vite` version is fixed
   by an `overrides:` entry in `app/pnpm-workspace.yaml`, which wins over the
@@ -16,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the installed tree. A genuine vite upgrade means editing the override,
   lifting the `@vitejs/plugin-react` ignore, and checking
   `@electron-forge/plugin-vite` (whose vite peer is `^5.0.12`).
+
+### Security
+
+- Raised the `postcss` override floor to `^8.5.18`, clearing the two remaining
+  high-severity Dependabot advisories on `main`. As with the other overrides,
+  `postcss` is build tooling and does not ship in the packaged app — Electron
+  Forge bundles only `dependencies`.
 
 ## [1.2.2] - 2026-07-28
 
@@ -314,6 +334,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.2.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.3
 [1.2.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.2
 [1.2.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.1
 [1.2.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.0
