@@ -12,5 +12,21 @@
     "plugin:import/electron",
     "plugin:import/typescript"
   ],
-  "parser": "@typescript-eslint/parser"
+  "parser": "@typescript-eslint/parser",
+  "rules": {
+    // typescript-eslint v8 promoted no-unused-vars to an error in `recommended`
+    // and ships no default ignore pattern. This codebase already marks
+    // deliberately-unused bindings with a leading underscore — interface-imposed
+    // parameters in the e2e fakes (`_url`, `_token`), caught errors that are
+    // swallowed on purpose (`_e`), and reserved options (`_includeResolved`).
+    // Honour that existing convention rather than deleting meaningful names.
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ]
+  }
 }
