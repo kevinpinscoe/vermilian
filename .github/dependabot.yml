@@ -24,6 +24,19 @@ updates:
       - dependency-name: "@vitejs/plugin-react"
         versions: [">=6.0.0"]
 
+      # vite majors are pinned by an `overrides: vite:` entry in
+      # app/pnpm-workspace.yaml, which exists so vitest and
+      # @electron-forge/plugin-vite resolve one copy (a floating range once let
+      # vitest pull a nested pre-release vite whose SSR transform broke).
+      # Because the override wins over the declared range, a Dependabot bump of
+      # the devDependency alone is a no-op that still passes CI while leaving
+      # package.json disagreeing with the installed tree — PR #24 did exactly
+      # that, claiming vite 8 while the lockfile resolved 6.4.3. A genuine
+      # upgrade means editing the override, lifting the plugin-react ignore
+      # above, and checking @electron-forge/plugin-vite (vite peer ^5.0.12).
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+
     groups:
       # Packages that MUST move in lockstep. @typescript-eslint/eslint-plugin and
       # @typescript-eslint/parser share a major line — an 8.x plugin against a
