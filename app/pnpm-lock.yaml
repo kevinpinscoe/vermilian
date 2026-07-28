@@ -34,8 +34,8 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(react@18.3.1)
       '@tanstack/react-query':
-        specifier: ^5.100.14
-        version: 5.100.14(react@18.3.1)
+        specifier: ^5.101.4
+        version: 5.101.4(react@18.3.1)
       '@vibe/core':
         specifier: ^4.2.1
         version: 4.2.1(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@14.16.1)(vitest@3.2.7(@types/node@25.9.1)(jiti@2.7.0)(terser@5.47.1))
@@ -90,7 +90,7 @@ importers:
         version: 5.2.0
       '@tanstack/react-query-devtools':
         specifier: ^5.100.14
-        version: 5.100.14(@tanstack/react-query@5.100.14(react@18.3.1))(react@18.3.1)
+        version: 5.100.14(@tanstack/react-query@5.101.4(react@18.3.1))(react@18.3.1)
       '@types/electron-squirrel-startup':
         specifier: ^1.0.2
         version: 1.0.2
@@ -869,8 +869,8 @@ packages:
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
 
-  '@tanstack/query-core@5.100.14':
-    resolution: {integrity: sha512-5X41dGpxgeaHISCRW2oYwcSycZeULZzAunaudXT9ov1KOTj9xwt0CH6hbwqP1/z74ZWF7rYFnDpyYH07XFcZew==}
+  '@tanstack/query-core@5.101.4':
+    resolution: {integrity: sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==}
 
   '@tanstack/query-devtools@5.100.14':
     resolution: {integrity: sha512-g96SmSSQecYTYcyuAMRXr895GplJv01UGt7qttQWPOUyZ5EGz5tbRc589bMc2m5BsPFD6O0PCEAHdbDYNP6UBw==}
@@ -881,8 +881,8 @@ packages:
       '@tanstack/react-query': ^5.100.14
       react: ^18 || ^19
 
-  '@tanstack/react-query@5.100.14':
-    resolution: {integrity: sha512-oOr6aRdSFEwWhzxEkD/9ZcItM3+LjBSkeVmadWKwUssAHTsqd/7bOjWrX4AbvEkoEhgAxzN0Xk6H/aYzXiYBAw==}
+  '@tanstack/react-query@5.101.4':
+    resolution: {integrity: sha512-yRg2pfOCxIs4ZJW3XYYHU/WgtD04FHSnfHlpRT7h7pR77hwkdRG4wxbKe4aq6P0RvXUTBSQpQeadS1SUYUe+KA==}
     peerDependencies:
       react: ^18 || ^19
 
@@ -5063,19 +5063,19 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
-  '@tanstack/query-core@5.100.14': {}
+  '@tanstack/query-core@5.101.4': {}
 
   '@tanstack/query-devtools@5.100.14': {}
 
-  '@tanstack/react-query-devtools@5.100.14(@tanstack/react-query@5.100.14(react@18.3.1))(react@18.3.1)':
+  '@tanstack/react-query-devtools@5.100.14(@tanstack/react-query@5.101.4(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@tanstack/query-devtools': 5.100.14
-      '@tanstack/react-query': 5.100.14(react@18.3.1)
+      '@tanstack/react-query': 5.101.4(react@18.3.1)
       react: 18.3.1
 
-  '@tanstack/react-query@5.100.14(react@18.3.1)':
+  '@tanstack/react-query@5.101.4(react@18.3.1)':
     dependencies:
-      '@tanstack/query-core': 5.100.14
+      '@tanstack/query-core': 5.101.4
       react: 18.3.1
 
   '@tootallnate/once@2.0.1': {}
