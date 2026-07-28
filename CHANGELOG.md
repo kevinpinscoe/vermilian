@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Every GitHub Release now includes a `checksums.txt` — a SHA-256 manifest of
+  all release assets — so downloads can be verified with
+  `sha256sum -c checksums.txt`. Generated and uploaded by the release workflow's
+  `channels` job after all platform artifacts are built.
+
 ### Changed
 
 - GitHub Release bodies now contain this file's section for the released
@@ -15,12 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   published before this change were backfilled the same way. If a tag has no
   matching `CHANGELOG.md` section, the workflow falls back to a link.
 
-### Added
+### Fixed
 
-- Every GitHub Release now includes a `checksums.txt` — a SHA-256 manifest of
-  all release assets — so downloads can be verified with
-  `sha256sum -c checksums.txt`. Generated and uploaded by the release workflow's
-  `channels` job after all platform artifacts are built.
+- `pnpm package` failed on `main`, which would have made the next release tag
+  fail every platform build. `@vitejs/plugin-react` had been bumped to 6.0.4,
+  which requires `vite ^8.0.0`, while this project is on `vite` 6.4.3; the
+  plugin imports `vite/internal`, a subpath vite 6 does not export. Pinned to
+  `@vitejs/plugin-react` 5.2.0 — the newest release whose vite peer range still
+  covers 6 (`^4.2 || ^5 || ^6 || ^7 || ^8`) — restoring the packaged build.
+
+- `pnpm lint` failed on `main`: `@typescript-eslint/eslint-plugin` had been
+  bumped to 8.65.0 while `@typescript-eslint/parser` stayed on 5.62.0. The two
+  share a major line and cannot be mixed. Bumped the parser to 8.65.0 to match.
+  typescript-eslint v8 also promoted `no-unused-vars` to an error in its
+  `recommended` config with no default ignore pattern, so the rule is now
+  configured to honour this codebase's existing leading-underscore convention
+  for deliberately-unused bindings.
 
 ## [1.2.1] - 2026-07-23
 
