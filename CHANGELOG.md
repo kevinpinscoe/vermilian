@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dependabot no longer proposes `vite` major bumps. The `vite` version is fixed
+  by an `overrides:` entry in `app/pnpm-workspace.yaml`, which wins over the
+  declared dependency range — so a bump of the `devDependencies` entry alone
+  resolves to the old version, passes CI, and leaves `package.json` disagreeing
+  with the installed tree. A genuine vite upgrade means editing the override,
+  lifting the `@vitejs/plugin-react` ignore, and checking
+  `@electron-forge/plugin-vite` (whose vite peer is `^5.0.12`).
+
 ## [1.2.2] - 2026-07-28
 
 ### Added
