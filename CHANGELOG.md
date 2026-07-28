@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sha256sum -c checksums.txt`. Generated and uploaded by the release workflow's
   `channels` job after all platform artifacts are built.
 
+- A `CI` workflow runs `pnpm lint`, `pnpm test`, and `pnpm package` on every
+  pull request into `main` and on `main` after merge. Previously the only
+  workflow fired on release tags, so pull requests carried no status checks at
+  all. The `package` step is the important one: the two dependency bumps that
+  broke `main` on 2026-07-27 both passed lint and all 162 unit tests, and only
+  a real build caught them.
+
+- `react-hooks/rules-of-hooks` (error) and `react-hooks/exhaustive-deps`
+  (warning) are now enforced, via a new `eslint-plugin-react-hooks`
+  dev-dependency. Two `eslint-disable react-hooks/exhaustive-deps` comments
+  already in the tree had never done anything, because the plugin providing the
+  rule was never installed. The plugin's own `recommended` preset is
+  deliberately not used — v7 folded in the React Compiler rule set, which
+  errors on 14 existing call sites; adopting those belongs in its own change.
+
 ### Changed
 
 - GitHub Release bodies now contain this file's section for the released
@@ -21,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Automated release vX.Y.Z. See CHANGELOG.md for details." pointer. Releases
   published before this change were backfilled the same way. If a tag has no
   matching `CHANGELOG.md` section, the workflow falls back to a link.
+
+- Dependabot now groups packages that must move in lockstep — `@typescript-eslint/*`,
+  `@electron-forge/*`, React and its type packages, Playwright, and `@dnd-kit/*` —
+  and its open-PR limit is raised from the default 5 to 10. It is also pinned
+  off `@vitejs/plugin-react` 6.x and above until this project moves to vite 8.
+
+### Removed
+
+- Dead code in `WorkspaceBoard.tsx`: an unused `useRef` import and an unused
+  `projectPrefix()` helper.
 
 ### Fixed
 

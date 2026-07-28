@@ -29,6 +29,8 @@ each release.
   state machine, API transforms, and search query building), alongside an end-to-end (Playwright)
   suite over the board, detail panel, settings, timer, AI, stand-up, and search flows. Verified on
   Linux (Fedora 42); the macOS and Windows builds are published but less extensively exercised.
+  Lint, the unit suite, and a full packaged build run in CI on every pull request into `main`; the
+  end-to-end suite is run locally before a release, since it drives the packaged binary.
 
 ## What it is
 

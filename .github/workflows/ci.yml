@@ -1,0 +1,70 @@
+name: CI
+
+# Runs on every pull request into main, and on main itself after merge.
+#
+# This exists because dependency PRs previously landed with no signal at all:
+# the only other workflow (release.yml) fires on v* tags, so a bump that broke
+# the build was invisible until release time. Two such bumps merged on
+# 2026-07-27 and left main unable to package at all.
+#
+# The `package` step is the one that matters most. Both breakages passed lint
+# and all 162 unit tests — only `electron-forge package` caught them:
+#   - @vitejs/plugin-react 6 requires vite 8; the repo is on vite 6, and the
+#     plugin imports vite/internal, a subpath vite 6 does not export.
+#   - @typescript-eslint plugin 8 against parser 5 breaks lint outright.
+# Do not drop the package step to save minutes; it is the only gate that would
+# have caught the release-breaking one.
+#
+# E2E (Playwright driving the packaged binary) is still not run here — it needs
+# a display and adds several minutes. Run `pnpm test:e2e` locally when a change
+# touches the main/preload/renderer boundary, per CLAUDE.md.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push to a PR branch cancels the in-flight run for that branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, test & package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      # --frozen-lockfile makes a package.json/pnpm-lock.yaml mismatch a hard
+      # failure rather than a silent lockfile rewrite — the same flag the
+      # release build uses, so CI and release resolve identical trees.
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      # Catches renderer/build-config breakage — peer-dependency mismatches in
+      # particular — that lint and unit tests both sail past.
+      - name: Package (build check)
+        run: pnpm package

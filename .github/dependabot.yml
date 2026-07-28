@@ -6,8 +6,63 @@ updates:
     directory: /app
     schedule:
       interval: weekly
+    # Default is 5. Four npm PRs plus the actions PR hit that ceiling, which is
+    # partly why the @typescript-eslint parser bump never got a PR of its own to
+    # pair with the plugin bump. Grouping below cuts the PR count anyway; the
+    # higher limit stops a backlog from silently starving later updates.
+    open-pull-requests-limit: 10
+
+    ignore:
+      # @vitejs/plugin-react 6.x requires vite ^8.0.0. This project is on vite 6
+      # (pinned in pnpm-workspace.yaml so vitest and @electron-forge/plugin-vite
+      # resolve one copy), and plugin-react 6 imports vite/internal — a subpath
+      # vite 6 does not export, which breaks `electron-forge package` outright.
+      # Bumping to 6.0.4 did exactly that on 2026-07-27. 5.2.0 is the newest
+      # release whose peer range still covers vite 6. Lift this ignore only as
+      # part of a deliberate vite 6 -> 8 upgrade, checking that
+      # @electron-forge/plugin-vite supports the new vite first.
+      - dependency-name: "@vitejs/plugin-react"
+        versions: [">=6.0.0"]
+
+    groups:
+      # Packages that MUST move in lockstep. @typescript-eslint/eslint-plugin and
+      # @typescript-eslint/parser share a major line — an 8.x plugin against a
+      # 5.x parser breaks `pnpm lint` outright. Ungrouped, Dependabot bumped only
+      # the plugin. Never split these again.
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+
+      # Electron Forge ships its CLI, makers, publishers, and plugins as one
+      # versioned set; mixing majors across them breaks packaging.
+      electron-forge:
+        patterns:
+          - "@electron-forge/*"
+
+      # React runtime and its type packages must agree on major.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+
+      # @playwright/test and playwright-core are released together and must match.
+      playwright:
+        patterns:
+          - "@playwright/test"
+          - "playwright-core"
+
+      # dnd-kit core/sortable/utilities are co-released.
+      dnd-kit:
+        patterns:
+          - "@dnd-kit/*"
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

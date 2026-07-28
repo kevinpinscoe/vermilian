@@ -13,7 +13,8 @@ allowBuilds:
 # Vite >= 6.4.3 also clears the vite/esbuild Dependabot advisories
 # (GHSA-fx2h-pf6j-xcff, GHSA-v6wh-96g9-6wx3, GHSA-4w7w-66w2-5vf9) and drags
 # esbuild >= 0.25.0 (GHSA-67mh-4wv8-2f99). @electron-forge/plugin-vite@7.11 has
-# no vite peer/dep pin and @vitejs/plugin-react@4.7 supports vite 6.
+# no vite peer/dep pin and @vitejs/plugin-react@5.2 supports vite 6 (5.2.0 is the
+# newest plugin-react whose peer range still covers vite 6 — 6.x requires vite 8).
 overrides:
   vite: ^6.4.3
   esbuild: ^0.25.0

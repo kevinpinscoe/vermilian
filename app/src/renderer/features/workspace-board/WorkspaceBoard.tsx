@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { Loader, Text, Heading, Button, Tooltip } from '@vibe/core';
 import { Wand, Play } from '@vibe/icons';
@@ -25,10 +25,6 @@ const COLORS: EffectiveColors = {
   Priority: PRIORITY_COLORS,
   Category: CATEGORY_COLORS,
 };
-
-function projectPrefix(idReadable: string): string {
-  return idReadable.replace(/-\d+$/, '');
-}
 
 function groupByStatus(issues: BoardIssue[]): Array<[string, BoardIssue[]]> {
   const map = new Map<string, BoardIssue[]>();
@@ -351,7 +347,7 @@ export function WorkspaceBoard({
                     <React.Fragment key={status}>
                       <GroupHeader
                         label={status} count={groupIssues.length} colSpan={colSpan}
-                        expanded={exp} onToggle={() => setCollapsed((s) => { const n = new Set(s); n.has(status) ? n.delete(status) : n.add(status); return n; })}
+                        expanded={exp} onToggle={() => setCollapsed((s) => { const n = new Set(s); if (n.has(status)) n.delete(status); else n.add(status); return n; })}
                         color={COLORS.Status[status] ?? '#C4C4C4'}
                       />
                       {exp && sorted.map((issue) => {
