@@ -26,7 +26,7 @@ overrides:
   tar: ^7.5.18
   js-yaml: ^4.2.0
   "@babel/core": ^7.29.6
-  postcss: ^8.5.10
+  postcss: ^8.5.18
   fast-uri: ^3.1.4
   # brace-expansion is vulnerable on both its 1.x and 2.x lines (GHSA-3jxr-9vmj-r5cp);
   # pin each major to its patched release rather than forcing one major everywhere.
