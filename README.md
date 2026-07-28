@@ -14,7 +14,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.2.1 — current release.** Vermilian is feature-complete against its specification and
+**v1.2.2 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
