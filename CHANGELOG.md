@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-07-28
+
 ### Added
 
 - Every GitHub Release now includes a `checksums.txt` — a SHA-256 manifest of
@@ -302,6 +304,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.2.2]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.2
 [1.2.1]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.1
 [1.2.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.0
 [1.1.3]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.1.3
