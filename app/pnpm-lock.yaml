@@ -40,8 +40,8 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(stylelint@14.16.1)(vitest@4.1.10(@types/node@25.9.1)(vite@6.4.3(@types/node@25.9.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons':
-        specifier: ^4.0.0
-        version: 4.0.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^4.1.0
+        version: 4.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       electron-squirrel-startup:
         specifier: ^1.0.1
         version: 1.0.1
@@ -1176,6 +1176,12 @@ packages:
 
   '@vibe/icons@4.0.0':
     resolution: {integrity: sha512-0pdp0Kzm/hQPzk/+WuIeI7KotN43Z6uF0lpB+ct1U0RtbIhsZBatCaGSHS4bH3qm20jV4fWgME/WM2xJBSGkIw==}
+    peerDependencies:
+      react: '>=16.9.0'
+      react-dom: '>=16.9.0'
+
+  '@vibe/icons@4.1.0':
+    resolution: {integrity: sha512-xO61cHnuNDEA0SlhG6/hWA3mYsatUzcTELTk701i2cGdZw85nZ/mNn2NtfJRaHnAZ8uJuw1ZWXQ+HpvXL1X6xA==}
     peerDependencies:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
@@ -5647,6 +5653,11 @@ snapshots:
       - vitest
 
   '@vibe/icons@4.0.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+
+  '@vibe/icons@4.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
