@@ -21,6 +21,37 @@ Run a single unit test file:
 pnpm vitest run src/renderer/features/settings/api.test.ts
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `pnpm lint`, `pnpm test`, and `pnpm package` on
+every pull request into `main` and on `main` after merge. It installs with
+`--frozen-lockfile`, so a `package.json` / `pnpm-lock.yaml` mismatch fails the
+build rather than silently rewriting the lockfile.
+
+**Do not drop the `package` step.** Two dependency bumps merged on 2026-07-27
+left `main` unable to build, and both passed lint and all 162 unit tests — only
+a real `electron-forge package` caught them. A peer-dependency mismatch is
+invisible to every other check.
+
+E2e is not in CI (it needs a display and adds minutes). Run `pnpm test:e2e`
+locally when a change touches the main/preload/renderer boundary.
+
+### Dependency constraints worth knowing
+
+- **`@vitejs/plugin-react` is held at 5.x.** Version 6 requires `vite ^8.0.0`
+  and imports `vite/internal`, which vite 6 does not export — it breaks
+  packaging outright. `pnpm-workspace.yaml` pins the whole tree to vite 6 so
+  vitest and `@electron-forge/plugin-vite` resolve one copy. Dependabot is
+  configured to ignore plugin-react `>=6.0.0`; lift that only as part of a
+  deliberate vite upgrade, after checking Forge supports the new vite.
+- **`@typescript-eslint/*` must move together.** Plugin and parser share a major
+  line; mixing them breaks `pnpm lint`. Dependabot groups them — do not remove
+  that group.
+- **`eslint-plugin-react-hooks` is pinned to explicit rules,** not its
+  `recommended` preset. v7 folded in the React Compiler rules
+  (`set-state-in-effect`, `static-components`, `use-memo`), which error on 14
+  existing call sites.
+
 ## Release workflow
 
 Every release ships through a branch + PR — never a direct push to `main`.
