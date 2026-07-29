@@ -531,9 +531,11 @@ function IssueRow({
     id: `row::${issue.id}`,
     data: { groupVal },
   });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const setRef = useCallback((node: HTMLTableRowElement | null) => {
     setDragRef(node); setDropRef(node);
+    // setDragRef/setDropRef are stable dnd-kit setters; an empty dep array is
+    // intentional so the callback identity does not change on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

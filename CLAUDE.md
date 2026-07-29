@@ -51,6 +51,31 @@ locally when a change touches the main/preload/renderer boundary.
   `recommended` preset. v7 folded in the React Compiler rules
   (`set-state-in-effect`, `static-components`, `use-memo`), which error on 14
   existing call sites.
+- **`eslint-plugin-import` declares an ESLint peer range that stops at 9,** while
+  this project runs ESLint 10. 2.32.0 is the latest release and upstream has not
+  updated the range. It was verified rule-for-rule against the pre-migration
+  setup and produces identical results, but it is formally an unsupported pair.
+  If a future ESLint release breaks it, the maintained fork
+  `eslint-plugin-import-x` supports 10 and offers the same flat configs — at the
+  cost of a native `unrs-resolver` binary needing a `pnpm-workspace.yaml`
+  `allowBuilds` entry, and renaming every rule `import/*` → `import-x/*`.
+
+### Lint config
+
+`app/eslint.config.mjs` is flat config. **There is no `.eslintrc.json`** — ESLint
+10 removed eslintrc support entirely, so re-adding one would be silently ignored.
+
+- It is `.mjs` because `app/package.json` has no `"type": "module"`.
+- The `files: ['**/*.ts', '**/*.tsx']` entry is what makes ESLint pick up
+  TypeScript at all; flat config lints only `*.js` otherwise. The old
+  `--ext .ts,.tsx` flag no longer exists, so `pnpm lint` is just `eslint .`.
+- Build output is excluded via the `ignores` entry, not an `.eslintignore`
+  (flat config ignores that file).
+- Flat config defaults `reportUnusedDisableDirectives` to `warn`, which eslintrc
+  did not. That immediately found a dead `eslint-disable-next-line` in
+  `ProjectBoard.tsx` — the directive sat one line above the `useCallback`, but
+  `exhaustive-deps` reports on the dependency-array line, so it suppressed
+  nothing. Put such directives immediately above the `}, [deps]);` line.
 
 ## Release workflow
 
