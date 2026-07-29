@@ -41,6 +41,29 @@
   white-space: nowrap;
 }
 
+/* Connection banner — shown when the projects query fails, i.e. the app cannot
+   talk to YouTrack. Sits directly under the top bar so it is the first thing
+   read, and carries its own actions since the left rail may have failed too. */
+.connectionBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ui-border-color);
+}
+
+.connectionBanner > *:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.connectionBannerActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* Rail + content row */
 .body {
   display: flex;

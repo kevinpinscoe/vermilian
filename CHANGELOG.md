@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A broken YouTrack connection could leave the app with no way to fix it.**
+  The startup check asks only whether a stored token *exists*, never whether it
+  works — so after a YouTrack rebuild invalidated the saved token, the app still
+  considered itself connected and opened the board instead of Settings. The
+  board was then empty, and the sole Settings button lived in the left rail,
+  which renders YouTrack-derived data and had itself failed to load. An
+  authentication failure removed the only route to fixing authentication, and
+  recovery meant deleting the credential file by hand.
+
+  Two escape hatches now exist. A Settings gear sits in the top bar, which
+  depends on no remote data and is therefore always reachable. And when the
+  projects query fails, a banner appears beneath the top bar naming the actual
+  problem — distinguishing a rejected token from an unreachable host or a wrong
+  URL — with **Open Settings** and **Retry** buttons.
+
+  Related: `IPC.getProjects` now re-throws a real `Error` carrying the HTTP
+  status. It previously let a plain `{ status, message }` object cross the IPC
+  boundary, where Electron stringified it to `[object Object]` and the status
+  was lost, so the renderer could not tell why a call had failed.
+
 ### Changed
 
 - TypeScript 5.9.3 → 6.0.3, and `baseUrl` removed from `app/tsconfig.json`. It

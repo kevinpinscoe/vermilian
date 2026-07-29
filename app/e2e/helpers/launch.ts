@@ -45,3 +45,15 @@ export async function launchAppUnconfigured(): Promise<ElectronApplication> {
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_UNCONFIGURED: '1' },
   });
 }
+
+// Launches fully configured, but with the fake YouTrack rejecting every
+// getProjects call with a 401 — the state a rebuilt/re-tokened YouTrack leaves
+// the app in. The token file still exists, so the app considers itself
+// connected and routes to the board rather than to first-run Settings.
+export async function launchAppWithRevokedToken(): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_YT_401: '1' },
+  });
+}

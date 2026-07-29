@@ -1041,6 +1041,7 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
         <Divider />
         <div className={styles.footerButtons}>
           <IconButton
+            data-testid="rail-settings-btn"
             icon={Settings}
             size="small"
             kind="tertiary"

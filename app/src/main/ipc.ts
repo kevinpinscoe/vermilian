@@ -209,7 +209,21 @@ export function registerIpc(): void {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
-    return youtrack.getProjects(cfg.youtrackUrl, token);
+    try {
+      return await youtrack.getProjects(cfg.youtrackUrl, token);
+    } catch (e) {
+      // youtrack.ts throws a plain { status, message } object. Electron
+      // stringifies a non-Error thrown across IPC, so the renderer would see
+      // "[object Object]" and lose the status entirely — which is why a dead
+      // token produced an empty board with no explanation. Re-throw a real
+      // Error with the status in the message so the renderer can tell an auth
+      // failure from an unreachable host. Parsed by connectionErrorMessage().
+      const err = e as { status?: number; message?: string };
+      throw new Error(
+        `YouTrack request failed (status ${err.status ?? 'none'}): ${err.message ?? 'unknown error'}`,
+        { cause: e },
+      );
+    }
   });
 
   ipcMain.handle(IPC.getWorkspaceConfig, async () => {
