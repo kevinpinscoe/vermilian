@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-07-29
+
 ### Fixed
 
 - **A broken YouTrack connection could leave the app with no way to fix it.**
@@ -439,6 +441,7 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[1.2.7]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.7
 [1.2.6]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.6
 [1.2.5]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.5
 [1.2.4]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.4
