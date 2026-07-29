@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { FIELD_KEYS } from '../../../shared/fields';
+import { FIELD_KEYS, type FieldKey } from '../../../shared/fields';
 import type { EffectiveColors } from './KanbanView';
 import {
   STATUS_ORDER,
@@ -18,7 +18,11 @@ import {
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 function issue(id: string, fields: Partial<BoardIssueFields> = {}, summary = id): BoardIssue {
-  const emptyFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, null])) as BoardIssueFields;
+  // The tuple needs an explicit type: with strictNullChecks off, `null` infers
+  // as `any`, so the callback's return type contains an implicit any.
+  const emptyFields = Object.fromEntries(
+    FIELD_KEYS.map((k): [FieldKey, null] => [k, null]),
+  ) as BoardIssueFields;
   return {
     id,
     idReadable: id.toUpperCase(),

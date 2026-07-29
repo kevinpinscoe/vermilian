@@ -4,16 +4,21 @@
 // This file is .mjs because app/package.json has no "type": "module"; a plain
 // eslint.config.js would be parsed as CommonJS and these imports would fail.
 //
-// Deliberately kept as one composed config object rather than a spread of the
-// plugins' own flat presets. Every rule set here was in .eslintrc.json, and
-// merging them explicitly makes it auditable that the migration changed no
-// rule — only the file format.
+// NOTE ON eslint-plugin-import: it used to be configured here and has been
+// removed. Its latest release (2.32.0, June 2025) declares an ESLint peer range
+// ending at 9, so it was formally unsupported against ESLint 10. Of the seven
+// rules it actually had enabled, four — import/default, import/export,
+// import/namespace, import/no-unresolved — are module-correctness checks the
+// TypeScript compiler performs natively and more accurately. Those are now
+// covered by `pnpm typecheck` (tsc --noEmit), which runs in CI. The other three
+// (no-duplicates, no-named-as-default, no-named-as-default-member) were
+// warning-level style heuristics; losing them is the deliberate price of not
+// carrying an unsupported plugin. See CLAUDE.md.
 
 import js from '@eslint/js';
 import globals from 'globals';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
-import importPlugin from 'eslint-plugin-import';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 // typescript-eslint ships flat/recommended as an array of config objects
@@ -56,15 +61,7 @@ export default [
 
     plugins: {
       '@typescript-eslint': tsPlugin,
-      import: importPlugin,
       'react-hooks': reactHooks,
-    },
-
-    settings: {
-      // From plugin:import/electron and plugin:import/typescript — these
-      // presets are settings-only (resolver paths and extension handling).
-      ...importPlugin.flatConfigs.electron.settings,
-      ...importPlugin.flatConfigs.typescript.settings,
     },
 
     rules: {
@@ -76,9 +73,6 @@ export default [
       ...tsPlugin.configs['flat/eslint-recommended'].rules,
       // plugin:@typescript-eslint/recommended
       ...tsRecommendedRules,
-      // plugin:import/recommended and plugin:import/typescript
-      ...importPlugin.flatConfigs.recommended.rules,
-      ...importPlugin.flatConfigs.typescript.rules,
 
       // The two classic hook rules. Deliberately NOT the react-hooks
       // `recommended` preset — v7 of the plugin folded in the React Compiler
@@ -103,21 +97,6 @@ export default [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-    },
-  },
-
-  {
-    // Build-tooling configs import ESM-only packages (vitest/config,
-    // @vitejs/plugin-react, @electron/fuses) whose "exports" maps
-    // eslint-plugin-import's Node resolver cannot follow — they resolve fine at
-    // runtime, and the packaged build proves it. Pointing the TypeScript
-    // resolver at them instead just moves the failure: it resolves the package,
-    // then fails parsing its ESM dist. Scope the import check off for these
-    // files rather than carrying a native resolver dependency to silence a
-    // false positive.
-    files: ['vite.*.config.ts', 'vitest.config.ts', 'forge.config.ts'],
-    rules: {
-      'import/no-unresolved': 'off',
     },
   },
 ];
