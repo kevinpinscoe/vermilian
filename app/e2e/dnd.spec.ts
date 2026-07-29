@@ -227,13 +227,21 @@ test.describe('Column resize', () => {
     await page.mouse.move(handleBox.x + 80, handleBox.y + handleBox.height / 2, { steps: 10 });
     await page.mouse.up();
 
-    const after = (await header.boundingBox())?.width ?? 0;
-    expect(after).toBeGreaterThan(before);
+    // Poll rather than read once. On mouseup the board clears the live drag
+    // width synchronously but persists the new width through an async config
+    // mutation, so for a moment the header renders back at its ORIGINAL width.
+    // A single boundingBox() read can land in that window — which is exactly
+    // how this test flaked under full-suite load while passing in isolation.
+    await expect
+      .poll(async () => (await header.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(before);
   });
 
   test('column cannot shrink below 40px minimum', async () => {
     const header = page.locator('[data-testid="col-header"]:not([data-col="summary"])').first();
     const handle = header.locator('[data-testid="col-resize-handle"]');
+    const before = (await header.boundingBox())?.width ?? 0;
+
     const handleBox = await handle.boundingBox();
     if (!handleBox) return test.skip();
 
@@ -241,6 +249,14 @@ test.describe('Column resize', () => {
     await page.mouse.down();
     await page.mouse.move(handleBox.x - 500, handleBox.y + handleBox.height / 2, { steps: 20 });
     await page.mouse.up();
+
+    // Wait for the resize to actually commit before asserting the clamp — see
+    // the note in the widen test above. Without this the assertion could read
+    // the pre-drag width, which is itself >= 40, so the test would pass while
+    // never exercising the 40px minimum at all.
+    await expect
+      .poll(async () => (await header.boundingBox())?.width ?? 0)
+      .toBeLessThan(before);
 
     const width = (await header.boundingBox())?.width ?? 0;
     expect(width).toBeGreaterThanOrEqual(40);
