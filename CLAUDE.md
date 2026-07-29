@@ -173,6 +173,18 @@ Pure TypeScript — no Electron, no React. Safe to import in either process or i
 
 When fixing a bug, write the test first, confirm it fails, then fix and confirm it passes.
 
+**Never assert on a rendered value immediately after an interaction that
+persists through a config mutation.** Handlers like the column-resize `mouseup`
+clear their live preview state synchronously but save through
+`saveBoardConfig.mutate()`, so for a moment the element renders back at its
+*previous* value. A single `boundingBox()` / `textContent()` read can land in
+that window — it passes in isolation and fails under full-suite load, which is
+the hardest kind of flake to chase. Use an auto-retrying assertion
+(`await expect.poll(...)` or `expect(locator).toHaveText(...)`) so the check
+waits for the committed value. Beware the inverse too: an assertion that also
+holds for the stale value (`>= 40` when the old width was already 120) will
+*false-pass* rather than flake, and silently stop testing anything.
+
 ### E2e fake backend
 
 `VERMILIAN_E2E=1` enables an in-memory YouTrack stub (`src/main/api/fakeYouTrack.ts`) with deterministic fixture data. The main process IPC handlers return fake tokens and mock credential status automatically. The renderer sees a fully connected app without any real network calls.

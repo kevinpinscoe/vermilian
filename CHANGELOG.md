@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `column widens when right edge dragged right` end-to-end test was flaky.
+  It read the column width once, immediately after releasing the mouse — but
+  the board clears the live drag width synchronously while persisting the new
+  width through an async config mutation, so the header briefly renders back at
+  its original width. The single read could land in that window, which is why
+  the test passed in isolation and failed only under full-suite load. It now
+  polls for the committed width. The neighbouring `40px minimum` test had the
+  same race but *false-passed* rather than flaking, because the stale width was
+  also above the minimum — it never exercised the clamp, and now does.
+
 ## [1.2.4] - 2026-07-29
 
 ### Changed
