@@ -8,6 +8,29 @@ export function friendlyYouTrackError(res: { status?: number; message?: string }
   return res.message ?? 'Connection failed.';
 }
 
+// Turn a failed projects/board query into an actionable sentence for the
+// connection banner. Unlike friendlyYouTrackError above, this receives whatever
+// React Query caught — an Error that has already crossed the IPC boundary, so
+// the original { status } object is gone and only the message survives. The
+// main process encodes the status into that message (see IPC.getProjects).
+//
+// The distinction that matters to the user: a rejected token is fixed in
+// Settings, an unreachable host is not.
+export function connectionErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+
+  if (/status 401|status 403|\b401\b|\b403\b|unauthorized|forbidden/i.test(msg)) {
+    return 'YouTrack rejected the stored token. It may have been revoked, expired, or replaced — open Settings to enter a new one.';
+  }
+  if (/status 404/i.test(msg)) {
+    return 'No YouTrack REST API found at the configured URL. Check the URL in Settings.';
+  }
+  if (/status none|fetch failed|ENOTFOUND|ECONNREFUSED|network|timeout/i.test(msg)) {
+    return 'Could not reach YouTrack. Check the URL in Settings and your network connection.';
+  }
+  return 'Could not load projects from YouTrack. Check the connection settings.';
+}
+
 export function friendlyClaudeError(raw?: string): string {
   const msg = raw ?? 'Key check failed.';
   if (/401|invalid x-api-key|authentication|unauthorized|permission/i.test(msg)) {

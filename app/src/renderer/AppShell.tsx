@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, Button, Tooltip } from '@vibe/core';
-import { Sun } from '@vibe/icons';
+import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
+import { Sun, Settings } from '@vibe/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceNav } from './features/workspace-nav/WorkspaceNav';
 import { ProjectBoard } from './features/project-board/ProjectBoard';
@@ -16,6 +16,7 @@ import { useWorkspaceStore } from './stores/workspace';
 import { useTimerStore, getTotalWorkMs } from './stores/timer';
 import { useToastStore } from './stores/toast';
 import { useProjects, useWorkspaceConfig } from './features/workspace-nav/api';
+import { connectionErrorMessage } from './features/settings/errors';
 import type { StandupScope, StandupWindow } from '../shared/config';
 import type { BoardIssue } from '../shared/workspace';
 import styles from './AppShell.module.css';
@@ -341,6 +342,21 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         <span className={styles.version} title="Vermilian version">
           v{__APP_VERSION__}
         </span>
+        {/* Settings must be reachable from the top bar, not only from the left
+            rail. The rail renders workspace/project data fetched from YouTrack,
+            so when the connection is broken the rail is exactly what fails —
+            taking the only Settings button with it and leaving no way to fix
+            the credentials. This button depends on nothing. */}
+        <Tooltip content="Open Settings">
+          <IconButton
+            data-testid="topbar-settings-btn"
+            icon={Settings}
+            size="small"
+            kind="tertiary"
+            onClick={onOpenSettings}
+            aria-label="Open Settings"
+          />
+        </Tooltip>
         <Tooltip
           content="Exit Vermilian"
         >
@@ -372,6 +388,28 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           </Button>
         </Tooltip>
       </div>
+
+      {/* Connection banner — the projects query is the canary. If it failed,
+          every board below is empty for a reason the user cannot otherwise see.
+          Says which failure it is (revoked token vs unreachable host) and
+          offers the fix directly, rather than leaving a blank screen. */}
+      {projects.isError && (
+        <div className={styles.connectionBanner} data-testid="connection-error-banner">
+          <AttentionBox
+            type="negative"
+            title="Cannot load projects from YouTrack"
+            text={connectionErrorMessage(projects.error)}
+          />
+          <div className={styles.connectionBannerActions}>
+            <Button size="small" kind="primary" onClick={onOpenSettings}>
+              Open Settings
+            </Button>
+            <Button size="small" kind="tertiary" onClick={() => void projects.refetch()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Break banner — shown when break phase is active */}
       {isBreak && (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { friendlyYouTrackError, friendlyClaudeError } from './errors';
+import { friendlyYouTrackError, friendlyClaudeError, connectionErrorMessage } from './errors';
 
 const URL = 'https://yt.example.com';
 
@@ -20,6 +20,44 @@ describe('friendlyYouTrackError', () => {
   it('falls back to the server message for other statuses', () => {
     expect(friendlyYouTrackError({ status: 500, message: 'Boom' }, URL)).toBe('Boom');
     expect(friendlyYouTrackError({ status: 500 }, URL)).toBe('Connection failed.');
+  });
+});
+
+describe('connectionErrorMessage', () => {
+  // Regression: a YouTrack instance was rebuilt, invalidating the stored token.
+  // The app still saw a token *file* on disk, so it routed to the board instead
+  // of Settings, then rendered an empty board with no explanation — and the only
+  // Settings button lived in the left rail, which had failed to render. The
+  // banner these messages feed is the escape hatch.
+  const REVOKED = 'Error invoking remote method: YouTrack request failed (status 401): Unauthorized';
+
+  it('names the token as the problem on 401/403, and points at Settings', () => {
+    const msg = connectionErrorMessage(new Error(REVOKED));
+    expect(msg).toMatch(/rejected the stored token/i);
+    expect(msg).toMatch(/Settings/);
+    expect(connectionErrorMessage(new Error('failed (status 403): Forbidden'))).toMatch(/rejected the stored token/i);
+  });
+
+  it('distinguishes a bad URL from a bad token', () => {
+    expect(connectionErrorMessage(new Error('failed (status 404): Not Found'))).toMatch(/No YouTrack REST API found/i);
+  });
+
+  it('treats an absent status as unreachable rather than an auth failure', () => {
+    const msg = connectionErrorMessage(new Error('failed (status none): fetch failed'));
+    expect(msg).toMatch(/Could not reach YouTrack/i);
+    expect(msg).not.toMatch(/rejected the stored token/i);
+  });
+
+  it('handles non-Error values without throwing', () => {
+    expect(connectionErrorMessage('plain string')).toMatch(/Could not load projects/i);
+    expect(connectionErrorMessage(null)).toMatch(/Could not load projects/i);
+    expect(connectionErrorMessage(undefined)).toMatch(/Could not load projects/i);
+  });
+
+  it('always yields something actionable, never an empty string', () => {
+    for (const input of [new Error(''), '', 0, {}, []]) {
+      expect(connectionErrorMessage(input).length).toBeGreaterThan(0);
+    }
   });
 });
 

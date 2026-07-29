@@ -13,7 +13,7 @@ const SETTINGS_HEADING = { role: 'heading' as const, name: 'Settings' };
 const TOKEN_FIELD = /^Token saved|Paste your YouTrack permanent token/;
 
 async function openSettings(page: Page) {
-  await page.getByLabel('Open Settings').click();
+  await page.locator('[data-testid="rail-settings-btn"]').click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 }
 
@@ -27,6 +27,19 @@ test.describe('Settings view', () => {
     await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
   });
   test.afterEach(async () => { await app.close(); });
+
+  // Regression: Settings used to be reachable ONLY from the left-rail gear.
+  // The rail renders workspace/project data fetched from YouTrack, so a revoked
+  // token made the rail fail — taking the only way to fix the credentials with
+  // it and stranding the user on an empty board. The top-bar gear depends on no
+  // remote data, so it must always be present and must open Settings.
+  test('the top-bar gear opens Settings, independently of the rail', async () => {
+    const topbarGear = page.locator('[data-testid="topbar-settings-btn"]');
+    await expect(topbarGear).toBeVisible();
+    await topbarGear.click();
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Connection' })).toBeVisible();
+  });
 
   test('the gear opens Settings with sections and a Save/Cancel footer', async () => {
     await openSettings(page);

@@ -62,7 +62,7 @@ test('capture README screenshots', async () => {
   await expect(panel).toBeHidden();
 
   // 3) Settings / connection view (light).
-  await page.getByLabel('Open Settings').click();
+  await page.locator('[data-testid="rail-settings-btn"]').click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Connection' })).toBeVisible();
   await page.waitForTimeout(400);

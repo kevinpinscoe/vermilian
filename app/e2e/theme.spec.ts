@@ -31,7 +31,7 @@ test.describe('Appearance', () => {
     await expect(page.locator('.light-app-theme').first()).toBeVisible();
 
     // Open Settings (rail footer gear) and pick Dark.
-    await page.locator('[aria-label="Open Settings"]').click();
+    await page.locator('[data-testid="rail-settings-btn"]').click();
     await page.getByRole('button', { name: 'Dark', exact: true }).click();
 
     await expect(page.locator('.dark-app-theme').first()).toBeVisible();

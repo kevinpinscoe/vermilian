@@ -98,6 +98,12 @@ export async function getWorklogTypes(_url: string, _token: string): Promise<str
 }
 
 export async function getProjects(_url: string, _token: string): Promise<YouTrackProject[]> {
+  // Set VERMILIAN_E2E_YT_401=1 to simulate a revoked/expired token, so the
+  // connection banner and its escape hatch can be tested. Mirrors the shape
+  // api/youtrack.ts throws: a plain { status, message } object, not an Error.
+  if (process.env.VERMILIAN_E2E_YT_401 === '1') {
+    throw { status: 401, message: 'Unauthorized' };
+  }
   return PROJECTS.map((p) => ({ ...p }));
 }
 

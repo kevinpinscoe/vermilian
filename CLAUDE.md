@@ -203,3 +203,25 @@ holds for the stale value (`>= 40` when the old width was already 120) will
 ### E2e fake backend
 
 `VERMILIAN_E2E=1` enables an in-memory YouTrack stub (`src/main/api/fakeYouTrack.ts`) with deterministic fixture data. The main process IPC handlers return fake tokens and mock credential status automatically. The renderer sees a fully connected app without any real network calls.
+
+Two flags vary that state, each with a matching helper in `e2e/helpers/launch.ts`:
+
+| Flag | Helper | Simulates |
+|---|---|---|
+| `VERMILIAN_E2E_UNCONFIGURED=1` | `launchAppUnconfigured()` | First run — no `youtrackUrl` seeded |
+| `VERMILIAN_E2E_YT_401=1` | `launchAppWithRevokedToken()` | A rebuilt YouTrack — `getProjects` returns 401 |
+
+### Settings must always be reachable
+
+`connected` in `App.tsx` only checks that a token *exists*, not that it works. A
+revoked token therefore routes to the board, not to Settings — and the board
+will be empty. **Do not make Settings reachable only from the left rail**: the
+rail renders YouTrack-derived data, so it is precisely what fails when the
+connection is broken, which once left users with no route to fix their
+credentials short of deleting the file by hand.
+
+The top-bar gear (`data-testid="topbar-settings-btn"`) exists for this reason
+and must not depend on any remote data. The rail gear is
+`data-testid="rail-settings-btn"` — both carry `aria-label="Open Settings"`, so
+target them by test id rather than by label. `e2e/connection-failure.spec.ts`
+guards the whole recovery path.
