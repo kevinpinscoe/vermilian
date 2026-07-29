@@ -61,6 +61,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Nothing else type-checks this project. Vite/esbuild strips types without
+      # verifying them, so before this step a plain `const n: number = "str"`
+      # passed lint, all unit tests, and a full package build. It also caught a
+      # real one: an <AttentionBox type="informative"> on the first-run settings
+      # screen, where that value is not in the component's union.
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Unit tests
         run: pnpm test
 

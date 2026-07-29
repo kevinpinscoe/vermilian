@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pnpm typecheck` (`tsc --noEmit`), now a required CI step. Nothing previously
+  type-checked this project — Vite/esbuild strips types without verifying them,
+  so a plain `const n: number = "str"` passed lint, all 162 unit tests, and a
+  full package build. `tsconfig.json` also moves to
+  `moduleResolution: "bundler"`; the previous `"node"` setting is the legacy
+  Node10 algorithm and cannot read `exports` maps, which produced spurious
+  "cannot find module" errors for `@electron/fuses` and `@vitejs/plugin-react`.
+
+### Changed
+
+- TypeScript 5.4.5 → 5.9.3, required for the resolution change above.
+
+### Removed
+
+- `eslint-plugin-import`. Its last release (2.32.0, June 2025) declares an
+  ESLint peer range ending at 9, so it was formally unsupported against the
+  ESLint 10 this project now runs. Four of its seven enabled rules were
+  module-correctness checks the TypeScript compiler performs natively and more
+  accurately, and are now covered by `pnpm typecheck`; the remaining three were
+  warning-level style heuristics, deliberately dropped rather than carrying an
+  unmaintained plugin.
+
+### Fixed
+
+- The first-run settings screen rendered its "Connect your YouTrack instance to
+  get started" banner with `type="informative"`, which is not one of the
+  `AttentionBox` component's accepted values (`primary`, `positive`, `negative`,
+  `warning`, `neutral`), so the banner did not style as intended. Now `primary`.
+  This had shipped unnoticed; the new typecheck step is what surfaced it.
+
 ## [1.2.5] - 2026-07-29
 
 ### Fixed

@@ -23,10 +23,21 @@ pnpm vitest run src/renderer/features/settings/api.test.ts
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `pnpm lint`, `pnpm test`, and `pnpm package` on
-every pull request into `main` and on `main` after merge. It installs with
-`--frozen-lockfile`, so a `package.json` / `pnpm-lock.yaml` mismatch fails the
-build rather than silently rewriting the lockfile.
+`.github/workflows/ci.yml` runs `pnpm lint`, `pnpm typecheck`, `pnpm test`, and
+`pnpm package` on every pull request into `main` and on `main` after merge. It
+installs with `--frozen-lockfile`, so a `package.json` / `pnpm-lock.yaml`
+mismatch fails the build rather than silently rewriting the lockfile.
+
+**`pnpm typecheck` (`tsc --noEmit`) is the only thing that type-checks this
+project.** Vite/esbuild strips types without verifying them, so nothing else
+will catch a type error — before this step existed, a plain
+`const n: number = "str"` passed lint, all 162 unit tests, *and* a full package
+build. It also caught a real shipped bug: an `<AttentionBox type="informative">`
+on the first-run settings screen, a value absent from that component's union.
+`tsconfig.json` uses `moduleResolution: "bundler"`; the older `"node"` setting
+is the legacy Node10 algorithm and cannot read `exports` maps, which produced
+spurious "cannot find module" errors for `@electron/fuses` and
+`@vitejs/plugin-react`.
 
 **Do not drop the `package` step.** Two dependency bumps merged on 2026-07-27
 left `main` unable to build, and both passed lint and all 162 unit tests — only
@@ -51,14 +62,12 @@ locally when a change touches the main/preload/renderer boundary.
   `recommended` preset. v7 folded in the React Compiler rules
   (`set-state-in-effect`, `static-components`, `use-memo`), which error on 14
   existing call sites.
-- **`eslint-plugin-import` declares an ESLint peer range that stops at 9,** while
-  this project runs ESLint 10. 2.32.0 is the latest release and upstream has not
-  updated the range. It was verified rule-for-rule against the pre-migration
-  setup and produces identical results, but it is formally an unsupported pair.
-  If a future ESLint release breaks it, the maintained fork
-  `eslint-plugin-import-x` supports 10 and offers the same flat configs — at the
-  cost of a native `unrs-resolver` binary needing a `pnpm-workspace.yaml`
-  `allowBuilds` entry, and renaming every rule `import/*` → `import-x/*`.
+- **`eslint-plugin-import` has been removed.** Its last release (2.32.0, June
+  2025) declared an ESLint peer range ending at 9, so it was unsupported against
+  ESLint 10. Four of its seven enabled rules (`default`, `export`, `namespace`,
+  `no-unresolved`) are module-correctness checks `tsc` does natively and more
+  accurately — those are covered by `pnpm typecheck`. The other three were
+  warning-level style heuristics, deliberately dropped. Do not re-add it.
 
 ### Lint config
 

@@ -206,7 +206,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
         {!canCancel && (
           <AttentionBox
-            type="informative"
+            type="primary"
             title="Connect your YouTrack instance to get started"
             text="Enter your YouTrack URL and a permanent token below, then click Save."
           />

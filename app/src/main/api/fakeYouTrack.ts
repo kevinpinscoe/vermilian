@@ -4,7 +4,7 @@
 // deterministic fixtures and mutations never leave the process.
 
 import type { BoardIssue, BoardIssueFields, IssueDetail } from '../../shared/workspace';
-import { FIELD_KEYS } from '../../shared/fields';
+import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import type {
   YouTrackProject,
   CreateIssuePayload,
@@ -30,7 +30,11 @@ const PROJECTS: YouTrackProject[] = [
 ];
 
 function emptyFields(over: Partial<BoardIssueFields>): BoardIssueFields {
-  const base = Object.fromEntries(FIELD_KEYS.map((k) => [k, null])) as BoardIssueFields;
+  // The tuple needs an explicit type: with strictNullChecks off, `null` infers
+  // as `any`, so the callback's return type contains an implicit any.
+  const base = Object.fromEntries(
+    FIELD_KEYS.map((k): [FieldKey, null] => [k, null]),
+  ) as BoardIssueFields;
   return { ...base, ...over };
 }
 
