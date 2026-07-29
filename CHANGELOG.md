@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- ESLint 8.57.1 → **10.8.0**, and the lint configuration migrated from
+  `.eslintrc.json` to flat config at `app/eslint.config.mjs`. ESLint 10 removed
+  eslintrc support outright, so this was a prerequisite rather than a
+  preference. The migration was verified rule-for-rule: linting the whole tree
+  under both setups produced an identical set of findings, file and line for
+  file and line. `pnpm lint` is now plain `eslint .` — the `--ext` flag no
+  longer exists, and the config names the TypeScript extensions instead.
+
+### Fixed
+
+- An `eslint-disable-next-line react-hooks/exhaustive-deps` in
+  `ProjectBoard.tsx` suppressed nothing. It sat directly above the
+  `useCallback`, but the rule reports on the dependency-array line, so the
+  warning fired anyway and the directive was dead. Flat config reports unused
+  disable directives by default — which is how this surfaced — and the
+  directive has been moved to where it actually applies.
+
 ## [1.2.3] - 2026-07-28
 
 ### Changed
