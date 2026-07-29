@@ -58,6 +58,12 @@ locally when a change touches the main/preload/renderer boundary.
 - **`@typescript-eslint/*` must move together.** Plugin and parser share a major
   line; mixing them breaks `pnpm lint`. Dependabot groups them — do not remove
   that group.
+- **TypeScript is capped at `< 6.1.0`** by that same plugin's peer range
+  (`>=4.8.4 <6.1.0` on 8.65.0, the latest — there is no v9). The project sits at
+  `~6.0.3`, the top of the window, and Dependabot ignores `>=6.1.0`. The bound
+  is a version constraint, not a major-version ignore, because 6.1.0 is a *minor*
+  bump that is already out of range. Before lifting it, check the current
+  ceiling: `npm view @typescript-eslint/eslint-plugin peerDependencies`.
 - **`eslint-plugin-react-hooks` is pinned to explicit rules,** not its
   `recommended` preset. v7 folded in the React Compiler rules
   (`set-state-in-effect`, `static-components`, `use-memo`), which error on 14

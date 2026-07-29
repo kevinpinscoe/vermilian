@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- TypeScript 5.9.3 → 6.0.3, and `baseUrl` removed from `app/tsconfig.json`. It
+  was set to `"."` with no `paths` mappings, so it resolved nothing; TypeScript
+  6 deprecates the option (`TS5101`) and 7 removes it, so deleting it was both a
+  valid cleanup and what unblocked the 6.0.3 bump.
+
+- Dependabot no longer proposes TypeScript at or above 6.1.0. That is the
+  ceiling of `@typescript-eslint`'s peer range (`>=4.8.4 <6.1.0` on 8.65.0, the
+  latest release), and this project now sits at the top of it. The bound is a
+  version constraint rather than a major-version ignore on purpose: 6.1.0 is a
+  minor bump but already outside the range, so ignoring majors alone would
+  still admit a failing update.
+
 ## [1.2.6] - 2026-07-29
 
 ### Added

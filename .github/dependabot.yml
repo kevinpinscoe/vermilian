@@ -37,6 +37,23 @@ updates:
       - dependency-name: "vite"
         update-types: ["version-update:semver-major"]
 
+      # TypeScript is capped by @typescript-eslint's peer range, currently
+      # `typescript: >=4.8.4 <6.1.0` on 8.65.0 (the latest — there is no v9).
+      # This project sits at ~6.0.3, the top of that window.
+      #
+      # The bound is >=6.1.0 rather than "semver-major" deliberately: 6.1.0 is a
+      # MINOR bump but is already outside the peer range, so a major-only ignore
+      # would still let a failing PR through. Dependabot proposed TypeScript 7
+      # for two days (#21) before that PR was rebased down to 6.0.3 and merged.
+      #
+      # Lift this when typescript-eslint widens its range — check with
+      # `npm view @typescript-eslint/eslint-plugin peerDependencies` — and raise
+      # the bound to whatever the new ceiling is rather than removing it.
+      # Note TypeScript 7 also removes `baseUrl` outright (TS5101 deprecates it
+      # in 6); that option has already been dropped from app/tsconfig.json.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+
     groups:
       # Packages that MUST move in lockstep. @typescript-eslint/eslint-plugin and
       # @typescript-eslint/parser share a major line — an 8.x plugin against a
