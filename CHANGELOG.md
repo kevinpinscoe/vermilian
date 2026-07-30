@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-07-30
+
 ### Fixed
 
 - **A stale machine could corrupt the shared workspace config for every other
@@ -32,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings → Advanced → **"Force resync from server"** — discards the
   cached workspace/project layout and re-fetches it from the YouTrack
   `_vermilian-config` Article, pruning stale project ids in the process.
+
+### Changed
+
+- The e2e suite's packaged-binary path was hardcoded to Linux
+  (`out/Vermilian-linux-x64/Vermilian`), so it could only run on FLDW. It now
+  resolves per `process.platform`/`process.arch`, and the full suite has been
+  verified passing on macOS as well.
 
 ## [1.2.7] - 2026-07-29
 

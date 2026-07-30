@@ -14,7 +14,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.2.7 — current release.** Vermilian is feature-complete against its specification and
+**v1.2.8 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -24,13 +24,16 @@ each release.
   project is selected); the task detail panel with inline field editing; the full Pomodoro focus
   timer (state machine, focus-mode lock, quit protection, crash-recovery checkpointing, and an
   automatic YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage;
-  and light/dark themes.
-- **Tested:** over 160 unit tests cover the core logic (board grouping/sorting/filtering, the timer
-  state machine, API transforms, and search query building), alongside an end-to-end (Playwright)
-  suite over the board, detail panel, settings, timer, AI, stand-up, and search flows. Verified on
-  Linux (Fedora 42); the macOS and Windows builds are published but less extensively exercised.
-  Lint, the unit suite, and a full packaged build run in CI on every pull request into `main`; the
-  end-to-end suite is run locally before a release, since it drives the packaged binary.
+  cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
+  stale project ids, with a manual "Force resync from server" recovery action); and light/dark
+  themes.
+- **Tested:** over 170 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+  state machine, API transforms, search query building, and workspace-config sync), alongside an
+  end-to-end (Playwright) suite over the board, detail panel, settings, timer, AI, stand-up, search,
+  and workspace-config sync flows. Verified on Linux (Fedora 42) and macOS; the Windows build is
+  published but less extensively exercised. Lint, the unit suite, and a full packaged build run in
+  CI on every pull request into `main`; the end-to-end suite is run locally before a release, since
+  it drives the packaged binary.
 
 ## What it is
 
