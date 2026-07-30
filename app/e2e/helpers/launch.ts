@@ -4,7 +4,9 @@ import os from 'os';
 import fs from 'fs';
 
 // Uses the packaged binary built by `pnpm package` (electron-forge package).
-// Output lands at out/Vermilian-linux-x64/Vermilian on Linux.
+// Electron Forge names the output dir `<productName>-<platform>-<arch>`
+// (e.g. out/Vermilian-linux-x64, out/Vermilian-darwin-arm64), and the
+// executable lives at a platform-specific path inside it.
 // Run `pnpm package` once before running tests, or use `pnpm test:e2e` which
 // packages automatically when out/ does not exist.
 //
@@ -21,7 +23,19 @@ const ELECTRON_ARGS = [
   '--in-process-gpu',
 ];
 
-const EXECUTABLE = path.join(__dirname, '../../out/Vermilian-linux-x64/Vermilian');
+function resolveExecutablePath(): string {
+  const outDir = path.join(__dirname, '../../out', `Vermilian-${process.platform}-${process.arch}`);
+  switch (process.platform) {
+    case 'darwin':
+      return path.join(outDir, 'Vermilian.app', 'Contents', 'MacOS', 'Vermilian');
+    case 'win32':
+      return path.join(outDir, 'Vermilian.exe');
+    default:
+      return path.join(outDir, 'Vermilian');
+  }
+}
+
+const EXECUTABLE = resolveExecutablePath();
 
 export function freshUserDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
