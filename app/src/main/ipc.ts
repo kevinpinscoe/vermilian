@@ -25,7 +25,7 @@ import {
   type TimerCheckpointData,
 } from '../shared/ipc';
 import type { AppConfig } from '../shared/config';
-import type { VermilianConfig } from '../shared/workspace';
+import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
 import { readConfig, writeConfig } from './services/config';
 import {
   saveSecret,
@@ -227,31 +227,86 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.getWorkspaceConfig, async () => {
-    // Try Article first; fall back to local file.
-    const cached = articleConfig.getWorkspaceConfig();
-    if (cached) return cached;
-    const local = await readWorkspaceConfig();
-    if (local) return local;
-    // Trigger a background Article load for next call.
-    const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (cfg.youtrackUrl && token) {
-      void articleConfig.load(cfg.youtrackUrl, token).catch((_e: unknown) => { /* best effort */ });
+    // Try Article first. If it hasn't hydrated yet, wait briefly (bounded)
+    // rather than immediately falling back to the local file — serving that
+    // stale fallback to the renderer is what let one machine's pre-rebuild
+    // project ids get echoed back through a later save and clobber the
+    // shared Article for every machine. See RUNBOOK.md.
+    let cached = articleConfig.getWorkspaceConfig();
+    if (!cached) {
+      const cfg = await readConfig();
+      const token = await loadYtToken(cfg);
+      if (cfg.youtrackUrl && token) {
+        await articleConfig.waitForLoad(cfg.youtrackUrl, token);
+        cached = articleConfig.getWorkspaceConfig();
+      }
     }
-    return null;
+    if (cached) return cached;
+    return readWorkspaceConfig();
   });
 
   ipcMain.handle(
     IPC.saveWorkspaceConfig,
     async (_e, config: VermilianConfig): Promise<{ ok: boolean }> => {
-      // Write local file immediately (fast, offline-safe).
-      await writeWorkspaceConfig(config);
-      // Update Article cache and schedule debounced remote write.
-      articleConfig.updateWorkspaceConfig(config);
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
+
+      // Drop any project ids that no longer exist (e.g. left behind by a
+      // YouTrack rebuild) before persisting anywhere. This is what actually
+      // stops a stale config from being written back to the shared Article —
+      // best-effort: if the live list can't be fetched (offline), save as-is
+      // rather than block the write.
+      let toSave = config;
+      if (cfg.youtrackUrl && token) {
+        try {
+          const projects = await youtrack.getProjects(cfg.youtrackUrl, token);
+          toSave = pruneStaleProjectIds(config, new Set(projects.map((p) => p.id)));
+        } catch {
+          /* offline or request failed — save as-is */
+        }
+      }
+
+      // Write local file immediately (fast, offline-safe).
+      await writeWorkspaceConfig(toSave);
+      // Update Article cache and schedule debounced remote write.
+      articleConfig.updateWorkspaceConfig(toSave);
       if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
       return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.forceResyncWorkspaceConfig,
+    async (): Promise<{ ok: boolean; error?: string }> => {
+      const cfg = await readConfig();
+      const token = await loadYtToken(cfg);
+      if (!cfg.youtrackUrl || !token) {
+        return { ok: false, error: 'YouTrack is not configured.' };
+      }
+      try {
+        let wsConfig = await articleConfig.forceReload(cfg.youtrackUrl, token);
+        if (wsConfig) {
+          try {
+            const projects = await youtrack.getProjects(cfg.youtrackUrl, token);
+            const pruned = pruneStaleProjectIds(wsConfig, new Set(projects.map((p) => p.id)));
+            if (JSON.stringify(pruned) !== JSON.stringify(wsConfig)) {
+              articleConfig.updateWorkspaceConfig(pruned);
+              articleConfig.scheduleSave(cfg.youtrackUrl, token);
+            }
+            wsConfig = pruned;
+          } catch {
+            /* best-effort prune — still return the freshly reloaded config */
+          }
+          await writeWorkspaceConfig(wsConfig);
+        }
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send('config:article-synced');
+        }
+        return { ok: true };
+      } catch (e) {
+        const err = e as { message?: string };
+        return { ok: false, error: err.message ?? 'Resync failed.' };
+      }
     },
   );
 

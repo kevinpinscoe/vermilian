@@ -140,6 +140,32 @@ export function getWorkspaceConfig(): VermilianConfig | null {
   };
 }
 
+// ─── Wait / force-reload ─────────────────────────────────────────────────────
+
+// Blocks until the Article has loaded (or a bounded timeout elapses) instead
+// of letting a caller read a not-yet-hydrated `cache` and fall back to a
+// possibly-stale local file. Serving that stale fallback to the renderer is
+// what let one machine's pre-rebuild project ids get echoed back through a
+// later save and clobber the shared Article — see RUNBOOK.md.
+export async function waitForLoad(url: string, token: string, timeoutMs = 5000): Promise<void> {
+  if (cache) return;
+  await Promise.race([
+    load(url, token),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+// Discards the in-memory cache and article-id and re-fetches from scratch.
+// Used by the "Force resync from server" Settings action to recover from a
+// corrupted Article without requiring manual API surgery.
+export async function forceReload(url: string, token: string): Promise<VermilianConfig | null> {
+  cache = null;
+  articleId = null;
+  lastReadUpdated = 0;
+  await load(url, token);
+  return getWorkspaceConfig();
+}
+
 // ─── Update helpers ──────────────────────────────────────────────────────────
 
 export function updateBoardConfig(config: BoardConfig): void {

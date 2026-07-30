@@ -23,7 +23,7 @@ const ELECTRON_ARGS = [
 
 const EXECUTABLE = path.join(__dirname, '../../out/Vermilian-linux-x64/Vermilian');
 
-function freshUserDataDir() {
+export function freshUserDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
 }
 
@@ -32,6 +32,22 @@ export async function launchApp(): Promise<ElectronApplication> {
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1' },
+  });
+}
+
+// Launches against a caller-provided --user-data-dir instead of a fresh one —
+// lets a test relaunch the same profile (e.g. after editing a config file on
+// disk between launches) rather than always getting a clean slate. `extraEnv`
+// layers on top of the base E2E env (e.g. VERMILIAN_E2E_ARTICLE_CONTENT to
+// seed the fake _vermilian-config Article with a specific starting body).
+export async function launchAppWithUserDataDir(
+  userDataDir: string,
+  extraEnv: Record<string, string> = {},
+): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${userDataDir}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', ...extraEnv },
   });
 }
 

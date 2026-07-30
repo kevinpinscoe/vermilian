@@ -77,7 +77,13 @@ function makeIssues(): FakeIssue[] {
 // ─── Mutable state ──────────────────────────────────────────────────────────────
 
 let issues: FakeIssue[] = makeIssues();
-let article: { id: string; content: string; updated: number } | null = null;
+// VERMILIAN_E2E_ARTICLE_CONTENT seeds the fake _vermilian-config Article's
+// initial body, simulating a machine whose shared server-side config already
+// differs from whatever this launch's local workspace-config.json holds.
+let article: { id: string; content: string; updated: number } | null =
+  process.env.VERMILIAN_E2E_ARTICLE_CONTENT
+    ? { id: 'e2e-article', content: process.env.VERMILIAN_E2E_ARTICLE_CONTENT, updated: Date.now() }
+    : null;
 let seq = 1000;
 
 function projectById(id: string): YouTrackProject | undefined {

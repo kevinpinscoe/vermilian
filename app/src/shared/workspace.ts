@@ -97,3 +97,26 @@ export function allAssignedProjectIds(config: VermilianConfig): Set<string> {
   }
   return ids;
 }
+
+/**
+ * Drop project ids that no longer exist (e.g. left behind by a YouTrack
+ * rebuild, which reassigns project ids even when names/short names are
+ * unchanged) from every folder. Self-heals a config that would otherwise
+ * leave a folder — or an entire workspace, if it was the only folder —
+ * permanently empty.
+ */
+export function pruneStaleProjectIds(
+  config: VermilianConfig,
+  liveProjectIds: ReadonlySet<string>,
+): VermilianConfig {
+  return {
+    ...config,
+    workspaces: config.workspaces.map((ws) => ({
+      ...ws,
+      folders: ws.folders.map((folder) => ({
+        ...folder,
+        projectIds: folder.projectIds.filter((id) => liveProjectIds.has(id)),
+      })),
+    })),
+  };
+}
