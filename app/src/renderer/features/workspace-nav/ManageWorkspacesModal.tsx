@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, Workspace } from '../../../shared/workspace';
+import { setWorkspaceProjects } from '../../../shared/workspace';
 import styles from './ManageWorkspacesModal.module.css';
+
+// Sentinel destination: leave the projects in no workspace at all. They keep
+// existing and resurface under "Unassigned" in the rail.
+const UNASSIGNED = '__unassigned__';
 
 // ─── Pure config transforms ───────────────────────────────────────────────────
 
@@ -12,8 +17,12 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
+function projectIdsIn(ws: Workspace): string[] {
+  return ws.folders.flatMap((f) => f.projectIds);
+}
+
 function projectCount(ws: Workspace): number {
-  return ws.folders.reduce((n, f) => n + f.projectIds.length, 0);
+  return projectIdsIn(ws).length;
 }
 
 function renameWorkspace(config: VermilianConfig, wsId: string, name: string): VermilianConfig {
@@ -59,9 +68,9 @@ export function ManageWorkspacesModal({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [blockedWs, setBlockedWs] = useState<Workspace | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [destination, setDestination] = useState<string>(UNASSIGNED);
 
   function startRename(ws: Workspace) {
     setEditingId(ws.id);
@@ -82,23 +91,46 @@ export function ManageWorkspacesModal({
   }
 
   function requestDelete(ws: Workspace) {
-    if (projectCount(ws) > 0) {
-      setBlockedWs(ws);
-      return;
-    }
+    // Holding projects no longer blocks deletion — the confirm step asks where
+    // they should go instead, which is the only place the old warning ("move or
+    // remove all projects first") could actually be acted on.
     setDeleteTarget(ws);
     setConfirmText('');
+    setDestination(UNASSIGNED);
+  }
+
+  function cancelDelete() {
+    setDeleteTarget(null);
+    setConfirmText('');
+    setDestination(UNASSIGNED);
   }
 
   function confirmDelete() {
     if (!deleteTarget || confirmText.trim() !== deleteTarget.name) return;
-    const next = deleteWorkspace(config, deleteTarget.id);
+
+    const moving = projectIdsIn(deleteTarget);
+    let next = config;
+
+    if (moving.length > 0 && destination !== UNASSIGNED) {
+      const target = config.workspaces.find((w) => w.id === destination);
+      if (target) {
+        next = setWorkspaceProjects(
+          next,
+          destination,
+          [...projectIdsIn(target), ...moving],
+          `folder-${Date.now()}`,
+        );
+      }
+    }
+    // Anything not moved simply leaves with the workspace and becomes
+    // unassigned — the projects themselves are never deleted.
+    next = deleteWorkspace(next, deleteTarget.id);
+
     if (config.activeWorkspaceId === deleteTarget.id) {
       onActiveWorkspaceChanged(next.activeWorkspaceId);
     }
     onSave(next);
-    setDeleteTarget(null);
-    setConfirmText('');
+    cancelDelete();
   }
 
   const onlyOne = sorted.length <= 1;
@@ -157,35 +189,55 @@ export function ManageWorkspacesModal({
           })}
         </div>
 
-        {blockedWs && (
-          <div className={styles.blocked} data-testid="ws-delete-blocked">
-            <span>Move or remove all projects from “{blockedWs.name}” before deleting it.</span>
-            <Button kind="secondary" size="small" onClick={() => setBlockedWs(null)}>OK</Button>
-          </div>
-        )}
-
         {deleteTarget && (
           <div className={styles.confirm}>
+            {projectCount(deleteTarget) > 0 && (
+              <div className={styles.moveRow} data-testid="ws-delete-move">
+                <label className={styles.moveLabel} htmlFor="ws-delete-destination">
+                  Move its {projectCount(deleteTarget)}{' '}
+                  {projectCount(deleteTarget) === 1 ? 'project' : 'projects'} to
+                </label>
+                <select
+                  id="ws-delete-destination"
+                  data-testid="ws-delete-destination"
+                  className={styles.moveSelect}
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                >
+                  <option value={UNASSIGNED}>Unassigned</option>
+                  {sorted
+                    .filter((w) => w.id !== deleteTarget.id)
+                    .map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                </select>
+              </div>
+            )}
             <div className={styles.confirmText}>
-              Type <strong>{deleteTarget.name}</strong> to confirm deletion. This cannot be undone.
+              Type <strong>{deleteTarget.name}</strong> to confirm deletion.
+              {projectCount(deleteTarget) > 0
+                ? ' The workspace is removed — its projects are kept.'
+                : ' This cannot be undone.'}
             </div>
             <input
               autoFocus
+              data-testid="ws-delete-confirm-input"
               className={styles.confirmInput}
               value={confirmText}
               placeholder={deleteTarget.name}
               onChange={(e) => setConfirmText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') confirmDelete();
-                if (e.key === 'Escape') { setDeleteTarget(null); setConfirmText(''); }
+                if (e.key === 'Escape') cancelDelete();
               }}
             />
             <div className={styles.confirmActions}>
-              <Button kind="tertiary" size="small" onClick={() => { setDeleteTarget(null); setConfirmText(''); }}>
+              <Button kind="tertiary" size="small" onClick={cancelDelete}>
                 Cancel
               </Button>
               <Button
                 color="negative" size="small"
+                data-testid="ws-delete-confirm"
                 disabled={confirmText.trim() !== deleteTarget.name}
                 onClick={confirmDelete}
               >Delete workspace</Button>

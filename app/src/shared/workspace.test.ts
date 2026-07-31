@@ -3,6 +3,7 @@ import {
   makeInitialConfig,
   allAssignedProjectIds,
   pruneStaleProjectIds,
+  setWorkspaceProjects,
   type VermilianConfig,
 } from './workspace';
 
@@ -144,5 +145,68 @@ describe('pruneStaleProjectIds', () => {
     };
     pruneStaleProjectIds(cfg, new Set());
     expect(cfg.workspaces[0].folders[0].projectIds).toEqual(['dead-1']);
+  });
+});
+
+describe('setWorkspaceProjects', () => {
+  function cfg(): VermilianConfig {
+    return {
+      version: 1,
+      activeWorkspaceId: 'empty',
+      workspaces: [
+        {
+          id: 'default', name: 'Workspace', order: 0,
+          folders: [
+            { id: 'f1', name: 'F1', order: 0, parentId: null, projectIds: ['p1', 'p2'] },
+            { id: 'f2', name: 'F2', order: 1, parentId: null, projectIds: ['p3'] },
+          ],
+        },
+        { id: 'work', name: 'Work', order: 1, folders: [
+          { id: 'f3', name: 'F3', order: 0, parentId: null, projectIds: ['p4'] },
+        ] },
+        { id: 'empty', name: 'Kevin', order: 2, folders: [] },
+      ],
+    };
+  }
+  const folderOf = (c: VermilianConfig, wsId: string) =>
+    c.workspaces.find((w) => w.id === wsId)!.folders;
+
+  it('creates a Projects folder when adding to a workspace with no folders', () => {
+    const next = setWorkspaceProjects(cfg(), 'empty', ['p1', 'p4'], 'folder-new');
+    expect(folderOf(next, 'empty')).toEqual([
+      { id: 'folder-new', name: 'Projects', order: 0, parentId: null, projectIds: ['p1', 'p4'] },
+    ]);
+  });
+
+  it('strips the moved projects from every other workspace', () => {
+    const next = setWorkspaceProjects(cfg(), 'empty', ['p1', 'p4'], 'folder-new');
+    expect(folderOf(next, 'default').map((f) => f.projectIds)).toEqual([['p2'], ['p3']]);
+    expect(folderOf(next, 'work')[0].projectIds).toEqual([]);
+  });
+
+  it('deselecting removes from the target but keeps the project in the config as unassigned', () => {
+    const added = setWorkspaceProjects(cfg(), 'empty', ['p1'], 'folder-new');
+    const removed = setWorkspaceProjects(added, 'empty', []);
+    expect(folderOf(removed, 'empty')[0].projectIds).toEqual([]);
+    expect(allAssignedProjectIds(removed).has('p1')).toBe(false);
+  });
+
+  it('appends new ids to the first folder by order, not by array position', () => {
+    const base = cfg();
+    // Reverse the array so display order (f1) differs from array order (f2).
+    base.workspaces[0].folders.reverse();
+    const next = setWorkspaceProjects(base, 'default', ['p1', 'p2', 'p3', 'p4']);
+    const f1 = folderOf(next, 'default').find((f) => f.id === 'f1')!;
+    expect(f1.projectIds).toEqual(['p1', 'p2', 'p4']);
+  });
+
+  it('leaves an already-present project in its existing folder', () => {
+    const next = setWorkspaceProjects(cfg(), 'default', ['p1', 'p2', 'p3']);
+    expect(folderOf(next, 'default').find((f) => f.id === 'f2')!.projectIds).toEqual(['p3']);
+  });
+
+  it('is a no-op on the folder set when nothing changes', () => {
+    const next = setWorkspaceProjects(cfg(), 'work', ['p4']);
+    expect(folderOf(next, 'work')).toEqual(folderOf(cfg(), 'work'));
   });
 });

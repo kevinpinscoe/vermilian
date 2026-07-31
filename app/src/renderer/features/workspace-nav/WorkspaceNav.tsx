@@ -16,6 +16,7 @@ import { useWorkspaceStore } from '../../stores/workspace';
 import { useBoardDragStore } from '../../stores/boardDrag';
 import { useProjects, useWorkspaceConfig, useSaveWorkspaceConfig } from './api';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
+import { AddProjectsModal } from './AddProjectsModal';
 import styles from './WorkspaceNav.module.css';
 
 interface WorkspaceNavProps {
@@ -605,6 +606,8 @@ function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onNewWorkspace, onM
             <button
               key={ws.id}
               type="button"
+              data-testid="workspace-menu-item"
+              data-ws-name={ws.name}
               className={`${styles.switcherMenuItem} ${ws.id === activeId ? styles.switcherMenuItemActive : ''}`}
               onClick={() => { onSwitch(ws.id); setOpen(false); }}
             >
@@ -690,6 +693,7 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
   const [flyoutOpen, setFlyoutOpen] = useState(false);
   const contentCollapsed = railCollapsed && !flyoutOpen;
   const [showManage, setShowManage] = useState(false);
+  const [showAddProjects, setShowAddProjects] = useState(false);
 
   // ── On fresh install: auto-create default workspace config ──────────────────
   useEffect(() => {
@@ -747,6 +751,11 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
   const activeWorkspace =
     config?.workspaces.find((w) => w.id === activeWorkspaceId) ??
     config?.workspaces[0];
+
+  // Drives the empty hint: a workspace can hold folders and still show no
+  // projects, so count projects rather than folders.
+  const workspaceProjectCount =
+    activeWorkspace?.folders.reduce((n, f) => n + f.projectIds.length, 0) ?? 0;
 
   // Projects in YouTrack but not assigned to any folder
   const assignedIds = config ? allAssignedProjectIds(config) : new Set<string>();
@@ -973,18 +982,29 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
               );
             })()}
 
-            {/* Empty workspace hint */}
-            {activeWorkspace.folders.length === 0 && !contentCollapsed && (
+            {/* Empty workspace hint — a workspace with no projects has no rail row
+                to right-click, so point at the picker rather than the context menu. */}
+            {!contentCollapsed && workspaceProjectCount === 0 && (
               <div className={styles.emptyWorkspaceHint}>
                 <Text type="text2">
-                  Right-click a project in another workspace to move it here.
+                  No projects in this workspace yet.
                 </Text>
               </div>
             )}
 
-            {/* Add folder */}
+            {/* Add projects / Add folder */}
             {!contentCollapsed && (
-              <AddFolderRow onAdd={handleCreateFolder} />
+              <>
+                <button
+                  type="button"
+                  data-testid="add-projects-btn"
+                  className={styles.addFolderBtn}
+                  onClick={() => setShowAddProjects(true)}
+                >
+                  + Add projects
+                </button>
+                <AddFolderRow onAdd={handleCreateFolder} />
+              </>
             )}
 
             {/* Unassigned projects — not yet in any workspace folder */}
@@ -1105,6 +1125,26 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
           />
         );
       })()}
+
+      {/* Add projects picker */}
+      {showAddProjects && config && activeWorkspace && (
+        <AddProjectsModal
+          config={config}
+          workspaceId={activeWorkspace.id}
+          workspaceName={activeWorkspace.name}
+          allProjects={allProjects}
+          onClose={() => setShowAddProjects(false)}
+          onSave={(updated) => {
+            saveConfig.mutate(updated);
+            // A folder the picker just created — or an existing one the user had
+            // collapsed — would otherwise swallow the projects they just added,
+            // leaving the rail looking exactly as empty as before the save.
+            updated.workspaces
+              .find((w) => w.id === activeWorkspace.id)
+              ?.folders.forEach((f) => { if (f.projectIds.length > 0) expandFolder(f.id); });
+          }}
+        />
+      )}
 
       {/* Manage workspaces modal */}
       {showManage && config && (

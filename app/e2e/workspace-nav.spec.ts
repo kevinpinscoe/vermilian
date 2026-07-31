@@ -43,7 +43,7 @@ test.describe('Workspace navigation', () => {
     await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('QA Space');
   });
 
-  test('Manage workspaces lists workspaces and blocks deleting a non-empty one', async () => {
+  test('Manage workspaces deletes a workspace that still holds projects, rehoming them', async () => {
     // Create a second workspace so delete is not disabled by the "last workspace" rule.
     await page.locator('[data-testid="workspace-switcher"]').click();
     await page.locator('[data-testid="new-workspace-btn"]').click();
@@ -57,8 +57,40 @@ test.describe('Workspace navigation', () => {
     const rows = page.locator('[data-testid="workspace-row"]');
     await expect(rows).toHaveCount(2);
 
-    // The original "Workspace" still holds the projects → deleting it is blocked.
+    // The original "Workspace" still holds all 4 projects. Deleting it is no longer
+    // blocked — the confirm step asks where those projects should go.
     await page.locator('[data-testid="workspace-row"][data-ws-name="Workspace"] [data-testid="workspace-delete"]').click();
-    await expect(page.locator('[data-testid="ws-delete-blocked"]')).toBeVisible();
+    await expect(page.locator('[data-testid="ws-delete-move"]')).toContainText('4 projects');
+
+    await page.locator('[data-testid="ws-delete-destination"]').selectOption({ label: 'Second' });
+    await page.locator('[data-testid="ws-delete-confirm-input"]').fill('Workspace');
+    await page.locator('[data-testid="ws-delete-confirm"]').click();
+
+    // "Workspace" is gone and its projects landed in "Second" rather than vanishing.
+    await expect(rows).toHaveCount(1);
+    await expect(page.locator('[data-testid="workspace-row"][data-ws-name="Second"]')).toContainText('4 projects');
+  });
+
+  test('deleting a workspace can leave its projects unassigned instead', async () => {
+    await page.locator('[data-testid="workspace-switcher"]').click();
+    await page.locator('[data-testid="new-workspace-btn"]').click();
+    await page.locator('[data-testid="new-workspace-input"]').fill('Second');
+    await page.locator('[data-testid="new-workspace-submit"]').click();
+    await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('Second');
+
+    await page.locator('[data-testid="workspace-switcher"]').click();
+    await page.locator('[data-testid="manage-workspaces-btn"]').click();
+    await page.locator('[data-testid="workspace-row"][data-ws-name="Workspace"] [data-testid="workspace-delete"]').click();
+
+    // "Unassigned" is the default destination — accept it.
+    await page.locator('[data-testid="ws-delete-confirm-input"]').fill('Workspace');
+    await page.locator('[data-testid="ws-delete-confirm"]').click();
+    await page.locator('[data-testid="workspace-row"][data-ws-name="Second"]').waitFor();
+    await expect(page.locator('[data-testid="workspace-row"][data-ws-name="Second"]')).toContainText('0 projects');
+
+    // The projects still exist — the rail lists them under "Unassigned".
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page.locator('nav').getByText('Unassigned', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-testid="nav-project"]')).toHaveCount(4);
   });
 });

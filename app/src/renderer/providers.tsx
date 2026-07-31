@@ -73,7 +73,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
+      {/* ThemeProvider renders its own wrapping <div> with no height of its own.
+          Without `className` it sits between #root and .fill as an auto-height
+          ancestor, so every `height: 100%` below it resolves to auto and the
+          whole shell becomes content-sized — which collapsed the absolutely
+          positioned nav rail to ~22px whenever the board area held nothing but
+          the one-line "Select a project" placeholder (i.e. an empty workspace). */}
+      <ThemeProvider className={styles.fill}>
         <div className={`${themeClass} ${styles.fill}`}>
           {children}
           <ToastStack />
