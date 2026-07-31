@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { makeInitialConfig, allAssignedProjectIds, type VermilianConfig } from './workspace';
+import {
+  makeInitialConfig,
+  allAssignedProjectIds,
+  pruneStaleProjectIds,
+  type VermilianConfig,
+} from './workspace';
 
 describe('makeInitialConfig', () => {
   it('places every project in a single Unassigned folder of a default workspace', () => {
@@ -55,5 +60,89 @@ describe('allAssignedProjectIds', () => {
       workspaces: [{ id: 'a', name: 'A', order: 0, folders: [] }],
     };
     expect(allAssignedProjectIds(cfg).size).toBe(0);
+  });
+});
+
+describe('pruneStaleProjectIds', () => {
+  it('drops project ids not present in the live set, keeping live ones', () => {
+    const cfg: VermilianConfig = {
+      version: 1,
+      activeWorkspaceId: 'a',
+      workspaces: [
+        {
+          id: 'a',
+          name: 'A',
+          order: 0,
+          folders: [
+            { id: 'f1', name: 'F1', order: 0, parentId: null, projectIds: ['live-1', 'dead-1'] },
+          ],
+        },
+      ],
+    };
+    const pruned = pruneStaleProjectIds(cfg, new Set(['live-1', 'live-2']));
+    expect(pruned.workspaces[0].folders[0].projectIds).toEqual(['live-1']);
+  });
+
+  it('can reduce a folder to empty without dropping the folder itself', () => {
+    const cfg: VermilianConfig = {
+      version: 1,
+      activeWorkspaceId: 'a',
+      workspaces: [
+        {
+          id: 'a',
+          name: 'A',
+          order: 0,
+          folders: [{ id: 'f1', name: 'F1', order: 0, parentId: null, projectIds: ['dead-1'] }],
+        },
+      ],
+    };
+    const pruned = pruneStaleProjectIds(cfg, new Set());
+    expect(pruned.workspaces[0].folders[0].projectIds).toEqual([]);
+    expect(pruned.workspaces[0].folders).toHaveLength(1);
+  });
+
+  it('prunes independently across multiple workspaces and folders', () => {
+    const cfg: VermilianConfig = {
+      version: 1,
+      activeWorkspaceId: 'a',
+      workspaces: [
+        {
+          id: 'a',
+          name: 'A',
+          order: 0,
+          folders: [
+            { id: 'f1', name: 'F1', order: 0, parentId: null, projectIds: ['live-1', 'dead-1'] },
+            { id: 'f2', name: 'F2', order: 1, parentId: null, projectIds: ['dead-2'] },
+          ],
+        },
+        {
+          id: 'b',
+          name: 'B',
+          order: 1,
+          folders: [{ id: 'f3', name: 'F3', order: 0, parentId: null, projectIds: ['live-2'] }],
+        },
+      ],
+    };
+    const pruned = pruneStaleProjectIds(cfg, new Set(['live-1', 'live-2']));
+    expect(pruned.workspaces[0].folders[0].projectIds).toEqual(['live-1']);
+    expect(pruned.workspaces[0].folders[1].projectIds).toEqual([]);
+    expect(pruned.workspaces[1].folders[0].projectIds).toEqual(['live-2']);
+  });
+
+  it('does not mutate the input config', () => {
+    const cfg: VermilianConfig = {
+      version: 1,
+      activeWorkspaceId: 'a',
+      workspaces: [
+        {
+          id: 'a',
+          name: 'A',
+          order: 0,
+          folders: [{ id: 'f1', name: 'F1', order: 0, parentId: null, projectIds: ['dead-1'] }],
+        },
+      ],
+    };
+    pruneStaleProjectIds(cfg, new Set());
+    expect(cfg.workspaces[0].folders[0].projectIds).toEqual(['dead-1']);
   });
 });

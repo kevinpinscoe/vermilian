@@ -32,6 +32,7 @@ export const IPC = {
   getProjects: 'youtrack:getProjects',
   getWorkspaceConfig: 'workspace:getConfig',
   saveWorkspaceConfig: 'workspace:saveConfig',
+  forceResyncWorkspaceConfig: 'workspace:forceResync',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   openExternalUrl: 'shell:openExternalUrl',
@@ -247,6 +248,10 @@ export interface VermilianAPI {
   getWorkspaceConfig(): Promise<VermilianConfig | null>;
   openExternalUrl(url: string): Promise<void>;
   saveWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean }>;
+  // Discards the local and in-memory workspace-config cache and re-fetches the
+  // _vermilian-config Article from scratch, pruning any stale project ids in
+  // the process. Manual recovery path for a corrupted shared Article.
+  forceResyncWorkspaceConfig(): Promise<{ ok: boolean; error?: string }>;
   getIssues(args: GetIssuesArgs): Promise<BoardIssue[]>;
   searchIssues(args: SearchIssuesArgs): Promise<BoardIssue[]>;
   // Issue CRUD

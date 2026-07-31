@@ -66,6 +66,7 @@ const api: VermilianAPI = {
   getWorkspaceConfig: () => ipcRenderer.invoke(IPC.getWorkspaceConfig),
   saveWorkspaceConfig: (config: VermilianConfig) =>
     ipcRenderer.invoke(IPC.saveWorkspaceConfig, config),
+  forceResyncWorkspaceConfig: () => ipcRenderer.invoke(IPC.forceResyncWorkspaceConfig),
   getIssues: (args: GetIssuesArgs) => ipcRenderer.invoke(IPC.getIssues, args),
   searchIssues: (args: SearchIssuesArgs) => ipcRenderer.invoke(IPC.searchIssues, args),
   openExternalUrl: (url: string) => ipcRenderer.invoke(IPC.openExternalUrl, url),

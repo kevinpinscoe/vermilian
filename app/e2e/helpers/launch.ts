@@ -4,7 +4,9 @@ import os from 'os';
 import fs from 'fs';
 
 // Uses the packaged binary built by `pnpm package` (electron-forge package).
-// Output lands at out/Vermilian-linux-x64/Vermilian on Linux.
+// Electron Forge names the output dir `<productName>-<platform>-<arch>`
+// (e.g. out/Vermilian-linux-x64, out/Vermilian-darwin-arm64), and the
+// executable lives at a platform-specific path inside it.
 // Run `pnpm package` once before running tests, or use `pnpm test:e2e` which
 // packages automatically when out/ does not exist.
 //
@@ -21,9 +23,21 @@ const ELECTRON_ARGS = [
   '--in-process-gpu',
 ];
 
-const EXECUTABLE = path.join(__dirname, '../../out/Vermilian-linux-x64/Vermilian');
+function resolveExecutablePath(): string {
+  const outDir = path.join(__dirname, '../../out', `Vermilian-${process.platform}-${process.arch}`);
+  switch (process.platform) {
+    case 'darwin':
+      return path.join(outDir, 'Vermilian.app', 'Contents', 'MacOS', 'Vermilian');
+    case 'win32':
+      return path.join(outDir, 'Vermilian.exe');
+    default:
+      return path.join(outDir, 'Vermilian');
+  }
+}
 
-function freshUserDataDir() {
+const EXECUTABLE = resolveExecutablePath();
+
+export function freshUserDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
 }
 
@@ -32,6 +46,22 @@ export async function launchApp(): Promise<ElectronApplication> {
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1' },
+  });
+}
+
+// Launches against a caller-provided --user-data-dir instead of a fresh one —
+// lets a test relaunch the same profile (e.g. after editing a config file on
+// disk between launches) rather than always getting a clean slate. `extraEnv`
+// layers on top of the base E2E env (e.g. VERMILIAN_E2E_ARTICLE_CONTENT to
+// seed the fake _vermilian-config Article with a specific starting body).
+export async function launchAppWithUserDataDir(
+  userDataDir: string,
+  extraEnv: Record<string, string> = {},
+): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${userDataDir}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', ...extraEnv },
   });
 }
 

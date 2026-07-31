@@ -18,3 +18,19 @@ preserves saved credentials, so it does not help here.
 
 Status: root-caused, not yet fixed. See `private/bugs/BUG-001.md` (not
 tracked in this public repo) for full detail.
+
+## BUG-002: Shared workspace config can be corrupted by one stale machine and break every machine
+
+The `_vermilian-config` YouTrack Article — the mechanism that syncs
+workspace/folder/project layout across every machine pointed at the same
+YouTrack instance — could be overwritten with stale project ids by a single
+machine whose local cache hadn't caught up with a YouTrack rebuild (rebuilds
+reassign project ids even when names are unchanged). Every other machine
+then inherited the corruption on its next launch, so a problem introduced on
+one laptop silently broke the app everywhere.
+
+Status: fixed in v1.2.8 (self-healing stale-id pruning on save, a startup
+race fix so a not-yet-loaded Article can't be shadowed by a stale local
+file, and a manual "Force resync from server" recovery action in Settings →
+Advanced). See `private/bugs/BUG-002.md` (not tracked in this public repo)
+for full detail.

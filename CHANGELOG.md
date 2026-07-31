@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-07-30
+
+### Fixed
+
+- **A stale machine could corrupt the shared workspace config for every other
+  machine.** Workspace/folder/project-assignment data syncs across machines
+  through a YouTrack Knowledge Base Article (`_vermilian-config`). A startup
+  race let a machine serve (and later re-save) its local
+  `workspace-config.json` cache before that Article finished loading, and
+  saving never dropped project ids that no longer exist — so a machine whose
+  local cache still held pre-rebuild project ids (YouTrack rebuilds reassign
+  ids even when names/short names are unchanged) could push that stale data
+  up through an ordinary action like switching workspaces, clobbering the
+  correct config every other machine relied on.
+
+  `saveWorkspaceConfig` now prunes any project ids absent from the live
+  project list before persisting anywhere (locally, in the Article cache, or
+  in the scheduled remote write). `getWorkspaceConfig` now waits (bounded) for
+  an in-flight Article load instead of racing it. And Settings → Advanced has
+  a new **"Force resync from server"** action to recover a config that's
+  already corrupted, without manual API surgery.
+
+### Added
+
+- Settings → Advanced → **"Force resync from server"** — discards the
+  cached workspace/project layout and re-fetches it from the YouTrack
+  `_vermilian-config` Article, pruning stale project ids in the process.
+
+### Changed
+
+- The e2e suite's packaged-binary path was hardcoded to Linux
+  (`out/Vermilian-linux-x64/Vermilian`), so it could only run on FLDW. It now
+  resolves per `process.platform`/`process.arch`, and the full suite has been
+  verified passing on macOS as well.
+
 ## [1.2.7] - 2026-07-29
 
 ### Fixed
