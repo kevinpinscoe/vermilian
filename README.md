@@ -14,7 +14,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.2.8 — current release.** Vermilian is feature-complete against its specification and
+**v1.2.9 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -25,9 +25,10 @@ each release.
   timer (state machine, focus-mode lock, quit protection, crash-recovery checkpointing, and an
   automatic YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage;
   cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
-  stale project ids, with a manual "Force resync from server" recovery action); and light/dark
-  themes.
-- **Tested:** over 170 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+  stale project ids, with a manual "Force resync from server" recovery action); workspace
+  organisation, including an "+ Add projects" picker for moving projects between workspaces and a
+  workspace delete that re-homes any projects it still holds; and light/dark themes.
+- **Tested:** over 175 unit tests cover the core logic (board grouping/sorting/filtering, the timer
   state machine, API transforms, search query building, and workspace-config sync), alongside an
   end-to-end (Playwright) suite over the board, detail panel, settings, timer, AI, stand-up, search,
   and workspace-config sync flows. Verified on Linux (Fedora 42) and macOS; the Windows build is

@@ -99,6 +99,72 @@ export function allAssignedProjectIds(config: VermilianConfig): Set<string> {
 }
 
 /**
+ * Set the exact set of projects that belong to `workspaceId`.
+ *
+ * Membership is exclusive — a project lives in one workspace at a time — so
+ * every id in `projectIds` is first stripped from all other workspaces. Ids
+ * currently in the target but absent from `projectIds` are dropped from it and
+ * become unassigned (they are never deleted from the config outright).
+ *
+ * A project already in the target keeps the folder it is in; only newly added
+ * ids are appended to the first folder in display order, or to a fresh
+ * `newFolderId` folder when the workspace has none (the empty-workspace case).
+ */
+export function setWorkspaceProjects(
+  config: VermilianConfig,
+  workspaceId: string,
+  projectIds: readonly string[],
+  newFolderId = 'folder-projects',
+): VermilianConfig {
+  const desired = new Set(projectIds);
+
+  const workspaces = config.workspaces.map((ws) => {
+    if (ws.id !== workspaceId) {
+      // Exclusive membership: give up anything the target now claims.
+      return {
+        ...ws,
+        folders: ws.folders.map((f) => ({
+          ...f,
+          projectIds: f.projectIds.filter((id) => !desired.has(id)),
+        })),
+      };
+    }
+
+    // Target: drop deselected ids, leave everything else where the user put it.
+    const folders = ws.folders.map((f) => ({
+      ...f,
+      projectIds: f.projectIds.filter((id) => desired.has(id)),
+    }));
+    const alreadyHere = new Set(folders.flatMap((f) => f.projectIds));
+    const added = projectIds.filter((id) => !alreadyHere.has(id));
+    if (added.length === 0) return { ...ws, folders };
+
+    if (folders.length === 0) {
+      return {
+        ...ws,
+        folders: [{
+          id: newFolderId,
+          name: 'Projects',
+          order: 0,
+          parentId: null,
+          projectIds: [...added],
+        }],
+      };
+    }
+
+    const firstId = folders.slice().sort((a, b) => a.order - b.order)[0].id;
+    return {
+      ...ws,
+      folders: folders.map((f) =>
+        f.id === firstId ? { ...f, projectIds: [...f.projectIds, ...added] } : f,
+      ),
+    };
+  });
+
+  return { ...config, workspaces };
+}
+
+/**
  * Drop project ids that no longer exist (e.g. left behind by a YouTrack
  * rebuild, which reassigns project ids even when names/short names are
  * unchanged) from every folder. Self-heals a config that would otherwise

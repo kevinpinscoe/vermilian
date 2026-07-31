@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-07-31
+
+### Added
+
+- **"+ Add projects" in the workspace rail.** Until now a project could only be
+  put into a workspace by right-clicking it and choosing *Move to workspace* —
+  which needs a visible project row to right-click. A newly created workspace
+  has none, so there was no way to put anything in it from inside it. The rail
+  now has an **+ Add projects** button that opens a picker listing every
+  YouTrack project with a checkbox and the workspace it currently belongs to.
+  Unchecking a project leaves it unassigned rather than deleting it.
+
+### Changed
+
+- **Deleting a workspace that still holds projects is no longer blocked.** The
+  old warning — "Move or remove all projects from X before deleting it" — named
+  an action the dialog gave no way to perform, and no *remove projects* control
+  existed anywhere in that modal. The delete confirmation now asks where the
+  projects should go instead, offering *Unassigned* or any other workspace. The
+  projects are never deleted, and the type-the-name confirmation is unchanged.
+
+### Fixed
+
+- **A workspace containing no projects rendered a completely blank left rail,**
+  leaving no way to switch back to a workspace that did have projects, and no
+  way to reach the workspace switcher, folder controls, or settings gear.
+  `ThemeProvider` renders its own wrapping `<div>`, and it was being used
+  without a `className`, so an unstyled auto-height element sat between `#root`
+  and the app shell — every `height: 100%` below it resolved to `auto`. A
+  populated board hid this by supplying its own content height, but an empty
+  workspace falls back to the one-line "Select a project" placeholder, which
+  collapsed the absolutely positioned rail to 22px.
+
+- The `↑`/`↓` workspace reorder buttons in *Manage workspaces* rendered as thin
+  vertical slivers — a 16px-tall button with `font-size: 11px` and
+  `line-height: 1` clipped the arrow glyphs' ascender and descender.
+
 ## [1.2.8] - 2026-07-30
 
 ### Fixed
@@ -476,6 +513,9 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.9
+[1.2.8]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.8
 [1.2.7]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.7
 [1.2.6]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.6
 [1.2.5]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.5

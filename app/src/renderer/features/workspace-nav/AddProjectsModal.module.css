@@ -1,0 +1,81 @@
+.intro {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  margin-bottom: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  color: var(--primary-text-color, #111111);
+}
+
+.row:hover {
+  background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
+}
+
+.checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary-color, #0073ea);
+}
+
+.projectName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "in <workspace>" — where this project lives today. */
+.origin {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  white-space: nowrap;
+}
+
+.originUnassigned {
+  font-style: italic;
+}
+
+.empty {
+  padding: 16px 8px;
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Warns that checked projects will leave the workspace they are in now. */
+.moveNotice {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--warning-color-selected, rgba(253, 171, 61, 0.12));
+  font-size: 12px;
+  color: var(--primary-text-color, #111111);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
