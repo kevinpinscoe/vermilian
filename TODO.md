@@ -3,6 +3,19 @@
 This file tracks planned public work for Vermilian. Items here are intentionally high level until
 they are promoted into a full feature spec, issue, or pull request.
 
+## In flight
+
+- **[PR #43 — `feat(fields)`: add Issue domain, Edit host, Affected host; fix two stale option
+  lists](https://github.com/kevinpinscoe/vermilian/pull/43)** — branch
+  `feat/host-and-domain-fields`. Registers the three custom fields added to YouTrack on
+  2026-08-01, and fixes two option lists that had drifted from the live bundles: `Project health`
+  still offered `Yellow` after the live value was renamed to `Amber` (so the field could not be
+  set at all), and `Status` offered `Working on it`, which does not exist, while omitting
+  `Backlog` and `Scheduled`, which do. Both were write failures, not cosmetic.
+  Typecheck clean, 179/179 tests pass.
+  **The schema-drift items below were raised by this PR and are on its branch** — they land on
+  `main` only when it merges.
+
 ## Planned features
 
 ### Task effort estimating
