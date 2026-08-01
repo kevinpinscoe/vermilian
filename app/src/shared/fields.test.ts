@@ -11,7 +11,29 @@ import {
 describe('FIELD_DEFS', () => {
   it('has exactly one entry per field key, no duplicates', () => {
     expect(new Set(FIELD_KEYS).size).toBe(FIELD_KEYS.length);
-    expect(FIELD_KEYS).toHaveLength(23);
+    // 23 -> 26 on 2026-08-01: Issue domain, Edit host, Affected host.
+    expect(FIELD_KEYS).toHaveLength(26);
+  });
+
+  it('the 3 host/domain fields match the live enum bundles', () => {
+    expect(FIELD_DEFS.issueDomain.$type).toBe('SingleEnumIssueCustomField');
+    expect(FIELD_DEFS.issueDomain.wire).toBe('enum');
+    expect(FIELD_DEFS.issueDomain.options).toHaveLength(3);
+    expect(FIELD_DEFS.editHost.$type).toBe('SingleEnumIssueCustomField');
+    expect(FIELD_DEFS.editHost.options).toHaveLength(4);
+    expect(FIELD_DEFS.affectedHost.$type).toBe('SingleEnumIssueCustomField');
+    // One per row of the service catalog's Fleet Hosts table.
+    expect(FIELD_DEFS.affectedHost.options).toHaveLength(21);
+  });
+
+  it('status and project health options match the live bundles', () => {
+    // Statuses bundle 161-31 — 'Working on it' is not a live value.
+    expect(FIELD_DEFS.status.options).toHaveLength(10);
+    expect(FIELD_DEFS.status.options).toContain('Backlog');
+    expect(FIELD_DEFS.status.options).toContain('Scheduled');
+    expect(FIELD_DEFS.status.options).not.toContain('Working on it');
+    // Project health bundle 159-52 — Yellow was renamed to Amber on 2026-08-01.
+    expect(FIELD_DEFS.projectHealth.options).toEqual(['Green', 'Amber', 'Red']);
   });
 
   it('the 13 fields added later have the confirmed live $type/wire shapes', () => {

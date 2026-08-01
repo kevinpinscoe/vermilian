@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Three new fields: `Issue domain`, `Edit host`, and `Affected host`.** They
+  were added to the YouTrack instance on 2026-08-01 and record whose work an
+  issue is (`Personal` / `Employer work` / `Client work`), which machine it is
+  being worked *from*, and which host it is *about*. All three are single-select
+  dropdowns, optional, and hidden board columns by default — they are empty on
+  every issue that predates them, since there was no backfill, so showing them
+  by default would have added three blank columns. `Issue domain` is offered on
+  the create-task form; the two host fields are edit-only.
+
+  `Affected host`'s 21 values mirror the k-fed service catalog's fleet-host
+  list. Adding a host to the fleet means adding a value here too.
+
+### Fixed
+
+- **`Project health` could not be set at all.** The dropdown still offered
+  `Yellow`, which was renamed to `Amber` in YouTrack on 2026-08-01 when the
+  field adopted standard RAG nomenclature. Selecting it failed with *"An X-type
+  entity with the specified name ({1}) was not found"*.
+- **The `Status` dropdown had drifted from the live instance.** It offered
+  `Working on it`, which is not a real status and failed the same way on write,
+  and it was missing `Backlog` and `Scheduled` — both live, both previously
+  unreachable from Vermilian. The list now matches the instance's `Statuses`
+  bundle exactly, in the same order.
+
 ## [1.2.9] - 2026-07-31
 
 ### Added
