@@ -28,7 +28,10 @@ export type FieldKey =
   | 'baseBranch'
   | 'pullRequestUrl'
   | 'artifactUrl'
-  | 'lastReportedCommit';
+  | 'lastReportedCommit'
+  | 'issueDomain'
+  | 'editHost'
+  | 'affectedHost';
 
 export type FieldWire = 'state' | 'enum' | 'date' | 'text' | 'user' | 'integer';
 export type FieldEditor = 'select' | 'date' | 'text' | 'link' | 'readonly' | 'number';
@@ -52,9 +55,18 @@ export function isValidUrl(s: string): string | null {
   return /^https?:\/\//i.test(s) ? null : 'Must be a valid URL.';
 }
 
+// Matches the live "Statuses" StateBundle (161-31), shared across every project
+// — read directly from the API on 2026-08-01.
+//
+// Corrected on that date after drifting from the instance: 'Working on it' is
+// not a live value (selecting it failed with YouTrack's "An X-type entity with
+// the specified name ({1}) was not found"), and 'Backlog' and 'Scheduled' were
+// live but unreachable from the UI. Bundle order is preserved, so the dropdown
+// reads in the same order as YouTrack's own.
 const STATUS_VALUES = [
-  'To do', 'In Progress', 'Working on it', 'Waiting for IT', 'BLOCKED',
-  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource', 'Done',
+  'To do', 'In Progress', 'Done', 'Waiting for IT', 'BLOCKED',
+  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource',
+  'Backlog', 'Scheduled',
 ] as const;
 
 const PRIORITY_VALUES = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'] as const;
@@ -70,9 +82,37 @@ const CATEGORY_VALUES = [
   'RELEASE', 'FINOPS', 'SECURITY', 'INGEST', 'HACKATHON', 'Playbook',
 ] as const;
 
-const PROJECT_HEALTH_VALUES = ['Green', 'Yellow', 'Red'] as const;
+// 'Yellow' was renamed to 'Amber' in the live bundle (159-52) on 2026-08-01,
+// adopting standard RAG nomenclature. One rename on the shared bundle covered
+// every project; no issue data changed, because Green was the only value in use.
+// Sending 'Yellow' now fails with YouTrack's "An X-type entity with the
+// specified name ({1}) was not found".
+const PROJECT_HEALTH_VALUES = ['Green', 'Amber', 'Red'] as const;
 
 const REPORTING_CADENCE_VALUES = ['Daily', 'Sprint', 'Monthly', 'Annual', 'On demand'] as const;
+
+// Matches the live "Issue domains" EnumBundle (159-60), shared across every
+// project. Classifies whose work an issue is. Empty is valid and normal —
+// canBeEmpty = true with no default.
+const ISSUE_DOMAIN_VALUES = ['Personal', 'Employer work', 'Client work'] as const;
+
+// Matches the live "Edit hosts" EnumBundle (159-64). Where the work is being
+// performed FROM — single-value, because you edit from one machine at a time.
+const EDIT_HOST_VALUES = ['FLDW', 'core', 'mac', 'mac-container'] as const;
+
+// Matches the live "Affected hosts" EnumBundle (159-68). The host an issue is
+// ABOUT, which is often not the host it is worked from. One value per row of
+// the service catalog's "Fleet Hosts" table — the catalog
+// (~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md)
+// stays the source of truth and this list mirrors it. Adding a k-fed host means
+// adding a value here too; see the youtrack.kevininscoe.com repo's
+// docs/custom-fields.md.
+const AFFECTED_HOST_VALUES = [
+  'FLDW', 'core', 'mac', 'mac-container', 'web1', 'mail1', 'john', 'obs',
+  'postgres', 'wazuh', 'aws-agent-1', 'home-k3s-dev', 'home-k3s-lab',
+  'home-k3s-prod', 'dev-agents-1', 'dev-servers-1', 'lab-agents-1',
+  'lab-agents-2', 'lab-servers-1', 'prod-agents-1', 'prod-servers-1',
+] as const;
 
 export const FIELD_DEFS = {
   status: {
@@ -206,6 +246,24 @@ export const FIELD_DEFS = {
     key: 'lastReportedCommit', ytName: 'Last reported commit', $type: 'SimpleIssueCustomField', wire: 'text',
     label: 'Last reported commit', editor: 'text',
     column: true, creatable: false, patchable: true, detailOrder: 22,
+  },
+  // Added 2026-08-01 alongside the YouTrack fields themselves. All three are
+  // enum[1] and optional (canBeEmpty = true, no default), so null is the normal
+  // state on the ~266 issues that predate them — there was no backfill.
+  issueDomain: {
+    key: 'issueDomain', ytName: 'Issue domain', $type: 'SingleEnumIssueCustomField', wire: 'enum',
+    label: 'Issue domain', editor: 'select', options: ISSUE_DOMAIN_VALUES,
+    column: true, creatable: true, patchable: true, detailOrder: 23,
+  },
+  editHost: {
+    key: 'editHost', ytName: 'Edit host', $type: 'SingleEnumIssueCustomField', wire: 'enum',
+    label: 'Edit host', editor: 'select', options: EDIT_HOST_VALUES,
+    column: true, creatable: false, patchable: true, detailOrder: 24,
+  },
+  affectedHost: {
+    key: 'affectedHost', ytName: 'Affected host', $type: 'SingleEnumIssueCustomField', wire: 'enum',
+    label: 'Affected host', editor: 'select', options: AFFECTED_HOST_VALUES,
+    column: true, creatable: false, patchable: true, detailOrder: 25,
   },
 } as const satisfies Record<FieldKey, FieldDef>;
 
