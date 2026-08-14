@@ -27,7 +27,10 @@ overrides:
   js-yaml: ^4.2.0
   "@babel/core": ^7.29.6
   postcss: ^8.5.18
-  fast-uri: ^3.1.4
+  # GHSA / Dependabot alert 43 patches at 3.1.5. The floor has to move even
+  # though ^3.1.4 already permits 3.1.5 — the lockfile held the tree at 3.1.4,
+  # so nothing updates until the vulnerable version is excluded by the range.
+  fast-uri: ^3.1.5
   # brace-expansion is vulnerable on every major line it ships, across a chain of
   # three advisories now. Pin each major to its own patched release rather than
   # forcing one major everywhere: this tree resolves minimatch 3, 5, 9 and 10 at
