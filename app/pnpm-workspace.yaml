@@ -18,15 +18,33 @@ allowBuilds:
 overrides:
   vite: ^6.4.3
   esbuild: ^0.25.0
-  # Security (Dependabot) — pin patched versions of transitive dev-toolchain
-  # deps. None of these ship in the packaged app (electron-forge bundles only
-  # `dependencies`); they are build/test/CLI tooling only.
+  # Security (Dependabot) — pin patched versions of transitive deps. Most are
+  # build/test/CLI tooling that never reaches the packaged app, because
+  # electron-forge bundles only `dependencies`.
+  #
+  # `postcss` and `nanoid` are the exceptions and are NOT build-only: they sit
+  # in the shipped dependency closure via
+  #   @vibe/core -> @vibe/base -> @vibe/style -> postcss -> nanoid
+  # and @vibe/core is a `dependencies` entry. Dependabot scoping their
+  # advisories `runtime` is correct. Do not deprioritise an advisory on either
+  # one on the assumption that it is only tooling.
   undici: ^7.28.0
   tmp: ^0.2.6
   tar: ^7.5.18
   js-yaml: ^4.2.0
   "@babel/core": ^7.29.6
   postcss: ^8.5.18
+  # Dependabot alert 50 — CVE-2026-67213 / GHSA-2v37-7h3g-55p8, high: custom
+  # generators can loop indefinitely when size is zero. Patched in 3.3.18.
+  #
+  # A flat pin is correct here because the tree resolves only nanoid 3.x. It
+  # arrives twice, from postcss 8.5.23 (nanoid 3.3.16, vulnerable) and postcss
+  # 8.5.26 (nanoid 3.3.18) — both postcss versions satisfy the ^8.5.18 pin
+  # above, so the duplicate survives and the vulnerable copy with it.
+  #
+  # If anything ever pulls nanoid 5.x, split this per major the way
+  # brace-expansion below is. A flat pin across majors would collide.
+  nanoid: ^3.3.18
   # GHSA / Dependabot alert 43 patches at 3.1.5. The floor has to move even
   # though ^3.1.4 already permits 3.1.5 — the lockfile held the tree at 3.1.4,
   # so nothing updates until the vulnerable version is excluded by the range.
