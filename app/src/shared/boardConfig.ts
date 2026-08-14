@@ -89,6 +89,12 @@ export const DEFAULT_COLUMNS: BoardColumnConfig[] = [
   { field: 'pullRequestUrl',     width: 140, visible: false },
   { field: 'artifactUrl',        width: 140, visible: false },
   { field: 'lastReportedCommit', width: 150, visible: false },
+  // Added 2026-08-01. Hidden by default like the rest of the tracking columns —
+  // they are empty on every issue that predates them (there was no backfill), so
+  // showing them by default would add three blank columns to the board.
+  { field: 'issueDomain',        width: 130, visible: false },
+  { field: 'editHost',           width: 120, visible: false },
+  { field: 'affectedHost',       width: 130, visible: false },
 ];
 
 export function defaultBoardView(): BoardViewConfig {

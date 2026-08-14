@@ -127,6 +127,9 @@ describe('getIssues', () => {
           pullRequestUrl: null,
           artifactUrl: null,
           lastReportedCommit: null,
+          issueDomain: null,
+          editHost: null,
+          affectedHost: null,
         },
       },
     ]);
