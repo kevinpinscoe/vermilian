@@ -61,7 +61,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-query": "^5.102.8",
     "@vibe/core": "^4.5.24",
     "@vibe/icons": "^4.1.0",
     "electron-squirrel-startup": "^1.0.1",
