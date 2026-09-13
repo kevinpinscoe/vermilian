@@ -12,6 +12,10 @@ So I created Vermilian as a better frontend alternative with a dense work queue,
 
 Vermilian also features a fully functional Kanban board for quick task review.
 
+## To do
+
+- Coming in 2026 Q3-Q4 Prioity tasking with AI assist. Mock up at  https://kevinpinscoe.github.io/vermilian/
+
 ## Status
 
 **v1.2.9 — current release.** Vermilian is feature-complete against its specification and
