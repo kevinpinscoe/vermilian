@@ -14,6 +14,16 @@ Vermilian targets a **monday.com** look and feel. Wireframes should reflect:
 
 Reference: [monday.com Vibe Design System](https://style.monday.com) and [Vibe GitHub](https://github.com/mondaycom/vibe).
 
+## Exceptions
+
+- [`priority-desk-mockup.html`](priority-desk-mockup.html) — a standalone HTML comparison mockup
+  for the proposed Priority Desk feature (Q3–Q4 2026 idea), not a D2/Mermaid wireframe. Kept as
+  HTML deliberately: it renders the app-shell before/after, Now/Next/Then cards, the Choose-next
+  candidate grid, and the Ask-for-recommendation panel using the actual Vibe design tokens
+  (`@vibe/core` primary `#0073ea`, Figtree/Poppins), which a low-fidelity D2 sketch or Mermaid
+  flowchart can't convey. Treat it as a one-off, not a new default — a real spec for this feature
+  should still get proper `screen-*.d2` / `flow-*.mmd` files here.
+
 ## Templates
 
 - [`_template-wireframe.d2`](_template-wireframe.d2) — D2 sketch-mode wireframe (Kroki / wiki.js)
