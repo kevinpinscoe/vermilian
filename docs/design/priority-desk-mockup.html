@@ -1,0 +1,588 @@
+<title>Priority Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
+<style>
+  :root{
+    --page-bg:#e7e9f2;
+    --frame-bg:#f6f7fb;
+    --surface:#ffffff;
+    --border:#c3c6d4;
+    --border-soft:#dfe1ec;
+    --text:#323338;
+    --text-dim:#676879;
+    --text-faint:#8b8ea0;
+    --primary:#0073ea;
+    --primary-text:#0073ea;
+    --primary-tint:rgba(0,115,234,.08);
+    --primary-tint-strong:rgba(0,115,234,.14);
+    --positive:#1a7a4c;
+    --positive-tint:#e3f6ec;
+    --warning-text:#8a6100;
+    --warning-tint:#fdf0c3;
+    --warning-border:#f0d27a;
+    --shadow-frame:0 1px 2px rgba(30,33,53,.06), 0 10px 28px rgba(30,33,53,.08);
+    --shadow-card:0 1px 2px rgba(30,33,53,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page-bg:#15161f;
+      --frame-bg:#24263a;
+      --surface:#2c2e45;
+      --border:#42445e;
+      --border-soft:#383a52;
+      --text:#dfe1ea;
+      --text-dim:#a5a8ba;
+      --text-faint:#7d8094;
+      --primary:#4d9bff;
+      --primary-text:#79b3ff;
+      --primary-tint:rgba(77,155,255,.14);
+      --primary-tint-strong:rgba(77,155,255,.22);
+      --positive:#5cc990;
+      --positive-tint:rgba(92,201,144,.14);
+      --warning-text:#e8c565;
+      --warning-tint:rgba(232,197,101,.14);
+      --warning-border:rgba(232,197,101,.35);
+      --shadow-frame:0 1px 2px rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.35);
+      --shadow-card:0 1px 2px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page-bg:#15161f;
+    --frame-bg:#24263a;
+    --surface:#2c2e45;
+    --border:#42445e;
+    --border-soft:#383a52;
+    --text:#dfe1ea;
+    --text-dim:#a5a8ba;
+    --text-faint:#7d8094;
+    --primary:#4d9bff;
+    --primary-text:#79b3ff;
+    --primary-tint:rgba(77,155,255,.14);
+    --primary-tint-strong:rgba(77,155,255,.22);
+    --positive:#5cc990;
+    --positive-tint:rgba(92,201,144,.14);
+    --warning-text:#e8c565;
+    --warning-tint:rgba(232,197,101,.14);
+    --warning-border:rgba(232,197,101,.35);
+    --shadow-frame:0 1px 2px rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.35);
+    --shadow-card:0 1px 2px rgba(0,0,0,.25);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--page-bg);
+    color:var(--text);
+    font-family:'Figtree','Roboto',sans-serif;
+    padding:0 20px;
+    padding-block:36px 56px;
+    display:flex;
+    justify-content:center;
+  }
+  .page{ width:100%; max-width:1160px; display:flex; flex-direction:column; gap:40px; }
+
+  h1,h2,h3{ font-family:'Poppins','Roboto',sans-serif; text-wrap:balance; margin:0; }
+
+  .eyebrow{
+    font-size:11.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--primary-text);
+  }
+  header.hero{ display:flex; flex-direction:column; gap:10px; max-width:720px; }
+  header.hero h1{ font-size:clamp(28px,4vw,38px); font-weight:700; color:var(--text); }
+  header.hero p{ margin:0; font-size:15.5px; line-height:1.55; color:var(--text-dim); max-width:62ch; }
+  .hero-meta{ display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:4px; font-size:12.5px; color:var(--text-faint); }
+  .hero-meta code{ font-family:ui-monospace,'SFMono-Regular',Menlo,monospace; background:var(--frame-bg); border:1px solid var(--border-soft); border-radius:4px; padding:1px 6px; color:var(--text-dim); }
+
+  section{ display:flex; flex-direction:column; gap:14px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .section-head h2{ font-size:19px; font-weight:600; }
+  .section-note{ font-size:13px; color:var(--text-faint); }
+
+  /* ---- app-window frame chrome ---- */
+  .frame{
+    background:var(--frame-bg);
+    border:1px solid var(--border-soft);
+    border-radius:12px;
+    box-shadow:var(--shadow-frame);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+  }
+  .frame-titlebar{
+    height:36px; flex-shrink:0; display:flex; align-items:center; gap:8px;
+    padding:0 12px; background:var(--surface); border-bottom:1px solid var(--border-soft);
+  }
+  .tb-dot{ width:9px; height:9px; border-radius:50%; background:var(--border); }
+  .tb-label{ margin-left:6px; font-size:12px; font-weight:600; color:var(--text-dim); }
+  .frame-body{ display:flex; flex:1; min-height:0; }
+
+  /* ---- rail ---- */
+  .rail{
+    width:150px; flex-shrink:0; background:var(--frame-bg);
+    border-right:1px solid var(--border-soft);
+    padding:8px 7px; display:flex; flex-direction:column; gap:2px;
+  }
+  .switcher{
+    display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700;
+    padding:6px 7px; margin-bottom:6px; color:var(--text);
+  }
+  .switcher .chev{ margin-left:auto; color:var(--text-faint); font-size:10px; }
+  .nav-item{
+    display:flex; align-items:center; gap:7px; padding:6.5px 7px; border-radius:6px;
+    font-size:12.5px; font-weight:500; color:var(--text-dim); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .nav-item .ico{ width:14px; flex-shrink:0; display:flex; }
+  .nav-item.active{ background:var(--primary-tint); color:var(--primary-text); font-weight:700; }
+  .nav-item.new{ position:relative; }
+  .new-pill{
+    margin-left:auto; font-size:8.5px; font-weight:800; letter-spacing:.04em;
+    background:var(--primary); color:#fff; border-radius:20px; padding:1.5px 5px; flex-shrink:0;
+  }
+  .rail-divider{ height:1px; background:var(--border-soft); margin:6px 2px; }
+
+  /* ---- "today" content: the messy text file ---- */
+  .content{ flex:1; min-width:0; padding:14px 16px; overflow:auto; }
+  .filecard{
+    background:var(--surface); border:1px solid var(--border-soft); border-radius:8px;
+    box-shadow:var(--shadow-card); padding:12px 14px;
+  }
+  .filecard .fname{
+    font-size:11px; font-weight:700; color:var(--text-faint); letter-spacing:.03em;
+    margin-bottom:8px; text-transform:uppercase;
+  }
+  .filecard ul{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .filecard li{
+    font-family:ui-monospace,'SFMono-Regular',Menlo,monospace; font-size:11.5px;
+    color:var(--text-dim); line-height:1.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .filecard li.done{ color:var(--text-faint); text-decoration:line-through; }
+  .filecard li .tag{ color:var(--primary-text); text-decoration:none; }
+  .today-annot{
+    margin-top:10px; font-size:12px; color:var(--text-faint); display:flex; gap:6px; align-items:flex-start;
+  }
+
+  .caption-row{ font-size:13.5px; color:var(--text-dim); max-width:70ch; }
+  .caption-row strong{ color:var(--text); }
+
+  .frames-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:stretch; }
+  .frames-grid .frame{ min-height:400px; }
+
+  /* ---- segmented control ---- */
+  .segmented{ display:inline-flex; background:var(--surface); border:1px solid var(--border-soft); border-radius:8px; padding:2px; gap:2px; }
+  .segmented button{
+    font:inherit; font-size:11.5px; font-weight:700; border:none; background:none; cursor:default;
+    padding:5px 12px; border-radius:6px; color:var(--text-faint);
+  }
+  .segmented button.active{ background:var(--primary); color:#fff; }
+
+  /* ---- desk cards row (Now/Next/Then) ---- */
+  .desk-row{ display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .slots{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .slot{ display:flex; flex-direction:column; gap:6px; }
+  .slot-label{ font-size:10px; font-weight:800; letter-spacing:.08em; color:var(--text-faint); text-transform:uppercase; padding-left:2px; }
+  .deskcard{
+    background:var(--surface); border:1px solid var(--border-soft); border-radius:8px;
+    box-shadow:var(--shadow-card); padding:10px 11px; display:flex; flex-direction:column; gap:7px; flex:1;
+  }
+  .deskcard.now{ border-color:var(--primary); box-shadow:0 0 0 1px var(--primary) inset, var(--shadow-card); }
+  .dc-top{ display:flex; align-items:center; gap:6px; }
+  .dc-id{ font-family:ui-monospace,monospace; font-size:10.5px; font-weight:700; color:var(--text-faint); font-variant-numeric:tabular-nums; }
+  .chip{ font-size:9.5px; font-weight:700; padding:1.5px 7px; border-radius:20px; white-space:nowrap; }
+  .chip.major{ background:var(--warning-tint); color:var(--warning-text); }
+  .chip.normal{ background:var(--border-soft); color:var(--text-dim); }
+  .dc-title{ font-size:12.5px; font-weight:700; color:var(--text); line-height:1.3; }
+  .dc-meta{ font-size:10.5px; color:var(--text-faint); }
+  .dc-why{ font-size:11px; color:var(--text-dim); font-style:italic; line-height:1.4; }
+  .dc-blocked{
+    display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700;
+    color:var(--warning-text); background:var(--warning-tint); border:1px solid var(--warning-border);
+    border-radius:5px; padding:2px 6px; width:fit-content;
+  }
+  .dc-actions{ margin-top:auto; padding-top:2px; }
+  .btn{ font:inherit; border:none; border-radius:6px; cursor:default; display:inline-flex; align-items:center; gap:5px; }
+  .btn-primary{ background:var(--primary); color:#fff; font-size:11px; font-weight:700; padding:6px 10px; }
+  .btn-ghost{ background:none; color:var(--text-dim); font-size:11px; font-weight:700; padding:5px 8px; border:1px solid var(--border-soft); }
+  .deskcard.empty{
+    align-items:center; justify-content:center; text-align:center; gap:4px;
+    border-style:dashed; background:transparent; box-shadow:none; min-height:96px;
+  }
+  .deskcard.empty .plus{ font-size:18px; color:var(--text-faint); }
+  .deskcard.empty .et{ font-size:11px; font-weight:700; color:var(--text-faint); }
+  .deskcard.empty .es{ font-size:10px; color:var(--text-faint); max-width:22ch; }
+  .desk-foot{ font-size:11px; color:var(--text-faint); }
+  .desk-foot .star{ color:var(--warning-text); }
+
+  /* ---- choose-next panel ---- */
+  .dropstrip{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .dropzone{
+    border:1.5px dashed var(--border); border-radius:7px; padding:6px 8px; display:flex; flex-direction:column; gap:2px;
+    background:var(--frame-bg);
+  }
+  .dropzone .dz-label{ font-size:9px; font-weight:800; letter-spacing:.07em; color:var(--text-faint); }
+  .dropzone .dz-fill{ font-size:11px; font-weight:600; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dropzone.dz-empty .dz-fill{ color:var(--text-faint); font-weight:400; font-style:italic; }
+
+  .candgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:9px; }
+  .candcard{
+    background:var(--surface); border:1px solid var(--border-soft); border-radius:8px;
+    box-shadow:var(--shadow-card); padding:9px 10px; display:flex; flex-direction:column; gap:6px;
+  }
+  .cc-top{ display:flex; align-items:center; justify-content:space-between; gap:4px; }
+  .cc-id{ font-family:ui-monospace,monospace; font-size:10px; font-weight:700; color:var(--text-faint); }
+  .star-ico{ color:var(--text-faint); flex-shrink:0; }
+  .star-ico.filled{ color:var(--warning-text); }
+  .cc-title{ font-size:11.5px; font-weight:700; color:var(--text); line-height:1.3; }
+  .cc-meta{ font-size:10px; color:var(--text-faint); }
+  .cc-bottom{ margin-top:auto; display:flex; justify-content:flex-end; }
+  .cc-dismiss{ font-size:9.5px; font-weight:700; color:var(--text-faint); background:none; border:none; padding:2px 0; }
+
+  /* ---- ask-for-recommendation panel ---- */
+  .ask-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .ask-btn{ background:var(--primary-tint-strong); color:var(--primary-text); font-size:11.5px; font-weight:700; padding:6px 11px; border:1px solid var(--primary); border-radius:7px; display:inline-flex; align-items:center; gap:6px; }
+  .ask-scope{ font-size:11.5px; color:var(--text-faint); }
+  .reco-list{ display:flex; flex-direction:column; gap:8px; }
+  .recocard{
+    background:var(--surface); border:1px solid var(--border-soft); border-radius:8px;
+    box-shadow:var(--shadow-card); padding:10px 12px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .reco-rank{
+    width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; background:var(--primary-tint-strong); color:var(--primary-text); margin-top:1px;
+  }
+  .recocard.alt .reco-rank{ background:var(--border-soft); color:var(--text-faint); }
+  .reco-body{ display:flex; flex-direction:column; gap:5px; flex:1; min-width:0; }
+  .reco-top{ display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; }
+  .reco-id{ font-family:ui-monospace,monospace; font-size:10.5px; font-weight:700; color:var(--text-faint); }
+  .reco-title{ font-size:12.5px; font-weight:700; color:var(--text); }
+  .evidence{ display:flex; flex-wrap:wrap; gap:5px; }
+  .etag{ font-size:9.5px; font-weight:600; color:var(--text-dim); background:var(--frame-bg); border:1px solid var(--border-soft); border-radius:5px; padding:2px 6px; }
+  .etag b{ color:var(--text); font-weight:700; }
+  .recocard.needsinput{ border-color:var(--warning-border); background:var(--warning-tint); }
+  .reco-question{ font-size:11.5px; color:var(--warning-text); font-weight:600; }
+  .confirm-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-soft); align-items:center; }
+  .confirm-note{ font-size:11px; color:var(--text-faint); margin-left:auto; }
+
+  /* ---- fields legend + sequence ---- */
+  .lower-grid{ display:grid; grid-template-columns:1fr 1.4fr; gap:24px; align-items:start; }
+  .fieldlist{ display:flex; flex-direction:column; gap:0; border:1px solid var(--border-soft); border-radius:8px; overflow:hidden; background:var(--surface); }
+  .fieldrow{ display:grid; grid-template-columns:100px 1fr; gap:10px; padding:10px 12px; }
+  .fieldrow + .fieldrow{ border-top:1px solid var(--border-soft); }
+  .fieldrow .fname2{ font-family:ui-monospace,monospace; font-size:11.5px; font-weight:700; color:var(--primary-text); }
+  .fieldrow .fdesc{ font-size:12px; color:var(--text-dim); line-height:1.4; }
+
+  .sequence{ display:flex; flex-direction:column; gap:0; }
+  .seqstep{ display:flex; gap:12px; padding:9px 0; }
+  .seqstep + .seqstep{ border-top:1px dashed var(--border-soft); }
+  .seqnum{
+    width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; background:var(--border-soft); color:var(--text-faint);
+  }
+  .seqstep.current .seqnum{ background:var(--primary); color:#fff; }
+  .seqtitle{ font-size:12.5px; font-weight:700; color:var(--text); }
+  .seqstep:not(.current) .seqtitle{ color:var(--text-dim); }
+  .seqdesc{ font-size:11.5px; color:var(--text-faint); margin-top:1px; }
+  .seqtag{
+    font-size:8.5px; font-weight:800; letter-spacing:.05em; background:var(--primary); color:#fff;
+    border-radius:20px; padding:1.5px 6px; margin-left:8px; vertical-align:middle;
+  }
+
+  footer{ font-size:11.5px; color:var(--text-faint); border-top:1px solid var(--border-soft); padding-top:16px; line-height:1.6; }
+  footer code{ font-family:ui-monospace,monospace; }
+
+  @media (max-width:760px){
+    .frames-grid{ grid-template-columns:1fr; }
+    .slots{ grid-template-columns:1fr; }
+    .dropstrip{ grid-template-columns:1fr; }
+    .lower-grid{ grid-template-columns:1fr; }
+    .rail{ width:118px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">Vermilian &middot; UI sketch, not implemented</div>
+    <h1>Priority Desk</h1>
+    <p>A new left-rail surface that answers one question &mdash; <em>what should I work on now</em> &mdash; from a small, ranked set instead of a scrolling text file. YouTrack stays the source of truth; this is the deciding layer on top of it.</p>
+    <div class="hero-meta">
+      <span>Source idea: <code>vermilian-improvements-q3-2026</code></span>
+      <span>Replaces: <code>~/Projects/_shortcuts/finish-tasks.txt</code></span>
+      <span>Ships in: delivery step 2 of 5</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <h2>What the rail looks like today, and after</h2>
+      <span class="section-note">Everything except the new rail entry is unchanged</span>
+    </div>
+    <p class="caption-row">The only structural change to the app shell is <strong>one new item above &ldquo;All tasks&rdquo;</strong>. The all-tasks table and every project Kanban stay exactly as they are &mdash; Priority Desk is a curated view, not a replacement dashboard.</p>
+
+    <div class="frames-grid">
+
+      <div class="frame">
+        <div class="frame-titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-label">Vermilian &mdash; today</span></div>
+        <div class="frame-body">
+          <div class="rail">
+            <div class="switcher">&#9679; Personal <span class="chev">&#9662;</span></div>
+            <div class="nav-item active"><span class="ico">&#9776;</span> All tasks</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Vermilian app</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Parzival policy</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Home lab</div>
+            <div class="rail-divider"></div>
+            <div class="nav-item"><span class="ico">&#9881;</span> Settings</div>
+          </div>
+          <div class="content">
+            <div class="filecard">
+              <div class="fname">finish-tasks.txt</div>
+              <ul>
+                <li class="done">[DONE] Bump vite 5&rarr;6 across app</li>
+                <li>Wire up column resize e2e flake fix</li>
+                <li>Parzival policy editor &mdash; convert to epic, see notes</li>
+                <li><span class="tag">https://youtrack&hellip;/KEVIN-91</span></li>
+                <li class="done">[DONE] Timer conflict modal copy pass</li>
+                <li>Ask Kevin about master-plan article structure</li>
+                <li>Kanban column color picker &mdash; contrast bug</li>
+                <li>Check Wayland focus-overlay z-index again</li>
+                <li>Draft standup wording for AI section</li>
+              </ul>
+            </div>
+            <div class="today-annot">&#9888;&#65039; One flat list &mdash; done items, ideas, URLs and instructions all mixed together, no ranking, no project context.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-label">Vermilian &mdash; proposed</span></div>
+        <div class="frame-body">
+          <div class="rail">
+            <div class="switcher">&#9679; Personal <span class="chev">&#9662;</span></div>
+            <div class="nav-item active new">&#11088; Priority Desk <span class="new-pill">NEW</span></div>
+            <div class="nav-item"><span class="ico">&#9776;</span> All tasks</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Vermilian app</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Parzival policy</div>
+            <div class="nav-item"><span class="ico">&#9635;</span> Home lab</div>
+            <div class="rail-divider"></div>
+            <div class="nav-item"><span class="ico">&#9881;</span> Settings</div>
+          </div>
+          <div class="content">
+            <div class="segmented">
+              <button class="active">Now</button>
+              <button>Choose next (5)</button>
+            </div>
+            <div class="desk-row">
+              <div class="slots">
+                <div class="slot">
+                  <div class="slot-label">Now</div>
+                  <div class="deskcard now">
+                    <div class="dc-top"><span class="dc-id">VERM&#8209;142</span><span class="chip major">Major</span></div>
+                    <div class="dc-title">Wire Focus field to task detail panel</div>
+                    <div class="dc-meta">Vermilian app &middot; Priority Desk foundation</div>
+                    <div class="dc-why">&ldquo;Blocks the manual-desk release &mdash; needs to land before beta.&rdquo;</div>
+                    <div class="dc-actions"><button class="btn btn-primary">&#9654; Start focus</button></div>
+                  </div>
+                </div>
+                <div class="slot">
+                  <div class="slot-label">Next</div>
+                  <div class="deskcard">
+                    <div class="dc-top"><span class="dc-id">VERM&#8209;118</span><span class="chip normal">Normal</span></div>
+                    <div class="dc-title">Fix column-resize flake in e2e suite</div>
+                    <div class="dc-meta">Vermilian app &middot; No epic</div>
+                    <div class="dc-blocked">&#9888; Blocked by VERM&#8209;101</div>
+                    <div class="dc-actions"><button class="btn btn-ghost">Open</button></div>
+                  </div>
+                </div>
+                <div class="slot">
+                  <div class="slot-label">Then</div>
+                  <div class="deskcard empty">
+                    <div class="plus">+</div>
+                    <div class="et">Add to Then</div>
+                    <div class="es">Empty is fine &mdash; nothing forces this slot to fill</div>
+                  </div>
+                </div>
+              </div>
+              <div class="desk-foot"><span class="star">&#9733;</span> Focus is toggled the same way in board rows, Kanban cards, and this detail panel.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Choosing what goes into those three slots</h2>
+      <span class="section-note">Second mode of the same screen &mdash; at most seven candidates</span>
+    </div>
+    <p class="caption-row">&ldquo;Choose next&rdquo; is a quiet comparison view, not a second board. Filters are limited to workspace, status and active epic; full search stays on the existing All-tasks table.</p>
+
+    <div class="frame">
+      <div class="frame-titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-label">Vermilian &mdash; Priority Desk &middot; Choose next</span></div>
+      <div class="frame-body" style="flex-direction:column;">
+        <div class="content" style="padding:16px 18px;">
+          <div class="segmented" style="margin-bottom:14px;">
+            <button>Now</button>
+            <button class="active">Choose next (5)</button>
+          </div>
+
+          <div class="dropstrip">
+            <div class="dropzone"><div class="dz-label">DRAG TO NOW</div><div class="dz-fill">VERM-142 &middot; filled</div></div>
+            <div class="dropzone"><div class="dz-label">DRAG TO NEXT</div><div class="dz-fill">VERM-118 &middot; filled</div></div>
+            <div class="dropzone dz-empty"><div class="dz-label">DRAG TO THEN</div><div class="dz-fill">drop a card here</div></div>
+          </div>
+
+          <div class="candgrid">
+            <div class="candcard">
+              <div class="cc-top"><span class="cc-id">VERM&#8209;155</span><span class="star-ico filled">&#9733;</span></div>
+              <div class="cc-title">Add Focus-rank column to All tasks</div>
+              <div class="cc-meta">Vermilian app &middot; Priority Desk foundation</div>
+              <div class="cc-bottom"><button class="cc-dismiss">Not this week</button></div>
+            </div>
+            <div class="candcard">
+              <div class="cc-top"><span class="cc-id">PZV&#8209;27</span><span class="star-ico">&#9734;</span></div>
+              <div class="cc-title">Draft policy-editor epic &amp; children</div>
+              <div class="cc-meta">Parzival policy &middot; No epic yet</div>
+              <div class="cc-bottom"><button class="cc-dismiss">Not this week</button></div>
+            </div>
+            <div class="candcard">
+              <div class="cc-top"><span class="cc-id">VERM&#8209;101</span><span class="star-ico">&#9734;</span></div>
+              <div class="cc-title">Investigate Wayland focus-overlay z-index</div>
+              <div class="cc-meta">Vermilian app &middot; No epic</div>
+              <div class="cc-bottom"><button class="cc-dismiss">Not this week</button></div>
+            </div>
+            <div class="candcard">
+              <div class="cc-top"><span class="cc-id">HL&#8209;9</span><span class="star-ico">&#9734;</span></div>
+              <div class="cc-title">Rack switch firmware &mdash; check changelog</div>
+              <div class="cc-meta">Home lab &middot; No epic</div>
+              <div class="cc-bottom"><button class="cc-dismiss">Not this week</button></div>
+            </div>
+            <div class="candcard">
+              <div class="cc-top"><span class="cc-id">VERM&#8209;160</span><span class="star-ico">&#9734;</span></div>
+              <div class="cc-title">Write Master Plan article template</div>
+              <div class="cc-meta">Vermilian app &middot; Priority Desk foundation</div>
+              <div class="cc-bottom"><button class="cc-dismiss">Not this week</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Asking AI for a recommendation</h2>
+      <span class="section-note">Step 4 &mdash; built only after the manual desk is trusted</span>
+    </div>
+    <p class="caption-row">The adviser reasons over the same bounded candidate set shown above and returns a reviewable proposal. It never writes a field, rank, status or epic link itself &mdash; every line ends at a human choice.</p>
+
+    <div class="frame">
+      <div class="frame-titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-label">Vermilian &mdash; Priority Desk &middot; Ask for recommendation</span></div>
+      <div class="frame-body" style="flex-direction:column;">
+        <div class="content" style="padding:16px 18px;">
+          <div class="ask-row">
+            <span class="ask-btn">&#10024; Ask for recommendation</span>
+            <span class="ask-scope">Evaluated 5 candidates against outcome &ldquo;Priority Desk foundation&rdquo;</span>
+          </div>
+
+          <div class="reco-list">
+            <div class="recocard">
+              <div class="reco-rank">1</div>
+              <div class="reco-body">
+                <div class="reco-top"><span class="reco-id">VERM&#8209;155</span><span class="reco-title">Add Focus-rank column to All tasks</span></div>
+                <div class="evidence">
+                  <span class="etag">Outcome: <b>high contribution</b></span>
+                  <span class="etag">Dependencies: <b>ready</b></span>
+                  <span class="etag">Urgency: <b>medium</b></span>
+                  <span class="etag">Effort: <b>small</b></span>
+                  <span class="etag">Risk: <b>low</b></span>
+                </div>
+              </div>
+            </div>
+            <div class="recocard">
+              <div class="reco-rank">2</div>
+              <div class="reco-body">
+                <div class="reco-top"><span class="reco-id">VERM&#8209;101</span><span class="reco-title">Investigate Wayland focus-overlay z-index</span></div>
+                <div class="evidence">
+                  <span class="etag">Outcome: <b>medium contribution</b></span>
+                  <span class="etag">Dependencies: <b>ready</b></span>
+                  <span class="etag">Urgency: <b>high</b></span>
+                  <span class="etag">Effort: <b>unknown</b></span>
+                  <span class="etag">Risk: <b>medium</b></span>
+                </div>
+              </div>
+            </div>
+            <div class="recocard alt">
+              <div class="reco-rank">3</div>
+              <div class="reco-body">
+                <div class="reco-top"><span class="reco-id">VERM&#8209;160</span><span class="reco-title">Write Master Plan article template</span></div>
+                <div class="evidence">
+                  <span class="etag">Outcome: <b>high contribution</b></span>
+                  <span class="etag">Dependencies: <b>ready</b></span>
+                  <span class="etag">Urgency: <b>low</b></span>
+                  <span class="etag">Effort: <b>small</b></span>
+                  <span class="etag">Risk: <b>low</b></span>
+                </div>
+              </div>
+            </div>
+            <div class="recocard needsinput">
+              <div class="reco-rank">&#63;</div>
+              <div class="reco-body">
+                <div class="reco-top"><span class="reco-id">PZV&#8209;27</span><span class="reco-title">Draft policy-editor epic &amp; children</span></div>
+                <div class="reco-question">Needs your input &mdash; no target window set on this epic yet. What's the deadline?</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="confirm-row">
+            <button class="btn btn-primary">Apply to desk</button>
+            <button class="btn btn-ghost">Star only</button>
+            <button class="btn btn-ghost">Keep my order</button>
+            <span class="confirm-note">Your choice is recorded on the issue for later learning &mdash; nothing changes until you pick one.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>What actually changes underneath</h2>
+    </div>
+    <div class="lower-grid">
+      <div class="fieldlist">
+        <div class="fieldrow"><div class="fname2">Focus</div><div class="fdesc">Enum, <code>Yes</code>/empty. The star. Source of truth for the desk.</div></div>
+        <div class="fieldrow"><div class="fname2">Focus rank</div><div class="fdesc">Integer 1&ndash;3 or empty. Sets Now/Next/Then order; setting it also sets Focus.</div></div>
+        <div class="fieldrow"><div class="fname2">Why now</div><div class="fdesc">Short text. The human-authored reason shown on the card.</div></div>
+      </div>
+      <div class="sequence">
+        <div class="seqstep">
+          <div class="seqnum">1</div>
+          <div><div class="seqtitle">Foundation</div><div class="seqdesc">New fields defined in YouTrack + Vermilian's field registry; editable in row, card and detail.</div></div>
+        </div>
+        <div class="seqstep current">
+          <div class="seqnum">2</div>
+          <div><div class="seqtitle">Manual desk <span class="seqtag">this mockup</span></div><div class="seqdesc">Priority Desk ships: three slots, star toggle, workspace-scoped query, persisted deferrals.</div></div>
+        </div>
+        <div class="seqstep">
+          <div class="seqnum">3</div>
+          <div><div class="seqtitle">Epic context</div><div class="seqdesc">Show native parent/subtask links; Master Plan article template.</div></div>
+        </div>
+        <div class="seqstep">
+          <div class="seqnum">4</div>
+          <div><div class="seqtitle">AI recommendation</div><div class="seqdesc">Bounded, review-first adviser &mdash; proposes, never sets fields itself.</div></div>
+        </div>
+        <div class="seqstep">
+          <div class="seqnum">5</div>
+          <div><div class="seqtitle">Daily Review</div><div class="seqdesc">Stand-up surfaces only decisions that need a human.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Sketch for internal review only &mdash; no code in <code>vermilian</code> has changed. Built from <code>~/ideation/ideation/ideas/vermilian-improvements-q3-2026/README.md</code>, dated 2026-09-13. Colors and type match the shipped app's Vibe design tokens (<code>@vibe/core</code> primary <code>#0073ea</code>, Figtree/Poppins).
+  </footer>
+
+</div>

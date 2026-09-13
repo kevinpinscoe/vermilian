@@ -18,6 +18,40 @@ they are promoted into a full feature spec, issue, or pull request.
 
 ## Planned features
 
+### Priority Desk (Q3–Q4 2026)
+
+Evolve Vermilian into a calm, human-controlled priority desk for YouTrack. YouTrack stays the
+source of truth for issues, epics, fields, comments, and links; Vermilian becomes the place to
+make one small, explicit decision — *what should I work on now?* This is meant to replace
+`~/Projects/_shortcuts/finish-tasks.txt`, which mixes active work, completed items, ideas, and
+URLs with no ranking or project context.
+
+See [`docs/design/priority-desk-mockup.html`](docs/design/priority-desk-mockup.html) for a visual
+mockup of the rail entry, the Now/Next/Then cards, the Choose-next candidate grid, and the
+Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermilian-improvements-q3-2026/README.md`.
+
+- [ ] **Foundation** — define `Focus` (enum, `Yes`/empty), `Focus rank` (integer 1–3 or empty),
+      and `Why now` (short text) as shared custom fields in YouTrack and in Vermilian's field
+      registry; show and edit them in board rows, Kanban cards, and the task detail panel.
+- [ ] **Manual desk** — add a Priority Desk entry above "All tasks" in the left rail, with two
+      modes: Now (at most three ranked Now/Next/Then cards, empty slots allowed) and Choose next
+      (no more than seven eligible candidates, star toggle, drag into a slot, "Not this week"
+      dismissal persisted in the existing `_vermilian-config` YouTrack knowledge-base article).
+- [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic + outcome
+      name only, no full portfolio management); document a Master Plan knowledge-base template.
+- [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
+      recommendation" action that evaluates the bounded candidate set and returns a ranked
+      top-three-plus-alternates proposal with qualitative evidence (outcome contribution,
+      dependency readiness, urgency, effort, risk), never writing a field/rank/status/epic-link
+      itself. Confirmation UI: Apply to desk / Star only / Keep my order.
+- [ ] **Daily Review** — reuse the existing Daily Stand-up capability to surface completed work,
+      active focus slots, blocked focus work, and agent work awaiting a human decision.
+
+Guardrails carried from the idea doc: no autonomous reprioritization, no new local issue database,
+no scores masquerading as certainty, no forced daily planning, no unbounded "AI decides my work"
+prompts. AI agents stay executors — they can propose work and report results, never select
+priorities or close accepted work on their own.
+
 ### Task effort estimating
 
 Add first-class effort estimates to tasks so Vermilian can show planned work beside actual worklog
