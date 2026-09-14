@@ -1,0 +1,72 @@
+# =============================================================================
+# UI Wireframe — Priority Desk, Choose next mode
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-09-14
+# Spec:        docs/requirements.md (§ Priority Desk), ADR-0007
+# Related:     screen-priority-desk-now.d2 (segmented-control sibling view)
+#              screen-priority-desk-recommendation.d2 (Ask for recommendation, step 4)
+#              flow-priority-desk.mmd (navigation between the three, incl. drag-to-slot)
+#              docs/design/priority-desk-mockup.html (higher-fidelity HTML reference)
+#
+# What this depicts: the second Priority Desk mode — a quiet comparison view of at
+# most seven eligible candidates, plus the three drop zones that assign a card to
+# Now/Next/Then. Not a second board: filters are limited to workspace, status, and
+# active epic; full search stays on the existing All-tasks table. Eligibility
+# rules, the deterministic (non-AI) ordering used when more than seven issues
+# qualify, and "Not this week" expiration are defined in docs/requirements.md
+# § Priority Desk ("Choose-next eligibility", "'Not this week' expiration") —
+# not duplicated here.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: down
+
+window: "Vermilian — Priority Desk · Choose next" {
+  shape: rectangle
+
+  segmented: "[ Now ]  [ Choose next (5)* ]" {
+    shape: rectangle
+    # Vibe: segmented control, same as screen-priority-desk-now.d2
+  }
+
+  filters: "Filters: Workspace ▾  Status ▾  Active epic ▾  (no free-text search here)" {
+    shape: rectangle
+  }
+
+  dropstrip: "Drop zones" {
+    shape: rectangle
+    direction: right
+    # Vibe: dashed drop targets — dragging a candidate card here sets its Focus rank
+    drag_now: "DRAG TO NOW\nVERM-142 · filled" {shape: rectangle; style.stroke-dash: 4}
+    drag_next: "DRAG TO NEXT\nVERM-118 · filled" {shape: rectangle; style.stroke-dash: 4}
+    drag_then: "DRAG TO THEN\ndrop a card here" {shape: rectangle; style.stroke-dash: 4}
+  }
+
+  candgrid: "Candidate grid — auto-fill, min 150px per card, max 7 candidates" {
+    shape: rectangle
+    direction: right
+    # Vibe: Card grid
+    # '[ Not this week ]' on any card dismisses it — persisted to _vermilian-config,
+    # expires automatically at the next local calendar week, Priority untouched.
+    # See flow-priority-desk.mmd for the action as a flow edge (not drawn here —
+    # a same-container self-loop isn't renderable by the dagre layout engine).
+
+    cand1: "VERM-155  ★ (filled)\nAdd Focus-rank column\nto All tasks\nVermilian app · Priority\nDesk foundation\n[ Not this week ]" {shape: rectangle}
+    cand2: "PZV-27  ☆\nDraft policy-editor epic\n& children\nParzival policy · No epic yet\n[ Not this week ]" {shape: rectangle}
+    cand3: "VERM-101  ☆\nInvestigate Wayland\nfocus-overlay z-index\nVermilian app · No epic\n[ Not this week ]" {shape: rectangle}
+    cand4: "HL-9  ☆\nRack switch firmware —\ncheck changelog\nHome lab · No epic\n[ Not this week ]" {shape: rectangle}
+    cand5: "VERM-160  ☆\nWrite Master Plan\narticle template\nVermilian app · Priority\nDesk foundation\n[ Not this week ]" {shape: rectangle}
+  }
+
+  empty_state: "Empty state: 'No eligible candidates — nothing else is unfinished, or everything is already focused or dismissed.'" {
+    shape: rectangle
+  }
+
+  segmented -> dropstrip: "toggle to this mode"
+  candgrid -> dropstrip: "drag card onto a zone → sets Focus rank, doubles back to Now"
+}
