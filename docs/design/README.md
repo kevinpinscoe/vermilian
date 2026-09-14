@@ -14,15 +14,28 @@ Vermilian targets a **monday.com** look and feel. Wireframes should reflect:
 
 Reference: [monday.com Vibe Design System](https://style.monday.com) and [Vibe GitHub](https://github.com/mondaycom/vibe).
 
+## Priority Desk
+
+- [`screen-priority-desk-now.d2`](screen-priority-desk-now.d2),
+  [`screen-priority-desk-choose-next.d2`](screen-priority-desk-choose-next.d2),
+  [`screen-priority-desk-recommendation.d2`](screen-priority-desk-recommendation.d2) — the
+  three Priority Desk screens as standard sketch-mode wireframes, following the same
+  conventions as every other `screen-*.d2` file here.
+- [`flow-priority-desk.mmd`](flow-priority-desk.mmd) — navigation between the three screens
+  plus every action that mutates `Focus`/`Focus rank`/`Why now` (star toggle, drag-to-slot,
+  "Not this week", and the Ask-for-recommendation confirm row).
+- See [ADR-0007](../adr/0007-priority-desk-field-model.md) for the field-model decision behind
+  these screens, and `docs/requirements.md` § Priority Desk for the full requirement.
+
 ## Exceptions
 
 - [`priority-desk-mockup.html`](priority-desk-mockup.html) — a standalone HTML comparison mockup
-  for the proposed Priority Desk feature (Q3–Q4 2026 idea), not a D2/Mermaid wireframe. Kept as
-  HTML deliberately: it renders the app-shell before/after, Now/Next/Then cards, the Choose-next
-  candidate grid, and the Ask-for-recommendation panel using the actual Vibe design tokens
-  (`@vibe/core` primary `#0073ea`, Figtree/Poppins), which a low-fidelity D2 sketch or Mermaid
-  flowchart can't convey. Treat it as a one-off, not a new default — a real spec for this feature
-  should still get proper `screen-*.d2` / `flow-*.mmd` files here.
+  for the Priority Desk feature, not a D2/Mermaid wireframe. Kept as HTML deliberately: it
+  renders the app-shell before/after, Now/Next/Then cards, the Choose-next candidate grid, and
+  the Ask-for-recommendation panel using the actual Vibe design tokens (`@vibe/core` primary
+  `#0073ea`, Figtree/Poppins), which a low-fidelity D2 sketch or Mermaid flowchart can't convey.
+  Treat it as a one-off, higher-fidelity companion to the `screen-priority-desk-*.d2` files
+  above — not a replacement for them.
 
 ## Templates
 

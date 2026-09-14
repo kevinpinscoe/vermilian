@@ -1,0 +1,107 @@
+# =============================================================================
+# UI Wireframe — Priority Desk, Now mode
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-09-14
+# Spec:        docs/requirements.md (§ Priority Desk), ADR-0007
+# Related:     screen-priority-desk-choose-next.d2 (segmented-control sibling view)
+#              screen-priority-desk-recommendation.d2 (Ask for recommendation, step 4)
+#              flow-priority-desk.mmd (navigation between the three)
+#              screen-workspace-navigation.d2 (left-rail detail — Priority Desk is the
+#              one new item, positioned above "All tasks")
+#              screen-timer-focus.d2 (opened by the "Start focus" action below)
+#              docs/design/priority-desk-mockup.html (higher-fidelity HTML reference
+#              this file and its siblings are derived from)
+#
+# What this depicts: the default Priority Desk view — at most three ranked cards
+# (Now / Next / Then). Empty slots are intentional and never forced to fill.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: right
+
+window: "Vermilian — Priority Desk · Now (left rail on the LEFT in actual layout; D2 stacks them for wireframe clarity)" {
+  shape: rectangle
+
+  # ---------------------------------------------------------------------------
+  # Left rail — full detail lives in screen-workspace-navigation.d2. Only the
+  # one new item is drawn here.
+  # ---------------------------------------------------------------------------
+  left_rail: "Left rail" {
+    shape: rectangle
+    direction: down
+    # Vibe: Menu / NavigationBar
+    ws: "Workspace switcher ▾" {shape: rectangle}
+    desk_item: "★ Priority Desk  [NEW]  ← active" {shape: rectangle}
+    all_tasks: "☰ All tasks" {shape: rectangle}
+    tree: "Folder tree (projects)" {shape: rectangle}
+  }
+
+  # ---------------------------------------------------------------------------
+  # Main content
+  # ---------------------------------------------------------------------------
+  main: "Main content area" {
+    shape: rectangle
+    direction: down
+
+    header: "★  Priority Desk" {
+      shape: rectangle
+      # Vibe: Heading
+    }
+
+    segmented: "[ Now* ]  [ Choose next (7) ]" {
+      shape: rectangle
+      # Vibe: segmented control / ButtonGroup — active view is per-session, not persisted
+    }
+
+    slots: "Now / Next / Then slots" {
+      shape: rectangle
+      direction: right
+      # Vibe: three-up card row
+
+      now_slot: "NOW" {
+        shape: rectangle
+        direction: down
+        card: "VERM-142 · Major chip\nWire Focus field to task detail panel\nVermilian app · Priority Desk foundation\n\"Blocks the manual-desk release —\nneeds to land before beta.\"\n[ ▶ Start focus ]" {
+          shape: rectangle
+          # Vibe: Card, ring-highlighted — carries Focus rank 1
+        }
+      }
+
+      next_slot: "NEXT" {
+        shape: rectangle
+        direction: down
+        card: "VERM-118 · Normal chip\nFix column-resize flake in e2e suite\nVermilian app · No epic\n⚠ Blocked by VERM-101\n[ Open ]" {
+          shape: rectangle
+          # Vibe: Card — carries Focus rank 2
+        }
+      }
+
+      then_slot: "THEN" {
+        shape: rectangle
+        direction: down
+        card: "+  Add to Then\nEmpty is fine — nothing forces\nthis slot to fill" {
+          shape: rectangle
+          style.stroke-dash: 4
+          # Vibe: Card, dashed empty state — Focus rank 3 unset
+        }
+      }
+    }
+
+    footer_note: "★ Focus is toggled the same way in board rows, Kanban cards, and the task detail panel." {
+      shape: rectangle
+    }
+
+    empty_state: "Empty state (all three slots empty): 'Nothing focused yet — choose from Choose next.'" {
+      shape: rectangle
+    }
+
+    error_banner: "Vibe Banner (danger) — shown on fetch/patch failure with Retry" {
+      shape: rectangle
+    }
+  }
+}

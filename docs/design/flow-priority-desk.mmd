@@ -1,0 +1,77 @@
+%%{init: {'theme': 'default'}}%%
+%% =============================================================================
+%% UI Flow — Priority Desk: navigation, ranking actions, and the AI recommendation
+%% Renderer:    Kroki (mermaid)  |  wiki.js (Kroki plugin or native Mermaid module)
+%% Reviewed:    2026-09-14
+%% Spec:        docs/requirements.md (§ Priority Desk), ADR-0007
+%% Related:     screen-priority-desk-now.d2, screen-priority-desk-choose-next.d2,
+%%              screen-priority-desk-recommendation.d2 (the three screens this
+%%              flow connects)
+%%              screen-timer-focus.d2 ("Start focus" hand-off)
+%%              flow-create-task-ai.mmd (the other AI-boundary flow in this app —
+%%              same MAIN-process-only rule for the Claude API key)
+%% What this depicts: the full Priority Desk interaction surface across its two
+%% modes and the delivery-4 AI adviser. Every path that mutates Focus/Focus
+%% rank/Why now is drawn explicitly; every other path is read-only. The adviser
+%% call runs in the Electron MAIN process, matching flow-create-task-ai.mmd.
+%% =============================================================================
+
+flowchart TD
+
+    RAIL(["Left rail: ★ Priority Desk"])
+    NOW["Now mode — up to 3 ranked cards"]
+    CHOOSE["Choose next mode — up to 7 candidates"]
+
+    STAR{"Star toggled on a candidate?"}
+    SETFOCUS["PATCH issue: Focus = Yes"]
+    UNSTAR["PATCH issue: Focus cleared, rank cleared, Why now preserved"]
+
+    DRAG{"Card dragged onto a slot?"}
+    FULL{"Target slot already filled?"}
+    ASKREPLACE(["Ask: replace this slot?"])
+    SETRANK["PATCH issue: Focus rank = slot N (implies Focus = Yes)"]
+
+    DISMISS{"'Not this week' clicked?"}
+    PERSISTDISMISS["Write dismissal to _vermilian-config KB article\n(keyed by workspace + issue ID) — Priority untouched"]
+
+    STARTFOCUS{"'Start focus' clicked on Now card?"}
+    TIMER["Existing per-task timer starts — see screen-timer-focus.d2"]
+
+    ASKBTN(["Ask for recommendation clicked"])
+    CALL["Electron MAIN: evaluate bounded candidate set\nagainst selected Master Plan outcome"]
+    RECOS["Ranked proposal — top 3 + alternates,\nor a concrete question per candidate"]
+
+    CONFIRM{"Confirm choice"}
+    APPLY["PATCH issues: Focus / Focus rank / Why now\n(the only adviser path that writes fields)"]
+    STARONLY["PATCH issues: Focus = Yes only, no rank"]
+    KEEPORDER["No write — proposal discarded"]
+    RECORD["Record recommendation + user's choice as a YouTrack\ncomment or Master Plan article note"]
+
+    RAIL --> NOW
+    NOW <-->|"segmented control"| CHOOSE
+
+    CHOOSE --> STAR
+    STAR -->|"star (was empty)"| SETFOCUS --> CHOOSE
+    STAR -->|"unstar (was filled)"| UNSTAR --> CHOOSE
+
+    CHOOSE --> DRAG
+    DRAG -->|"yes"| FULL
+    FULL -->|"yes"| ASKREPLACE
+    ASKREPLACE -->|"confirmed"| SETRANK
+    ASKREPLACE -->|"cancelled"| CHOOSE
+    FULL -->|"no — slot empty"| SETRANK
+    SETRANK --> NOW
+
+    CHOOSE --> DISMISS
+    DISMISS -->|"yes"| PERSISTDISMISS --> CHOOSE
+
+    NOW --> STARTFOCUS
+    STARTFOCUS -->|"yes"| TIMER
+
+    NOW --> ASKBTN
+    ASKBTN --> CALL
+    CALL --> RECOS
+    RECOS --> CONFIRM
+    CONFIRM -->|"Apply to desk"| APPLY --> RECORD --> NOW
+    CONFIRM -->|"Star only"| STARONLY --> RECORD
+    CONFIRM -->|"Keep my order"| KEEPORDER --> RECORD

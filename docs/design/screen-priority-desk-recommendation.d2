@@ -1,0 +1,71 @@
+# =============================================================================
+# UI Wireframe — Priority Desk, Ask for recommendation panel
+# Renderer:    Kroki (d2, sketch mode)  |  wiki.js with Kroki plugin
+# Reviewed:    2026-09-14
+# Spec:        docs/requirements.md (§ Priority Desk — "Ask for recommendation"), ADR-0007
+# Related:     screen-priority-desk-choose-next.d2 (the bounded candidate set this
+#              panel evaluates)
+#              flow-priority-desk.mmd (the confirm branches: Apply to desk / Star
+#              only / Keep my order)
+#              docs/design/priority-desk-mockup.html (higher-fidelity HTML reference)
+#
+# What this depicts: delivery step 4 — built only after the manual desk (steps 1–3)
+# is trusted. The adviser reasons over the same bounded candidate set shown in
+# screen-priority-desk-choose-next.d2 and returns a reviewable proposal. It never
+# writes a field, rank, status, or epic link itself; every path ends at a human
+# choice in the confirm row.
+# =============================================================================
+
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+
+direction: down
+
+window: "Vermilian — Priority Desk · Ask for recommendation" {
+  shape: rectangle
+
+  ask_row: "[ ✦ Ask for recommendation ]   Evaluated 5 candidates against outcome \"Priority Desk foundation\"" {
+    shape: rectangle
+    # Vibe: Button (primary, tinted) + helper text
+  }
+
+  reco_list: "Ranked proposal" {
+    shape: rectangle
+    direction: down
+    # Vibe: Card list — read-only until a confirm action is taken
+
+    reco1: "①  VERM-155 — Add Focus-rank column to All tasks\nOutcome: high contribution · Dependencies: ready\nUrgency: medium · Effort: small · Risk: low" {
+      shape: rectangle
+    }
+    reco2: "②  VERM-101 — Investigate Wayland focus-overlay z-index\nOutcome: medium contribution · Dependencies: ready\nUrgency: high · Effort: unknown · Risk: medium" {
+      shape: rectangle
+    }
+    reco3: "③ (alternate)  VERM-160 — Write Master Plan article template\nOutcome: high contribution · Dependencies: ready\nUrgency: low · Effort: small · Risk: low" {
+      shape: rectangle
+    }
+    reco_needsinput: "?  PZV-27 — Draft policy-editor epic & children\nNeeds your input — no target window set on this\nepic yet. What's the deadline?" {
+      shape: rectangle
+      style.stroke-dash: 4
+      # Vibe: Banner-tinted card — a concrete question, not a guessed rank
+    }
+  }
+
+  confirm_row: "Confirm row" {
+    shape: rectangle
+    direction: right
+    # Vibe: Button (primary) + Button (ghost) x2 — nothing changes until one is picked
+    apply: "Apply to desk" {shape: oval}
+    star_only: "Star only" {shape: oval}
+    keep_order: "Keep my order" {shape: oval}
+    note: "Your choice is recorded on the issue for later\nlearning — nothing changes until you pick one." {shape: rectangle}
+  }
+
+  ask_row -> reco_list: "single call, bounded candidate set only"
+  reco_list -> confirm_row: "review"
+  confirm_row.apply -> confirm_row.note: "writes Focus / Focus rank / Why now — the only path that mutates fields, and only after this explicit click"
+  confirm_row.star_only -> confirm_row.note: "sets Focus only, no rank"
+  confirm_row.keep_order -> confirm_row.note: "no write — proposal discarded"
+}
