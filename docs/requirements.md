@@ -46,6 +46,54 @@ Each task must support the full YouTrack field set used on this instance:
 | Tracking link | optional URL |
 | Notes | optional free text |
 
+### Priority Desk
+
+A cross-project decision surface, above "All tasks" in the left rail, that answers one
+question — *what should I work on now* — from a small ranked set rather than a scrolling
+text file. YouTrack remains the source of truth for issues, epics, fields, comments, and
+links; the desk is a curated view onto it, never a second store. See
+[ADR-0007](adr/0007-priority-desk-field-model.md) for the field-model decision and
+`docs/design/screen-priority-desk-*.d2` / `flow-priority-desk.mmd` for the wireframes.
+
+- Three shared, optional custom fields, added to every active project: `Focus` (enum,
+  `Yes` / empty — the star), `Focus rank` (integer `1`–`3` or empty — sets Now/Next/Then
+  order; setting a rank also sets `Focus`), and `Why now` (short text — the human-authored
+  reason shown on the card). Clearing `Focus` clears the rank but preserves `Why now` for
+  later reconsideration.
+- `Focus` is a low-friction toggle wherever a task is shown: board rows, Kanban cards, and
+  the task detail panel.
+- **Now mode**: at most three ranked cards (Now / Next / Then) showing issue ID, summary,
+  project, parent epic, priority, a blocker/dependency warning, and the `Why now` note.
+  Empty slots are intentional and never forced to fill. "Now" has a `Start focus` action
+  that starts the existing per-task timer.
+- **Choose next mode**: no more than seven eligible candidates in a quiet comparison grid.
+  Cards can be starred, opened, or dragged into a Now/Next/Then slot. A "Not this week"
+  dismissal removes a candidate from the decision surface without changing its YouTrack
+  `Priority`. Filters are limited to workspace, status, and active epic — full search stays
+  on the existing All-tasks table.
+- Setting a fourth rank while all three slots are filled asks which slot to replace; it
+  never silently evicts existing focus work.
+- Deferrals ("Not this week") and other transient desk preferences persist in the existing
+  `_vermilian-config` YouTrack Knowledge Base Article, keyed by workspace and issue ID — no
+  new local task database.
+- Reads native YouTrack Epic → Subtask issue links to show the parent epic and outcome name
+  on a card. Creating or restructuring those links, and full portfolio management, are out
+  of scope for the desk itself.
+- **Ask for recommendation** (built only once the manual desk is trusted): evaluates the
+  bounded candidate set against a selected Master Plan outcome and returns a ranked
+  top-three-plus-alternates proposal with qualitative evidence (outcome contribution,
+  dependency readiness, urgency, effort, risk) — or a concrete question when it cannot make
+  a sound recommendation. It never writes a field, rank, status, or epic link itself; the
+  confirmation UI offers **Apply to desk**, **Star only**, and **Keep my order**.
+- **Daily Review**: reuses the existing Daily Stand-up capability to surface completed
+  work, active focus slots, blocked focus work, and agent work awaiting a human decision.
+  AI agents stay executors throughout — they can propose work and report results, never
+  select priorities or close accepted work on their own.
+
+Delivery is phased — Foundation → Manual desk → Epic context → AI recommendation → Daily
+Review — tracked in `TODO.md` and
+[VERM-3](https://youtrack.kevininscoe.com/issue/VERM-3).
+
 ### Projects
 
 - Display personal projects (`Kevin -` prefix) and work projects (`Work -` prefix)
@@ -92,5 +140,6 @@ Each task must support the full YouTrack field set used on this instance:
 - [x] Styling approach → **Vibe Design System** (`@vibe/core`) — see [ADR-0003](adr/0003-styling.md)
 - [x] Credential storage → **Electron `safeStorage`** with Linux fail-closed check — see [ADR-0004](adr/0004-credential-storage.md)
 - [x] Claude model defaults → Haiku 4.5 for AI create, Sonnet 4.6 for stand-up — see [ADR-0006](adr/0006-claude-model-selection.md)
+- [x] Priority Desk field model → dedicated `Focus` / `Focus rank` / `Why now` fields, not an overload of `Priority` — see [ADR-0007](adr/0007-priority-desk-field-model.md)
 
 All Phase 1 open questions are resolved. New design questions surfaced during implementation should be raised as ADRs.
