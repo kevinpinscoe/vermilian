@@ -2,31 +2,32 @@
 
 ## Project Structure & Module Organization
 
-Vermilian is an Electron desktop app for YouTrack. The application lives in `app/`: `src/main/` contains Electron main-process code, `src/preload.ts` exposes IPC, `src/renderer/` contains React UI, and `src/shared/` holds cross-process types and utilities. Renderer features are grouped under `app/src/renderer/features/<feature>/`, with CSS modules beside their components. Unit tests sit next to the code as `*.test.ts`; Playwright E2E specs live in `app/e2e/`. Product specs are in `spec/features/`, ADRs in `docs/adr/`, diagrams in `docs/architecture/` and `docs/design/`, and screenshots in `docs/screenshots/`.
+Vermilian is an Electron desktop app for YouTrack. Its application code is in `app/`: `src/main/` is the Electron main process, `src/preload.ts` exposes IPC, `src/renderer/` is the React UI, and `src/shared/` contains cross-process types and utilities. Group renderer work in `app/src/renderer/features/<feature>/`; keep CSS modules alongside their components.
+
+Unit tests live beside their code as `*.test.ts`; Playwright end-to-end specs are in `app/e2e/`. Product requirements are in `spec/features/`; ADRs, diagrams, and screenshots live under `docs/`. `cli/YouTrack/` is a planned Go CLI and is not part of the Electron build.
 
 ## Build, Test, and Development Commands
 
-Use the pinned toolchain: `mise install`, then `corepack enable pnpm`. In new shells, ensure Node 24 is on `PATH` as documented in `README.md`.
+Use the pinned Node 24 toolchain: run `mise install`, then `corepack enable pnpm`. Follow the `README.md` instructions to put the mise-managed Node binary on `PATH` in a new shell.
 
-Run commands from `app/`:
+Run these from `app/`:
 
-- `pnpm install` installs dependencies from `pnpm-lock.yaml`.
-- `pnpm start` launches Electron Forge with Vite HMR.
-- `pnpm lint` runs ESLint over TypeScript and TSX.
-- `pnpm test` or `pnpm test:unit` runs Vitest once.
-- `pnpm test:watch` runs Vitest in watch mode.
-- `pnpm test:e2e` packages the app if needed, then runs Playwright.
-- `pnpm package` builds an Electron package without publishing.
-- `./node_modules/.bin/tsc --noEmit` performs a type-check only pass.
+- `pnpm install` installs locked dependencies.
+- `pnpm start` runs Electron Forge with Vite HMR.
+- `pnpm lint` checks TypeScript and TSX with ESLint.
+- `pnpm typecheck` runs TypeScript without emitting files.
+- `pnpm test` runs the Vitest unit suite once; `pnpm test:watch` watches it.
+- `pnpm test:e2e` packages when needed and runs Playwright.
+- `pnpm package` builds an unpackaged Electron bundle; `pnpm make` creates distributable artifacts.
 
 ## Coding Style & Naming Conventions
 
-Use TypeScript for app code and React function components for renderer UI. Follow existing naming: components and stores use `PascalCase.tsx` or descriptive `camelCase.ts`; CSS modules use `ComponentName.module.css`. Keep feature-specific code inside its feature directory and move only reusable contracts/utilities to `src/shared/`. ESLint is the source of formatting and import hygiene; run `pnpm lint` before submitting.
+Write TypeScript and React function components. Use `PascalCase.tsx` for components and stores, descriptive `camelCase.ts` for modules, and `ComponentName.module.css` for CSS modules. Keep feature-specific code local; promote only genuinely reusable contracts and helpers to `src/shared/`. ESLint governs formatting and imports—run `pnpm lint` before submission.
 
 ## Testing Guidelines
 
-Prefer focused unit tests beside the implementation (`colors.test.ts`, `workspace.test.ts`). Use Vitest for pure logic, stores, API transforms, and IPC-safe utilities. Use Playwright specs in `app/e2e/` for workflows spanning windows, renderer state, settings, timer, search, and packaged Electron behavior. Update screenshots or coverage notes only when the UI behavior intentionally changes.
+Add focused Vitest coverage beside changed logic (for example, `colors.test.ts` or `workspace.test.ts`). Use Playwright for workflows crossing windows, renderer state, settings, timers, search, or packaged-app behavior. Update screenshots or coverage notes only for intentional UI changes.
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses Conventional Commit prefixes such as `fix:`, `docs:`, `ci:`, `chore:`, and `build(deps):`. Keep commits narrow and signed when landing on `main`. For changes touching `app/src/`, create a branch such as `feat/<slug>` or `fix/<short-description>` and open a PR. PRs should describe the change, list validation commands, link related issues/specs, include screenshots for UI changes, and note any AI-assisted content when applicable.
+Use narrow, signed Conventional Commits such as `fix:`, `docs:`, `ci:`, `chore:`, and `build(deps):`. Documentation and small fixes may go directly to `main`; changes under `app/src/` require a branch such as `feat/<slug>` or `fix/<short-description>` and a PR. Complete the PR template: explain the change, list validation, link related issues/specs, include UI screenshots where applicable, and disclose AI assistance.
