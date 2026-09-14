@@ -55,36 +55,104 @@ links; the desk is a curated view onto it, never a second store. See
 [ADR-0007](adr/0007-priority-desk-field-model.md) for the field-model decision and
 `docs/design/screen-priority-desk-*.d2` / `flow-priority-desk.mmd` for the wireframes.
 
-- Three shared, optional custom fields, added to every active project: `Focus` (enum,
-  `Yes` / empty — the star), `Focus rank` (integer `1`–`3` or empty — sets Now/Next/Then
-  order; setting a rank also sets `Focus`), and `Why now` (short text — the human-authored
-  reason shown on the card). Clearing `Focus` clears the rank but preserves `Why now` for
-  later reconsideration.
+- Three shared, optional custom fields, added to every active project:
+  - `Focus` — YouTrack `enum[1]`, single-value, whose only defined enum value is `Yes`.
+    Unset/null means not focused. There is no `empty` enum value — absence of a value
+    **is** the "not focused" state, not a value to select.
+  - `Focus rank` — YouTrack `integer`. Application-valid values are `1`, `2`, or `3`;
+    unset/null means unranked. Setting a rank implies `Focus = Yes`. YouTrack's schema
+    does not constrain the range or prevent two issues sharing a rank — Vermilian
+    enforces both; see "Focus-rank invariant" below.
+  - `Why now` — YouTrack `string` (not `text`): a short, human-authored reason shown on
+    the card.
+
+  Clearing `Focus` clears the rank but preserves `Why now` for later reconsideration.
 - `Focus` is a low-friction toggle wherever a task is shown: board rows, Kanban cards, and
   the task detail panel.
+- **Focus-rank invariant**: within the active workspace, at most one issue may hold each
+  of rank `1`, `2`, and `3` at a time. Normal UI operations preserve this — dragging a
+  card onto an occupied slot, or setting a fourth rank while all three are already full,
+  asks which issue keeps the slot rather than silently overwriting or evicting one. If
+  Vermilian ever discovers two or more issues sharing a rank in the active workspace —
+  stale local state, a partial write, a change made by another client or another machine,
+  or an edit made directly in the YouTrack web UI — it does not pick a winner on its own.
+  It surfaces a repair state naming every issue holding the disputed rank and requires the
+  user to choose which one keeps the slot; the others are cleared to unranked (`Focus`
+  stays `Yes`, `Why now` is preserved) rather than silently reassigned to a different rank.
 - **Now mode**: at most three ranked cards (Now / Next / Then) showing issue ID, summary,
   project, parent epic, priority, a blocker/dependency warning, and the `Why now` note.
   Empty slots are intentional and never forced to fill. "Now" has a `Start focus` action
   that starts the existing per-task timer.
-- **Choose next mode**: no more than seven eligible candidates in a quiet comparison grid.
-  Cards can be starred, opened, or dragged into a Now/Next/Then slot. A "Not this week"
-  dismissal removes a candidate from the decision surface without changing its YouTrack
-  `Priority`. Filters are limited to workspace, status, and active epic — full search stays
-  on the existing All-tasks table.
-- Setting a fourth rank while all three slots are filled asks which slot to replace; it
-  never silently evicts existing focus work.
-- Deferrals ("Not this week") and other transient desk preferences persist in the existing
-  `_vermilian-config` YouTrack Knowledge Base Article, keyed by workspace and issue ID — no
-  new local task database.
+- **Choose next mode**: no more than seven eligible candidates in a quiet comparison grid
+  (see "Choose-next eligibility" below for what qualifies and how ties beyond seven are
+  broken). Cards can be starred, opened, or dragged into a Now/Next/Then slot. A "Not this
+  week" dismissal removes a candidate from the decision surface until the dismissal
+  expires (see "'Not this week' expiration" below), without changing its YouTrack
+  `Priority`. Filters are limited to workspace, status, and active epic — full search
+  stays on the existing All-tasks table.
+- **Choose-next eligibility**: an issue is an eligible candidate only if all of the
+  following hold:
+  - it belongs to a project assigned to a folder in the **active workspace**;
+  - its `Status` is not `Done`;
+  - it does not already carry a `Focus rank` (ranked issues show in Now mode instead of
+    the candidate grid — an issue with `Focus = Yes` and no rank still appears here,
+    starred);
+  - it is not currently dismissed under an unexpired "Not this week" entry;
+  - it matches the user's selected Status filter, when one is set;
+  - it matches the user's selected active-Epic filter, when one is set.
+
+  When more than seven issues are eligible, the grid shows the top seven under a fixed,
+  deterministic sort — never a hidden numerical priority score:
+  1. `Due Date` ascending (soonest first; issues with no `Due Date` sort last);
+  2. `Priority`'s own ordinal, descending (`Show-stopper` > `Critical` > `Major` >
+     `Normal` > `Minor`);
+  3. `idReadable` ascending, as the final, always-unique tiebreak.
+
+  Every step reads an existing field's own value or ordinal directly; there is no
+  blended or weighted score behind the ordering.
+- **"Not this week" expiration**: a dismissal is not an indefinite hide. It excludes the
+  issue from the Choose-next candidate set only through the end of the local calendar
+  week (Monday–Sunday, evaluated in the device's local timezone) in which it was made.
+  `_vermilian-config` stores one entry per dismissed issue as
+  `{ workspace, issueId, dismissedWeekOf }`, where `dismissedWeekOf` is the ISO date
+  (`YYYY-MM-DD`) of the Monday that starts the local week the dismissal happened in. At
+  eligibility time, Vermilian computes the Monday date of the *current* local week; the
+  issue is excluded only while its stored `dismissedWeekOf` equals that value. Once the
+  current week's Monday has moved past it, the issue is eligible again automatically —
+  no separate cleanup step. A stale entry left in `_vermilian-config` past its week never
+  suppresses eligibility; entries may be pruned opportunistically the next time the
+  article is rewritten. This, and other transient desk preferences, persist in the
+  existing `_vermilian-config` YouTrack Knowledge Base Article, keyed by workspace and
+  issue ID — no new local task database.
 - Reads native YouTrack Epic → Subtask issue links to show the parent epic and outcome name
   on a card. Creating or restructuring those links, and full portfolio management, are out
   of scope for the desk itself.
+- **Master Plan (minimum contract)**: a single Master Plan article — a YouTrack Knowledge
+  Base article, or an issue in a dedicated planning project — defines the outcomes the
+  desk and the AI recommendation reason against. Full authoring workflow and per-epic
+  "next milestone" tracking are Epic-context delivery-step scope; the minimum shape below
+  is defined now so "Ask for recommendation" has an unambiguous source to depend on:
+
+  `Outcome/theme → active epics → success measure → target window → risks/dependencies`
+
+  Selecting an outcome for a recommendation call means selecting one Master Plan entry;
+  its active epics and their own descriptions are the planning context bounded into that
+  call, subject to the data-scope rule below.
 - **Ask for recommendation** (built only once the manual desk is trusted): evaluates the
   bounded candidate set against a selected Master Plan outcome and returns a ranked
   top-three-plus-alternates proposal with qualitative evidence (outcome contribution,
   dependency readiness, urgency, effort, risk) — or a concrete question when it cannot make
   a sound recommendation. It never writes a field, rank, status, or epic link itself; the
   confirmation UI offers **Apply to desk**, **Star only**, and **Keep my order**.
+  - **Data scope**: a recommendation call sends only the explicitly selected, bounded
+    issue summaries, descriptions, relevant issue links, and the selected Master Plan
+    excerpt needed for that call. It never silently sends all comments, credentials,
+    unrelated projects, or any other unselected YouTrack data.
+  - **Audit record**: the recommendation shown and the user's resulting choice (Apply to
+    desk / Star only / Keep my order) are recorded as a YouTrack comment on the
+    top-ranked recommended issue — the canonical audit record. A Master Plan article is a
+    planning document Kevin edits by hand (see "Master Plan" above); it is not a target
+    for automated writes.
 - **Daily Review**: reuses the existing Daily Stand-up capability to surface completed
   work, active focus slots, blocked focus work, and agent work awaiting a human decision.
   AI agents stay executors throughout — they can propose work and report results, never

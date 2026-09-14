@@ -14,13 +14,18 @@
 %% modes and the delivery-4 AI adviser. Every path that mutates Focus/Focus
 %% rank/Why now is drawn explicitly; every other path is read-only. The adviser
 %% call runs in the Electron MAIN process, matching flow-create-task-ai.mmd.
+%% Also depicts the Focus-rank invariant's repair path (docs/requirements.md
+%% § Priority Desk, "Focus-rank invariant") — duplicate ranks are never
+%% resolved automatically.
 %% =============================================================================
 
 flowchart TD
 
     RAIL(["Left rail: ★ Priority Desk"])
+    DUPCHECK{"Duplicate Focus rank found\nin the active workspace?"}
+    REPAIR["Repair state: list every issue holding the disputed\nrank; user picks which keeps the slot — others cleared\nto unranked (Focus stays Yes, Why now preserved).\nNever auto-selected."]
     NOW["Now mode — up to 3 ranked cards"]
-    CHOOSE["Choose next mode — up to 7 candidates"]
+    CHOOSE["Choose next mode — up to 7 eligible candidates\n(see docs/requirements.md § Priority Desk,\n'Choose-next eligibility' for the filter and sort rules)"]
 
     STAR{"Star toggled on a candidate?"}
     SETFOCUS["PATCH issue: Focus = Yes"]
@@ -32,7 +37,7 @@ flowchart TD
     SETRANK["PATCH issue: Focus rank = slot N (implies Focus = Yes)"]
 
     DISMISS{"'Not this week' clicked?"}
-    PERSISTDISMISS["Write dismissal to _vermilian-config KB article\n(keyed by workspace + issue ID) — Priority untouched"]
+    PERSISTDISMISS["Write { workspace, issueId, dismissedWeekOf } to\n_vermilian-config KB article — Priority untouched.\nExpires automatically at the start of the next local\ncalendar week; no separate cleanup step."]
 
     STARTFOCUS{"'Start focus' clicked on Now card?"}
     TIMER["Existing per-task timer starts — see screen-timer-focus.d2"]
@@ -45,9 +50,11 @@ flowchart TD
     APPLY["PATCH issues: Focus / Focus rank / Why now\n(the only adviser path that writes fields)"]
     STARONLY["PATCH issues: Focus = Yes only, no rank"]
     KEEPORDER["No write — proposal discarded"]
-    RECORD["Record recommendation + user's choice as a YouTrack\ncomment or Master Plan article note"]
+    RECORD["Record recommendation + user's choice as a YouTrack\ncomment on the top-ranked recommended issue\n(canonical audit record)"]
 
-    RAIL --> NOW
+    RAIL --> DUPCHECK
+    DUPCHECK -->|"yes"| REPAIR --> NOW
+    DUPCHECK -->|"no"| NOW
     NOW <-->|"segmented control"| CHOOSE
 
     CHOOSE --> STAR

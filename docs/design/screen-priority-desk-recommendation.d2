@@ -13,7 +13,11 @@
 # is trusted. The adviser reasons over the same bounded candidate set shown in
 # screen-priority-desk-choose-next.d2 and returns a reviewable proposal. It never
 # writes a field, rank, status, or epic link itself; every path ends at a human
-# choice in the confirm row.
+# choice in the confirm row. Data sent to the model is scoped to the selected
+# candidates and Master Plan excerpt only (docs/requirements.md § Priority Desk,
+# "Ask for recommendation" — "Data scope"); the audit record is a YouTrack comment
+# on the top-ranked issue, not a Master Plan article write (same section, "Audit
+# record").
 # =============================================================================
 
 vars: {
@@ -60,7 +64,7 @@ window: "Vermilian — Priority Desk · Ask for recommendation" {
     apply: "Apply to desk" {shape: oval}
     star_only: "Star only" {shape: oval}
     keep_order: "Keep my order" {shape: oval}
-    note: "Your choice is recorded on the issue for later\nlearning — nothing changes until you pick one." {shape: rectangle}
+    note: "Your choice is recorded as a YouTrack comment on the\ntop-ranked issue — the canonical audit record. Nothing\nchanges until you pick one." {shape: rectangle}
   }
 
   ask_row -> reco_list: "single call, bounded candidate set only"

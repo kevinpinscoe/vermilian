@@ -34,9 +34,9 @@ Add three shared, optional custom fields to every active project:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `Focus` | single-value enum: `Yes` / empty | Source-of-truth star, rendered as a filled or outline star in Vermilian. |
-| `Focus rank` | integer, `1`–`3` or empty | Ordering for Now, Next, Then; setting a rank also sets `Focus`. |
-| `Why now` | short text | Human-authored reason visible on the desk card. |
+| `Focus` | `enum[1]`, single value: `Yes` | Source-of-truth star; unset/null means not focused. No `empty` enum value is created — absence of a value is the "not focused" state. Rendered as a filled or outline star in Vermilian. |
+| `Focus rank` | YouTrack `integer` | Ordering for Now, Next, Then. Application-valid values are `1`, `2`, `3`; unset/null means unranked. Setting a rank also sets `Focus`. YouTrack does not constrain the range or enforce per-workspace uniqueness — Vermilian does; see `docs/requirements.md` § Priority Desk, "Focus-rank invariant". |
+| `Why now` | YouTrack `string` (not `text`) | Human-authored reason visible on the desk card. |
 
 Setting `Focus rank` implies `Focus = Yes`. Clearing `Focus` clears the rank but preserves
 `Why now`, so a deferred item's reasoning survives for later reconsideration rather than being
@@ -56,6 +56,14 @@ other view does; it never writes to it and never derives ranking from it.
 
 ## Consequences
 
+- `Focus rank`'s uniqueness (at most one issue per rank per workspace) and its `1`–`3`
+  range are both **application-level constraints, not YouTrack schema constraints** — a
+  plain `integer` field accepts any value and permits duplicates across issues. Vermilian
+  is responsible for preventing duplicates through its own UI flows (asking which slot to
+  replace rather than overwriting one) and for detecting and repairing any duplicate it
+  discovers — by surfacing a repair state for the user to resolve, never by silently
+  picking a winner — rather than assuming the schema will catch it. See
+  `docs/requirements.md` § Priority Desk, "Focus-rank invariant".
 - `Focus`, `Focus rank`, and `Why now` need to exist on every active project before the
   Foundation delivery step (`docs/requirements.md` § Priority Desk) can ship — this is
   schema work, in the same style as the `Issue domain` / `Edit host` / `Affected host` fields
