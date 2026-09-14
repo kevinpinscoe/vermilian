@@ -5,13 +5,14 @@ ADRs capture significant design decisions, their context, and their consequences
 ## Index
 
 | # | Title | Status |
-|---|-------|--------|
+| --- | ------- | -------- |
 | [0001](_0001-template.md) | ADR template | — |
 | [0002](0002-state-management.md) | State management — TanStack Query + Zustand | Accepted |
 | [0003](0003-styling.md) | Styling approach — monday.com Vibe Design System | Accepted |
 | [0004](0004-credential-storage.md) | Credential storage — Electron safeStorage | Accepted |
 | [0005](0005-youtrack-rest-api.md) | YouTrack REST API namespace and version policy | Accepted |
 | [0006](0006-claude-model-selection.md) | Claude model defaults for AI features | Accepted |
+| [0007](0007-priority-desk-field-model.md) | Priority Desk field model — dedicated Focus fields | Accepted |
 
 ## Process
 
