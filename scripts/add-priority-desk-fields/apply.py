@@ -293,16 +293,27 @@ def reconcile_enum_attachment(api, project_id, project_label, spec, proto, exist
 
 
 def reconcile_simple_attachment(api, project_id, project_label, spec, proto, existing, pcf_type):
-    """Create or fix one plain (non-bundle) field's attachment on one project."""
+    """Create or fix one plain (non-bundle) field's attachment on one project.
+
+    `emptyFieldText: null` is rejected outright by this instance's API
+    ("Can't use empty null value text" / no-type-is-invalid) for a
+    SimpleProjectCustomField, unlike the enum attach path where a null
+    empty_text is never sent in the first place. Established live 2026-09-15:
+    `Focus rank` (empty_text "Unranked") attached to every project fine;
+    `Why now` (empty_text None) failed on the very first project it tried
+    with exactly that error. Omit the key entirely rather than sending null;
+    the field is still `canBeEmpty: true`, it just has no placeholder text.
+    """
     name = spec["name"]
 
     if existing is None:
         payload = {
             "field": {"id": proto["id"], "$type": "CustomField"},
             "canBeEmpty": True,
-            "emptyFieldText": spec["empty_text"],
             "$type": pcf_type,
         }
+        if spec["empty_text"] is not None:
+            payload["emptyFieldText"] = spec["empty_text"]
         log(f"    {project_label}: attaching '{name}'")
         api.post(f"/api/admin/projects/{project_id}/customFields?fields=id", payload)
         return "attached"
@@ -311,7 +322,7 @@ def reconcile_simple_attachment(api, project_id, project_label, spec, proto, exi
     if not existing.get("canBeEmpty"):
         update["canBeEmpty"] = True
         why.append("canBeEmpty False -> True")
-    if existing.get("emptyFieldText") != spec["empty_text"]:
+    if spec["empty_text"] is not None and existing.get("emptyFieldText") != spec["empty_text"]:
         update["emptyFieldText"] = spec["empty_text"]
         why.append("emptyFieldText")
     if not update:
