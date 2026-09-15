@@ -114,6 +114,7 @@ export function FocusControl({ issue, projectShortName, size = 'small' }: FocusC
                 type="button"
                 className={styles.rankMenuBackdrop}
                 aria-label="Close rank picker"
+                data-testid={`focus-rank-menu-backdrop-${issue.id}`}
                 onClick={(e) => { e.stopPropagation(); setRankMenuOpen(false); }}
               />
               <div className={styles.rankMenu} data-testid={`focus-rank-menu-${issue.id}`}>
@@ -153,7 +154,7 @@ export function FocusControl({ issue, projectShortName, size = 'small' }: FocusC
       )}
 
       {conflict && (
-        <div className={styles.dialogOverlay} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.dialogOverlay} onClick={(e) => e.stopPropagation()} data-testid="focus-rank-conflict-dialog">
           <div className={styles.dialog}>
             <Text type="text1" weight="bold">Focus rank {conflict.rank} is already taken</Text>
             <Text type="text2">
@@ -162,8 +163,10 @@ export function FocusControl({ issue, projectShortName, size = 'small' }: FocusC
               {' '}will become unranked (it stays starred).
             </Text>
             <div className={styles.dialogActions}>
-              <Button kind="secondary" onClick={() => setConflict(null)}>Keep {conflict.holder.issue.idReadable}</Button>
-              <Button onClick={confirmDisplace}>Move rank here</Button>
+              <Button kind="secondary" onClick={() => setConflict(null)} data-testid="focus-rank-conflict-keep">
+                Keep {conflict.holder.issue.idReadable}
+              </Button>
+              <Button onClick={confirmDisplace} data-testid="focus-rank-conflict-move">Move rank here</Button>
             </div>
           </div>
         </div>
