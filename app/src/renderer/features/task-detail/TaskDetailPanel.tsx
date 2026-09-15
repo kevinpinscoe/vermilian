@@ -5,6 +5,7 @@ import type { IssueDetail } from '../../../shared/workspace';
 import type { BoardIssueFields } from '../../../shared/workspace';
 import { FIELD_KEYS, getFieldDef, type FieldKey } from '../../../shared/fields';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS, getContrastColor } from '../project-board/colors';
+import { FocusControl } from '../project-board/FocusControl';
 import { useIssueDetail, usePatchIssue, useDeleteIssue } from './api';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useQueryClient } from '@tanstack/react-query';
@@ -529,6 +530,9 @@ export function TaskDetailPanel({
             <Text type="text2" weight="medium" className={styles.issueId}>
               <span data-testid="detail-issue-id">{issue?.idReadable ?? issueId}</span>
             </Text>
+            {issue && (
+              <FocusControl issue={issue} projectShortName={issue.project.shortName} size="medium" />
+            )}
             {patchMutation.isPending && (
               <span className={styles.savingBadge}>
                 <Loader size={16} />

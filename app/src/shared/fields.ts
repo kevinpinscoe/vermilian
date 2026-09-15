@@ -31,7 +31,10 @@ export type FieldKey =
   | 'lastReportedCommit'
   | 'issueDomain'
   | 'editHost'
-  | 'affectedHost';
+  | 'affectedHost'
+  | 'focus'
+  | 'focusRank'
+  | 'whyNow';
 
 export type FieldWire = 'state' | 'enum' | 'date' | 'text' | 'user' | 'integer';
 export type FieldEditor = 'select' | 'date' | 'text' | 'link' | 'readonly' | 'number';
@@ -107,6 +110,12 @@ const EDIT_HOST_VALUES = ['FLDW', 'core', 'mac', 'mac-container'] as const;
 // stays the source of truth and this list mirrors it. Adding a k-fed host means
 // adding a value here too; see the youtrack.kevininscoe.com repo's
 // docs/custom-fields.md.
+// Matches the live "Focus values" EnumBundle, added under VERM-4 (ADR-0007,
+// docs/adr/0007-priority-desk-field-model.md). The only defined value is
+// "Yes" — unset/null means not focused, deliberately with no separate empty
+// enum value. See scripts/add-priority-desk-fields for the schema migration.
+const FOCUS_VALUES = ['Yes'] as const;
+
 const AFFECTED_HOST_VALUES = [
   'FLDW', 'core', 'mac', 'mac-container', 'web1', 'mail1', 'john', 'obs',
   'postgres', 'wazuh', 'aws-agent-1', 'home-k3s-dev', 'home-k3s-lab',
@@ -264,6 +273,28 @@ export const FIELD_DEFS = {
     key: 'affectedHost', ytName: 'Affected host', $type: 'SingleEnumIssueCustomField', wire: 'enum',
     label: 'Affected host', editor: 'select', options: AFFECTED_HOST_VALUES,
     column: true, creatable: false, patchable: true, detailOrder: 25,
+  },
+  // Priority Desk field model (VERM-4, ADR-0007). `focus` and `focusRank`
+  // have no `editor`/`detailOrder`/column — like `assignee`, they are
+  // patchable data-layer fields with their own dedicated UI (the Focus
+  // toggle + rank control in board rows, Kanban cards, and the task detail
+  // panel; see features/project-board/focus.ts) rather than the generic
+  // select/number editor and column system. `whyNow` is a plain text field
+  // and uses the generic editor normally.
+  focus: {
+    key: 'focus', ytName: 'Focus', $type: 'SingleEnumIssueCustomField', wire: 'enum',
+    label: 'Focus', options: FOCUS_VALUES,
+    column: false, creatable: false, patchable: true,
+  },
+  focusRank: {
+    key: 'focusRank', ytName: 'Focus rank', $type: 'SimpleIssueCustomField', wire: 'integer',
+    label: 'Focus rank',
+    column: false, creatable: false, patchable: true,
+  },
+  whyNow: {
+    key: 'whyNow', ytName: 'Why now', $type: 'SimpleIssueCustomField', wire: 'text',
+    label: 'Why now', editor: 'text',
+    column: true, creatable: false, patchable: true, detailOrder: 26,
   },
 } as const satisfies Record<FieldKey, FieldDef>;
 

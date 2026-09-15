@@ -202,6 +202,13 @@
   gap: 4px;
 }
 
+.cardTopLeft {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
 .cardId {
   font-size: 10px;
   color: var(--secondary-text-color, #444444);

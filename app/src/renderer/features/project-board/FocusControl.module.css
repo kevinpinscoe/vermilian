@@ -1,0 +1,147 @@
+.focusControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+/* Star toggle — mirrors ProjectBoard.module.css's .playBtn convention (a
+   native button, always visible rather than hover-revealed, since a low
+   -friction Focus toggle needs to stay reachable at a glance). */
+.star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.starMedium {
+  width: 26px;
+  height: 26px;
+}
+
+.star:hover {
+  background: var(--primary-selected-color, #e6f0ff);
+}
+
+.star:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.starActive {
+  color: var(--warning-color, #fdab3d);
+}
+
+.rankWrap {
+  position: relative;
+}
+
+.rankBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--warning-color, #fdab3d);
+  border-radius: 8px;
+  background: var(--warning-color-selected, #fff2df);
+  color: var(--warning-color, #fdab3d);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rankBadge:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rankMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+.rankMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1901;
+  display: flex;
+  flex-direction: column;
+  min-width: 108px;
+  background: var(--primary-background-color);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  gap: 2px;
+}
+
+.rankMenuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--primary-text-color, #111111);
+  cursor: pointer;
+}
+
+.rankMenuItem:hover:not(:disabled) {
+  background: var(--primary-selected-color, #e6f0ff);
+}
+
+.rankMenuItem:disabled {
+  color: var(--secondary-text-color, #676879);
+  cursor: not-allowed;
+}
+
+/* Conflict confirmation — same overlay/dialog shape as AppShell's
+   TimerConflictDialog/QuitDialog, so every "are you sure" moment in the app
+   looks identical. */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.dialog {
+  background: var(--primary-background-color);
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

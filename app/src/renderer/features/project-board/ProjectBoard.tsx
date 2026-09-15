@@ -25,6 +25,8 @@ import { BoardSettingsPanel } from './BoardSettingsPanel';
 import {
   ChipCell, EffectiveColors, formatDate, KanbanView,
 } from './KanbanView';
+import { FocusControl } from './FocusControl';
+import { FocusRankRepairBanner } from './FocusRankRepairBanner';
 import {
   STATUS_ORDER, GROUP_FIELD_MAP, groupIssues, getGroupColorMap,
   applyFilter, filterCount, sortIssues, applyManualOrder, orderedUnique,
@@ -503,6 +505,7 @@ interface IssueRowProps {
   groupVal: string;
   visibleColumns: BoardColumnConfig[];
   colors: EffectiveColors;
+  projectShortName: string;
   onClick?: () => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   isActiveTimer: boolean;
@@ -512,8 +515,8 @@ interface IssueRowProps {
 }
 
 function IssueRow({
-  issue, groupVal, visibleColumns, colors, onClick, onStartTimer, isActiveTimer, timerDisplay, onPatch,
-  liveColumnWidths,
+  issue, groupVal, visibleColumns, colors, projectShortName, onClick, onStartTimer, isActiveTimer, timerDisplay,
+  onPatch, liveColumnWidths,
 }: IssueRowProps) {
   const [hovered, setHovered] = useState(false);
   const [editingSummary, setEditingSummary] = useState(false);
@@ -574,6 +577,7 @@ function IssueRow({
           </button>
         )}
         <span data-testid="issue-id" className={styles.issueId}>{issue.idReadable}</span>
+        <FocusControl issue={issue} projectShortName={projectShortName} />
         {editingSummary ? (
           <input
             ref={summaryInputRef}
@@ -628,6 +632,7 @@ interface MainTableViewProps {
   onSort: (field: ColumnField) => void;
   visibleColumns: BoardColumnConfig[];
   colors: EffectiveColors;
+  projectShortName: string;
   onSelectIssue: (issueId: string) => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   onPatch: (issueId: string, field: string, value: string | number | null) => void;
@@ -711,7 +716,7 @@ function SortableColHeader({
 // ─── Main table view ──────────────────────────────────────────────────────────
 
 function MainTableView({
-  issues, groupBy, sort, onSort, visibleColumns, colors, onSelectIssue, onStartTimer,
+  issues, groupBy, sort, onSort, visibleColumns, colors, projectShortName, onSelectIssue, onStartTimer,
   onPatch, onAddTask, issueOrderByGroup, onReorder, onColumnReorder, onColumnWidthChange,
   onCrossBoardDrop,
 }: MainTableViewProps) {
@@ -982,6 +987,7 @@ function MainTableView({
                               groupVal={groupVal}
                               visibleColumns={visibleColumns}
                               colors={colors}
+                              projectShortName={projectShortName}
                               onClick={() => onSelectIssue(issue.id)}
                               onStartTimer={onStartTimer}
                               isActiveTimer={isActiveTimer}
@@ -1324,6 +1330,12 @@ export function ProjectBoard({
         <FilterBar issues={issues} filter={filter} colors={colors} onChange={setFilter} searchRef={searchInputRef} />
       )}
 
+      {/* Focus-rank repair state — two or more issues sharing a rank in the
+          active workspace (VERM-4, ADR-0007). Workspace-wide, so it can
+          surface a conflict involving a project other than the one on
+          screen; renders nothing when there is no conflict. */}
+      <FocusRankRepairBanner />
+
       {/* Content */}
       {isLoading && <div className={styles.loaderWrap}><Loader size={40} /></div>}
 
@@ -1371,6 +1383,7 @@ export function ProjectBoard({
           onSort={handleSort}
           visibleColumns={visibleColumns}
           colors={colors}
+          projectShortName={projectShortName}
           onSelectIssue={onSelectIssue}
           onStartTimer={onStartTimer}
           onPatch={handlePatch}
@@ -1389,6 +1402,7 @@ export function ProjectBoard({
           groupColorMap={groupColorMap}
           colors={colors}
           groupByField={GROUP_FIELD_MAP[effectiveGroupBy]?.key ?? 'status'}
+          projectShortName={projectShortName}
           onSelectIssue={onSelectIssue}
           onPatch={handlePatch}
           onStartTimer={onStartTimer}

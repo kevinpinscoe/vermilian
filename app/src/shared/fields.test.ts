@@ -12,7 +12,8 @@ describe('FIELD_DEFS', () => {
   it('has exactly one entry per field key, no duplicates', () => {
     expect(new Set(FIELD_KEYS).size).toBe(FIELD_KEYS.length);
     // 23 -> 26 on 2026-08-01: Issue domain, Edit host, Affected host.
-    expect(FIELD_KEYS).toHaveLength(26);
+    // 26 -> 29 on VERM-4: Focus, Focus rank, Why now (ADR-0007).
+    expect(FIELD_KEYS).toHaveLength(29);
   });
 
   it('the 3 host/domain fields match the live enum bundles', () => {
@@ -104,6 +105,36 @@ describe('FIELD_DEFS', () => {
     expect(FIELD_DEFS.dateTimeEntered.column).toBe(true);
     expect(FIELD_DEFS.dateTimeEntered.creatable).toBe(false);
     expect(FIELD_DEFS.dateTimeEntered.patchable).toBe(false);
+  });
+
+  it('focus and focusRank are patchable with no column or detail surface, like assignee', () => {
+    expect(FIELD_DEFS.focus.patchable).toBe(true);
+    expect(FIELD_DEFS.focus.column).toBe(false);
+    expect(getFieldDef('focus').detailOrder).toBeUndefined();
+    expect(FIELD_DEFS.focusRank.patchable).toBe(true);
+    expect(FIELD_DEFS.focusRank.column).toBe(false);
+    expect(getFieldDef('focusRank').detailOrder).toBeUndefined();
+  });
+
+  it('focus is a single-value enum whose only option is Yes', () => {
+    expect(FIELD_DEFS.focus.$type).toBe('SingleEnumIssueCustomField');
+    expect(FIELD_DEFS.focus.wire).toBe('enum');
+    expect(FIELD_DEFS.focus.options).toEqual(['Yes']);
+  });
+
+  it('focusRank is an integer field, not creatable', () => {
+    expect(FIELD_DEFS.focusRank.$type).toBe('SimpleIssueCustomField');
+    expect(FIELD_DEFS.focusRank.wire).toBe('integer');
+    expect(FIELD_DEFS.focusRank.creatable).toBe(false);
+  });
+
+  it('whyNow is a plain text field with a detail-panel surface', () => {
+    expect(FIELD_DEFS.whyNow.$type).toBe('SimpleIssueCustomField');
+    expect(FIELD_DEFS.whyNow.wire).toBe('text');
+    expect(FIELD_DEFS.whyNow.editor).toBe('text');
+    expect(FIELD_DEFS.whyNow.column).toBe(true);
+    expect(FIELD_DEFS.whyNow.creatable).toBe(false);
+    expect(getFieldDef('whyNow').detailOrder).toBeDefined();
   });
 });
 
