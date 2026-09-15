@@ -30,9 +30,11 @@ See [`docs/design/priority-desk-mockup.html`](docs/design/priority-desk-mockup.h
 mockup of the rail entry, the Now/Next/Then cards, the Choose-next candidate grid, and the
 Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermilian-improvements-q3-2026/README.md`.
 
-- [ ] **Foundation** — define `Focus` (enum, `Yes`/empty), `Focus rank` (integer 1–3 or empty),
+- [x] **Foundation** — define `Focus` (enum, `Yes`/empty), `Focus rank` (integer 1–3 or empty),
       and `Why now` (short text) as shared custom fields in YouTrack and in Vermilian's field
       registry; show and edit them in board rows, Kanban cards, and the task detail panel.
+      Delivered in [VERM-4](https://youtrack.kevininscoe.com/issue/VERM-4),
+      [PR #88](https://github.com/kevinpinscoe/vermilian/pull/88).
 - [ ] **Manual desk** — add a Priority Desk entry above "All tasks" in the left rail, with two
       modes: Now (at most three ranked Now/Next/Then cards, empty slots allowed) and Choose next
       (no more than seven eligible candidates, star toggle, drag into a slot, "Not this week"
