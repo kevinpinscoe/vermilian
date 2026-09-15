@@ -1,0 +1,181 @@
+.desk {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  background: var(--board-background-color, var(--primary-background-color));
+}
+
+.header {
+  padding: 16px 24px 0;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 22px !important;
+  margin-bottom: 12px;
+}
+
+.body {
+  padding: 16px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.loading {
+  padding: 24px 0;
+}
+
+.allEmptyNote {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-color, #c3c6d4);
+  border-radius: 8px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .slots {
+    grid-template-columns: 1fr;
+  }
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slotLabel {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--secondary-text-color, #676879);
+  padding-left: 2px;
+}
+
+.card {
+  background: var(--primary-background-color, #ffffff);
+  border: 1px solid var(--border-color, #dfe1ec);
+  border-radius: 8px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(30, 33, 53, 0.05);
+}
+
+.card:hover {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.cardNow {
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea) inset, 0 1px 2px rgba(30, 33, 53, 0.05);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardId {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardSummary {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--primary-text-color, #323338);
+  line-height: 1.3;
+}
+
+.cardMeta {
+  font-size: 11px !important;
+  color: var(--secondary-text-color, #8b8ea0);
+}
+
+.cardWhyNow {
+  font-size: 11.5px !important;
+  font-style: italic;
+  color: var(--secondary-text-color, #676879);
+  line-height: 1.4;
+}
+
+.cardWhyNowEmpty {
+  font-size: 11.5px !important;
+  font-style: italic;
+  color: var(--placeholder-color, #8b8ea0);
+  line-height: 1.4;
+}
+
+.cardFocusRow {
+  display: flex;
+}
+
+.cardActions {
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.emptyCard {
+  border: 1.5px dashed var(--border-color, #c3c6d4);
+  border-radius: 8px;
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  padding: 12px;
+}
+
+.emptyCardTitle {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--secondary-text-color, #8b8ea0);
+}
+
+.emptyCardHint {
+  font-size: 10.5px !important;
+  color: var(--secondary-text-color, #8b8ea0);
+  max-width: 22ch;
+}
+
+.needsRepairCard {
+  border: 1px solid var(--warning-border-color, #f0d27a);
+  background: var(--warning-background-color, #fdf0c3);
+  border-radius: 8px;
+  min-height: 118px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.needsRepairText {
+  font-size: 11.5px !important;
+  color: var(--warning-text-color, #8a6100);
+  font-weight: 600 !important;
+}
+
+.footerNote {
+  font-size: 11px !important;
+  color: var(--secondary-text-color, #8b8ea0);
+}

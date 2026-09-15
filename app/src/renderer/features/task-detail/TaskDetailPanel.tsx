@@ -387,8 +387,16 @@ export function TaskDetailPanel({
   onStopAndLog,
 }: TaskDetailPanelProps) {
   const { data: issue, isLoading, isError, error, refetch } = useIssueDetail(issueId);
-  const patchMutation = usePatchIssue(issueId, projectShortName);
-  const deleteMutation = useDeleteIssue(projectShortName);
+  // The caller-supplied projectShortName is null from any cross-project view
+  // (WorkspaceBoard's "All tasks", and Priority Desk — VERM-5) since neither
+  // has one "active project" to hand down. Once the issue itself has loaded,
+  // its own project is the authoritative short name and is used instead, so
+  // usePatchIssue/useDeleteIssue invalidate the right board cache regardless
+  // of which view opened the panel. Falls back to the prop until the issue
+  // loads, and stays on the prop for a caller that never had one to begin with.
+  const effectiveProjectShortName = issue?.project.shortName ?? projectShortName;
+  const patchMutation = usePatchIssue(issueId, effectiveProjectShortName);
+  const deleteMutation = useDeleteIssue(effectiveProjectShortName);
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [stoppingTimer, setStoppingTimer] = useState(false);

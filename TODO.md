@@ -35,10 +35,13 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       registry; show and edit them in board rows, Kanban cards, and the task detail panel.
       Delivered in [VERM-4](https://youtrack.kevininscoe.com/issue/VERM-4),
       [PR #88](https://github.com/kevinpinscoe/vermilian/pull/88).
-- [ ] **Manual desk** — add a Priority Desk entry above "All tasks" in the left rail, with two
-      modes: Now (at most three ranked Now/Next/Then cards, empty slots allowed) and Choose next
-      (no more than seven eligible candidates, star toggle, drag into a slot, "Not this week"
-      dismissal persisted in the existing `_vermilian-config` YouTrack knowledge-base article).
+- [x] **Manual desk — Now mode** — Priority Desk entry above "All tasks" in the left rail; the
+      default Now mode (at most three ranked Now/Next/Then cards, empty slots allowed, `Start
+      focus` on the Now card, duplicate-rank repair banner surfaced consistently). Delivered in
+      [VERM-5](https://youtrack.kevininscoe.com/issue/VERM-5).
+- [ ] **Manual desk — Choose next** — the second mode of the same screen: no more than seven
+      eligible candidates, star toggle, drag into a slot, "Not this week" dismissal persisted in
+      the existing `_vermilian-config` YouTrack knowledge-base article.
 - [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic + outcome
       name only, no full portfolio management); document a Master Plan knowledge-base template.
 - [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
