@@ -203,4 +203,89 @@ test.describe('Priority Desk', () => {
     await openPriorityDesk(page);
     await expect(page.locator('[data-testid="priority-desk-card-0-e1-1"]')).toBeVisible();
   });
+
+  test('a focused-but-unranked issue does not count as ranked — the empty state still shows', async () => {
+    // Focus = Yes, Focus rank = null: a valid starred-but-unranked issue
+    // (Choose-next territory, VERM-6) that must not occupy a desk slot.
+    await page.evaluate(async () => {
+      await window.vermilian.patchIssue({ issueId: '0-e1-1', field: 'focus', value: 'Yes' });
+    });
+    await page.reload();
+    await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+    await openPriorityDesk(page);
+
+    await expect(page.locator('[data-testid="priority-desk-all-empty"]')).toBeVisible();
+    await expect(page.locator('[data-testid="priority-desk-all-empty"]')).toContainText('No tasks are ranked yet');
+    await expect(page.locator('[data-testid="priority-desk-all-empty"]')).not.toContainText('Nothing focused');
+    await expect(page.locator('[data-testid="priority-desk-empty-now"]')).toBeVisible();
+    await expect(page.locator('[data-testid="priority-desk-card-0-e1-1"]')).toHaveCount(0);
+  });
+
+  test.describe('card ↔ task detail integration', () => {
+    test('clicking the body of an occupied card opens the task detail panel', async () => {
+      await rankIssue(page, '0-e1-1', 1);
+      await openPriorityDesk(page);
+
+      await page.locator('[data-testid="priority-desk-card-0-e1-1"]').getByText('To do task 1').click();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toBeVisible();
+      await expect(page.locator('[data-testid="detail-issue-id"]')).toHaveText('TEST-1');
+    });
+
+    test('clicking Start focus or the Focus control does not also open the task detail panel', async () => {
+      await rankIssue(page, '0-e1-1', 1);
+      await openPriorityDesk(page);
+
+      // The rank badge opens FocusControl's own rank-picker popover — a
+      // non-destructive click on the embedded control (unlike the star, which
+      // would unfocus an already-focused, already-ranked issue here).
+      await page.locator('[data-testid="focus-rank-badge-0-e1-1"]').click();
+      await expect(page.locator('[data-testid="focus-rank-menu-0-e1-1"]')).toBeVisible();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toHaveCount(0);
+      await page.locator('[data-testid="focus-rank-menu-backdrop-0-e1-1"]').click();
+
+      await page.locator('[data-testid="priority-desk-start-focus-0-e1-1"]').click();
+      await expect(page.locator('[data-testid="focus-overlay"]')).toBeVisible();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toHaveCount(0);
+
+      await page.locator('[data-testid="focus-stop-btn"]').click();
+      await page.getByText(/Logged \d+ min/).waitFor({ timeout: 5000 }).catch(() => {});
+    });
+
+    test('editing Why now through the detail panel updates the desk card without a reload', async () => {
+      await rankIssue(page, '0-e1-1', 1);
+      await openPriorityDesk(page);
+
+      await page.locator('[data-testid="priority-desk-card-0-e1-1"]').getByText('To do task 1').click();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toBeVisible();
+
+      await page.locator('[data-field="whyNow"] button').click();
+      await page.locator('[data-field="whyNow"] input').fill('Set from the detail panel');
+      await page.locator('[data-field="whyNow"] input').press('Enter');
+      await expect(page.locator('[data-field="whyNow"] button')).toHaveText('Set from the detail panel');
+
+      await page.keyboard.press('Escape');
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toHaveCount(0);
+
+      // Still on the desk (closing the panel doesn't navigate away) — no reload.
+      await expect(page.locator('[data-testid="priority-desk"]')).toBeVisible();
+      await expect(page.locator('[data-testid="priority-desk-card-0-e1-1"]')).toContainText('Set from the detail panel');
+    });
+
+    test('deleting the ranked issue through the detail panel empties its slot without a reload', async () => {
+      await rankIssue(page, '0-e1-1', 1);
+      await openPriorityDesk(page);
+
+      await page.locator('[data-testid="priority-desk-card-0-e1-1"]').getByText('To do task 1').click();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toBeVisible();
+
+      await page.getByLabel('Delete task').click();
+      await page.locator('[data-testid="delete-confirm-btn"]').click();
+      await expect(page.locator('[data-testid="task-detail-panel"]')).toHaveCount(0);
+
+      // Still on the desk, no reload — the Now slot goes back to its empty placeholder.
+      await expect(page.locator('[data-testid="priority-desk"]')).toBeVisible();
+      await expect(page.locator('[data-testid="priority-desk-card-0-e1-1"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="priority-desk-empty-now"]')).toBeVisible();
+    });
+  });
 });

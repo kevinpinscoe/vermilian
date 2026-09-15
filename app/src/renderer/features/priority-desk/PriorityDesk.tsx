@@ -68,7 +68,9 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
           <>
             {allEmpty && (
               <div className={styles.allEmptyNote} data-testid="priority-desk-all-empty">
-                <Text type="text2">Nothing focused yet. Star a task to add it here.</Text>
+                <Text type="text2">
+                  No tasks are ranked yet. Assign Focus rank 1, 2, or 3 from a board, Kanban card, or task detail.
+                </Text>
               </div>
             )}
 
