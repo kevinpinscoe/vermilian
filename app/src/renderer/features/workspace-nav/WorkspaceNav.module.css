@@ -440,6 +440,17 @@
   font-style: italic;
 }
 
+.allTasksRowActive {
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+  color: var(--primary-color, #0073ea);
+}
+
+.allTasksRowActive .allTasksLabel {
+  color: var(--primary-color, #0073ea);
+  font-style: normal;
+  font-weight: 600;
+}
+
 /* Folders */
 .folder {
   margin-bottom: 2px;

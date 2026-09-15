@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IconButton, Loader, Text, Divider, AttentionBox } from '@vibe/core';
-import { Settings, Inbox, Menu as MenuIcon } from '@vibe/icons';
+import { Settings, Inbox, Menu as MenuIcon, Favorite } from '@vibe/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -677,11 +677,13 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
   const {
     activeWorkspaceId,
     activeProjectId,
+    priorityDeskActive,
     railCollapsed,
     expandedFolderIds,
     expandedHydrated,
     setActiveWorkspace,
     setActiveProject,
+    openPriorityDesk,
     toggleRail,
     toggleFolder,
     expandFolder,
@@ -944,9 +946,25 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
               </div>
             )}
 
+            {/* Priority Desk — first-class entry above All tasks (VERM-5) */}
+            <button
+              type="button"
+              data-testid="nav-priority-desk"
+              aria-current={priorityDeskActive ? 'true' : undefined}
+              className={`${styles.allTasksRow} ${priorityDeskActive ? styles.allTasksRowActive : ''}`}
+              onClick={openPriorityDesk}
+              title={contentCollapsed ? 'Priority Desk' : undefined}
+            >
+              <Favorite size={14} />
+              {!contentCollapsed && (
+                <Text type="text2" className={styles.allTasksLabel}>Priority Desk</Text>
+              )}
+            </button>
+
             {/* All tasks virtual entry */}
             <button
               type="button"
+              data-testid="nav-all-tasks"
               className={styles.allTasksRow}
               onClick={() => setActiveProject(null, null)}
             >

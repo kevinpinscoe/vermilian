@@ -3,6 +3,7 @@ import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
 import { Sun, Settings } from '@vibe/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceNav } from './features/workspace-nav/WorkspaceNav';
+import { PriorityDesk } from './features/priority-desk/PriorityDesk';
 import { ProjectBoard } from './features/project-board/ProjectBoard';
 import { WorkspaceBoard } from './features/workspace-board/WorkspaceBoard';
 import { TaskDetailPanel } from './features/task-detail/TaskDetailPanel';
@@ -102,6 +103,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const activeProjectShortName = useWorkspaceStore((s) => s.activeProjectShortName);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const priorityDeskActive = useWorkspaceStore((s) => s.priorityDeskActive);
   const selectedIssueId = useWorkspaceStore((s) => s.selectedIssueId);
   const setSelectedIssue = useWorkspaceStore((s) => s.setSelectedIssue);
   const projects = useProjects();
@@ -420,7 +422,12 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         <WorkspaceNav onOpenSettings={onOpenSettings} />
 
         <main className={styles.content}>
-          {activeProject && activeProjectShortName ? (
+          {priorityDeskActive ? (
+            <PriorityDesk
+              onSelectIssue={(id) => setSelectedIssue(id)}
+              onStartTimer={handleStartTimer}
+            />
+          ) : activeProject && activeProjectShortName ? (
             <ProjectBoard
               projectId={activeProjectId ?? ''}
               projectName={activeProject.name}

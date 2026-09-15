@@ -29,6 +29,7 @@ interface WorkspaceState {
   activeProjectShortName: string | null; // shortName used for issue queries
   activeProjectId: string | null; // YouTrack project ID
   selectedIssueId: string | null; // issue open in the detail panel
+  priorityDeskActive: boolean; // Priority Desk (VERM-5) showing instead of a project/workspace board
   railCollapsed: boolean;
   expandedFolderIds: Set<string>;
   expandedHydrated: boolean; // true once expand state came from storage or a user action
@@ -36,6 +37,7 @@ interface WorkspaceState {
   setActiveWorkspace(id: string): void;
   setActiveProject(projectId: string | null, shortName: string | null): void;
   setSelectedIssue(id: string | null): void;
+  openPriorityDesk(): void;
   toggleRail(): void;
   toggleFolder(folderId: string): void;
   expandFolder(folderId: string): void;
@@ -48,6 +50,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeProjectShortName: null,
   activeProjectId: null,
   selectedIssueId: null,
+  priorityDeskActive: false,
   railCollapsed: loadRail(),
   expandedFolderIds: persistedExpanded ?? new Set<string>(),
   expandedHydrated: persistedExpanded !== null,
@@ -57,7 +60,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   },
 
   setActiveProject(projectId, shortName) {
-    set({ activeProjectId: projectId, activeProjectShortName: shortName, selectedIssueId: null });
+    set({
+      activeProjectId: projectId,
+      activeProjectShortName: shortName,
+      selectedIssueId: null,
+      priorityDeskActive: false,
+    });
+  },
+
+  openPriorityDesk() {
+    set({
+      priorityDeskActive: true,
+      activeProjectId: null,
+      activeProjectShortName: null,
+      selectedIssueId: null,
+    });
   },
 
   setSelectedIssue(id) {
