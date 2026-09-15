@@ -22,10 +22,16 @@ bash run.sh --stage verify             # confirms every active project carries a
 Stages are independent and re-runnable. `verify` never writes and ignores
 `--dry-run`.
 
-Targets every project that is not archived and not a template project
-(`template: true`, e.g. `TMPL`) — computed live against the instance each
-run, not a hard-coded list, because the project roster changes without any
-repo being told.
+Targets every project that is not archived, **plus `TMPL` by name even
+though it reads `template: true`** — computed live against the instance
+each run, not a hard-coded list, because the project roster changes without
+any repo being told. `TMPL` is deliberate, not an oversight: it's the
+project new projects are mirrored from (there's no create-from-project REST
+call), so it needs to carry the same schema a project built from it will
+inherit. Attaching *schema* to the template project is unrelated to the
+"never file an *issue* into TMPL" rule — that one's about issue-level
+writes, which really are a one-way trip there; any *other* `template: true`
+project stays excluded by default.
 
 Once this has run and `verify` passes, the app-side field registry
 (`app/src/shared/fields.ts`) and the Focus-toggle UI can rely on the fields

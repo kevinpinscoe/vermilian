@@ -20,17 +20,32 @@ not something to try to encode in YouTrack itself.
 
 TARGETS
 -------
-Every ACTIVE project — not a fixed list. "Active" means not archived and not
-a template project (`template: true`, e.g. TMPL). Schema on TMPL is still
-correct to touch: TMPL is built to carry the standard field set so a project
-created from it mirrors that set (see the sibling `youtrack.kevininscoe.com`
-repo's `scripts/add-host-and-domain-fields/apply.py`, `stage_projects`,
-which is the precedent this script's shape is copied from). The project
-roster changes without any repo being told
-(when-creating-a-youtrack-ticket.md §1), so this queries the live instance
-at run time instead of hard-coding project shortNames — unlike that
-precedent's `EXISTING_PROJECTS = ["KEVIN", "WORK", "VERM"]`, which predates
-most of the 35+ projects live today.
+Every ACTIVE project, plus TMPL by name — not a fixed list otherwise.
+"Active" means not archived. A project flagged `template: true` is
+otherwise excluded (when-creating-a-youtrack-ticket.md's "never file a test
+issue into TMPL, or any other template project" is about issue-level
+writes: create/update-field/delete on an *issue inside* a template project
+is a one-way trip there, per that directive's own measurements). Attaching
+*schema* to the template *project itself* is a different, unbroken
+operation — the sibling `youtrack.kevininscoe.com` repo's
+`scripts/add-host-and-domain-fields/apply.py` (the precedent this script's
+shape is copied from) does exactly this in its own `stage_projects`, and it
+is *why* TMPL carries the standard field set at all: TMPL exists
+specifically so a project built from it (there is no
+create-project-from-project REST call; new projects are mirrored from a
+reference project's attached fields, see that precedent's own docstring)
+inherits the full schema, Priority Desk fields included, from day one.
+
+So `TEMPLATE_PROJECT_SHORT_NAME` ("TMPL") is named explicitly and pulled
+back into the target set even though it reads `template: true` — every
+*other* `template: true` project, if one is ever created, stays excluded
+by default rather than assumed safe the same way. `active_projects()` is
+the single place this is decided; `stage_verify` inherits the same set
+automatically. The project roster otherwise changes without any repo being
+told (when-creating-a-youtrack-ticket.md §1), so this queries the live
+instance at run time instead of hard-coding project shortNames — unlike
+the precedent's `EXISTING_PROJECTS = ["KEVIN", "WORK", "VERM"]`, which
+predates most of the 35+ projects live today.
 
 THE ORPHAN-BUNDLE TRAP (Focus only — the one enum field here)
 ---------------------------------------------------------------
@@ -78,6 +93,11 @@ import urllib.request
 from datetime import datetime, timezone
 
 REFERENCE_PROJECT = "KEVIN"  # used only by the `test` stage
+
+# The one template project deliberately included in the schema targets even
+# though it reads template: true — see the module docstring's TARGETS
+# section. Any OTHER template project stays excluded by default.
+TEMPLATE_PROJECT_SHORT_NAME = "TMPL"
 
 # ---------------------------------------------------------------------------
 # The one enum field.
@@ -188,15 +208,23 @@ def all_projects(api):
 
 
 def active_projects(api):
-    """Every project that is not archived and not a template project.
+    """Every project that is not archived, minus template projects EXCEPT
+    TEMPLATE_PROJECT_SHORT_NAME ("TMPL"), which is deliberately included so
+    it carries the same schema a project built from it inherits.
 
     Computed live, not from any hard-coded list — see the module docstring's
     TARGETS section for why.
     """
     projects = all_projects(api)
-    active = [p for p in projects if not p.get("archived") and not p.get("template")]
+    active = [
+        p for p in projects
+        if not p.get("archived")
+        and (not p.get("template") or p.get("shortName") == TEMPLATE_PROJECT_SHORT_NAME)
+    ]
+    excluded = len(projects) - len(active)
     log(f"{len(projects)} projects total, {len(active)} active "
-        f"({len(projects) - len(active)} archived/template excluded)")
+        f"({excluded} archived/other-template excluded; "
+        f"{TEMPLATE_PROJECT_SHORT_NAME} included by name if present)")
     return active
 
 
