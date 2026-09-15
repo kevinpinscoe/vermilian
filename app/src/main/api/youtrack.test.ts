@@ -130,6 +130,9 @@ describe('getIssues', () => {
           issueDomain: null,
           editHost: null,
           affectedHost: null,
+          focus: null,
+          focusRank: null,
+          whyNow: null,
         },
       },
     ]);

@@ -12,6 +12,7 @@ import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../sha
 import { getContrastColor } from './colors';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useBoardDragStore } from '../../stores/boardDrag';
+import { FocusControl } from './FocusControl';
 import styles from './KanbanView.module.css';
 
 // ─── Shared types / helpers (also used by ProjectBoard) ───────────────────────
@@ -162,6 +163,7 @@ function AddKanbanCard({ onAdd }: { onAdd: (summary: string) => void }) {
 
 interface KanbanCardInnerProps {
   issue: BoardIssue;
+  projectShortName: string;
   colors: EffectiveColors;
   onClick: () => void;
   onPatch: (issueId: string, field: string, value: string | number | null) => void;
@@ -172,7 +174,7 @@ interface KanbanCardInnerProps {
 }
 
 function KanbanCardInner({
-  issue, colors, onClick, onPatch, onStartTimer, isActiveTimer, timerDisplay, isDragOverlay,
+  issue, projectShortName, colors, onClick, onPatch, onStartTimer, isActiveTimer, timerDisplay, isDragOverlay,
 }: KanbanCardInnerProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -184,7 +186,10 @@ function KanbanCardInner({
       onMouseLeave={() => setHovered(false)}
     >
       <div className={styles.cardTop}>
-        <span className={styles.cardId}>{issue.idReadable}</span>
+        <span className={styles.cardTopLeft}>
+          <span className={styles.cardId}>{issue.idReadable}</span>
+          <FocusControl issue={issue} projectShortName={projectShortName} />
+        </span>
         {isActiveTimer ? (
           <span className={styles.cardTimerBadge}>▶ {timerDisplay}</span>
         ) : (
@@ -250,12 +255,13 @@ function KanbanCard(props: KanbanCardInnerProps) {
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  title, issues, colorDot, colors, onSelectIssue, onPatch, onStartTimer, onAdd,
+  title, issues, colorDot, colors, projectShortName, onSelectIssue, onPatch, onStartTimer, onAdd,
 }: {
   title: string;
   issues: BoardIssue[];
   colorDot: string;
   colors: EffectiveColors;
+  projectShortName: string;
   onSelectIssue: (id: string) => void;
   onPatch: (issueId: string, field: string, value: string | number | null) => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
@@ -301,6 +307,7 @@ function KanbanColumn({
               <KanbanCard
                 key={issue.id}
                 issue={issue}
+                projectShortName={projectShortName}
                 colors={colors}
                 onClick={() => onSelectIssue(issue.id)}
                 onPatch={onPatch}
@@ -324,6 +331,7 @@ export interface KanbanViewProps {
   groupColorMap: Record<string, string>;
   colors: EffectiveColors;
   groupByField: string; // e.g. 'status', 'priority', 'category' — field to patch on drop
+  projectShortName: string;
   onSelectIssue: (issueId: string) => void;
   onPatch: (issueId: string, field: string, value: string | number | null) => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
@@ -332,7 +340,7 @@ export interface KanbanViewProps {
 }
 
 export function KanbanView({
-  groups, groupColorMap, colors, groupByField,
+  groups, groupColorMap, colors, groupByField, projectShortName,
   onSelectIssue, onPatch, onStartTimer, onAddTask, onCrossBoardDrop,
 }: KanbanViewProps) {
   const [draggingIssue, setDraggingIssue] = useState<BoardIssue | null>(null);
@@ -401,6 +409,7 @@ export function KanbanView({
             issues={issues}
             colorDot={groupColorMap[groupVal] ?? '#C4C4C4'}
             colors={colors}
+            projectShortName={projectShortName}
             onSelectIssue={onSelectIssue}
             onPatch={onPatch}
             onStartTimer={onStartTimer}
@@ -412,6 +421,7 @@ export function KanbanView({
         {draggingIssue && (
           <KanbanCardInner
             issue={draggingIssue}
+            projectShortName={projectShortName}
             colors={colors}
             onClick={() => {}}
             onPatch={() => {}}

@@ -95,6 +95,11 @@ export const DEFAULT_COLUMNS: BoardColumnConfig[] = [
   { field: 'issueDomain',        width: 130, visible: false },
   { field: 'editHost',           width: 120, visible: false },
   { field: 'affectedHost',       width: 130, visible: false },
+  // Priority Desk (VERM-4, ADR-0007). Focus and Focus rank are not columns —
+  // they have their own dedicated toggle (FocusControl), not the generic
+  // column system, so only whyNow appears here. Hidden by default, same
+  // reasoning as the fields above.
+  { field: 'whyNow',             width: 200, visible: false },
 ];
 
 export function defaultBoardView(): BoardViewConfig {
