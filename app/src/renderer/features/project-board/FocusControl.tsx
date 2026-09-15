@@ -157,10 +157,10 @@ export function FocusControl({ issue, projectShortName, size = 'small' }: FocusC
         <div className={styles.dialogOverlay} onClick={(e) => e.stopPropagation()} data-testid="focus-rank-conflict-dialog">
           <div className={styles.dialog}>
             <Text type="text1" weight="bold">Focus rank {conflict.rank} is already taken</Text>
-            <Text type="text2">
-              {conflict.holder.issue.idReadable} — &ldquo;{conflict.holder.issue.summary}&rdquo; — currently
-              holds rank {conflict.rank}. Give this rank to {issue.idReadable} instead? {conflict.holder.issue.idReadable}
-              {' '}will become unranked (it stays starred).
+            <Text type="text2" element="p">
+              {conflict.holder.issue.idReadable} — &ldquo;{conflict.holder.issue.summary}&rdquo; —
+              {' '}currently holds rank {conflict.rank}. Move it to {issue.idReadable} instead?
+              {' '}{conflict.holder.issue.idReadable} will become unranked — it stays starred.
             </Text>
             <div className={styles.dialogActions}>
               <Button kind="secondary" onClick={() => setConflict(null)} data-testid="focus-rank-conflict-keep">
