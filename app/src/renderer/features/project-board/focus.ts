@@ -135,6 +135,89 @@ export function useWorkspaceFocusRankHolders(): {
   };
 }
 
+// ─── Pure write-orchestration logic ────────────────────────────────────────
+//
+// Each of these issues 1-3 sequential PATCH-equivalent writes through a
+// caller-supplied `patch` function. They are deliberately independent of
+// React Query / IPC / toasts so the safety-critical bit — which write
+// happens first, and that a failed write stops the rest rather than
+// continuing blindly — is directly unit-testable (see focus.test.ts) without
+// mocking a hook. useFocusMutations below wires them to the real `patch`
+// and to cache invalidation.
+
+export type PatchFn = (issueId: string, field: string, value: string | number | null) => Promise<void>;
+
+/**
+ * Turn Focus on/off. Turning OFF clears Focus rank BEFORE Focus itself.
+ *
+ * If only the first write of a pair lands, this order leaves the issue
+ * unranked-but-still-focused — safe, since no rank invariant is at stake.
+ * The reverse order (Focus first) risks the opposite: Focus = null with a
+ * non-null Focus rank still sitting in it, an "invisible" holder that no
+ * longer shows as focused anywhere in the UI but still occupies a slot
+ * `decideRankAssignment` won't let another issue take (review finding on
+ * VERM-4's PR).
+ */
+export async function runToggleFocus(
+  patch: PatchFn, issueId: string, currentlyFocused: boolean,
+): Promise<void> {
+  if (currentlyFocused) {
+    await patch(issueId, 'focusRank', null);
+    await patch(issueId, 'focus', null);
+  } else {
+    await patch(issueId, 'focus', 'Yes');
+  }
+}
+
+/** Clear just the rank — used both as a standalone "Clear rank" action and,
+ * via runSetRank, to displace the previous holder when resolving a
+ * conflict. Focus itself is left alone (still Yes, now unranked and
+ * starred in Choose-next). Single write; extracted mainly so every
+ * mutation goes through the same shape as the others. */
+export async function runClearRank(patch: PatchFn, issueId: string): Promise<void> {
+  await patch(issueId, 'focusRank', null);
+}
+
+/**
+ * Assign `rank` to the target issue, always implying Focus = Yes. Pass
+ * `displace` when a conflict was confirmed: the previous holder's rank is
+ * cleared FIRST, then the target is focused, then ranked.
+ *
+ * That order means a partial failure can leave the rank held by neither
+ * issue (safe — no invariant violation) but never by both: the old holder
+ * is never left in place at the same time the new one is assigned.
+ */
+export async function runSetRank(
+  patch: PatchFn,
+  target: { issueId: string },
+  rank: FocusRank,
+  displace?: FocusRankHolder,
+): Promise<void> {
+  if (displace) {
+    await patch(displace.issue.id, 'focusRank', null);
+  }
+  await patch(target.issueId, 'focus', 'Yes');
+  await patch(target.issueId, 'focusRank', rank);
+}
+
+/**
+ * Runs `fn`, then always runs `invalidate` — including when `fn` throws
+ * partway through a multi-write sequence. Without this, a partial failure
+ * leaves the query cache showing whatever it had *before* the first write,
+ * which matches neither the old nor the new true state; invalidating
+ * unconditionally forces a refetch of the real YouTrack state so the UI
+ * never shows a fabricated "rolled back" view (review finding on VERM-4's
+ * PR). The error itself still propagates — this only guarantees the
+ * refetch, it does not swallow or hide the failure.
+ */
+export async function withInvalidate(fn: () => Promise<void>, invalidate: () => void): Promise<void> {
+  try {
+    await fn();
+  } finally {
+    invalidate();
+  }
+}
+
 // ─── Mutations ──────────────────────────────────────────────────────────────
 
 function invalidateIssueQueries(qc: QueryClient, shortNames: Iterable<string>) {
@@ -147,13 +230,13 @@ export function useFocusMutations() {
   const qc = useQueryClient();
   const showToast = useToastStore((s) => s.show);
 
-  async function patch(issueId: string, field: string, value: string | number | null) {
+  const patch: PatchFn = async (issueId, field, value) => {
     const result = await window.vermilian.patchIssue({ issueId, field, value });
     if (!result.ok) {
       showToast('negative', result.error ?? 'Save failed');
       throw new Error(result.error ?? 'Save failed');
     }
-  }
+  };
 
   /**
    * Toggle Focus on/off. Turning off clears Focus rank too, but Why now is
@@ -161,21 +244,20 @@ export function useFocusMutations() {
    * reconsideration (ADR-0007).
    */
   async function toggleFocus(issueId: string, projectShortName: string, currentlyFocused: boolean) {
-    if (currentlyFocused) {
-      await patch(issueId, 'focus', null);
-      await patch(issueId, 'focusRank', null);
-    } else {
-      await patch(issueId, 'focus', 'Yes');
-    }
-    invalidateIssueQueries(qc, [projectShortName]);
+    await withInvalidate(
+      () => runToggleFocus(patch, issueId, currentlyFocused),
+      () => invalidateIssueQueries(qc, [projectShortName]),
+    );
   }
 
   /** Clear just the rank — used both as a standalone "Unrank" action and to
    * displace the previous holder when resolving a conflict. Focus itself is
    * left alone (still Yes, now unranked and starred in Choose-next). */
   async function clearRank(issueId: string, projectShortName: string) {
-    await patch(issueId, 'focusRank', null);
-    invalidateIssueQueries(qc, [projectShortName]);
+    await withInvalidate(
+      () => runClearRank(patch, issueId),
+      () => invalidateIssueQueries(qc, [projectShortName]),
+    );
   }
 
   /** Assign `rank` to the target issue, always implying Focus = Yes. Pass
@@ -186,14 +268,12 @@ export function useFocusMutations() {
     rank: FocusRank,
     displace?: FocusRankHolder,
   ) {
-    if (displace) {
-      await patch(displace.issue.id, 'focusRank', null);
-    }
-    await patch(target.issueId, 'focus', 'Yes');
-    await patch(target.issueId, 'focusRank', rank);
-    invalidateIssueQueries(
-      qc,
-      [target.projectShortName, displace?.projectShortName].filter(Boolean) as string[],
+    await withInvalidate(
+      () => runSetRank(patch, target, rank, displace),
+      () => invalidateIssueQueries(
+        qc,
+        [target.projectShortName, displace?.projectShortName].filter(Boolean) as string[],
+      ),
     );
   }
 
