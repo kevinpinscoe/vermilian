@@ -34,6 +34,21 @@ overrides:
   js-yaml: ^4.2.0
   "@babel/core": ^7.29.6
   postcss: ^8.5.18
+  # @xmldom/xmldom — ten Dependabot alerts at once (51, 58, 59, 60, 61, 62, 65,
+  # 66, 67, 68), eight high and two medium. 0.9.12 clears every one of them, so
+  # this is one pin rather than ten pieces of work.
+  #
+  # Eight are requireWellFormed bypasses — attribute name, element name,
+  # processing-instruction target, DocType name, DocType publicId/systemId, and
+  # embedded line terminators on the default serialization path — plus an XML
+  # fragment injection via an invalid EntityReference nodeName. The other two are
+  # quadratic-time denial of service: attribute deduplication, and the
+  # malformed-input recovery path's parseElementStartPart re-scan.
+  #
+  # A flat pin is correct: the tree resolves only 0.9.10, arriving once, via
+  # plist <- @electron/packager. Build tooling — nothing under `dependencies`
+  # reaches it (verified with pnpm why --prod).
+  "@xmldom/xmldom": ^0.9.12
   # Dependabot alert 50 — CVE-2026-67213 / GHSA-2v37-7h3g-55p8, high: custom
   # generators can loop indefinitely when size is zero. Patched in 3.3.18.
   #
