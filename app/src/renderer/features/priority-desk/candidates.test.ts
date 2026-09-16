@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { computeCandidates, compareCandidates, MAX_CANDIDATES, type Candidate } from './candidates';
+import {
+  computeCandidates, compareCandidates, candidateSetReadiness, MAX_CANDIDATES,
+  type Candidate, type QueryStatus,
+} from './candidates';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
 import type { Dismissals } from '../../../shared/boardConfig';
 
@@ -61,6 +64,36 @@ describe('compareCandidates', () => {
     const two = candidate({ id: 'a', idReadable: 'TEST-2', fields: { dueDate: 1000, priority: 'Major' } });
     const one = candidate({ id: 'b', idReadable: 'TEST-1', fields: { dueDate: 1000, priority: 'Major' } });
     expect([two, one].sort(compareCandidates).map((c) => c.issue.idReadable)).toEqual(['TEST-1', 'TEST-2']);
+  });
+});
+
+describe('candidateSetReadiness', () => {
+  const loaded: QueryStatus = { hasData: true, isError: false };
+  const pending: QueryStatus = { hasData: false, isError: false };
+  const errored: QueryStatus = { hasData: false, isError: true };
+
+  it('is not loading and not errored once every project and dismissals query has data', () => {
+    expect(candidateSetReadiness([loaded, loaded], loaded)).toEqual({ isLoading: false, isError: false });
+  });
+
+  it('is loading while any one project query is still pending, even if others already have data', () => {
+    expect(candidateSetReadiness([loaded, pending], loaded)).toEqual({ isLoading: true, isError: false });
+  });
+
+  it('is loading while the dismissals query is pending, even if every project has data', () => {
+    expect(candidateSetReadiness([loaded, loaded], pending)).toEqual({ isLoading: true, isError: false });
+  });
+
+  it('is an error, not "loading", when a project query errors — never treated as an empty project', () => {
+    expect(candidateSetReadiness([loaded, errored], loaded)).toEqual({ isLoading: false, isError: true });
+  });
+
+  it('is an error when the dismissals query errors', () => {
+    expect(candidateSetReadiness([loaded, loaded], errored)).toEqual({ isLoading: false, isError: true });
+  });
+
+  it('reports no pending or error state for a workspace with no projects', () => {
+    expect(candidateSetReadiness([], loaded)).toEqual({ isLoading: false, isError: false });
   });
 });
 

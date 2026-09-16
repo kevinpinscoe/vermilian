@@ -97,9 +97,44 @@ export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidate
   return { candidates: eligible.slice(0, MAX_CANDIDATES), totalEligible: eligible.length };
 }
 
+// ─── Readiness (pure) ───────────────────────────────────────────────────────
+
+export interface QueryStatus {
+  hasData: boolean;
+  isError: boolean;
+}
+
+export interface CandidateSetReadiness {
+  isLoading: boolean;
+  isError: boolean;
+}
+
+/**
+ * Choose next must not present an actionable candidate set — cards, the
+ * seven-item cap, deterministic ordering, or the count badge — until every
+ * workspace project's issue query (and the dismissals query) has settled.
+ * Treating a still-pending project query as "this project has zero issues"
+ * silently under-reports eligibility the moment one project's query is
+ * slower than another's (review finding on VERM-6's PR, 2026-09-16). An
+ * errored query is terminal, not pending — it reports `isError`, never a
+ * false-empty project standing in for the rest.
+ */
+export function candidateSetReadiness(
+  projectQueries: readonly QueryStatus[],
+  dismissalsQuery: QueryStatus,
+): CandidateSetReadiness {
+  const isError = projectQueries.some((q) => q.isError) || dismissalsQuery.isError;
+  const isLoading = !isError && (
+    projectQueries.some((q) => !q.hasData) || !dismissalsQuery.hasData
+  );
+  return { isLoading, isError };
+}
+
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
-export function useChooseNextCandidates(statusFilter: string | null): ComputeCandidatesResult & { isLoading: boolean } {
+export function useChooseNextCandidates(
+  statusFilter: string | null,
+): ComputeCandidatesResult & CandidateSetReadiness {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const projectShortNames = useActiveWorkspaceProjectShortNames();
   const dismissalsQuery = useDismissals();
@@ -112,9 +147,18 @@ export function useChooseNextCandidates(statusFilter: string | null): ComputeCan
     })),
   });
 
+  const { isLoading, isError } = candidateSetReadiness(
+    results.map((r) => ({ hasData: r.data !== undefined, isError: r.isError })),
+    { hasData: dismissalsQuery.data !== undefined, isError: dismissalsQuery.isError },
+  );
+
+  if (isLoading || isError) {
+    return { candidates: [], totalEligible: 0, isLoading, isError };
+  }
+
   const issuesByProject = new Map<string, BoardIssue[]>();
   results.forEach((r, i) => {
-    issuesByProject.set(projectShortNames[i], ((r.data as BoardIssue[] | undefined) ?? []));
+    issuesByProject.set(projectShortNames[i], (r.data as BoardIssue[]) ?? []);
   });
 
   const { candidates, totalEligible } = computeCandidates({
@@ -125,9 +169,5 @@ export function useChooseNextCandidates(statusFilter: string | null): ComputeCan
     statusFilter,
   });
 
-  return {
-    candidates,
-    totalEligible,
-    isLoading: (projectShortNames.length > 0 && results.every((r) => !r.data)) || dismissalsQuery.isLoading,
-  };
+  return { candidates, totalEligible, isLoading: false, isError: false };
 }

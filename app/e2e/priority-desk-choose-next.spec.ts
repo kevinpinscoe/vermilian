@@ -134,11 +134,52 @@ test.describe('Priority Desk — Choose next', () => {
     await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(7)');
   });
 
-  test('"Not this week" survives a restart via _vermilian-config', async () => {
+  test('"Not this week" survives a renderer reload (UI-state check only — see the Article test below for real persistence)', async () => {
     await openChooseNext(page);
     await page.locator('[data-testid="priority-desk-candidate-dismiss-0-e1-1"]').click();
     await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-1"]')).toHaveCount(0, { timeout: 10_000 });
 
+    // A renderer reload alone proves nothing about the Article: the main
+    // process, articleConfig cache, and fake Article all stay alive across
+    // it. This only confirms the renderer's own query cache still reflects
+    // the dismissal — see the dedicated Article-persistence test below for
+    // proof the write actually reached the Article.
+    await page.reload();
+    await openChooseNext(page);
+    await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-1"]')).toHaveCount(0);
+  });
+
+  test('"Not this week" is actually persisted to the Article — survives a discarded cache + forced reload from it', async () => {
+    await openChooseNext(page);
+    await page.locator('[data-testid="priority-desk-candidate-dismiss-0-e1-1"]').click();
+    await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-1"]')).toHaveCount(0, { timeout: 10_000 });
+
+    // Let the debounced Article write (1.5s, articleConfig.ts) complete.
+    await page.waitForTimeout(2000);
+
+    // Discard the in-memory Article cache and re-fetch from the fake
+    // YouTrack Article — the same recovery path Settings' "Force resync
+    // from server" uses (workspace-config-sync.spec.ts). This exercises the
+    // real serialise → Article write → cache discard → Article read → parse
+    // path, not just a live process's untouched cache.
+    const result = await page.evaluate(() => window.vermilian.forceResyncWorkspaceConfig());
+    expect(result.ok).toBe(true);
+
+    const { entry, expectedWeekOf } = await page.evaluate(async () => {
+      const dismissals = await window.vermilian.getDismissals();
+      const d = new Date();
+      const day = d.getDay();
+      d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+      const weekOf = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { entry: dismissals['workspace-default:0-e1-1'], expectedWeekOf: weekOf };
+    });
+    expect(entry).toBeDefined();
+    expect(entry.workspace).toBe('workspace-default');
+    expect(entry.issueId).toBe('0-e1-1');
+    expect(entry.dismissedWeekOf).toBe(expectedWeekOf);
+
+    // Choose next still excludes it once the renderer picks up the same
+    // Article-backed state.
     await page.reload();
     await openChooseNext(page);
     await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-1"]')).toHaveCount(0);

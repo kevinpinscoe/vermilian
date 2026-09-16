@@ -14,7 +14,7 @@
 // decision recorded on VERM-6/VERM-7, 2026-09-16). Epic context, AI
 // recommendation, and Daily Review remain later delivery steps.
 import React, { useState } from 'react';
-import { Heading, Text, Button } from '@vibe/core';
+import { Heading, Text, Button, AttentionBox } from '@vibe/core';
 import { Play } from '@vibe/icons';
 import type { BoardIssue } from '../../../shared/workspace';
 import { STATUS_OPTIONS } from '../../../shared/workspace';
@@ -62,7 +62,7 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const { byRank, isLoading: nowLoading } = useWorkspaceFocusRankHolders();
-  const { candidates, isLoading: candidatesLoading } = useChooseNextCandidates(statusFilter);
+  const { candidates, isLoading: candidatesLoading, isError: candidatesError } = useChooseNextCandidates(statusFilter);
   const projects = useProjects();
 
   function projectNameFor(shortName: string): string {
@@ -117,6 +117,7 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
           <ChooseNext
             candidates={candidates}
             isLoading={candidatesLoading}
+            isError={candidatesError}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
             projectNameFor={projectNameFor}
@@ -139,6 +140,11 @@ function ModeSwitch({
 }: {
   mode: Mode;
   onChange: (m: Mode) => void;
+  // Deliberately the count of candidates actually displayed (`candidates.length`,
+  // capped at MAX_CANDIDATES) — "choices you can act on from here right now" —
+  // not `totalEligible`, which can exceed the seven-item cap. Kept explicit here
+  // because the two numbers can differ and the badge must not read as a promise
+  // of how many are eligible (review finding on VERM-6's PR, 2026-09-16).
   candidateCount: number;
 }) {
   return (
@@ -279,10 +285,11 @@ function DeskCard({
 // ─── Choose next ────────────────────────────────────────────────────────────
 
 function ChooseNext({
-  candidates, isLoading, statusFilter, onStatusFilterChange, projectNameFor, onSelectIssue,
+  candidates, isLoading, isError, statusFilter, onStatusFilterChange, projectNameFor, onSelectIssue,
 }: {
   candidates: Candidate[];
   isLoading: boolean;
+  isError: boolean;
   statusFilter: string | null;
   onStatusFilterChange: (v: string | null) => void;
   projectNameFor: (shortName: string) => string;
@@ -299,8 +306,16 @@ function ChooseNext({
     <div data-testid="priority-desk-choose-next">
       <StatusFilter value={statusFilter} onChange={onStatusFilterChange} />
 
-      {isLoading ? (
-        <div className={styles.loading}>
+      {isError ? (
+        <div data-testid="priority-desk-candidates-error">
+          <AttentionBox
+            type="negative"
+            title="Couldn't load Choose next"
+            text="One or more projects in this workspace failed to load. The candidate set would be incomplete, so nothing is shown until it can be loaded in full."
+          />
+        </div>
+      ) : isLoading ? (
+        <div className={styles.loading} data-testid="priority-desk-candidates-loading">
           <Text type="text2">Loading…</Text>
         </div>
       ) : candidates.length === 0 ? (

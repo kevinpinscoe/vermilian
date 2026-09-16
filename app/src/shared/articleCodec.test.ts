@@ -104,11 +104,46 @@ describe('mergeRemoteConfig', () => {
     expect(merged.boards['remote-only']).toBeDefined(); // remote-only preserved
   });
 
-  it('overlays local dismissals on top of remote dismissals (local wins per key)', () => {
+  it('merges dismissals by recency, not "local wins" — the later dismissedWeekOf wins per key', () => {
     const merged = mergeRemoteConfig(remote, local);
     expect(Object.keys(merged.dismissals).sort()).toEqual(['l-ws:ISS-LOCAL', 'r-ws:ISS-REMOTE', 'r-ws:ISS-SHARED']);
-    expect(merged.dismissals['r-ws:ISS-SHARED'].dismissedWeekOf).toBe('2026-09-14'); // local wins
+    expect(merged.dismissals['r-ws:ISS-SHARED'].dismissedWeekOf).toBe('2026-09-14'); // local newer — local wins
     expect(merged.dismissals['r-ws:ISS-REMOTE']).toBeDefined(); // remote-only preserved
+    expect(merged.dismissals['l-ws:ISS-LOCAL']).toBeDefined(); // local-only preserved
+  });
+
+  it('keeps the remote dismissal when remote is newer than local, even though boards still favor local', () => {
+    const remoteNewer: ArticleFullConfig = {
+      ...remote,
+      dismissals: { 'r-ws:ISS-X': { workspace: 'r-ws', issueId: 'ISS-X', dismissedWeekOf: '2026-09-14' } },
+    };
+    const localOlder: ArticleFullConfig = {
+      ...local,
+      dismissals: { 'r-ws:ISS-X': { workspace: 'r-ws', issueId: 'ISS-X', dismissedWeekOf: '2026-09-07' } },
+    };
+    const merged = mergeRemoteConfig(remoteNewer, localOlder);
+    expect(merged.dismissals['r-ws:ISS-X'].dismissedWeekOf).toBe('2026-09-14'); // remote newer — remote wins
+  });
+
+  it('resolves a tie (equal dismissedWeekOf) deterministically, favoring local', () => {
+    const sameWeek: ArticleFullConfig = {
+      ...remote,
+      dismissals: { 'r-ws:ISS-Y': { workspace: 'r-ws', issueId: 'ISS-Y', dismissedWeekOf: '2026-09-14' } },
+    };
+    const sameWeekLocal: ArticleFullConfig = {
+      ...local,
+      dismissals: { 'r-ws:ISS-Y': { workspace: 'r-ws', issueId: 'ISS-Y', dismissedWeekOf: '2026-09-14' } },
+    };
+    const merged = mergeRemoteConfig(sameWeek, sameWeekLocal);
+    expect(merged.dismissals['r-ws:ISS-Y']).toEqual(sameWeekLocal.dismissals['r-ws:ISS-Y']);
+  });
+
+  it('does not mutate either input\'s dismissals', () => {
+    const remoteSnapshot = JSON.stringify(remote.dismissals);
+    const localSnapshot = JSON.stringify(local.dismissals);
+    mergeRemoteConfig(remote, local);
+    expect(JSON.stringify(remote.dismissals)).toBe(remoteSnapshot);
+    expect(JSON.stringify(local.dismissals)).toBe(localSnapshot);
   });
 
   it('does not mutate either input', () => {
