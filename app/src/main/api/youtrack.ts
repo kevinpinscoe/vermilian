@@ -585,13 +585,16 @@ export async function getIssuesForStandup(
   return { done, inProgress, blocked };
 }
 
-// --- _vermilian-config Knowledge Base Article ---
+// --- _vermilian-config and _vermilian-master-plan Knowledge Base Articles ---
 
-const ARTICLE_SUMMARY = '_vermilian-config';
+const CONFIG_ARTICLE_SUMMARY = '_vermilian-config';
+const MASTER_PLAN_ARTICLE_SUMMARY = '_vermilian-master-plan';
 const ARTICLE_FIELDS = 'id,summary,content,updated';
 // This YouTrack instance requires every Article to belong to a project.
-// VERM (id 0-33) is a dedicated project created to own the config article.
-const ARTICLE_PROJECT_SHORT_NAME = 'VERM';
+// VERM (id 0-33) is a dedicated project created to own these articles — both
+// _vermilian-config (application-managed JSON) and _vermilian-master-plan
+// (human-maintained Markdown, ADR-0008) live here, as top-level siblings.
+const VERMILIAN_ARTICLE_PROJECT_SHORT_NAME = 'VERM';
 
 interface RawArticle {
   id: string;
@@ -617,7 +620,7 @@ export async function findVermilianArticle(
       token,
       `/api/articles?fields=${ARTICLE_FIELDS}&$top=500`,
     );
-    const match = articles.find((a) => a.summary === ARTICLE_SUMMARY);
+    const match = articles.find((a) => a.summary === CONFIG_ARTICLE_SUMMARY);
     return match ? { id: match.id, content: match.content ?? '{}', updated: match.updated ?? 0 } : null;
   } catch {
     return null;
@@ -637,9 +640,9 @@ export async function createVermilianArticle(
       {
         method: 'POST',
         body: JSON.stringify({
-          summary: ARTICLE_SUMMARY,
+          summary: CONFIG_ARTICLE_SUMMARY,
           content,
-          project: { shortName: ARTICLE_PROJECT_SHORT_NAME },
+          project: { shortName: VERMILIAN_ARTICLE_PROJECT_SHORT_NAME },
         }),
       },
     );
@@ -683,4 +686,81 @@ export async function getVermilianArticle(
   } catch {
     return null;
   }
+}
+
+// --- _vermilian-master-plan discovery (read-only — Vermilian never creates,
+// updates, or overwrites this article; Kevin authors it by hand in YouTrack.
+// See ADR-0008.) ---
+
+const MASTER_PLAN_PAGE_SIZE = 100;
+// Safety cap against runaway pagination (10,000 articles in one project),
+// not a discovery-completeness bound: discovery only ever returns 'none' or
+// 'ambiguous' once every page has actually been read, and returns
+// 'discovery-incomplete' instead if this cap is hit first, rather than
+// silently trusting a partial result the way a single `$top=500` request
+// would (VERM-7 review correction, 2026-09-16).
+const MASTER_PLAN_MAX_PAGES = 100;
+
+type PagedArticlesResult =
+  | { ok: true; articles: RawArticle[] }
+  | { ok: false; reason: 'fetch-error' | 'incomplete' };
+
+// Server-side project-scoped listing (confirmed against the live instance,
+// 2026-09-16: `/api/admin/projects/<shortName>/articles` accepts the project
+// shortName directly and returns only that project's articles) — paginated
+// to exhaustion rather than trusting one bounded page, so completeness is
+// established rather than assumed.
+async function fetchAllProjectArticles(
+  url: string,
+  token: string,
+  projectShortName: string,
+): Promise<PagedArticlesResult> {
+  const all: RawArticle[] = [];
+  for (let page = 0; page < MASTER_PLAN_MAX_PAGES; page++) {
+    let batch: RawArticle[];
+    try {
+      batch = await request<RawArticle[]>(
+        url,
+        token,
+        `/api/admin/projects/${projectShortName}/articles?fields=${ARTICLE_FIELDS}` +
+          `&$top=${MASTER_PLAN_PAGE_SIZE}&$skip=${page * MASTER_PLAN_PAGE_SIZE}`,
+      );
+    } catch {
+      return { ok: false, reason: 'fetch-error' };
+    }
+    all.push(...batch);
+    if (batch.length < MASTER_PLAN_PAGE_SIZE) return { ok: true, articles: all };
+  }
+  return { ok: false, reason: 'incomplete' };
+}
+
+export type MasterPlanDiscovery =
+  | { status: 'none' }
+  | { status: 'found'; article: VermilianArticle }
+  // Every matching article's id, so a caller can tell whether the *same* set
+  // of duplicates is still present versus a genuinely new one (VERM-7 review
+  // correction: a dismissed diagnostic must reappear if the underlying
+  // problem changes, not just if its kind is the same).
+  | { status: 'ambiguous'; articles: VermilianArticle[] }
+  // A request in the pagination chain failed outright — never collapsed
+  // into 'none'. 'discovery-incomplete' is the distinct case where every
+  // request succeeded but MASTER_PLAN_MAX_PAGES was exhausted before
+  // pagination could prove completeness.
+  | { status: 'discovery-error' }
+  | { status: 'discovery-incomplete' };
+
+export async function findMasterPlanArticle(
+  url: string,
+  token: string,
+): Promise<MasterPlanDiscovery> {
+  const result = await fetchAllProjectArticles(url, token, VERMILIAN_ARTICLE_PROJECT_SHORT_NAME);
+  if (!result.ok) {
+    return result.reason === 'fetch-error' ? { status: 'discovery-error' } : { status: 'discovery-incomplete' };
+  }
+  const matches = result.articles
+    .filter((a) => a.summary === MASTER_PLAN_ARTICLE_SUMMARY)
+    .map((a): VermilianArticle => ({ id: a.id, content: a.content ?? '', updated: a.updated ?? 0 }));
+  if (matches.length === 0) return { status: 'none' };
+  if (matches.length > 1) return { status: 'ambiguous', articles: matches };
+  return { status: 'found', article: matches[0] };
 }

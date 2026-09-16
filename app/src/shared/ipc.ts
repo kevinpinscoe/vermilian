@@ -4,6 +4,7 @@
 
 import type { AppConfig } from './config';
 import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
+import type { MasterPlanState } from './masterPlan';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -37,6 +38,9 @@ export const IPC = {
   forceResyncWorkspaceConfig: 'workspace:forceResync',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
+  // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
+  // creates, updates, or overwrites the article.
+  getMasterPlan: 'youtrack:getMasterPlan',
   openExternalUrl: 'shell:openExternalUrl',
   quitApp: 'app:quit',
   // Issue CRUD
@@ -260,6 +264,10 @@ export interface VermilianAPI {
   forceResyncWorkspaceConfig(): Promise<{ ok: boolean; error?: string }>;
   getIssues(args: GetIssuesArgs): Promise<BoardIssue[]>;
   searchIssues(args: SearchIssuesArgs): Promise<BoardIssue[]>;
+  // Re-fetches and re-parses on every call — no persistent cache on either
+  // side of this boundary. Refresh cadence is the renderer's own React
+  // Query staleTime.
+  getMasterPlan(): Promise<MasterPlanState>;
   // Issue CRUD
   getIssueDetail(issueId: string): Promise<import('./workspace').IssueDetail>;
   patchIssue(args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }>;

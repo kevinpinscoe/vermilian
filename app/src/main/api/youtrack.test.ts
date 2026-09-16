@@ -7,6 +7,7 @@ import {
   getIssuesForStandup,
   patchIssue,
   createIssue,
+  findMasterPlanArticle,
 } from './youtrack';
 
 const URL = 'https://yt.example.com/';
@@ -634,5 +635,89 @@ describe('createIssue', () => {
     expect(repoUrlField).toEqual({
       name: 'Repo URL', $type: 'SimpleIssueCustomField', value: 'https://git.example.com/kinscoe/vermilian',
     });
+  });
+});
+
+// ─── findMasterPlanArticle ───────────────────────────────────────────────────
+
+function fillerArticles(n: number, startId = 0): { id: string; summary: string; content: string; updated: number }[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `filler-${startId + i}`,
+    summary: `_not-master-plan-${startId + i}`,
+    content: '',
+    updated: 0,
+  }));
+}
+
+describe('findMasterPlanArticle', () => {
+  it('uses the project-scoped articles endpoint, not the global one', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes([]));
+    await findMasterPlanArticle(URL, TOKEN);
+    const [calledUrl] = lastCall();
+    expect(calledUrl).toBe(
+      'https://yt.example.com/api/admin/projects/VERM/articles?fields=id,summary,content,updated&$top=100&$skip=0',
+    );
+  });
+
+  it('returns none when a complete (single-page) search finds no match', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes(fillerArticles(3)));
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result).toEqual({ status: 'none' });
+  });
+
+  it('returns found for exactly one match', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        ...fillerArticles(2),
+        { id: '183-6', summary: '_vermilian-master-plan', content: '## Outcome\n', updated: 111 },
+      ]),
+    );
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result).toEqual({
+      status: 'found',
+      article: { id: '183-6', content: '## Outcome\n', updated: 111 },
+    });
+  });
+
+  it('returns ambiguous — never picking one — when more than one article matches', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        { id: 'a1', summary: '_vermilian-master-plan', content: 'A', updated: 1 },
+        { id: 'a2', summary: '_vermilian-master-plan', content: 'B', updated: 2 },
+      ]),
+    );
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result.status).toBe('ambiguous');
+    if (result.status === 'ambiguous') {
+      expect(result.articles.map((a) => a.id).sort()).toEqual(['a1', 'a2']);
+    }
+  });
+
+  it('pages to completion — a match on a later page is still found, not lost to a bounded first page', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(fillerArticles(100))) // a full page — must page again
+      .mockResolvedValueOnce(
+        jsonRes([{ id: '183-6', summary: '_vermilian-master-plan', content: 'C', updated: 5 }]),
+      );
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result).toEqual({ status: 'found', article: { id: '183-6', content: 'C', updated: 5 } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [secondUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(secondUrl).toContain('$skip=100');
+  });
+
+  it('returns discovery-error rather than none when a page request fails', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('network down'));
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result).toEqual({ status: 'discovery-error' });
+  });
+
+  it('returns discovery-incomplete — not none, not found — when pagination cannot reach completeness', async () => {
+    // Every page comes back full (100 items), so the loop never sees a
+    // short page and must exhaust the safety cap instead of concluding
+    // the search is complete.
+    fetchMock.mockImplementation(() => Promise.resolve(jsonRes(fillerArticles(100))));
+    const result = await findMasterPlanArticle(URL, TOKEN);
+    expect(result).toEqual({ status: 'discovery-incomplete' });
   });
 });

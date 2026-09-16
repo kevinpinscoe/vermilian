@@ -11,6 +11,7 @@ import type {
   CreateIssueResult,
   StandupIssues,
   VermilianArticle,
+  MasterPlanDiscovery,
 } from './youtrack';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
@@ -271,4 +272,39 @@ export async function getVermilianArticle(
 ): Promise<VermilianArticle | null> {
   if (!article || article.id !== articleId) return null;
   return { id: article.id, content: article.content, updated: article.updated };
+}
+
+// ─── _vermilian-master-plan discovery (in-memory) ────────────────────────────────
+// VERMILIAN_E2E_MASTER_PLAN_CONTENT seeds a single matching article.
+// VERMILIAN_E2E_MASTER_PLAN_DUPLICATE=1 simulates two matching articles
+// (ambiguous discovery) instead, using that same content (or a default) for
+// both. VERMILIAN_E2E_MASTER_PLAN_ERROR=1 simulates a fetch failure. Default
+// (none of these set): no article exists ('none').
+export async function findMasterPlanArticle(
+  _url: string, _token: string,
+): Promise<MasterPlanDiscovery> {
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_ERROR) {
+    return { status: 'discovery-error' };
+  }
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_DUPLICATE) {
+    const content = process.env.VERMILIAN_E2E_MASTER_PLAN_CONTENT ?? '## Outcome\n- Active epics: TEST-3\n';
+    return {
+      status: 'ambiguous',
+      articles: [
+        { id: 'e2e-master-plan-1', content, updated: Date.now() },
+        { id: 'e2e-master-plan-2', content, updated: Date.now() },
+      ],
+    };
+  }
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_CONTENT) {
+    return {
+      status: 'found',
+      article: {
+        id: 'e2e-master-plan',
+        content: process.env.VERMILIAN_E2E_MASTER_PLAN_CONTENT,
+        updated: Date.now(),
+      },
+    };
+  }
+  return { status: 'none' };
 }
