@@ -32,6 +32,9 @@ import { useProjects } from '../workspace-nav/api';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useChooseNextCandidates, type Candidate } from './candidates';
 import { currentWeekMonday, useDismissIssue } from './dismissals';
+import { useMasterPlan } from './masterPlanApi';
+import { MasterPlanDiagnosticBanner } from './MasterPlanDiagnosticBanner';
+import { resolveEpicOutcome } from '../../../shared/masterPlan';
 import styles from './PriorityDesk.module.css';
 
 interface PriorityDeskProps {
@@ -87,6 +90,7 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
 
       <div className={styles.body}>
         <FocusRankRepairBanner />
+        <MasterPlanDiagnosticBanner />
 
         {mode === 'now' ? (
           nowLoading ? (
@@ -238,6 +242,17 @@ function DeskCard({
 }) {
   const issue: BoardIssue = holder.issue;
 
+  // Only a cleanly 'loaded' Master Plan contributes an outcome label — a
+  // missing article, a discovery problem, or an Epic with a conflicting
+  // (>1 outcome) association all fall through to "no outcome shown", never
+  // a guess. Every non-'found' case is already covered by the persistent
+  // diagnostic banner above, including the conflict case itself.
+  const { data: masterPlan } = useMasterPlan();
+  const outcomes = masterPlan?.kind === 'loaded' ? masterPlan.outcomes : [];
+  const epicOutcome = issue.parentEpic
+    ? resolveEpicOutcome(outcomes, issue.parentEpic.idReadable)
+    : { kind: 'none' as const };
+
   return (
     <div
       className={`${styles.card} ${isNow ? styles.cardNow : ''}`}
@@ -256,7 +271,15 @@ function DeskCard({
       <Text type="text2" className={styles.cardMeta}>{projectName}</Text>
       {issue.parentEpic && (
         <Text type="text2" className={styles.cardEpic} data-testid={`priority-desk-card-epic-${issue.id}`}>
+          {/* The Epic identifier is always the native YouTrack idReadable —
+              never anything read from the Master Plan article, which is only
+              ever a lookup key (VERM-7 review correction, 2026-09-16). */}
           Epic: <span className={styles.cardEpicId}>{issue.parentEpic.idReadable}</span> {issue.parentEpic.summary}
+        </Text>
+      )}
+      {issue.parentEpic && epicOutcome.kind === 'found' && (
+        <Text type="text2" className={styles.cardOutcome} data-testid={`priority-desk-card-outcome-${issue.id}`}>
+          Outcome: <span className={styles.cardOutcomeName}>{epicOutcome.outcome.name}</span>
         </Text>
       )}
 
