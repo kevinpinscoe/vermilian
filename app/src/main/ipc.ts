@@ -42,6 +42,7 @@ import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
+import { getMasterPlanState } from './services/masterPlan';
 import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
@@ -322,6 +323,14 @@ export function registerIpc(): void {
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
     return youtrack.searchIssues(cfg.youtrackUrl, token, args.projectShortNames, args.query);
+  });
+
+  // Re-fetches and re-parses _vermilian-master-plan on every call — see
+  // services/masterPlan.ts for why there is no persistent cache here.
+  ipcMain.handle(IPC.getMasterPlan, async () => {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
   });
 
   ipcMain.handle(IPC.openExternalUrl, async (_e, url: string): Promise<void> => {

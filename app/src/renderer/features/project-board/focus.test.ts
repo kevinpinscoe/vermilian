@@ -27,6 +27,8 @@ function issue(id: string, fields: Partial<BoardIssueFields> = {}, summary = id)
     summary,
     resolved: null,
     fields: { ...emptyFields, ...fields },
+    parentEpic: null,
+    isEpic: false,
   };
 }
 

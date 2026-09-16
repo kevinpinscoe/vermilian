@@ -127,15 +127,39 @@ interface RawCustomField {
   value: unknown;
 }
 
+// Native YouTrack Epic → Subtask relationship (VERM-7). A "Subtask" issue-link
+// bucket appears in both the OUTWARD and INWARD direction on every issue, and
+// which bucket the epic/child relationship lands in is NOT reliable evidence
+// of which side is the parent — confirmed against production data 2026-09-16:
+// four of VERM-3's five subtasks carry the expected INWARD link back to it,
+// but the fifth (VERM-4) carries an OUTWARD "Subtask" link *to* VERM-3, i.e.
+// authored in the reverse direction. Resolution below therefore keys off the
+// linked issue's own Type field being "Epic", checked across both direction
+// buckets, never off which bucket it happened to land in. See
+// docs/adr/0008-master-plan-storage.md and PLAN.md § "Design decisions".
+interface RawLinkedIssue {
+  id: string;
+  idReadable: string;
+  summary: string;
+  customFields: RawCustomField[];
+}
+
+interface RawIssueLink {
+  direction: 'OUTWARD' | 'INWARD' | 'BOTH';
+  linkType: { name: string };
+  issues: RawLinkedIssue[];
+}
+
 interface RawIssue {
   id: string;
   idReadable: string;
   summary: string;
   resolved: number | null;
   customFields: RawCustomField[];
+  links?: RawIssueLink[];
 }
 
-import type { BoardIssue, IssueDetail } from '../../shared/workspace';
+import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueSearchQuery } from '../../shared/search';
 import {
   FIELD_DEFS,
@@ -148,8 +172,13 @@ import {
   type BoardIssueFields,
 } from '../../shared/fields';
 
+// links(...) is embedded in the same bounded per-project request the board/
+// candidate queries already make — no per-card N+1 (VERM-7 PLAN.md § "Fetch
+// shape"). The linked issue's customFields are fetched only so its Type name
+// can be read for parent-Epic resolution below.
 const ISSUE_FIELDS =
-  'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login))';
+  'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login)),' +
+  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
 
 function parseFieldStringValue(field: RawCustomField): string | null {
   if (field.value === null || field.value === undefined) return null;
@@ -192,6 +221,41 @@ function extractFields(fields: RawCustomField[]): BoardIssueFields {
   return result as unknown as BoardIssueFields;
 }
 
+// Reads the "Type" custom field's value name off any customFields array —
+// the primary issue's own, or a linked issue's inside a links() bucket, both
+// of which share the same wire shape. Missing customFields, a missing Type
+// entry, or a malformed/empty value all resolve to null rather than throwing
+// — an issue with no readable Type is simply never treated as an Epic.
+function typeNameOf(customFields: RawCustomField[] | undefined): string | null {
+  const typeField = customFields?.find((f) => f.name === 'Type');
+  return typeField ? parseFieldStringValue(typeField) : null;
+}
+
+// See the RawIssueLink comment above for why direction is not trusted.
+// Collects every Epic-typed issue across both direction buckets of every
+// Subtask-type link before picking one, rather than returning the first
+// bucket that happens to contain one — the Subtask link type does not forbid
+// an issue from carrying more than one such link, so resolution must not
+// depend on which bucket (or which of several) the API happened to return
+// first. Ties (more than one Epic-typed parent) are broken by idReadable —
+// an arbitrary but now deterministic and documented choice, never "whichever
+// direction bucket landed first."
+function resolveParentEpic(links: RawIssueLink[] | undefined): ParentEpic | null {
+  if (!links) return null;
+  const epics: ParentEpic[] = [];
+  for (const link of links) {
+    if (link.linkType?.name !== 'Subtask') continue;
+    for (const linked of link.issues) {
+      if (typeNameOf(linked.customFields) === 'Epic') {
+        epics.push({ id: linked.id, idReadable: linked.idReadable, summary: linked.summary });
+      }
+    }
+  }
+  if (epics.length === 0) return null;
+  epics.sort((a, b) => (a.idReadable < b.idReadable ? -1 : a.idReadable > b.idReadable ? 1 : 0));
+  return epics[0];
+}
+
 function rawToBoardIssue(issue: RawIssue): BoardIssue {
   return {
     id: issue.id,
@@ -199,6 +263,11 @@ function rawToBoardIssue(issue: RawIssue): BoardIssue {
     summary: issue.summary,
     resolved: issue.resolved ?? null,
     fields: extractFields(issue.customFields ?? []),
+    parentEpic: resolveParentEpic(issue.links),
+    // An Epic issue is a container, never itself a Choose-next candidate
+    // (VERM-7 review finding, 2026-09-16) — read from the issue's own Type
+    // field, which ISSUE_FIELDS already fetches as an ordinary custom field.
+    isEpic: typeNameOf(issue.customFields) === 'Epic',
   };
 }
 
@@ -242,6 +311,10 @@ export async function searchIssues(
 
 // --- Issue detail (all fields including Notes, Date time entered) ---
 
+// No links(...) here — the task detail panel does not display parentEpic
+// (VERM-7 review finding, 2026-09-16: fetching it was pure unused payload on
+// every single-issue detail open). Add it back only alongside an actual UI
+// consumer in the detail panel.
 const DETAIL_FIELDS =
   'id,idReadable,summary,resolved,project(id,name,shortName),' +
   'customFields(name,$type,value(name,isResolved,text,login))';
@@ -267,6 +340,9 @@ export async function getIssueDetail(
     resolved: raw.resolved ?? null,
     project: raw.project,
     fields: extractFields(raw.customFields ?? []),
+    // Not fetched here — see the DETAIL_FIELDS comment above.
+    parentEpic: null,
+    isEpic: typeNameOf(raw.customFields) === 'Epic',
   };
 }
 
@@ -509,13 +585,16 @@ export async function getIssuesForStandup(
   return { done, inProgress, blocked };
 }
 
-// --- _vermilian-config Knowledge Base Article ---
+// --- _vermilian-config and _vermilian-master-plan Knowledge Base Articles ---
 
-const ARTICLE_SUMMARY = '_vermilian-config';
+const CONFIG_ARTICLE_SUMMARY = '_vermilian-config';
+const MASTER_PLAN_ARTICLE_SUMMARY = '_vermilian-master-plan';
 const ARTICLE_FIELDS = 'id,summary,content,updated';
 // This YouTrack instance requires every Article to belong to a project.
-// VERM (id 0-33) is a dedicated project created to own the config article.
-const ARTICLE_PROJECT_SHORT_NAME = 'VERM';
+// VERM (id 0-33) is a dedicated project created to own these articles — both
+// _vermilian-config (application-managed JSON) and _vermilian-master-plan
+// (human-maintained Markdown, ADR-0008) live here, as top-level siblings.
+const VERMILIAN_ARTICLE_PROJECT_SHORT_NAME = 'VERM';
 
 interface RawArticle {
   id: string;
@@ -541,7 +620,7 @@ export async function findVermilianArticle(
       token,
       `/api/articles?fields=${ARTICLE_FIELDS}&$top=500`,
     );
-    const match = articles.find((a) => a.summary === ARTICLE_SUMMARY);
+    const match = articles.find((a) => a.summary === CONFIG_ARTICLE_SUMMARY);
     return match ? { id: match.id, content: match.content ?? '{}', updated: match.updated ?? 0 } : null;
   } catch {
     return null;
@@ -561,9 +640,9 @@ export async function createVermilianArticle(
       {
         method: 'POST',
         body: JSON.stringify({
-          summary: ARTICLE_SUMMARY,
+          summary: CONFIG_ARTICLE_SUMMARY,
           content,
-          project: { shortName: ARTICLE_PROJECT_SHORT_NAME },
+          project: { shortName: VERMILIAN_ARTICLE_PROJECT_SHORT_NAME },
         }),
       },
     );
@@ -607,4 +686,81 @@ export async function getVermilianArticle(
   } catch {
     return null;
   }
+}
+
+// --- _vermilian-master-plan discovery (read-only — Vermilian never creates,
+// updates, or overwrites this article; Kevin authors it by hand in YouTrack.
+// See ADR-0008.) ---
+
+const MASTER_PLAN_PAGE_SIZE = 100;
+// Safety cap against runaway pagination (10,000 articles in one project),
+// not a discovery-completeness bound: discovery only ever returns 'none' or
+// 'ambiguous' once every page has actually been read, and returns
+// 'discovery-incomplete' instead if this cap is hit first, rather than
+// silently trusting a partial result the way a single `$top=500` request
+// would (VERM-7 review correction, 2026-09-16).
+const MASTER_PLAN_MAX_PAGES = 100;
+
+type PagedArticlesResult =
+  | { ok: true; articles: RawArticle[] }
+  | { ok: false; reason: 'fetch-error' | 'incomplete' };
+
+// Server-side project-scoped listing (confirmed against the live instance,
+// 2026-09-16: `/api/admin/projects/<shortName>/articles` accepts the project
+// shortName directly and returns only that project's articles) — paginated
+// to exhaustion rather than trusting one bounded page, so completeness is
+// established rather than assumed.
+async function fetchAllProjectArticles(
+  url: string,
+  token: string,
+  projectShortName: string,
+): Promise<PagedArticlesResult> {
+  const all: RawArticle[] = [];
+  for (let page = 0; page < MASTER_PLAN_MAX_PAGES; page++) {
+    let batch: RawArticle[];
+    try {
+      batch = await request<RawArticle[]>(
+        url,
+        token,
+        `/api/admin/projects/${projectShortName}/articles?fields=${ARTICLE_FIELDS}` +
+          `&$top=${MASTER_PLAN_PAGE_SIZE}&$skip=${page * MASTER_PLAN_PAGE_SIZE}`,
+      );
+    } catch {
+      return { ok: false, reason: 'fetch-error' };
+    }
+    all.push(...batch);
+    if (batch.length < MASTER_PLAN_PAGE_SIZE) return { ok: true, articles: all };
+  }
+  return { ok: false, reason: 'incomplete' };
+}
+
+export type MasterPlanDiscovery =
+  | { status: 'none' }
+  | { status: 'found'; article: VermilianArticle }
+  // Every matching article's id, so a caller can tell whether the *same* set
+  // of duplicates is still present versus a genuinely new one (VERM-7 review
+  // correction: a dismissed diagnostic must reappear if the underlying
+  // problem changes, not just if its kind is the same).
+  | { status: 'ambiguous'; articles: VermilianArticle[] }
+  // A request in the pagination chain failed outright — never collapsed
+  // into 'none'. 'discovery-incomplete' is the distinct case where every
+  // request succeeded but MASTER_PLAN_MAX_PAGES was exhausted before
+  // pagination could prove completeness.
+  | { status: 'discovery-error' }
+  | { status: 'discovery-incomplete' };
+
+export async function findMasterPlanArticle(
+  url: string,
+  token: string,
+): Promise<MasterPlanDiscovery> {
+  const result = await fetchAllProjectArticles(url, token, VERMILIAN_ARTICLE_PROJECT_SHORT_NAME);
+  if (!result.ok) {
+    return result.reason === 'fetch-error' ? { status: 'discovery-error' } : { status: 'discovery-incomplete' };
+  }
+  const matches = result.articles
+    .filter((a) => a.summary === MASTER_PLAN_ARTICLE_SUMMARY)
+    .map((a): VermilianArticle => ({ id: a.id, content: a.content ?? '', updated: a.updated ?? 0 }));
+  if (matches.length === 0) return { status: 'none' };
+  if (matches.length > 1) return { status: 'ambiguous', articles: matches };
+  return { status: 'found', article: matches[0] };
 }

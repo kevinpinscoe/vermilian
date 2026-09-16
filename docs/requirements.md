@@ -127,13 +127,28 @@ links; the desk is a curated view onto it, never a second store. See
 - Reads native YouTrack Epic → Subtask issue links to show the parent epic and outcome name
   on a card. Creating or restructuring those links, and full portfolio management, are out
   of scope for the desk itself.
-- **Master Plan (minimum contract)**: a single Master Plan article — a YouTrack Knowledge
-  Base article, or an issue in a dedicated planning project — defines the outcomes the
-  desk and the AI recommendation reason against. Full authoring workflow and per-epic
-  "next milestone" tracking are Epic-context delivery-step scope; the minimum shape below
-  is defined now so "Ask for recommendation" has an unambiguous source to depend on:
+- **Master Plan**: a single Master Plan article — a YouTrack Knowledge Base article, exact
+  summary `_vermilian-master-plan`, owned by project `VERM`, top-level (a sibling of
+  `_vermilian-config`, never its child) — see [ADR-0008](adr/0008-master-plan-storage.md).
+  It defines the outcomes the desk and the AI recommendation reason against:
 
   `Outcome/theme → active epics → success measure → target window → risks/dependencies`
+
+  The article is **human-maintained**: Kevin authors and edits it by hand in YouTrack.
+  Vermilian **finds, reads, parses, and displays** it — deterministically matching both
+  the exact summary and the owning project, never treating a bounded/incomplete search as
+  proof of absence or uniqueness — but **never creates, overwrites, or automatically
+  repairs** it. A task's parent Epic (native YouTrack relationship, above) resolves to a
+  Master Plan outcome when that Epic's `idReadable` appears in the outcome's `Active
+  epics` list; the Epic identifier shown anywhere in the UI is always the native
+  `idReadable`, never anything read from the article. No match, more than one matching
+  article, an unreachable/incomplete discovery, or malformed/partial article content are
+  all distinct, surfaced states — none of them silently choose a default or break Priority
+  Desk or ordinary task display; a persistent, dismissible diagnostic banner names the
+  problem when one exists. An Epic listed under more than one outcome is itself an
+  ambiguous association (no outcome shown for it, folded into the same diagnostic) rather
+  than a first-match guess. Full authoring workflow and per-epic "next milestone" tracking
+  remain Epic-context delivery-step scope beyond this minimum.
 
   Selecting an outcome for a recommendation call means selecting one Master Plan entry;
   its active epics and their own descriptions are the planning context bounded into that

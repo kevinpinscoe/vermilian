@@ -45,12 +45,27 @@ export const STATUS_OPTIONS = FIELD_DEFS.status.options;
 export const PRIORITY_OPTIONS = FIELD_DEFS.priority.options;
 export const CATEGORY_OPTIONS = FIELD_DEFS.category.options;
 
+// Native YouTrack Epic → Subtask issue-link metadata, resolved server-side in
+// api/youtrack.ts (see rawToBoardIssue). Deliberately not a BoardIssueFields /
+// FIELD_DEFS entry — this is issue-link data, not a custom field, and carries
+// no `patchIssue` path (VERM-7: read-only Epic context).
+export interface ParentEpic {
+  id: string;
+  idReadable: string;
+  summary: string;
+}
+
 export interface BoardIssue {
   id: string;
   idReadable: string;
   summary: string;
   resolved: number | null; // epoch ms; null = unresolved
   fields: BoardIssueFields;
+  parentEpic: ParentEpic | null;
+  // This issue's own Type is "Epic" — read from the issue's Type custom
+  // field server-side (main/api/youtrack.ts). An Epic is a container, never
+  // itself a Choose-next candidate (VERM-7 review finding, 2026-09-16).
+  isEpic: boolean;
 }
 
 export interface IssueDetailProject {

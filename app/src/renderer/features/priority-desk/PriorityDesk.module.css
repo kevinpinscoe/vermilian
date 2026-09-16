@@ -141,6 +141,30 @@
   color: var(--secondary-text-color, #8b8ea0);
 }
 
+.cardEpic {
+  font-size: 11px !important;
+  color: var(--secondary-text-color, #8b8ea0);
+}
+
+.cardEpicId {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-weight: 600;
+}
+
+/* Deliberately a distinct accent color from .cardEpic/.cardMeta (both
+   secondary-text-gray) so the Epic and its Master Plan outcome read as two
+   different kinds of information at a glance, not one continuation of the
+   other. */
+.cardOutcome {
+  font-size: 11px !important;
+  color: var(--primary-color, #0073ea);
+}
+
+.cardOutcomeName {
+  font-weight: 600;
+  font-style: italic;
+}
+
 .cardWhyNow {
   font-size: 11.5px !important;
   font-style: italic;

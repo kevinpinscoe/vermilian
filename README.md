@@ -14,7 +14,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## To do
 
-- Coming in 2026 Q3-Q4 Prioity tasking with AI assist. Mock up at  https://kevinpinscoe.github.io/vermilian/
+- Coming in 2026 Q3-Q4 Prioity tasking with AI assist. Mock up at  <https://kevinpinscoe.github.io/vermilian/>
 
 ## Status
 
@@ -85,6 +85,7 @@ drag **Vermilian** to Applications. (Intel Macs are not yet served — see [Targ
 > **Unsigned build:** Vermilian is not yet notarized with an Apple Developer ID, so Gatekeeper
 > reports that the app "cannot be opened" or "is damaged." The Homebrew Cask clears the quarantine
 > flag for you automatically. For the manual `.dmg`, run this once after dragging it in:
+>
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Vermilian.app
 > ```
@@ -148,7 +149,7 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
 ## Target platforms
 
 | Platform | Artifact | Architecture | v1.0.0 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Linux (Fedora / Ubuntu) | AppImage | x86_64 | published |
 | macOS (Apple Silicon) | `.dmg` | arm64 | published |
 | Windows 11 | Squirrel installer + Scoop | x86_64 | published |
@@ -173,7 +174,7 @@ follow-up release.
 ## Tech stack
 
 | Layer | Choice |
-|---|---|
+| --- | --- |
 | App shell | Electron (electron-forge) |
 | UI framework | React 18 + TypeScript |
 | Design system | [monday.com Vibe](https://style.monday.com) — React component library for monday.com-style UI |
@@ -217,7 +218,7 @@ Vermilian targets a **monday.com-style** visual experience: high-density boards,
 Theme colours are defined in `app/src/renderer/theme.ts`. Two independent palettes let the left nav and the main board have different text colours:
 
 | Variable | Where it applies |
-|---|---|
+| --- | --- |
 | `--nav-header-text-color` | Left rail — workspace name, "All tasks" link |
 | `--nav-primary-text-color` | Left rail — project names |
 | `--nav-secondary-text-color` | Left rail — folder names, issue-count badges |
@@ -241,7 +242,7 @@ See [spec/README.md](spec/README.md) for the full SDD workflow.
 ## Phases
 
 | Phase | Goal |
-|---|---|
+| --- | --- |
 | 0 | Dev environment — tools installed, YouTrack API verified |
 | 1 | SDD design — specs, wireframes, ADRs, API contracts |
 | 2 | Coding — implement from specs |
@@ -259,7 +260,7 @@ Phase 2 increment 1 (Foundation + Settings) is shipped but has a few known devia
 
 ## Repository Layout
 
-```
+```text
 vermilian/
 ├── app/                    # Electron app root (electron-forge, Vite, React 18, Vibe)
 │   ├── src/
@@ -285,13 +286,17 @@ vermilian/
 ├── mise.toml               # Node 24.15.0 toolchain pin
 ├── CONTRIBUTING.md
 ├── LICENSE
+├── PLAN.md                 # active project's implementation plan (AI-executed, human-owned)
 ├── README.md
-└── RUNBOOK.md
+├── RUNBOOK.md
+└── TODO.md                 # human task list / next steps
 ```
 
 ## Documentation
 
 - [Requirements](docs/requirements.md)
+- [Project plan](PLAN.md)
+- [To-do / next steps](TODO.md)
 - [SDD specs](spec/README.md)
 - [Architecture diagrams](docs/architecture/README.md)
 - [UI wireframes](docs/design/README.md)
@@ -304,7 +309,7 @@ The default Electron icon can be replaced by dropping three files into `app/buil
 ### Image requirements
 
 | Platform | Format | Minimum size |
-|---|---|---|
+| --- | --- | --- |
 | macOS | `.icns` | 1024×1024 source |
 | Windows | `.ico` | 256×256 source (multi-resolution container) |
 | Linux | `.png` | 512×512 (1024×1024 recommended) |
@@ -315,7 +320,7 @@ Start with a single 1024×1024 PNG and convert to the platform formats. Tools: [
 
 **1.** Place the files:
 
-```
+```text
 app/build/
   icon.icns
   icon.ico

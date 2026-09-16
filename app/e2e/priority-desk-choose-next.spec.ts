@@ -8,16 +8,22 @@
  * existing VERM-4 conflict/repair behavior (see focus-toggle.spec.ts and
  * priority-desk.spec.ts for that behavior's own coverage).
  *
- * The active-Epic filter in VERM-6's original scope is deferred to VERM-7 (no
- * native Epic/Subtask link data exists yet — scope decision recorded on
- * VERM-6/VERM-7, 2026-09-16), so there is no Epic filter to test here.
+ * VERM-7 completes the active-Epic filter VERM-6's original scope deferred
+ * (no native Epic/Subtask link data existed at the time).
  *
  * Fake YouTrack fixtures (src/main/api/fakeYouTrack.ts): TEST project has 6
  * issues (0-e1-1..6 — TEST-1..6), TST2 has 2 (0-e2-1..2), INB has 1 (0-e3-1).
- * All 9 start unranked, undismissed, not Done — 9 eligible candidates on a
- * fresh launch, capped at 7. TEST-1 and TEST-2 carry fixed Due Dates (TEST-1
- * earlier than TEST-2, both earlier than the rest, which are undated), so
- * they deterministically sort first and second regardless of Priority.
+ * All start unranked, undismissed, not Done. TEST-3 is itself flagged
+ * isEpic — an Epic is never a Choose-next candidate (VERM-7 review finding)
+ * — so 8 of the 9 are actually eligible on a fresh launch, still capped at 7
+ * displayed; the visible top-7 set is unaffected by that exclusion, since
+ * TEST-3 was already outside it under the plain seven-item cap. TEST-1 and
+ * TEST-2 carry fixed Due Dates (TEST-1 earlier than TEST-2, both earlier
+ * than the rest, which are undated), so they deterministically sort first
+ * and second regardless of Priority. TEST-3 doubles as the parent Epic for
+ * TEST-1 and TEST-2; TEST-4 doubles as the parent Epic for TEST-5 (but is
+ * not itself flagged isEpic, so it still appears as an ordinary candidate);
+ * TEST-6 and every TST2/INB issue carry no parent Epic at all (VERM-7).
  */
 
 import { test, expect, Page } from '@playwright/test';
@@ -66,7 +72,7 @@ test.describe('Priority Desk — Choose next', () => {
     await expect(page.locator('[data-testid="priority-desk-slot-now"]')).toBeVisible();
   });
 
-  test('shows at most seven candidates even though nine are eligible', async () => {
+  test('shows at most seven candidates even though eight are eligible', async () => {
     await openChooseNext(page);
     await expect(page.locator('[data-testid="priority-desk-candidate-id"]')).toHaveCount(7);
   });
@@ -121,6 +127,67 @@ test.describe('Priority Desk — Choose next', () => {
     // Clicking the same pill again clears the filter back to All.
     await page.locator('[data-testid="priority-desk-status-pill"][data-value="In Progress"]').click();
     await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(7)');
+  });
+
+  test('VERM-7: an Epic issue itself never appears as a Choose-next candidate', async () => {
+    // TEST-3 (0-e1-3) is itself flagged isEpic in the fake fixtures and is
+    // the parent Epic of TEST-1/TEST-2. Filtering to its own Status ("To do")
+    // narrows the pool below the seven-item cap, which is exactly the
+    // condition under which the pre-fix cap-only exclusion would have let it
+    // through as a visible candidate.
+    await openChooseNext(page);
+    await page.locator('[data-testid="priority-desk-status-pill"][data-value="To do"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(5)');
+    await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-3"]')).toHaveCount(0);
+    const ids = await page.locator('[data-testid="priority-desk-candidate-id"]').allTextContents();
+    expect(ids.sort()).toEqual(['INB-1', 'TEST-1', 'TEST-2', 'TEST-4', 'TST2-1']);
+  });
+
+  test('VERM-7: the Epic filter options are populated from native Epic relationships', async () => {
+    await openChooseNext(page);
+    // "All epics" plus the two epics actually present in the fixtures (TEST-3, TEST-4) —
+    // never a hard-coded list.
+    await expect(page.locator('[data-testid="priority-desk-epic-pill"]')).toHaveCount(3);
+    await expect(page.locator('[data-testid="priority-desk-epic-pill"][data-value="0-e1-3"]')).toContainText('TEST-3');
+    await expect(page.locator('[data-testid="priority-desk-epic-pill"][data-value="0-e1-4"]')).toContainText('TEST-4');
+  });
+
+  test('VERM-7: selecting an Epic restricts Choose next to issues linked beneath it', async () => {
+    await openChooseNext(page);
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(7)');
+
+    await page.locator('[data-testid="priority-desk-epic-pill"][data-value="0-e1-3"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(2)');
+    const ids = await page.locator('[data-testid="priority-desk-candidate-id"]').allTextContents();
+    expect(ids.sort()).toEqual(['TEST-1', 'TEST-2']);
+  });
+
+  test('VERM-7: clearing the Epic filter restores the broader candidate set', async () => {
+    await openChooseNext(page);
+    await page.locator('[data-testid="priority-desk-epic-pill"][data-value="0-e1-3"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(2)');
+
+    await page.locator('[data-testid="priority-desk-epic-pill"][data-value=""]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(7)');
+  });
+
+  test('VERM-7: the Status and Epic filters combine conjunctively', async () => {
+    await openChooseNext(page);
+    // TEST-5 (0-e1-5, "In Progress") is the only candidate under Epic TEST-4.
+    await page.locator('[data-testid="priority-desk-epic-pill"][data-value="0-e1-4"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(1)');
+
+    // Adding a Status filter TEST-5 does not match empties the set — the
+    // Epic filter never gets widened back out by the Status pill.
+    await page.locator('[data-testid="priority-desk-status-pill"][data-value="To do"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(0)');
+    await expect(page.locator('[data-testid="priority-desk-no-candidates"]')).toBeVisible();
+
+    // TEST-5's actual Status ("In Progress") brings it back, still scoped to the same Epic.
+    await page.locator('[data-testid="priority-desk-status-pill"][data-value="To do"]').click(); // clear
+    await page.locator('[data-testid="priority-desk-status-pill"][data-value="In Progress"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(1)');
+    await expect(page.locator('[data-testid="priority-desk-candidate-id"]')).toHaveText('TEST-5');
   });
 
   test('"Not this week" removes the card immediately and updates the candidate count', async () => {

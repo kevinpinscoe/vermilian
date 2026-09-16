@@ -46,9 +46,12 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       active-Epic filter in this delivery step's original scope is deferred to VERM-7 — no
       native Epic/Subtask link data exists yet. Delivered in
       [VERM-6](https://youtrack.kevininscoe.com/issue/VERM-6).
-- [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic + outcome
-      name only, no full portfolio management); document a Master Plan knowledge-base template;
-      populate the active-Epic filter Choose next deferred. See
+- [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic, no
+      full portfolio management); populate the active-Epic filter Choose next deferred; and
+      the live `_vermilian-master-plan` YouTrack Knowledge Base article
+      (per [ADR-0008](docs/adr/0008-master-plan-storage.md)) — deterministic discovery,
+      structured parse diagnostics, and Epic→outcome association shown on Now-mode cards,
+      all read-only (Vermilian never writes the article). See
       [VERM-7](https://youtrack.kevininscoe.com/issue/VERM-7).
 - [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
       recommendation" action that evaluates the bounded candidate set and returns a ranked
