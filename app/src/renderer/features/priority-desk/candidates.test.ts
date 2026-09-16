@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeCandidates, compareCandidates, candidateSetReadiness, MAX_CANDIDATES,
+  computeCandidates, compareCandidates, candidateSetReadiness, deriveEpicFilterOptions, MAX_CANDIDATES,
   type Candidate, type QueryStatus,
 } from './candidates';
 import type { BoardIssue, BoardIssueFields, ParentEpic } from '../../../shared/workspace';
@@ -106,6 +106,7 @@ describe('computeCandidates', () => {
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
   });
@@ -118,6 +119,7 @@ describe('computeCandidates', () => {
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
   });
@@ -127,6 +129,7 @@ describe('computeCandidates', () => {
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['a']);
   });
@@ -136,7 +139,7 @@ describe('computeCandidates', () => {
     const dismissals: Dismissals = { 'ws-1:a': { workspace: 'ws-1', issueId: 'a', dismissedWeekOf: '2026-09-14' } };
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
-      dismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      dismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null, epicFilter: null,
     });
     expect(candidates).toHaveLength(0);
   });
@@ -146,7 +149,7 @@ describe('computeCandidates', () => {
     const dismissals: Dismissals = { 'ws-1:a': { workspace: 'ws-1', issueId: 'a', dismissedWeekOf: '2026-09-07' } };
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
-      dismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      dismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null, epicFilter: null,
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['a']);
   });
@@ -159,6 +162,7 @@ describe('computeCandidates', () => {
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: 'In Progress',
+      epicFilter: null,
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
   });
@@ -168,6 +172,7 @@ describe('computeCandidates', () => {
     const { candidates, totalEligible } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
     });
     expect(candidates).toHaveLength(MAX_CANDIDATES);
     expect(totalEligible).toBe(10);
@@ -178,10 +183,128 @@ describe('computeCandidates', () => {
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['OTHER', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
     });
     expect(candidates.map((c) => c.projectShortName)).toEqual(['OTHER']);
     // (Workspace isolation itself is enforced by the caller only ever passing
     // that workspace's own projects in — see useChooseNextCandidates, which
     // reuses useActiveWorkspaceProjectShortNames exactly as focus.ts does.)
+  });
+
+  // ─── VERM-7: active-Epic filter ───────────────────────────────────────────
+
+  const EPIC_A: ParentEpic = { id: 'epic-a', idReadable: 'TEST-100', summary: 'Epic A' };
+  const EPIC_B: ParentEpic = { id: 'epic-b', idReadable: 'TEST-200', summary: 'Epic B' };
+
+  it('restricts candidates to issues linked beneath the selected Epic', () => {
+    const issues = [
+      issue({ id: 'a', parentEpic: EPIC_A }),
+      issue({ id: 'b', parentEpic: EPIC_B }),
+      issue({ id: 'c', parentEpic: null }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['a']);
+  });
+
+  it('applies no Epic-membership restriction when no Epic is selected', () => {
+    const issues = [issue({ id: 'a', parentEpic: EPIC_A }), issue({ id: 'b', parentEpic: null })];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['a', 'b']);
+  });
+
+  it('applies the Status and Epic filters conjunctively', () => {
+    const issues = [
+      issue({ id: 'a', fields: { status: 'To do' }, parentEpic: EPIC_A }),
+      issue({ id: 'b', fields: { status: 'In Progress' }, parentEpic: EPIC_A }),
+      issue({ id: 'c', fields: { status: 'To do' }, parentEpic: EPIC_B }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: 'To do',
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['a']);
+  });
+
+  it('still excludes a ranked issue under an Epic filter', () => {
+    const issues = [
+      issue({ id: 'a', fields: { focus: 'Yes', focusRank: 1 }, parentEpic: EPIC_A }),
+      issue({ id: 'b', parentEpic: EPIC_A }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
+  });
+
+  it('still excludes a dismissed-this-week issue under an Epic filter', () => {
+    const issues = [issue({ id: 'a', parentEpic: EPIC_A }), issue({ id: 'b', parentEpic: EPIC_A })];
+    const dismissals: Dismissals = { 'ws-1:a': { workspace: 'ws-1', issueId: 'a', dismissedWeekOf: '2026-09-14' } };
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null, epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
+  });
+
+  it('keeps deterministic Due Date/Priority/idReadable ordering unchanged after Epic filtering', () => {
+    const issues = [
+      issue({ id: 'a', idReadable: 'TEST-2', fields: { dueDate: 2000 }, parentEpic: EPIC_A }),
+      issue({ id: 'b', idReadable: 'TEST-1', fields: { dueDate: 1000 }, parentEpic: EPIC_A }),
+      issue({ id: 'c', idReadable: 'TEST-3', fields: { dueDate: 1500 }, parentEpic: EPIC_B }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['b', 'a']);
+  });
+
+  it('keeps the seven-item cap unchanged after Epic filtering', () => {
+    const issues = Array.from({ length: 10 }, (_, i) =>
+      issue({ id: `i${i}`, idReadable: `TEST-${i}`, parentEpic: EPIC_A }));
+    const { candidates, totalEligible } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates).toHaveLength(MAX_CANDIDATES);
+    expect(totalEligible).toBe(10);
+  });
+});
+
+describe('deriveEpicFilterOptions', () => {
+  const EPIC_A: ParentEpic = { id: 'epic-a', idReadable: 'TEST-100', summary: 'Epic A' };
+  const EPIC_B: ParentEpic = { id: 'epic-b', idReadable: 'TEST-200', summary: 'Epic B' };
+
+  it('returns the distinct parent Epics across all fetched issues, sorted by idReadable', () => {
+    const issues = [
+      issue({ id: 'a', parentEpic: EPIC_B }),
+      issue({ id: 'b', parentEpic: EPIC_A }),
+      issue({ id: 'c', parentEpic: EPIC_A }),
+      issue({ id: 'd', parentEpic: null }),
+    ];
+    expect(deriveEpicFilterOptions(new Map([['TEST', issues]]))).toEqual([EPIC_A, EPIC_B]);
+  });
+
+  it('is not affected by Status, rank, or dismissal — an Epic option persists even if its only child is otherwise ineligible', () => {
+    const issues = [issue({ id: 'a', fields: { status: 'Done' }, parentEpic: EPIC_A })];
+    expect(deriveEpicFilterOptions(new Map([['TEST', issues]]))).toEqual([EPIC_A]);
+  });
+
+  it('returns an empty list when no issue has a resolvable parent Epic', () => {
+    const issues = [issue({ id: 'a', parentEpic: null })];
+    expect(deriveEpicFilterOptions(new Map([['TEST', issues]]))).toEqual([]);
   });
 });

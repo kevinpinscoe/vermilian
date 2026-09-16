@@ -6,11 +6,13 @@
 // VERM-5), so Now mode, Choose next, and the boards all share one cache
 // instead of each firing their own requests.
 //
-// The active-Epic filter listed in this ticket's original scope is deferred to
-// VERM-7 — no native Epic/Subtask link data exists in Vermilian yet (scope
-// decision recorded on VERM-6/VERM-7, 2026-09-16).
+// VERM-7 adds the active-Epic filter this ticket's VERM-6 delivery step
+// deferred: options are the distinct BoardIssue.parentEpic values already
+// present in the fetched, pre-filter issue set (no hard-coded list, no extra
+// query), and the filter itself is conjunctive with every other eligibility
+// rule below.
 import { useQueries } from '@tanstack/react-query';
-import type { BoardIssue } from '../../../shared/workspace';
+import type { BoardIssue, ParentEpic } from '../../../shared/workspace';
 import { PRIORITY_OPTIONS } from '../../../shared/workspace';
 import type { Dismissals } from '../../../shared/boardConfig';
 import { useWorkspaceStore } from '../../stores/workspace';
@@ -62,6 +64,7 @@ export interface ComputeCandidatesArgs {
   workspaceId: string;
   weekOf: string;
   statusFilter: string | null;
+  epicFilter: string | null; // parentEpic.id; null = no Epic-membership restriction
 }
 
 export interface ComputeCandidatesResult {
@@ -74,13 +77,15 @@ export interface ComputeCandidatesResult {
  * "Choose-next eligibility"): belongs to a project in the active workspace
  * (enforced by the caller only ever passing that workspace's projects),
  * Status is not Done, no existing Focus rank 1-3 (a ranked issue shows in Now
- * mode instead), not under an unexpired "Not this week" dismissal, and
- * matches the selected Status filter when one is set. A Focus=Yes issue with
- * no rank remains eligible and appears starred — Focus itself is not an
+ * mode instead), not under an unexpired "Not this week" dismissal, matches
+ * the selected Status filter when one is set, and matches the selected
+ * active-Epic filter when one is set (VERM-7) — conjunctive with the Status
+ * filter, never a side effect on Priority or Focus. A Focus=Yes issue with no
+ * rank remains eligible and appears starred — Focus itself is not an
  * eligibility criterion.
  */
 export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidatesResult {
-  const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter } = args;
+  const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter, epicFilter } = args;
   const eligible: Candidate[] = [];
 
   for (const [projectShortName, issues] of issuesByProject) {
@@ -89,12 +94,35 @@ export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidate
       if (isFocusRank(issue.fields.focusRank)) continue;
       if (isDismissedThisWeek(dismissals, workspaceId, issue.id, weekOf)) continue;
       if (statusFilter && issue.fields.status !== statusFilter) continue;
+      if (epicFilter && issue.parentEpic?.id !== epicFilter) continue;
       eligible.push({ issue, projectShortName });
     }
   }
 
   eligible.sort(compareCandidates);
   return { candidates: eligible.slice(0, MAX_CANDIDATES), totalEligible: eligible.length };
+}
+
+/**
+ * The active-Epic filter's own options: every distinct parent Epic appearing
+ * across the workspace's fetched issues, independent of Status/dismissal/rank
+ * eligibility — so an Epic never disappears from the dropdown merely because
+ * its one remaining candidate got dismissed or ranked. No hard-coded list,
+ * no custom field: derived entirely from BoardIssue.parentEpic. Sorted by
+ * idReadable for a stable, deterministic dropdown order.
+ */
+export function deriveEpicFilterOptions(
+  issuesByProject: ReadonlyMap<string, readonly BoardIssue[]>,
+): ParentEpic[] {
+  const byId = new Map<string, ParentEpic>();
+  for (const issues of issuesByProject.values()) {
+    for (const issue of issues) {
+      if (issue.parentEpic && !byId.has(issue.parentEpic.id)) {
+        byId.set(issue.parentEpic.id, issue.parentEpic);
+      }
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.idReadable < b.idReadable ? -1 : 1));
 }
 
 // ─── Readiness (pure) ───────────────────────────────────────────────────────
@@ -134,7 +162,8 @@ export function candidateSetReadiness(
 
 export function useChooseNextCandidates(
   statusFilter: string | null,
-): ComputeCandidatesResult & CandidateSetReadiness {
+  epicFilter: string | null,
+): ComputeCandidatesResult & CandidateSetReadiness & { epicOptions: ParentEpic[] } {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const projectShortNames = useActiveWorkspaceProjectShortNames();
   const dismissalsQuery = useDismissals();
@@ -153,7 +182,7 @@ export function useChooseNextCandidates(
   );
 
   if (isLoading || isError) {
-    return { candidates: [], totalEligible: 0, isLoading, isError };
+    return { candidates: [], totalEligible: 0, isLoading, isError, epicOptions: [] };
   }
 
   const issuesByProject = new Map<string, BoardIssue[]>();
@@ -167,7 +196,11 @@ export function useChooseNextCandidates(
     workspaceId: activeWorkspaceId,
     weekOf: currentWeekMonday(),
     statusFilter,
+    epicFilter,
   });
 
-  return { candidates, totalEligible, isLoading: false, isError: false };
+  return {
+    candidates, totalEligible, isLoading: false, isError: false,
+    epicOptions: deriveEpicFilterOptions(issuesByProject),
+  };
 }

@@ -9,14 +9,15 @@
 // through the same FocusControl (star, then rank badge) used everywhere else
 // rather than a new drag-to-slot interaction.
 //
-// The active-Epic filter listed in VERM-6's original scope is deferred to
-// VERM-7 — no native Epic/Subtask link data exists in Vermilian yet (scope
-// decision recorded on VERM-6/VERM-7, 2026-09-16). Epic context, AI
-// recommendation, and Daily Review remain later delivery steps.
+// VERM-7 adds the native Epic → Subtask context this file previously deferred:
+// Now-mode cards show a resolvable parent Epic (BoardIssue.parentEpic, read-
+// only — see api/youtrack.ts), and Choose next gains the active-Epic filter
+// VERM-6 left unpopulated. AI recommendation and Daily Review remain later
+// delivery steps.
 import React, { useState } from 'react';
 import { Heading, Text, Button, AttentionBox } from '@vibe/core';
 import { Play } from '@vibe/icons';
-import type { BoardIssue } from '../../../shared/workspace';
+import type { BoardIssue, ParentEpic } from '../../../shared/workspace';
 import { STATUS_OPTIONS } from '../../../shared/workspace';
 import { ChipCell } from '../project-board/KanbanView';
 import { PRIORITY_COLORS } from '../project-board/colors';
@@ -56,13 +57,17 @@ const SLOTS: SlotDef[] = [
 const CANDIDATE_STATUS_OPTIONS = STATUS_OPTIONS.filter((s) => s !== 'Done');
 
 export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps) {
-  // Mode and the Status filter are per-session UI state only — not persisted,
-  // matching the design wireframe's own note (screen-priority-desk-now.d2).
+  // Mode, the Status filter, and the Epic filter are per-session UI state
+  // only — not persisted, matching the design wireframe's own note
+  // (screen-priority-desk-now.d2).
   const [mode, setMode] = useState<Mode>('now');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [epicFilter, setEpicFilter] = useState<string | null>(null);
 
   const { byRank, isLoading: nowLoading } = useWorkspaceFocusRankHolders();
-  const { candidates, isLoading: candidatesLoading, isError: candidatesError } = useChooseNextCandidates(statusFilter);
+  const {
+    candidates, isLoading: candidatesLoading, isError: candidatesError, epicOptions,
+  } = useChooseNextCandidates(statusFilter, epicFilter);
   const projects = useProjects();
 
   function projectNameFor(shortName: string): string {
@@ -120,6 +125,9 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
             isError={candidatesError}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            epicFilter={epicFilter}
+            epicOptions={epicOptions}
+            onEpicFilterChange={setEpicFilter}
             projectNameFor={projectNameFor}
             onSelectIssue={onSelectIssue}
           />
@@ -246,6 +254,11 @@ function DeskCard({
 
       <Text type="text2" className={styles.cardSummary}>{issue.summary}</Text>
       <Text type="text2" className={styles.cardMeta}>{projectName}</Text>
+      {issue.parentEpic && (
+        <Text type="text2" className={styles.cardEpic} data-testid={`priority-desk-card-epic-${issue.id}`}>
+          Epic: <span className={styles.cardEpicId}>{issue.parentEpic.idReadable}</span> {issue.parentEpic.summary}
+        </Text>
+      )}
 
       {issue.fields.whyNow ? (
         <Text type="text2" className={styles.cardWhyNow}>&ldquo;{issue.fields.whyNow}&rdquo;</Text>
@@ -285,13 +298,17 @@ function DeskCard({
 // ─── Choose next ────────────────────────────────────────────────────────────
 
 function ChooseNext({
-  candidates, isLoading, isError, statusFilter, onStatusFilterChange, projectNameFor, onSelectIssue,
+  candidates, isLoading, isError, statusFilter, onStatusFilterChange,
+  epicFilter, epicOptions, onEpicFilterChange, projectNameFor, onSelectIssue,
 }: {
   candidates: Candidate[];
   isLoading: boolean;
   isError: boolean;
   statusFilter: string | null;
   onStatusFilterChange: (v: string | null) => void;
+  epicFilter: string | null;
+  epicOptions: ParentEpic[];
+  onEpicFilterChange: (v: string | null) => void;
   projectNameFor: (shortName: string) => string;
   onSelectIssue: (id: string) => void;
 }) {
@@ -305,6 +322,9 @@ function ChooseNext({
   return (
     <div data-testid="priority-desk-choose-next">
       <StatusFilter value={statusFilter} onChange={onStatusFilterChange} />
+      {epicOptions.length > 0 && (
+        <EpicFilter value={epicFilter} options={epicOptions} onChange={onEpicFilterChange} />
+      )}
 
       {isError ? (
         <div data-testid="priority-desk-candidates-error">
@@ -369,6 +389,48 @@ function StatusFilter({ value, onChange }: { value: string | null; onChange: (v:
           onClick={() => onChange(value === opt ? null : opt)}
         >
           {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Epic filter ────────────────────────────────────────────────────────────
+// Single-select, same shape as StatusFilter above, conjunctive with it
+// (docs/requirements.md § Priority Desk, "Choose-next eligibility"). Options
+// come from useChooseNextCandidates' epicOptions — derived from native Epic
+// links already present in the fetched issue set, never hard-coded — so the
+// filter renders nothing at all when no issue in the workspace has a
+// resolvable parent Epic yet.
+
+function EpicFilter({
+  value, options, onChange,
+}: {
+  value: string | null;
+  options: ParentEpic[];
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className={styles.statusFilter} data-testid="priority-desk-epic-filter">
+      <button
+        type="button"
+        data-testid="priority-desk-epic-pill"
+        data-value=""
+        className={`${styles.filterPill} ${value === null ? styles.filterPillActive : ''}`}
+        onClick={() => onChange(null)}
+      >
+        All epics
+      </button>
+      {options.map((epic) => (
+        <button
+          key={epic.id}
+          type="button"
+          data-testid="priority-desk-epic-pill"
+          data-value={epic.id}
+          className={`${styles.filterPill} ${value === epic.id ? styles.filterPillActive : ''}`}
+          onClick={() => onChange(value === epic.id ? null : epic.id)}
+        >
+          {epic.idReadable}
         </button>
       ))}
     </div>
