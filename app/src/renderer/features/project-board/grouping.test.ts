@@ -30,6 +30,7 @@ function issue(id: string, fields: Partial<BoardIssueFields> = {}, summary = id)
     resolved: null,
     fields: { ...emptyFields, ...fields },
     parentEpic: null,
+    isEpic: false,
   };
 }
 

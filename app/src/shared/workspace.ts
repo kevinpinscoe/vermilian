@@ -62,6 +62,10 @@ export interface BoardIssue {
   resolved: number | null; // epoch ms; null = unresolved
   fields: BoardIssueFields;
   parentEpic: ParentEpic | null;
+  // This issue's own Type is "Epic" — read from the issue's Type custom
+  // field server-side (main/api/youtrack.ts). An Epic is a container, never
+  // itself a Choose-next candidate (VERM-7 review finding, 2026-09-16).
+  isEpic: boolean;
 }
 
 export interface IssueDetailProject {

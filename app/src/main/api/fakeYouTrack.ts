@@ -47,6 +47,7 @@ function makeIssues(): FakeIssue[] {
     n: number, projectId: string, prefix: string, status: string, priority: string,
     dueDate: number | null = null,
     parentEpic: ParentEpic | null = null,
+    isEpic = false,
   ): FakeIssue => ({
     id: `${projectId}-${n}`,
     idReadable: `${prefix}-${n}`,
@@ -55,6 +56,7 @@ function makeIssues(): FakeIssue[] {
     projectId,
     fields: emptyFields({ status, priority, category: 'TASK', ticket: `JIRA-${n}`, dueDate }),
     parentEpic,
+    isEpic,
   });
   // Two TEST issues carry fixed due dates so the Due Date filter is testable:
   // TEST-1 is before 2026-06-15, TEST-2 is after it; the rest are undated.
@@ -64,14 +66,20 @@ function makeIssues(): FakeIssue[] {
   // reusing existing fixture issues rather than adding new rows — this keeps
   // every pre-existing .first()/.nth()-based e2e selector stable. TEST-3 has
   // two subtasks (TEST-1, TEST-2); TEST-4 has one (TEST-5); TEST-6 and every
-  // TST2/INB issue carry no parent Epic at all.
+  // TST2/INB issue carry no parent Epic at all. Only TEST-3 is itself flagged
+  // isEpic: true — TEST-4 stays an ordinary (non-Epic) fixture so the
+  // existing deterministic-ordering assertions, which expect TEST-4 to
+  // appear as a displayed candidate, are unaffected; TEST-3 was already
+  // excluded from the displayed seven by the cap either way, so flagging it
+  // isEpic changes *why* it's absent (never eligible, not just capped out)
+  // without changing any existing visible-candidate assertion.
   const EPIC_TEST_3: ParentEpic = { id: '0-e1-3', idReadable: 'TEST-3', summary: 'To do task 3' };
   const EPIC_TEST_4: ParentEpic = { id: '0-e1-4', idReadable: 'TEST-4', summary: 'To do task 4' };
   return [
     // TEST: 4 in "To do", 2 in "In Progress" → >=2 groups, >=3 in one group
     mk(1, '0-e1', 'TEST', 'To do', 'Normal', DUE_EARLY, EPIC_TEST_3),
     mk(2, '0-e1', 'TEST', 'To do', 'Critical', DUE_LATE, EPIC_TEST_3),
-    mk(3, '0-e1', 'TEST', 'To do', 'Minor'),
+    mk(3, '0-e1', 'TEST', 'To do', 'Minor', null, null, true),
     mk(4, '0-e1', 'TEST', 'To do', 'Major'),
     mk(5, '0-e1', 'TEST', 'In Progress', 'Normal', null, EPIC_TEST_4),
     mk(6, '0-e1', 'TEST', 'In Progress', 'Critical'),
@@ -130,6 +138,7 @@ function toBoardIssue(i: FakeIssue): BoardIssue {
     resolved: i.resolved,
     fields: { ...i.fields },
     parentEpic: i.parentEpic,
+    isEpic: i.isEpic,
   };
 }
 
@@ -203,6 +212,7 @@ export async function createIssue(
       relatedLink: payload.relatedLink, notes: payload.notes, repoUrl: payload.repoUrl,
     }),
     parentEpic: null,
+    isEpic: false,
   };
   issues.push(issue);
   return { id: issue.id, idReadable: issue.idReadable };

@@ -221,20 +221,39 @@ function extractFields(fields: RawCustomField[]): BoardIssueFields {
   return result as unknown as BoardIssueFields;
 }
 
-function linkedIssueType(linked: RawLinkedIssue): string | null {
-  const typeField = linked.customFields?.find((f) => f.name === 'Type');
+// Reads the "Type" custom field's value name off any customFields array —
+// the primary issue's own, or a linked issue's inside a links() bucket, both
+// of which share the same wire shape. Missing customFields, a missing Type
+// entry, or a malformed/empty value all resolve to null rather than throwing
+// — an issue with no readable Type is simply never treated as an Epic.
+function typeNameOf(customFields: RawCustomField[] | undefined): string | null {
+  const typeField = customFields?.find((f) => f.name === 'Type');
   return typeField ? parseFieldStringValue(typeField) : null;
 }
 
 // See the RawIssueLink comment above for why direction is not trusted.
+// Collects every Epic-typed issue across both direction buckets of every
+// Subtask-type link before picking one, rather than returning the first
+// bucket that happens to contain one — the Subtask link type does not forbid
+// an issue from carrying more than one such link, so resolution must not
+// depend on which bucket (or which of several) the API happened to return
+// first. Ties (more than one Epic-typed parent) are broken by idReadable —
+// an arbitrary but now deterministic and documented choice, never "whichever
+// direction bucket landed first."
 function resolveParentEpic(links: RawIssueLink[] | undefined): ParentEpic | null {
   if (!links) return null;
+  const epics: ParentEpic[] = [];
   for (const link of links) {
-    if (link.linkType.name !== 'Subtask') continue;
-    const epic = link.issues.find((i) => linkedIssueType(i) === 'Epic');
-    if (epic) return { id: epic.id, idReadable: epic.idReadable, summary: epic.summary };
+    if (link.linkType?.name !== 'Subtask') continue;
+    for (const linked of link.issues) {
+      if (typeNameOf(linked.customFields) === 'Epic') {
+        epics.push({ id: linked.id, idReadable: linked.idReadable, summary: linked.summary });
+      }
+    }
   }
-  return null;
+  if (epics.length === 0) return null;
+  epics.sort((a, b) => (a.idReadable < b.idReadable ? -1 : a.idReadable > b.idReadable ? 1 : 0));
+  return epics[0];
 }
 
 function rawToBoardIssue(issue: RawIssue): BoardIssue {
@@ -245,6 +264,10 @@ function rawToBoardIssue(issue: RawIssue): BoardIssue {
     resolved: issue.resolved ?? null,
     fields: extractFields(issue.customFields ?? []),
     parentEpic: resolveParentEpic(issue.links),
+    // An Epic issue is a container, never itself a Choose-next candidate
+    // (VERM-7 review finding, 2026-09-16) — read from the issue's own Type
+    // field, which ISSUE_FIELDS already fetches as an ordinary custom field.
+    isEpic: typeNameOf(issue.customFields) === 'Epic',
   };
 }
 
@@ -288,10 +311,13 @@ export async function searchIssues(
 
 // --- Issue detail (all fields including Notes, Date time entered) ---
 
+// No links(...) here — the task detail panel does not display parentEpic
+// (VERM-7 review finding, 2026-09-16: fetching it was pure unused payload on
+// every single-issue detail open). Add it back only alongside an actual UI
+// consumer in the detail panel.
 const DETAIL_FIELDS =
   'id,idReadable,summary,resolved,project(id,name,shortName),' +
-  'customFields(name,$type,value(name,isResolved,text,login)),' +
-  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
+  'customFields(name,$type,value(name,isResolved,text,login))';
 
 interface RawIssueDetail extends RawIssue {
   project: { id: string; name: string; shortName: string };
@@ -314,7 +340,9 @@ export async function getIssueDetail(
     resolved: raw.resolved ?? null,
     project: raw.project,
     fields: extractFields(raw.customFields ?? []),
-    parentEpic: resolveParentEpic(raw.links),
+    // Not fetched here — see the DETAIL_FIELDS comment above.
+    parentEpic: null,
+    isEpic: typeNameOf(raw.customFields) === 'Epic',
   };
 }
 

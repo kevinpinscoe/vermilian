@@ -75,14 +75,16 @@ export interface ComputeCandidatesResult {
 /**
  * Choose-next eligibility (docs/requirements.md § Priority Desk,
  * "Choose-next eligibility"): belongs to a project in the active workspace
- * (enforced by the caller only ever passing that workspace's projects),
- * Status is not Done, no existing Focus rank 1-3 (a ranked issue shows in Now
- * mode instead), not under an unexpired "Not this week" dismissal, matches
- * the selected Status filter when one is set, and matches the selected
- * active-Epic filter when one is set (VERM-7) — conjunctive with the Status
- * filter, never a side effect on Priority or Focus. A Focus=Yes issue with no
- * rank remains eligible and appears starred — Focus itself is not an
- * eligibility criterion.
+ * (enforced by the caller only ever passing that workspace's projects), is
+ * not itself an Epic (VERM-7 review finding, 2026-09-16 — an Epic is a
+ * container, never a single actionable task), Status is not Done, no
+ * existing Focus rank 1-3 (a ranked issue shows in Now mode instead), not
+ * under an unexpired "Not this week" dismissal, matches the selected Status
+ * filter when one is set, and matches the selected active-Epic filter when
+ * one is set (VERM-7) — conjunctive with the Status filter, never a side
+ * effect on Priority or Focus. A Focus=Yes issue with no rank remains
+ * eligible and appears starred — Focus itself is not an eligibility
+ * criterion.
  */
 export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidatesResult {
   const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter, epicFilter } = args;
@@ -90,6 +92,7 @@ export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidate
 
   for (const [projectShortName, issues] of issuesByProject) {
     for (const issue of issues) {
+      if (issue.isEpic) continue;
       if (issue.fields.status === 'Done') continue;
       if (isFocusRank(issue.fields.focusRank)) continue;
       if (isDismissedThisWeek(dismissals, workspaceId, issue.id, weekOf)) continue;

@@ -135,6 +135,7 @@ describe('getIssues', () => {
           whyNow: null,
         },
         parentEpic: null,
+        isEpic: false,
       },
     ]);
   });
@@ -263,6 +264,109 @@ describe('getIssues', () => {
     );
     const issues = await getIssues(URL, TOKEN, 'TST');
     expect(issues[0].parentEpic).toBeNull();
+  });
+
+  it('does not crash and leaves parentEpic null when a linked issue has no customFields at all', async () => {
+    // Malformed/partial API response — the linked issue's Type is simply
+    // unreadable, not "confirmed non-Epic".
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'INWARD',
+              linkType: { name: 'Subtask' },
+              issues: [{ id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic' }],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toBeNull();
+  });
+
+  it('does not crash and leaves parentEpic null when the linked issue\'s Type value is malformed', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'INWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic',
+                  customFields: [{ name: 'Type', value: null }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toBeNull();
+  });
+
+  it('resolves deterministically to the lowest idReadable when more than one Epic-typed parent is linked', async () => {
+    // The Subtask link type does not forbid an issue carrying more than one
+    // such link — resolution must not depend on which bucket (here, INWARD
+    // vs OUTWARD) happened to be returned first.
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'OUTWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'epic-9', idReadable: 'TST-900', summary: 'Epic Nine',
+                  customFields: [{ name: 'Type', value: { name: 'Epic' } }],
+                },
+              ],
+            },
+            {
+              direction: 'INWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'epic-1', idReadable: 'TST-100', summary: 'Epic One',
+                  customFields: [{ name: 'Type', value: { name: 'Epic' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toEqual({ id: 'epic-1', idReadable: 'TST-100', summary: 'Epic One' });
+  });
+
+  it('marks an issue isEpic when its own Type is Epic', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'An Epic', resolved: null,
+          customFields: [{ name: 'Type', $type: 'SingleEnumIssueCustomField', value: { name: 'Epic' } }],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].isEpic).toBe(true);
+  });
+
+  it('leaves isEpic false when the Type field is absent or not Epic', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([{ id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [] }]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].isEpic).toBe(false);
   });
 
   it('URL-encodes the project query', async () => {

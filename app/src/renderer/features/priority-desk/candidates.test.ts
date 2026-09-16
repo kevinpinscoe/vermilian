@@ -13,6 +13,7 @@ interface IssueOverrides {
   resolved?: number | null;
   fields?: Partial<BoardIssueFields>;
   parentEpic?: ParentEpic | null;
+  isEpic?: boolean;
 }
 
 function issue(over: IssueOverrides): BoardIssue {
@@ -29,6 +30,7 @@ function issue(over: IssueOverrides): BoardIssue {
   return {
     id: over.id ?? 'p-1', idReadable: over.idReadable ?? 'TEST-1', summary: over.summary ?? 'Summary',
     resolved: over.resolved ?? null, fields, parentEpic: over.parentEpic ?? null,
+    isEpic: over.isEpic ?? false,
   };
 }
 
@@ -282,6 +284,34 @@ describe('computeCandidates', () => {
     expect(candidates).toHaveLength(MAX_CANDIDATES);
     expect(totalEligible).toBe(10);
   });
+
+  // ─── VERM-7 review finding: an Epic is a container, never a candidate ─────
+
+  it('never presents an Epic issue itself as a Choose-next candidate', () => {
+    const issues = [
+      issue({ id: 'epic', idReadable: 'TEST-3', isEpic: true }),
+      issue({ id: 'task', idReadable: 'TEST-1' }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
+      epicFilter: null,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['task']);
+  });
+
+  it('excludes an Epic issue even when it would otherwise match every other filter', () => {
+    const issues = [
+      issue({ id: 'epic', idReadable: 'TEST-3', fields: { status: 'To do' }, parentEpic: EPIC_A, isEpic: true }),
+      issue({ id: 'task', idReadable: 'TEST-1', fields: { status: 'To do' }, parentEpic: EPIC_A }),
+    ];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: 'To do',
+      epicFilter: EPIC_A.id,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['task']);
+  });
 });
 
 describe('deriveEpicFilterOptions', () => {
@@ -306,5 +336,16 @@ describe('deriveEpicFilterOptions', () => {
   it('returns an empty list when no issue has a resolvable parent Epic', () => {
     const issues = [issue({ id: 'a', parentEpic: null })];
     expect(deriveEpicFilterOptions(new Map([['TEST', issues]]))).toEqual([]);
+  });
+
+  it('dedupes the same Epic when it is referenced from issues in different projects', () => {
+    // Epic ids are globally unique in YouTrack regardless of which project an
+    // issue linking to them lives in — the Map key is the Epic's own id, so
+    // this can never double-count or collide with a different Epic.
+    const issuesByProject = new Map([
+      ['TEST', [issue({ id: 'a', idReadable: 'TEST-1', parentEpic: EPIC_A })]],
+      ['TST2', [issue({ id: 'b', idReadable: 'TST2-1', parentEpic: EPIC_A })]],
+    ]);
+    expect(deriveEpicFilterOptions(issuesByProject)).toEqual([EPIC_A]);
   });
 });
