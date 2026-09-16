@@ -33,7 +33,37 @@ overrides:
   tar: ^7.5.18
   js-yaml: ^4.2.0
   "@babel/core": ^7.29.6
+  # browserslist — alert 57, high: an untrusted browserslist-stats.json custom
+  # stats file can crash normalizeStats or write through to Object.prototype.
+  # Patched in 4.28.7. One version in the tree (4.28.2), reached from
+  # @babel/helper-compilation-targets, webpack and update-browserslist-db.
+  browserslist: ^4.28.7
+  # baseline-browser-mapping — alert 71, medium: process termination on invalid
+  # input. Patched in 2.11.0.
+  #
+  # The browserslist pin above already lifts this one — 4.29.0 resolves
+  # baseline-browser-mapping 2.11.24 without any help. The floor is stated here
+  # anyway, because "it happens to resolve above the fix" is not the same as "the
+  # vulnerable range is excluded", and only the second survives browserslist
+  # relaxing its own dependency range later. This is the alert-43 lesson from
+  # GH-5 applied before it bites rather than after.
+  baseline-browser-mapping: ^2.11.0
   postcss: ^8.5.18
+  # @xmldom/xmldom — ten Dependabot alerts at once (51, 58, 59, 60, 61, 62, 65,
+  # 66, 67, 68), eight high and two medium. 0.9.12 clears every one of them, so
+  # this is one pin rather than ten pieces of work.
+  #
+  # Eight are requireWellFormed bypasses — attribute name, element name,
+  # processing-instruction target, DocType name, DocType publicId/systemId, and
+  # embedded line terminators on the default serialization path — plus an XML
+  # fragment injection via an invalid EntityReference nodeName. The other two are
+  # quadratic-time denial of service: attribute deduplication, and the
+  # malformed-input recovery path's parseElementStartPart re-scan.
+  #
+  # A flat pin is correct: the tree resolves only 0.9.10, arriving once, via
+  # plist <- @electron/packager. Build tooling — nothing under `dependencies`
+  # reaches it (verified with pnpm why --prod).
+  "@xmldom/xmldom": ^0.9.12
   # Dependabot alert 50 — CVE-2026-67213 / GHSA-2v37-7h3g-55p8, high: custom
   # generators can loop indefinitely when size is zero. Patched in 3.3.18.
   #
@@ -45,10 +75,23 @@ overrides:
   # If anything ever pulls nanoid 5.x, split this per major the way
   # brace-expansion below is. A flat pin across majors would collide.
   nanoid: ^3.3.18
-  # GHSA / Dependabot alert 43 patches at 3.1.5. The floor has to move even
-  # though ^3.1.4 already permits 3.1.5 — the lockfile held the tree at 3.1.4,
-  # so nothing updates until the vulnerable version is excluded by the range.
-  fast-uri: ^3.1.5
+  # fast-uri is NOT build-only. It is reachable from a `dependencies` entry via
+  #   @vibe/core -> @vibe/base -> @vibe/style -> stylelint -> table -> ajv -> fast-uri
+  # because @vibe/style declares stylelint as a real dependency rather than a
+  # devDependency, which drags the lint toolchain into the shipped closure.
+  # Dependabot scoping these advisories `runtime` is correct.
+  #
+  # Alert 43 patched at 3.1.5 and the floor was raised there in GH-5. Four further
+  # advisories have since landed against everything below 3.1.6:
+  #
+  #   alert 52  host confusion via skipped IDN canonicalization on scheme-relative refs
+  #   alert 53  SSRF via repeated hostname percent-decoding
+  #   alert 54  SSRF via malformed IPv6 normalization
+  #   alert 55  host confusion via percent-encoded scheme normalization
+  #
+  # Same lesson as alert 43: the range has to exclude the vulnerable version, not
+  # merely permit the patched one, or the lockfile stays where it is.
+  fast-uri: ^3.1.6
   # brace-expansion is vulnerable on every major line it ships, across a chain of
   # three advisories now. Pin each major to its own patched release rather than
   # forcing one major everywhere: this tree resolves minimatch 3, 5, 9 and 10 at
