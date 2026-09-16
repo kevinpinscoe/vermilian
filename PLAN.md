@@ -76,7 +76,32 @@ dismissed this week, the Status filter). Ordering (`Due Date` → `Priority` →
 `idReadable`) and the seven-item cap are unaffected — the Epic filter narrows the
 eligible set the same way the Status filter already does, before sorting and capping run.
 
-## Master Plan template (documented, not built)
+### 5. Master Plan discovery, parsing, and Epic→outcome association
+
+Built against the live `_vermilian-master-plan` article (`VERM-A-2`, project `VERM`,
+top-level — see ADR-0008's "Implementation (VERM-7)" section for the full design). Four
+design points worth calling out beyond what ADR-0008 already covers:
+
+- **Discovery completeness is proven, not assumed.** `_vermilian-config`'s finder trusts
+  one `$top=500` global request; the Master Plan finder instead pages the project-scoped
+  `/api/admin/projects/VERM/articles` endpoint to exhaustion, and returns a distinct
+  `discovery-incomplete` state (rather than `none`) if a safety cap is hit before
+  completeness can be established — a documented, tested bound rather than a silent
+  assumption.
+- **Matching key vs. display value are kept strictly separate.** `normalizeEpicRef`
+  (trim + case-fold) is used only to decide *whether* an Epic reference matches; the
+  Epic identifier rendered on a card is always `BoardIssue.parentEpic.idReadable`, read
+  from the native YouTrack relationship, never from the article's own text.
+- **A duplicate Epic→outcome association is a conflict, not a pick.** If the same Epic
+  idReadable appears under two outcomes, `resolveEpicOutcome` returns `conflict`
+  (never the first match) and the card shows no outcome line for it — the ambiguity is
+  reported through the same diagnostic banner as every other Master Plan problem.
+- **No cache to go stale.** `main/services/masterPlan.ts` deliberately does not mirror
+  `articleConfig.ts`'s singleton-cache shape — every call re-fetches and re-parses, and
+  the renderer's own `staleTime: 60_000` (matching `candidates.ts`'s issue queries) is
+  what governs how often that happens in practice.
+
+## Master Plan template
 
 Minimum structure for the KB article, one Master Plan article covering every workspace:
 
@@ -91,7 +116,8 @@ Minimum structure for the KB article, one Master Plan article covering every wor
 Referencing active Epics by their `idReadable` — the same identifier Vermilian already
 displays everywhere — is what lets VERM-8's AI recommendation step deterministically
 resolve "the epics under this outcome" back to real YouTrack issues without inventing a
-second identifier scheme.
+second identifier scheme. As of this ticket the association itself (Epic idReadable →
+outcome) is built and tested; VERM-8 consumes it rather than establishing it.
 
 ## Task breakdown
 
@@ -101,5 +127,5 @@ timestamped task list. This file records the design; that one tracks progress.
 ## Verification
 
 `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm package`, `pnpm test:e2e`, plus a
-visual QA pass against the dev server with the fake YouTrack backend
-(`VERMILIAN_E2E=1`), before the pull request is opened.
+visual QA pass against a **freshly packaged build** (not the dev server) with the fake
+YouTrack backend (`VERMILIAN_E2E=1`), before the pull request is opened.
