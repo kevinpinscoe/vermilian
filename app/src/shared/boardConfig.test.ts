@@ -71,6 +71,7 @@ describe('emptyArticleConfig', () => {
       workspaces: [],
       activeWorkspaceId: '',
       boards: {},
+      dismissals: {},
     });
   });
 });

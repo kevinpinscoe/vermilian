@@ -42,7 +42,7 @@ import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
-import type { BoardConfig } from '../shared/boardConfig';
+import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
 let quitProtected = false;
@@ -543,6 +543,28 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.saveBoardConfig, async (_e, config: BoardConfig): Promise<void> => {
     articleConfig.updateBoardConfig(config);
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
+  });
+
+  // ─── Priority Desk "Not this week" dismissals (VERM-6) ───────────────────────
+  // Same shape as the board-config handlers above: read/write the Article
+  // cache, schedule a debounced remote write. No local-file fallback — like
+  // board colors, this is non-critical UI state, not something the app needs
+  // to function offline.
+
+  ipcMain.handle(IPC.getDismissals, async (): Promise<Dismissals> => {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (cfg.youtrackUrl && token && !articleConfig.getCachedConfig()) {
+      try { await articleConfig.load(cfg.youtrackUrl, token); } catch { /* ignore */ }
+    }
+    return articleConfig.getDismissals();
+  });
+
+  ipcMain.handle(IPC.saveDismissal, async (_e, entry: NotThisWeekDismissal): Promise<void> => {
+    articleConfig.setDismissal(entry);
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);

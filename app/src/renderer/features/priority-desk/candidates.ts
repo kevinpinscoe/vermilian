@@ -1,0 +1,133 @@
+// Priority Desk Choose-next — candidate eligibility and deterministic ordering
+// (VERM-6, docs/requirements.md § Priority Desk "Choose-next eligibility").
+// Pure logic here (unit-tested in candidates.test.ts); the hook wraps it,
+// reusing the same active-workspace project scoping and ['youtrack','issues',
+// shortName] query key as focus.ts's useWorkspaceFocusRankHolders (VERM-4/
+// VERM-5), so Now mode, Choose next, and the boards all share one cache
+// instead of each firing their own requests.
+//
+// The active-Epic filter listed in this ticket's original scope is deferred to
+// VERM-7 — no native Epic/Subtask link data exists in Vermilian yet (scope
+// decision recorded on VERM-6/VERM-7, 2026-09-16).
+import { useQueries } from '@tanstack/react-query';
+import type { BoardIssue } from '../../../shared/workspace';
+import { PRIORITY_OPTIONS } from '../../../shared/workspace';
+import type { Dismissals } from '../../../shared/boardConfig';
+import { useWorkspaceStore } from '../../stores/workspace';
+import { isFocusRank, useActiveWorkspaceProjectShortNames } from '../project-board/focus';
+import { currentWeekMonday, isDismissedThisWeek, useDismissals } from './dismissals';
+
+export const MAX_CANDIDATES = 7;
+
+export interface Candidate {
+  issue: BoardIssue;
+  projectShortName: string;
+}
+
+// ─── Pure logic ─────────────────────────────────────────────────────────────
+
+function priorityOrdinal(priority: string | null): number {
+  if (!priority) return PRIORITY_OPTIONS.length; // no Priority set sorts last
+  const idx = (PRIORITY_OPTIONS as readonly string[]).indexOf(priority);
+  return idx === -1 ? PRIORITY_OPTIONS.length : idx;
+}
+
+/**
+ * Deterministic ordering used only when more than seven issues are eligible —
+ * never a blended or weighted score. Every step reads an existing field's own
+ * value or ordinal directly:
+ *   1. Due Date ascending (no Due Date sorts last);
+ *   2. Priority's own ordinal, descending urgency (Show-stopper first);
+ *   3. idReadable ascending, the final, always-unique tiebreak.
+ */
+export function compareCandidates(a: Candidate, b: Candidate): number {
+  const aDue = a.issue.fields.dueDate;
+  const bDue = b.issue.fields.dueDate;
+  if (aDue === null && bDue !== null) return 1;
+  if (aDue !== null && bDue === null) return -1;
+  if (aDue !== null && bDue !== null && aDue !== bDue) return aDue - bDue;
+
+  const aPriority = priorityOrdinal(a.issue.fields.priority);
+  const bPriority = priorityOrdinal(b.issue.fields.priority);
+  if (aPriority !== bPriority) return aPriority - bPriority;
+
+  if (a.issue.idReadable < b.issue.idReadable) return -1;
+  if (a.issue.idReadable > b.issue.idReadable) return 1;
+  return 0;
+}
+
+export interface ComputeCandidatesArgs {
+  issuesByProject: ReadonlyMap<string, readonly BoardIssue[]>; // projectShortName -> issues
+  dismissals: Dismissals;
+  workspaceId: string;
+  weekOf: string;
+  statusFilter: string | null;
+}
+
+export interface ComputeCandidatesResult {
+  candidates: Candidate[]; // deterministically ordered, capped at MAX_CANDIDATES
+  totalEligible: number; // count before the cap
+}
+
+/**
+ * Choose-next eligibility (docs/requirements.md § Priority Desk,
+ * "Choose-next eligibility"): belongs to a project in the active workspace
+ * (enforced by the caller only ever passing that workspace's projects),
+ * Status is not Done, no existing Focus rank 1-3 (a ranked issue shows in Now
+ * mode instead), not under an unexpired "Not this week" dismissal, and
+ * matches the selected Status filter when one is set. A Focus=Yes issue with
+ * no rank remains eligible and appears starred — Focus itself is not an
+ * eligibility criterion.
+ */
+export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidatesResult {
+  const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter } = args;
+  const eligible: Candidate[] = [];
+
+  for (const [projectShortName, issues] of issuesByProject) {
+    for (const issue of issues) {
+      if (issue.fields.status === 'Done') continue;
+      if (isFocusRank(issue.fields.focusRank)) continue;
+      if (isDismissedThisWeek(dismissals, workspaceId, issue.id, weekOf)) continue;
+      if (statusFilter && issue.fields.status !== statusFilter) continue;
+      eligible.push({ issue, projectShortName });
+    }
+  }
+
+  eligible.sort(compareCandidates);
+  return { candidates: eligible.slice(0, MAX_CANDIDATES), totalEligible: eligible.length };
+}
+
+// ─── Hook ───────────────────────────────────────────────────────────────────
+
+export function useChooseNextCandidates(statusFilter: string | null): ComputeCandidatesResult & { isLoading: boolean } {
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const projectShortNames = useActiveWorkspaceProjectShortNames();
+  const dismissalsQuery = useDismissals();
+
+  const results = useQueries({
+    queries: projectShortNames.map((sn) => ({
+      queryKey: ['youtrack', 'issues', sn],
+      queryFn: () => window.vermilian.getIssues({ projectShortName: sn, includeResolved: false }),
+      staleTime: 60_000,
+    })),
+  });
+
+  const issuesByProject = new Map<string, BoardIssue[]>();
+  results.forEach((r, i) => {
+    issuesByProject.set(projectShortNames[i], ((r.data as BoardIssue[] | undefined) ?? []));
+  });
+
+  const { candidates, totalEligible } = computeCandidates({
+    issuesByProject,
+    dismissals: dismissalsQuery.data ?? {},
+    workspaceId: activeWorkspaceId,
+    weekOf: currentWeekMonday(),
+    statusFilter,
+  });
+
+  return {
+    candidates,
+    totalEligible,
+    isLoading: (projectShortNames.length > 0 && results.every((r) => !r.data)) || dismissalsQuery.isLoading,
+  };
+}

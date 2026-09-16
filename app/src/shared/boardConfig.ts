@@ -52,6 +52,27 @@ export interface BoardConfig {
   colors: BoardColors;
 }
 
+// ─── Priority Desk "Not this week" dismissals (VERM-6) ─────────────────────────
+//
+// A dismissal excludes an issue from the Choose-next candidate set only through
+// the end of the local calendar week it was made in (docs/requirements.md §
+// Priority Desk, "'Not this week' expiration"). Keyed by `${workspace}:${issueId}`
+// so at most one active dismissal exists per issue per workspace, and the
+// stale-write merge below can treat it exactly like `boards` (local wins per
+// key) with no bespoke merge logic.
+
+export interface NotThisWeekDismissal {
+  workspace: string; // workspace ID the dismissal was made in
+  issueId: string;
+  dismissedWeekOf: string; // ISO date (YYYY-MM-DD) of the Monday starting the local week
+}
+
+export type Dismissals = Record<string, NotThisWeekDismissal>;
+
+export function dismissalKey(workspace: string, issueId: string): string {
+  return `${workspace}:${issueId}`;
+}
+
 // ─── Article-level document ───────────────────────────────────────────────────
 
 export const ARTICLE_CONFIG_VERSION = 1;
@@ -61,6 +82,7 @@ export interface ArticleFullConfig {
   workspaces: VermilianConfig['workspaces'];
   activeWorkspaceId: string;
   boards: Record<string, BoardConfig>; // keyed by project ID
+  dismissals: Dismissals;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -137,5 +159,6 @@ export function emptyArticleConfig(): ArticleFullConfig {
     workspaces: [],
     activeWorkspaceId: '',
     boards: {},
+    dismissals: {},
   };
 }

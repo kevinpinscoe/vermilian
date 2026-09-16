@@ -17,6 +17,7 @@ export function parseArticleConfig(raw: string): ArticleFullConfig {
       workspaces: parsed.workspaces ?? [],
       activeWorkspaceId: parsed.activeWorkspaceId ?? '',
       boards: parsed.boards ?? {},
+      dismissals: parsed.dismissals ?? {},
     };
   } catch {
     return emptyArticleConfig();
@@ -29,10 +30,14 @@ export function serialiseArticleConfig(cfg: ArticleFullConfig): string {
 
 // Stale-write merge: another machine wrote a newer Article. Take the remote as
 // the base (version / workspaces / activeWorkspaceId) and overlay our local
-// board edits on top (local wins per board key).
+// board edits and dismissals on top (local wins per key in both cases).
 export function mergeRemoteConfig(
   remote: ArticleFullConfig,
   local: ArticleFullConfig,
 ): ArticleFullConfig {
-  return { ...remote, boards: { ...remote.boards, ...local.boards } };
+  return {
+    ...remote,
+    boards: { ...remote.boards, ...local.boards },
+    dismissals: { ...remote.dismissals, ...local.dismissals },
+  };
 }

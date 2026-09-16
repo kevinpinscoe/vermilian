@@ -39,11 +39,17 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       default Now mode (at most three ranked Now/Next/Then cards, empty slots allowed, `Start
       focus` on the Now card, duplicate-rank repair banner surfaced consistently). Delivered in
       [VERM-5](https://youtrack.kevininscoe.com/issue/VERM-5).
-- [ ] **Manual desk — Choose next** — the second mode of the same screen: no more than seven
-      eligible candidates, star toggle, drag into a slot, "Not this week" dismissal persisted in
-      the existing `_vermilian-config` YouTrack knowledge-base article.
+- [x] **Manual desk — Choose next** — the second mode of the same screen: at most seven eligible
+      candidates (deterministic Due Date/Priority/idReadable ordering), a Status filter, star
+      toggle and rank assignment via the existing FocusControl, and "Not this week" dismissal
+      persisted in the existing `_vermilian-config` YouTrack knowledge-base article. The
+      active-Epic filter in this delivery step's original scope is deferred to VERM-7 — no
+      native Epic/Subtask link data exists yet. Delivered in
+      [VERM-6](https://youtrack.kevininscoe.com/issue/VERM-6).
 - [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic + outcome
-      name only, no full portfolio management); document a Master Plan knowledge-base template.
+      name only, no full portfolio management); document a Master Plan knowledge-base template;
+      populate the active-Epic filter Choose next deferred. See
+      [VERM-7](https://youtrack.kevininscoe.com/issue/VERM-7).
 - [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
       recommendation" action that evaluates the bounded candidate set and returns a ranked
       top-three-plus-alternates proposal with qualitative evidence (outcome contribution,

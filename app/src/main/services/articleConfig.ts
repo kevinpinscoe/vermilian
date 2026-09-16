@@ -5,11 +5,12 @@
 import { app } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ArticleFullConfig, BoardConfig } from '../../shared/boardConfig';
+import type { ArticleFullConfig, BoardConfig, Dismissals, NotThisWeekDismissal } from '../../shared/boardConfig';
 import {
   emptyArticleConfig,
   ARTICLE_CONFIG_VERSION,
   defaultBoardConfig,
+  dismissalKey,
 } from '../../shared/boardConfig';
 import {
   parseArticleConfig,
@@ -140,6 +141,10 @@ export function getWorkspaceConfig(): VermilianConfig | null {
   };
 }
 
+export function getDismissals(): Dismissals {
+  return cache?.dismissals ?? {};
+}
+
 // ─── Wait / force-reload ─────────────────────────────────────────────────────
 
 // Blocks until the Article has loaded (or a bounded timeout elapses) instead
@@ -187,6 +192,12 @@ export function updateWorkspaceConfig(wsConfig: VermilianConfig): void {
     workspaces: wsConfig.workspaces,
     activeWorkspaceId: wsConfig.activeWorkspaceId,
   };
+}
+
+export function setDismissal(entry: NotThisWeekDismissal): void {
+  if (!cache) cache = emptyArticleConfig();
+  const key = dismissalKey(entry.workspace, entry.issueId);
+  cache = { ...cache, dismissals: { ...cache.dismissals, [key]: entry } };
 }
 
 // ─── Debounced write ─────────────────────────────────────────────────────────

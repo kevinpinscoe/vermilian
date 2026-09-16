@@ -26,6 +26,8 @@ export const IPC = {
   getBoardConfig: 'board:getConfig',
   saveBoardConfig: 'board:saveConfig',
   resetBoardConfig: 'board:resetConfig',
+  getDismissals: 'priorityDesk:getDismissals',
+  saveDismissal: 'priorityDesk:saveDismissal',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -241,6 +243,10 @@ export interface VermilianAPI {
   getBoardConfig(projectId: string): Promise<import('./boardConfig').BoardConfig>;
   saveBoardConfig(config: import('./boardConfig').BoardConfig): Promise<void>;
   resetBoardConfig(projectId: string): Promise<void>;
+  // Priority Desk "Not this week" dismissals (VERM-6) — persisted in the
+  // _vermilian-config Article's `dismissals` map, same pattern as board config.
+  getDismissals(): Promise<import('./boardConfig').Dismissals>;
+  saveDismissal(entry: import('./boardConfig').NotThisWeekDismissal): Promise<void>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board
