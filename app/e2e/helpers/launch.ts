@@ -87,3 +87,32 @@ export async function launchAppWithRevokedToken(): Promise<ElectronApplication> 
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_YT_401: '1' },
   });
 }
+
+// Launches with a single fake _vermilian-master-plan article seeded with
+// `content` (see src/main/api/fakeYouTrack.ts's findMasterPlanArticle).
+export async function launchAppWithMasterPlan(content: string): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_CONTENT: content },
+  });
+}
+
+// Simulates two matching _vermilian-master-plan articles — the ambiguous-
+// discovery case that must never be resolved by silently picking one.
+export async function launchAppWithDuplicateMasterPlan(): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_DUPLICATE: '1' },
+  });
+}
+
+// Simulates a Master Plan discovery request failing outright.
+export async function launchAppWithMasterPlanError(): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_ERROR: '1' },
+  });
+}
