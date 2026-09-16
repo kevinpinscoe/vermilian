@@ -6,7 +6,9 @@
  * of the Focus-rank invariant (see focus-toggle.spec.ts for that).
  *
  * Fake YouTrack fixtures used: TEST project (0-e1-1..6) and TST2 project
- * (0-e2-1..2), both in the default workspace on a fresh install.
+ * (0-e2-1..2), both in the default workspace on a fresh install. TEST-3 and
+ * TEST-4 double as parent Epics for TEST-1/TEST-2 and TEST-5 respectively
+ * (VERM-7) — see fakeYouTrack.ts.
  */
 
 import { test, expect, Page } from '@playwright/test';
@@ -126,6 +128,28 @@ test.describe('Priority Desk', () => {
     // Why now with nothing set shows an explicit placeholder rather than blank.
     const nextCard = page.locator('[data-testid="priority-desk-card-0-e1-2"]');
     await expect(nextCard).toContainText('No reason given yet.');
+  });
+
+  test('VERM-7: a Now card shows its resolvable parent Epic', async () => {
+    // 0-e1-1 (TEST-1) carries parentEpic TEST-3 in the fake fixtures.
+    await rankIssue(page, '0-e1-1', 1);
+    await openPriorityDesk(page);
+
+    const card = page.locator('[data-testid="priority-desk-card-0-e1-1"]');
+    const epic = card.locator('[data-testid="priority-desk-card-epic-0-e1-1"]');
+    await expect(epic).toBeVisible();
+    await expect(epic).toContainText('TEST-3');
+    await expect(epic).toContainText('To do task 3');
+  });
+
+  test('VERM-7: a task with no parent Epic renders its card normally, with no Epic line', async () => {
+    // 0-e1-3 (TEST-3) carries no parentEpic of its own in the fake fixtures.
+    await rankIssue(page, '0-e1-3', 1);
+    await openPriorityDesk(page);
+
+    const card = page.locator('[data-testid="priority-desk-card-0-e1-3"]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('[data-testid="priority-desk-card-epic-0-e1-3"]')).toHaveCount(0);
   });
 
   test('Start focus on the Now card invokes the existing timer', async () => {
