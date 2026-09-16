@@ -10,11 +10,43 @@
   padding: 16px 24px 0;
   border-bottom: 1px solid var(--border-color, #e0e0e0);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .title {
   font-size: 22px !important;
   margin-bottom: 12px;
+}
+
+.segmented {
+  display: inline-flex;
+  background: var(--primary-background-color, #ffffff);
+  border: 1px solid var(--border-color, #dfe1ec);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.segmentedBtn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--secondary-text-color, #8b8ea0);
+}
+
+.segmentedBtnActive {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
 }
 
 .body {
@@ -130,6 +162,9 @@
 .cardActions {
   margin-top: auto;
   padding-top: 2px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .emptyCard {
@@ -178,4 +213,53 @@
 .footerNote {
   font-size: 11px !important;
   color: var(--secondary-text-color, #8b8ea0);
+}
+
+/* ─── Choose next (VERM-6) ────────────────────────────────────────────────── */
+
+.statusFilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.filterPill {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-color, #dfe1ec);
+  background: var(--primary-background-color, #ffffff);
+  color: var(--secondary-text-color, #676879);
+  border-radius: 20px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+
+.filterPillActive {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.candidateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.candidateCard {
+  background: var(--primary-background-color, #ffffff);
+  border: 1px solid var(--border-color, #dfe1ec);
+  border-radius: 8px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(30, 33, 53, 0.05);
+}
+
+.candidateCard:hover {
+  border-color: var(--primary-color, #0073ea);
 }

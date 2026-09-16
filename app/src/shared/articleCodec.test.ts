@@ -18,6 +18,7 @@ describe('parseArticleConfig', () => {
       workspaces: [],
       activeWorkspaceId: 'ws-1',
       boards: { 'p-1': defaultBoardConfig('p-1') },
+      dismissals: { 'ws-1:ISS-1': { workspace: 'ws-1', issueId: 'ISS-1', dismissedWeekOf: '2026-09-14' } },
     };
     expect(parseArticleConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -41,6 +42,7 @@ describe('parseArticleConfig', () => {
       workspaces: [],
       activeWorkspaceId: '',
       boards: {},
+      dismissals: {},
     });
   });
 
@@ -70,6 +72,10 @@ describe('mergeRemoteConfig', () => {
       shared: { boardId: 'shared', views: [], activeViewId: 'a', colors: { Status: { x: '#111' } } },
       'remote-only': { boardId: 'remote-only', views: [], activeViewId: 'a', colors: {} },
     },
+    dismissals: {
+      'r-ws:ISS-SHARED': { workspace: 'r-ws', issueId: 'ISS-SHARED', dismissedWeekOf: '2026-09-07' },
+      'r-ws:ISS-REMOTE': { workspace: 'r-ws', issueId: 'ISS-REMOTE', dismissedWeekOf: '2026-09-07' },
+    },
   };
   const local: ArticleFullConfig = {
     version: 1,
@@ -78,6 +84,10 @@ describe('mergeRemoteConfig', () => {
     boards: {
       shared: { boardId: 'shared', views: [], activeViewId: 'b', colors: { Status: { x: '#999' } } },
       'local-only': { boardId: 'local-only', views: [], activeViewId: 'a', colors: {} },
+    },
+    dismissals: {
+      'r-ws:ISS-SHARED': { workspace: 'r-ws', issueId: 'ISS-SHARED', dismissedWeekOf: '2026-09-14' },
+      'l-ws:ISS-LOCAL': { workspace: 'l-ws', issueId: 'ISS-LOCAL', dismissedWeekOf: '2026-09-14' },
     },
   };
 
@@ -92,6 +102,48 @@ describe('mergeRemoteConfig', () => {
     expect(Object.keys(merged.boards).sort()).toEqual(['local-only', 'remote-only', 'shared']);
     expect(merged.boards.shared.activeViewId).toBe('b'); // local wins
     expect(merged.boards['remote-only']).toBeDefined(); // remote-only preserved
+  });
+
+  it('merges dismissals by recency, not "local wins" — the later dismissedWeekOf wins per key', () => {
+    const merged = mergeRemoteConfig(remote, local);
+    expect(Object.keys(merged.dismissals).sort()).toEqual(['l-ws:ISS-LOCAL', 'r-ws:ISS-REMOTE', 'r-ws:ISS-SHARED']);
+    expect(merged.dismissals['r-ws:ISS-SHARED'].dismissedWeekOf).toBe('2026-09-14'); // local newer — local wins
+    expect(merged.dismissals['r-ws:ISS-REMOTE']).toBeDefined(); // remote-only preserved
+    expect(merged.dismissals['l-ws:ISS-LOCAL']).toBeDefined(); // local-only preserved
+  });
+
+  it('keeps the remote dismissal when remote is newer than local, even though boards still favor local', () => {
+    const remoteNewer: ArticleFullConfig = {
+      ...remote,
+      dismissals: { 'r-ws:ISS-X': { workspace: 'r-ws', issueId: 'ISS-X', dismissedWeekOf: '2026-09-14' } },
+    };
+    const localOlder: ArticleFullConfig = {
+      ...local,
+      dismissals: { 'r-ws:ISS-X': { workspace: 'r-ws', issueId: 'ISS-X', dismissedWeekOf: '2026-09-07' } },
+    };
+    const merged = mergeRemoteConfig(remoteNewer, localOlder);
+    expect(merged.dismissals['r-ws:ISS-X'].dismissedWeekOf).toBe('2026-09-14'); // remote newer — remote wins
+  });
+
+  it('resolves a tie (equal dismissedWeekOf) deterministically, favoring local', () => {
+    const sameWeek: ArticleFullConfig = {
+      ...remote,
+      dismissals: { 'r-ws:ISS-Y': { workspace: 'r-ws', issueId: 'ISS-Y', dismissedWeekOf: '2026-09-14' } },
+    };
+    const sameWeekLocal: ArticleFullConfig = {
+      ...local,
+      dismissals: { 'r-ws:ISS-Y': { workspace: 'r-ws', issueId: 'ISS-Y', dismissedWeekOf: '2026-09-14' } },
+    };
+    const merged = mergeRemoteConfig(sameWeek, sameWeekLocal);
+    expect(merged.dismissals['r-ws:ISS-Y']).toEqual(sameWeekLocal.dismissals['r-ws:ISS-Y']);
+  });
+
+  it('does not mutate either input\'s dismissals', () => {
+    const remoteSnapshot = JSON.stringify(remote.dismissals);
+    const localSnapshot = JSON.stringify(local.dismissals);
+    mergeRemoteConfig(remote, local);
+    expect(JSON.stringify(remote.dismissals)).toBe(remoteSnapshot);
+    expect(JSON.stringify(local.dismissals)).toBe(localSnapshot);
   });
 
   it('does not mutate either input', () => {
