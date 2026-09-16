@@ -47,8 +47,9 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       native Epic/Subtask link data exists yet. Delivered in
       [VERM-6](https://youtrack.kevininscoe.com/issue/VERM-6).
 - [ ] **Epic context** — read and display native Epic → Subtask issue links (parent epic + outcome
-      name only, no full portfolio management); document a Master Plan knowledge-base template;
-      populate the active-Epic filter Choose next deferred. See
+      name only, no full portfolio management); document a Master Plan knowledge-base template
+      per [ADR-0008](docs/adr/0008-master-plan-storage.md); populate the active-Epic filter
+      Choose next deferred. See
       [VERM-7](https://youtrack.kevininscoe.com/issue/VERM-7).
 - [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
       recommendation" action that evaluates the bounded candidate set and returns a ranked

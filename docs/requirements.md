@@ -128,8 +128,8 @@ links; the desk is a curated view onto it, never a second store. See
   on a card. Creating or restructuring those links, and full portfolio management, are out
   of scope for the desk itself.
 - **Master Plan (minimum contract)**: a single Master Plan article — a YouTrack Knowledge
-  Base article, or an issue in a dedicated planning project — defines the outcomes the
-  desk and the AI recommendation reason against. Full authoring workflow and per-epic
+  Base article (see [ADR-0008](adr/0008-master-plan-storage.md)) — defines the outcomes
+  the desk and the AI recommendation reason against. Full authoring workflow and per-epic
   "next milestone" tracking are Epic-context delivery-step scope; the minimum shape below
   is defined now so "Ask for recommendation" has an unambiguous source to depend on:
 
