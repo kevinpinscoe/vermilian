@@ -3,7 +3,7 @@ import {
   computeCandidates, compareCandidates, candidateSetReadiness, MAX_CANDIDATES,
   type Candidate, type QueryStatus,
 } from './candidates';
-import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
+import type { BoardIssue, BoardIssueFields, ParentEpic } from '../../../shared/workspace';
 import type { Dismissals } from '../../../shared/boardConfig';
 
 interface IssueOverrides {
@@ -12,6 +12,7 @@ interface IssueOverrides {
   summary?: string;
   resolved?: number | null;
   fields?: Partial<BoardIssueFields>;
+  parentEpic?: ParentEpic | null;
 }
 
 function issue(over: IssueOverrides): BoardIssue {
@@ -27,7 +28,7 @@ function issue(over: IssueOverrides): BoardIssue {
   } as BoardIssueFields;
   return {
     id: over.id ?? 'p-1', idReadable: over.idReadable ?? 'TEST-1', summary: over.summary ?? 'Summary',
-    resolved: over.resolved ?? null, fields,
+    resolved: over.resolved ?? null, fields, parentEpic: over.parentEpic ?? null,
   };
 }
 

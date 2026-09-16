@@ -127,15 +127,39 @@ interface RawCustomField {
   value: unknown;
 }
 
+// Native YouTrack Epic → Subtask relationship (VERM-7). A "Subtask" issue-link
+// bucket appears in both the OUTWARD and INWARD direction on every issue, and
+// which bucket the epic/child relationship lands in is NOT reliable evidence
+// of which side is the parent — confirmed against production data 2026-09-16:
+// four of VERM-3's five subtasks carry the expected INWARD link back to it,
+// but the fifth (VERM-4) carries an OUTWARD "Subtask" link *to* VERM-3, i.e.
+// authored in the reverse direction. Resolution below therefore keys off the
+// linked issue's own Type field being "Epic", checked across both direction
+// buckets, never off which bucket it happened to land in. See
+// docs/adr/0008-master-plan-storage.md and PLAN.md § "Design decisions".
+interface RawLinkedIssue {
+  id: string;
+  idReadable: string;
+  summary: string;
+  customFields: RawCustomField[];
+}
+
+interface RawIssueLink {
+  direction: 'OUTWARD' | 'INWARD' | 'BOTH';
+  linkType: { name: string };
+  issues: RawLinkedIssue[];
+}
+
 interface RawIssue {
   id: string;
   idReadable: string;
   summary: string;
   resolved: number | null;
   customFields: RawCustomField[];
+  links?: RawIssueLink[];
 }
 
-import type { BoardIssue, IssueDetail } from '../../shared/workspace';
+import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueSearchQuery } from '../../shared/search';
 import {
   FIELD_DEFS,
@@ -148,8 +172,13 @@ import {
   type BoardIssueFields,
 } from '../../shared/fields';
 
+// links(...) is embedded in the same bounded per-project request the board/
+// candidate queries already make — no per-card N+1 (VERM-7 PLAN.md § "Fetch
+// shape"). The linked issue's customFields are fetched only so its Type name
+// can be read for parent-Epic resolution below.
 const ISSUE_FIELDS =
-  'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login))';
+  'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login)),' +
+  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
 
 function parseFieldStringValue(field: RawCustomField): string | null {
   if (field.value === null || field.value === undefined) return null;
@@ -192,6 +221,22 @@ function extractFields(fields: RawCustomField[]): BoardIssueFields {
   return result as unknown as BoardIssueFields;
 }
 
+function linkedIssueType(linked: RawLinkedIssue): string | null {
+  const typeField = linked.customFields?.find((f) => f.name === 'Type');
+  return typeField ? parseFieldStringValue(typeField) : null;
+}
+
+// See the RawIssueLink comment above for why direction is not trusted.
+function resolveParentEpic(links: RawIssueLink[] | undefined): ParentEpic | null {
+  if (!links) return null;
+  for (const link of links) {
+    if (link.linkType.name !== 'Subtask') continue;
+    const epic = link.issues.find((i) => linkedIssueType(i) === 'Epic');
+    if (epic) return { id: epic.id, idReadable: epic.idReadable, summary: epic.summary };
+  }
+  return null;
+}
+
 function rawToBoardIssue(issue: RawIssue): BoardIssue {
   return {
     id: issue.id,
@@ -199,6 +244,7 @@ function rawToBoardIssue(issue: RawIssue): BoardIssue {
     summary: issue.summary,
     resolved: issue.resolved ?? null,
     fields: extractFields(issue.customFields ?? []),
+    parentEpic: resolveParentEpic(issue.links),
   };
 }
 
@@ -244,7 +290,8 @@ export async function searchIssues(
 
 const DETAIL_FIELDS =
   'id,idReadable,summary,resolved,project(id,name,shortName),' +
-  'customFields(name,$type,value(name,isResolved,text,login))';
+  'customFields(name,$type,value(name,isResolved,text,login)),' +
+  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
 
 interface RawIssueDetail extends RawIssue {
   project: { id: string; name: string; shortName: string };
@@ -267,6 +314,7 @@ export async function getIssueDetail(
     resolved: raw.resolved ?? null,
     project: raw.project,
     fields: extractFields(raw.customFields ?? []),
+    parentEpic: resolveParentEpic(raw.links),
   };
 }
 

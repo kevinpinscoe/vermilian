@@ -134,6 +134,7 @@ describe('getIssues', () => {
           focusRank: null,
           whyNow: null,
         },
+        parentEpic: null,
       },
     ]);
   });
@@ -178,6 +179,90 @@ describe('getIssues', () => {
     );
     const issues = await getIssues(URL, TOKEN, 'TST');
     expect(issues[0].fields.progressPercent).toBe(10);
+  });
+
+  it('resolves the parent Epic from the expected INWARD Subtask-link bucket', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'INWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic',
+                  customFields: [{ name: 'Type', value: { name: 'Epic' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toEqual({ id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic' });
+  });
+
+  it('resolves the parent Epic even when the Subtask link was authored in reverse (OUTWARD)', async () => {
+    // Real-data finding (VERM-7, 2026-09-16): VERM-4 (Type Task) carries an
+    // OUTWARD "Subtask" link to its Epic VERM-3, backwards from every other
+    // subtask of that Epic. Resolution must key off the linked issue's own
+    // Type being "Epic", not off which direction bucket it landed in.
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'OUTWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic',
+                  customFields: [{ name: 'Type', value: { name: 'Epic' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toEqual({ id: 'epic-1', idReadable: 'TST-100', summary: 'The Epic' });
+  });
+
+  it('does not treat a Subtask link to a non-Epic issue as a parent Epic', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [],
+          links: [
+            {
+              direction: 'OUTWARD',
+              linkType: { name: 'Subtask' },
+              issues: [
+                {
+                  id: 'child-1', idReadable: 'TST-2', summary: 'A child task',
+                  customFields: [{ name: 'Type', value: { name: 'Task' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toBeNull();
+  });
+
+  it('leaves parentEpic null for an issue with no links field at all', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([{ id: '1', idReadable: 'TST-1', summary: 'Hello', resolved: null, customFields: [] }]),
+    );
+    const issues = await getIssues(URL, TOKEN, 'TST');
+    expect(issues[0].parentEpic).toBeNull();
   });
 
   it('URL-encodes the project query', async () => {

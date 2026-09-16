@@ -3,7 +3,7 @@
 // state is process-local, so each app launch (each test) starts from the same
 // deterministic fixtures and mutations never leave the process.
 
-import type { BoardIssue, BoardIssueFields, IssueDetail } from '../../shared/workspace';
+import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import type {
   YouTrackProject,
@@ -46,6 +46,7 @@ function makeIssues(): FakeIssue[] {
   const mk = (
     n: number, projectId: string, prefix: string, status: string, priority: string,
     dueDate: number | null = null,
+    parentEpic: ParentEpic | null = null,
   ): FakeIssue => ({
     id: `${projectId}-${n}`,
     idReadable: `${prefix}-${n}`,
@@ -53,18 +54,26 @@ function makeIssues(): FakeIssue[] {
     resolved: null,
     projectId,
     fields: emptyFields({ status, priority, category: 'TASK', ticket: `JIRA-${n}`, dueDate }),
+    parentEpic,
   });
   // Two TEST issues carry fixed due dates so the Due Date filter is testable:
   // TEST-1 is before 2026-06-15, TEST-2 is after it; the rest are undated.
   const DUE_EARLY = new Date('2026-06-10T00:00:00').getTime();
   const DUE_LATE = new Date('2026-06-20T00:00:00').getTime();
+  // VERM-7: TEST-3 and TEST-4 double as Epics for a couple of their siblings,
+  // reusing existing fixture issues rather than adding new rows — this keeps
+  // every pre-existing .first()/.nth()-based e2e selector stable. TEST-3 has
+  // two subtasks (TEST-1, TEST-2); TEST-4 has one (TEST-5); TEST-6 and every
+  // TST2/INB issue carry no parent Epic at all.
+  const EPIC_TEST_3: ParentEpic = { id: '0-e1-3', idReadable: 'TEST-3', summary: 'To do task 3' };
+  const EPIC_TEST_4: ParentEpic = { id: '0-e1-4', idReadable: 'TEST-4', summary: 'To do task 4' };
   return [
     // TEST: 4 in "To do", 2 in "In Progress" → >=2 groups, >=3 in one group
-    mk(1, '0-e1', 'TEST', 'To do', 'Normal', DUE_EARLY),
-    mk(2, '0-e1', 'TEST', 'To do', 'Critical', DUE_LATE),
+    mk(1, '0-e1', 'TEST', 'To do', 'Normal', DUE_EARLY, EPIC_TEST_3),
+    mk(2, '0-e1', 'TEST', 'To do', 'Critical', DUE_LATE, EPIC_TEST_3),
     mk(3, '0-e1', 'TEST', 'To do', 'Minor'),
     mk(4, '0-e1', 'TEST', 'To do', 'Major'),
-    mk(5, '0-e1', 'TEST', 'In Progress', 'Normal'),
+    mk(5, '0-e1', 'TEST', 'In Progress', 'Normal', null, EPIC_TEST_4),
     mk(6, '0-e1', 'TEST', 'In Progress', 'Critical'),
     // TST2: a couple so cross-board moves have a destination
     mk(1, '0-e2', 'TST2', 'To do', 'Normal'),
@@ -114,7 +123,14 @@ export async function getProjects(_url: string, _token: string): Promise<YouTrac
 }
 
 function toBoardIssue(i: FakeIssue): BoardIssue {
-  return { id: i.id, idReadable: i.idReadable, summary: i.summary, resolved: i.resolved, fields: { ...i.fields } };
+  return {
+    id: i.id,
+    idReadable: i.idReadable,
+    summary: i.summary,
+    resolved: i.resolved,
+    fields: { ...i.fields },
+    parentEpic: i.parentEpic,
+  };
 }
 
 export async function getIssues(
@@ -186,6 +202,7 @@ export async function createIssue(
       dueDate: payload.dueDate, ticket: payload.ticket, ticketLink: payload.ticketLink,
       relatedLink: payload.relatedLink, notes: payload.notes, repoUrl: payload.repoUrl,
     }),
+    parentEpic: null,
   };
   issues.push(issue);
   return { id: issue.id, idReadable: issue.idReadable };
