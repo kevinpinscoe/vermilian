@@ -27,6 +27,7 @@ import {
   type GetRecommendationResult,
   type PostRecommendationAuditArgs,
   type PostRecommendationAuditResult,
+  type DailyReviewGetResult,
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
@@ -63,6 +64,10 @@ export function forceQuit(): void {
   app.quit();
 }
 
+// Fixed, not configurable — PLAN.md "Scope and window — fixed, not
+// configurable". Matches Stand-up's own default window.
+const DAILY_REVIEW_COMPLETED_WINDOW_HOURS = 48;
+
 export function sendQuitRequested(): void {
   BrowserWindow.getAllWindows()[0]?.webContents.send('timer:quit-requested');
 }
@@ -77,6 +82,21 @@ async function loadClaudeKey(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-claude-key';
   const c = cfg ?? (await readConfig());
   return loadSecretWithSources(FILES.claudeKey, c.claudeKeyCommand, c.claudeKeyFile);
+}
+
+// Project short names in the active workspace, resolved the same way
+// standupGenerate's scope: 'active-workspace' branch does. Daily Review
+// (VERM-9) only ever needs this one scope — unlike Stand-up it has no
+// scope/window config step (PLAN.md "Scope and window — fixed, not
+// configurable") — so this is its own small helper rather than exposing
+// standupGenerate's three-way scope switch for one branch of it.
+async function activeWorkspaceProjectShortNames(url: string, token: string): Promise<string[]> {
+  const allProjects = await youtrack.getProjects(url, token);
+  const wsConfig = await readWorkspaceConfig();
+  const activeWs =
+    wsConfig?.workspaces.find((w) => w.id === wsConfig.activeWorkspaceId) ?? wsConfig?.workspaces[0];
+  const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
+  return allProjects.filter((p) => projectIds.has(p.id)).map((p) => p.shortName);
 }
 
 export function registerIpc(): void {
@@ -476,6 +496,32 @@ export function registerIpc(): void {
       }
     },
   );
+
+  // Priority Desk Daily Review (VERM-9, docs/requirements.md § Priority
+  // Desk). Deterministic — no Claude call. Answers only "recently
+  // completed", the one section the renderer's own board cache can't cover
+  // (that cache excludes resolved issues); Now/Next/Then, blocked-focused,
+  // and needs-attention are all derived client-side from that board cache
+  // instead (renderer/features/daily-review/boardData.ts).
+  ipcMain.handle(IPC.dailyReviewGet, async (): Promise<DailyReviewGetResult> => {
+    try {
+      const cfg = await readConfig();
+      const token = await loadYtToken(cfg);
+      if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
+
+      const projectShortNames = await activeWorkspaceProjectShortNames(cfg.youtrackUrl, token);
+      const cutoffMs = Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000;
+      const { done } = await youtrack.getIssuesForStandup(cfg.youtrackUrl, token, projectShortNames, cutoffMs);
+
+      return {
+        ok: true,
+        completed: done.map((t) => ({ idReadable: t.idReadable, summary: t.summary, priority: t.priority })),
+      };
+    } catch (e) {
+      const err = e as { message?: string };
+      return { ok: false, error: err.message ?? 'Daily Review failed to load.' };
+    }
+  });
 
   // e2e-only test hook — wired directly to the fake module (never through
   // api/client.ts, which has no such export on the real client) so specs can

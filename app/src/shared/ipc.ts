@@ -58,6 +58,12 @@ export const IPC = {
   // confirmation action — see shared/recommendationAudit.ts.
   getRecommendation: 'priorityDesk:getRecommendation',
   postRecommendationAudit: 'priorityDesk:postRecommendationAudit',
+  // Priority Desk Daily Review (VERM-9, docs/requirements.md § Priority
+  // Desk). Deterministic only — no Claude call. Covers just "recently
+  // completed", the one section the board cache (getIssues,
+  // includeResolved: false) can't answer; every other section is derived
+  // client-side from that same board cache (see renderer/features/daily-review).
+  dailyReviewGet: 'priorityDesk:dailyReviewGet',
 } as const;
 
 export interface CredentialStatus {
@@ -202,6 +208,24 @@ export interface PostRecommendationAuditArgs {
 export interface PostRecommendationAuditResult {
   ok: boolean;
   error?: string;
+}
+
+// Priority Desk Daily Review (VERM-9). Deliberately its own minimal shape,
+// not a re-export of main/api/youtrack.ts's StandupTask — that type lives in
+// a main-process-only file and carries stand-up-specific fields (notes,
+// loggedMinutesToday) this section never displays.
+export interface DailyReviewTask {
+  idReadable: string;
+  summary: string;
+  priority: string | null;
+}
+
+export interface DailyReviewGetResult {
+  ok: boolean;
+  error?: string;
+  // Present only when ok is true. Always the fixed active-workspace/48h
+  // scope — see renderer/features/daily-review — never user-configurable.
+  completed?: DailyReviewTask[];
 }
 
 export interface CreateIssueArgs {
@@ -370,6 +394,7 @@ export interface VermilianAPI {
   // Priority Desk "Ask for recommendation" (VERM-8)
   getRecommendation(args: GetRecommendationArgs): Promise<GetRecommendationResult>;
   postRecommendationAudit(args: PostRecommendationAuditArgs): Promise<PostRecommendationAuditResult>;
+  dailyReviewGet(): Promise<DailyReviewGetResult>;
   // e2e-only test hook (VERMILIAN_E2E=1) — reads back what
   // postRecommendationAudit actually posted, from the in-memory fake. The
   // main-process handler is registered only under the e2e harness; calling

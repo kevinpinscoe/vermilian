@@ -289,6 +289,13 @@ export async function postWorklog(
 export async function getIssuesForStandup(
   _url: string, _token: string, projectShortNames: string[], _cutoffMs: number,
 ): Promise<StandupIssues> {
+  // Set VERMILIAN_E2E_DAILY_REVIEW_ERROR=1 to simulate this fetch failing —
+  // used by Daily Review's (VERM-9) e2e error-state coverage. Shared with
+  // Stand-up's own fetch (both call this function), which is fine: the flag
+  // is opt-in per launch and no existing Stand-up spec sets it.
+  if (process.env.VERMILIAN_E2E_DAILY_REVIEW_ERROR === '1') {
+    throw { status: 500, message: 'Simulated Daily Review fetch failure' };
+  }
   if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
   // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has data.
   return {

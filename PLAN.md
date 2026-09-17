@@ -1,80 +1,123 @@
-# PLAN — VERM-8: Priority Desk AI adviser (Ask for recommendation)
+# PLAN — VERM-9: Priority Desk Daily Review
 
-Tracked in [VERM-8](https://youtrack.kevininscoe.com/issue/VERM-8). Depends on VERM-7
-(Epic context / Master Plan), merged.
+Tracked in [VERM-9](https://youtrack.kevininscoe.com/issue/VERM-9). Depends on the Manual
+desk (VERM-5/VERM-6, merged); does not depend on AI recommendation (VERM-8) — Daily Review
+never calls Claude.
 
 ## Constraints (Kevin, given before starting)
 
-1. Consume existing Epic-to-outcome associations (`resolveEpicOutcome` from VERM-7) —
-   never re-derive.
-2. Never write `Focus`/`Focus rank`/`Status`/Epic links automatically — only via one of
-   the three confirmation actions.
-3. Use only the bounded candidate set (`useChooseNextCandidates`, ≤7) — never a wider query.
-4. Require explicit user choice before applying anything.
-5. Audit comment only after a ranked recommendation AND a user choice.
-6. Clarification-only responses: no audit comment, no task changes.
+1. Deterministic panel only — no Claude call, no scoring, no interpretation. Daily Review
+   reports current state; it does not generate it.
+2. "Focus items needing attention" = Focus is `Yes` **and** Focus rank is unset. No other
+   rule (no overdue dates, no priority thresholds, no staleness, no AI-derived urgency)
+   unless the ticket is amended to require one.
+3. The three agent-work sections (awaiting review / needing input / failed) render as
+   empty/unavailable states — never fabricated from ordinary YouTrack fields — because no
+   agent-execution metadata store exists in Vermilian yet.
+4. Entry point mirrors Stand-up exactly: a top-bar button beside `standup-btn`, opening a
+   modal built the same way `StandupModal` is.
+5. Do not autonomously reprioritize anything; do not close or accept any issue from this
+   view.
 
 ## Design decisions
 
-### Data scope — a fresh, bounded fetch, not the board cache
+### No new data store, no Claude — reuse what VERM-4/5/6 and Stand-up already built
 
-`BoardIssue` has no `description` field (never fetched anywhere in the app), and the
-board's `links(...)` embed (VERM-7) only surfaces Subtask-type buckets' linked-issue Type.
-The recommendation call needs the issue `description` and *all* link types (for
-"dependency readiness"), so it uses a **new, separate fetch by exact id list** —
-`getIssuesForRecommendation(url, token, ids)` — called only with the ids of the currently
-displayed candidate cards (≤7). This is deliberately not folded into the shared
-`['youtrack','issues',...]` cache: it is a one-shot, request-scoped payload, not board
-state, and reusing that cache would either bloat every board load with `description` or
-require a second field-shape variant of the same query key (rejected during VERM-7's
-review for the same architectural reason).
+Every section is derived from data Vermilian already fetches:
 
-### No numeric score
+| Section | Source |
+| --- | --- |
+| Recently completed | `youtrack.getIssuesForStandup()`'s `done` bucket (main process) — the same function Stand-up uses, called directly with no Claude step afterward |
+| Now / Next / Then | `useWorkspaceFocusRankHolders()` (`project-board/focus.ts`) — identical to Priority Desk's own Now mode, verbatim |
+| Blocked focused work | Derived client-side from the same per-project `['youtrack','issues',shortName]` board query: any issue with `isFocusRank(fields.focusRank)` and `fields.status === 'BLOCKED'` |
+| Needs attention | Same board query: `fields.focus === 'Yes'` and `!isFocusRank(fields.focusRank)` |
+| Agent work (3 sections) | No data source. Static "not available yet" panels. |
 
-The Claude tool schema's evidence fields (`outcome_contribution`, `dependency_readiness`,
-`urgency`, `effort`, `risk`) are free-text strings. There is no numeric field anywhere in
-the request or response shape.
+No second local database, no new YouTrack query shape beyond what Stand-up already sends,
+no new field. This is the point of the epic's own guardrail ("no new local issue
+database").
 
-### Confirmation actions and field writes
+### Scope and window — fixed, not configurable
 
-- **Apply to desk** — assigns Focus rank 1/2/3 to the top three via the *existing*
-  `useFocusMutations().setRank` (VERM-4), never a second ranking mechanism. If any of
-  ranks 1-3 is already held by a *different* issue, the action is refused with a message
-  pointing at the existing holder rather than silently displacing it or reimplementing the
-  conflict-resolution dialog inline — a deliberate scope trim (see "Trims" below).
-- **Star only** — `useFocusMutations().toggleFocus` on each of the top three not already
-  Focus=Yes. No rank assigned.
-- **Keep my order** — no field writes. Still a real "user choice" for audit purposes.
+Unlike Stand-up, Daily Review has no scope/window config step. It is always scoped to the
+**active workspace** and a **fixed 48-hour window** for "recently completed" — matching
+Stand-up's own default window. A decision surface that opens straight to its content, with
+no form to fill in first, is "bounded" in the sense the acceptance criteria ask for; a
+configurable window would reopen the "forced daily planning" surface the epic explicitly
+guards against. If Kevin wants this configurable later, that is a follow-up, not part of
+this ticket's scope.
 
-### Audit comment
+### New IPC: `dailyReviewGet` — completed work only
 
-`shared/recommendationAudit.ts` exports a pure `buildAuditComment(items, action)` —
-unit-testable with no network/Electron dependency. The IPC handler calls it and posts the
-result via a new `youtrack.postComment` (no such function existed before this ticket —
-every comment on record so far was posted outside the app). Only ever called from the
-confirmed-choice path, targeting the top-ranked issue.
+The board query (`getIssues`, `includeResolved: false`) already covers Now/Next/Then,
+blocked-focused, and needs-attention — all unresolved issues. It cannot answer "recently
+completed", which requires resolved issues within a time window; that is what
+`getIssuesForStandup` is for. So the only new main-process work is a thin handler that
+calls it and returns the `done` bucket, with no Claude call:
 
-### Clarification-only path
+```ts
+// shared/ipc.ts
+export interface DailyReviewTask {
+  idReadable: string;
+  summary: string;
+  priority: string | null;
+}
+export interface DailyReviewGetResult {
+  ok: boolean;
+  error?: string;
+  completed?: DailyReviewTask[];
+}
+```
 
-`RecommendationResult` is a discriminated union (`kind: 'ranked' | 'clarification'`). The
-panel renders the question and offers no confirmation actions at all when `kind ===
-'clarification'` — there is nothing to confirm, so no audit call is reachable from that
-state by construction, not just by convention.
+```ts
+// main/ipc.ts — IPC.dailyReviewGet handler
+// 1. Load config + YouTrack token (no Claude key required).
+// 2. Resolve active-workspace project short names (same lookup standupGenerate
+//    already does for scope: 'active-workspace').
+// 3. cutoffMs = Date.now() - 48h.
+// 4. const { done } = await youtrack.getIssuesForStandup(url, token, shortNames, cutoffMs);
+// 5. Map to DailyReviewTask[] and return { ok: true, completed }.
+```
 
-## Trims made under context/time constraints (flagged, not hidden)
+### Blocked-focused and needs-attention: derived, not fetched separately
 
-- **No Settings UI for a dedicated recommendation model.** `AppConfig.modelForRecommendation`
-  exists with a sensible default (`claude-sonnet-4-6`, matching ADR-0006's quality-over-speed
-  choice for prose/reasoning tasks), but there is no Settings form field to override it yet —
-  matches `modelForCreate`/`modelForStandup`'s *existence* but not their *editability*. Fast
-  follow, not a correctness or safety gap.
-- **Apply-to-desk conflict handling is refuse-not-resolve.** Rather than reusing the full
-  displace-conflict dialog (`focus-rank-conflict-dialog`), a rank already held by a
-  different issue blocks the action with a message rather than prompting to displace. Safer
-  default (never a surprise reassignment), simpler to verify, at the cost of one extra
-  manual step for the user in that specific collision case.
+Both come from the exact same `['youtrack','issues',shortName]` query
+`useWorkspaceFocusRankHolders` already issues per active-workspace project (same
+`staleTime`, same cache key) — so `DailyReviewModal` rides that cache rather than adding
+new requests. A new hook, `useDailyReviewBoardData()` in
+`renderer/features/daily-review/boardData.ts`, runs the same `useQueries` shape and
+derives two lists from the combined `BoardIssue[]`:
 
-## Verification
+```ts
+export function deriveBlockedFocused(issues: BoardIssue[]): BoardIssue[] {
+  return issues.filter((i) => isFocusRank(i.fields.focusRank) && i.fields.status === 'BLOCKED');
+}
+export function deriveNeedsAttention(issues: BoardIssue[]): BoardIssue[] {
+  return issues.filter((i) => i.fields.focus === 'Yes' && !isFocusRank(i.fields.focusRank));
+}
+```
 
-`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm package`, `pnpm test:e2e`, plus visual QA
-against the packaged app with the fake backend.
+Both are pure and unit-tested directly (no DOM, no React Query) — same convention as
+`focus.ts`'s `holdersOfRank`/`decideRankAssignment`.
+
+### Entry point
+
+`AppShell.tsx` gets a `daily-review-btn` beside `standup-btn`, toggling
+`showDailyReview`, exactly mirroring `showStandup`. `DailyReviewModal` takes no
+scope/window props (see above) — just `onClose`.
+
+### Agent-work sections — explicitly inert
+
+Three fixed sections, each an `AttentionBox type="informative"` (or equivalent) reading
+along the lines of "Agent work tracking isn't set up yet — nothing to show here." No IPC
+call backs them. This is what "must degrade cleanly if agent-execution metadata is not yet
+implemented" means in practice: the feature ships with these sections permanently in their
+not-yet-available state until Vermilian actually has agent-execution metadata, which is
+out of scope for VERM-9.
+
+## Out of scope
+
+- Any AI-generated summary text (that is what Stand-up is for).
+- A configurable scope/window step.
+- Any new local persistence — Daily Review reads, it never writes.
+- Real agent-execution status — no such store exists yet.

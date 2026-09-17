@@ -84,6 +84,7 @@ const api: VermilianAPI = {
   getRecommendation: (args: GetRecommendationArgs) => ipcRenderer.invoke(IPC.getRecommendation, args),
   postRecommendationAudit: (args: PostRecommendationAuditArgs) =>
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
+  dailyReviewGet: () => ipcRenderer.invoke(IPC.dailyReviewGet),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
 };
 
