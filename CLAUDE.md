@@ -47,6 +47,24 @@ invisible to every other check.
 E2e is not in CI (it needs a display and adds minutes). Run `pnpm test:e2e`
 locally when a change touches the main/preload/renderer boundary.
 
+### Build environment parity (FLDW vs CI)
+
+The repo-root `mise.toml` pins `node = "24.15.0"` and `pnpm = "11.5.0"` — the
+same versions `ci.yml`'s `actions/setup-node`/`pnpm/action-setup` steps
+install, and the same pnpm version `app/package.json`'s `packageManager`
+field pins by integrity hash. Verified 2026-09-17 (VERM-12): a clean `pnpm
+install --frozen-lockfile` followed by `lint`/`typecheck`/`test`/`package`
+passes identically on the FLDW's mise-managed toolchain. These three pins
+(`mise.toml`, `ci.yml`, `packageManager`) are what keep that true — bump all
+three together, never just one, or local and CI builds can silently diverge.
+
+**CI's `ubuntu-latest` vs the FLDW's Fedora doesn't need reconciling.**
+`ci.yml` only runs the pre-merge gate (lint/typecheck/test/package); the
+actual release artifacts for all four shipped platforms (`ubuntu-24.04`,
+`ubuntu-24.04-arm`, `macos-14`, `windows-2022`) are built by `release.yml`'s
+own matrix on GitHub-hosted runners when a tag is pushed — never on the
+FLDW. FLDW parity only has to match what `ci.yml` checks, which it does.
+
 ### Dependency constraints worth knowing
 
 - **`@vitejs/plugin-react` is held at 5.x.** Version 6 requires `vite ^8.0.0`
