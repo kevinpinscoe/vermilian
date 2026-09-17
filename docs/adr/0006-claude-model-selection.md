@@ -47,3 +47,16 @@ The `create-task-ai.md` spec previously stated `claude-sonnet-4-6` as the create
 - When Anthropic ships new model versions, this ADR will need a revision (or a follow-up ADR) — defaults are not auto-upgraded.
 - The Electron main process is the only place that holds the model IDs at runtime (it makes the API calls) — the renderer reads them through IPC but never sends API requests directly.
 - The open question "AI model selection" in `docs/requirements.md` is resolved — remove from the open questions list.
+
+## Update — VERM-8 (2026-09-17): a third use case, same reasoning
+
+Priority Desk's "Ask for recommendation" (`docs/requirements.md` § Priority Desk) added a third
+Claude call: ranking a small, bounded candidate set against a selected Master Plan outcome with
+qualitative evidence. Like the stand-up report, this is a reasoning/prose task, not
+latency-sensitive structured extraction — the user has already asked for the recommendation and
+is not staring at a per-keystroke spinner. `modelForRecommendation` therefore defaults to
+`claude-sonnet-4-6`, the same choice this ADR already made for stand-up, for the same reason.
+
+Unlike `modelForCreate`/`modelForStandup`, this field has no Settings UI yet — it exists on
+`AppConfig` with the default above, editable only by hand-editing `app-config.json`, until a
+follow-up gives it a form field (PLAN.md, VERM-8, "Trims made under context/time constraints").
