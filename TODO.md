@@ -60,8 +60,13 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       itself. Confirmation UI: Apply to desk / Star only / Keep my order. Delivered in
       [VERM-8](https://youtrack.kevininscoe.com/issue/VERM-8),
       [PR #93](https://github.com/kevinpinscoe/vermilian/pull/93).
-- [ ] **Daily Review** — reuse the existing Daily Stand-up capability to surface completed work,
-      active focus slots, blocked focus work, and agent work awaiting a human decision.
+- [x] **Daily Review** — a deterministic decision surface complementing Daily Stand-up:
+      recently completed work, Now/Next/Then focus slots, blocked focused work, and
+      focused-but-unranked items needing attention, plus three agent-work sections that
+      render as inert placeholders until Vermilian has agent-execution metadata. No Claude
+      call, no new data store. Delivered in
+      [VERM-9](https://youtrack.kevininscoe.com/issue/VERM-9),
+      [PR #94](https://github.com/kevinpinscoe/vermilian/pull/94).
 
 Guardrails carried from the idea doc: no autonomous reprioritization, no new local issue database,
 no scores masquerading as certainty, no forced daily planning, no unbounded "AI decides my work"
