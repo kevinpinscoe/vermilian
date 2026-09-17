@@ -53,11 +53,13 @@ Ask-for-recommendation panel. Full idea source: `~/ideation/ideation/ideas/vermi
       structured parse diagnostics, and Epic→outcome association shown on Now-mode cards,
       all read-only (Vermilian never writes the article). Delivered in
       [VERM-7](https://youtrack.kevininscoe.com/issue/VERM-7).
-- [ ] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
+- [x] **AI recommendation** — build only after the manual desk is trusted: an "Ask for
       recommendation" action that evaluates the bounded candidate set and returns a ranked
       top-three-plus-alternates proposal with qualitative evidence (outcome contribution,
       dependency readiness, urgency, effort, risk), never writing a field/rank/status/epic-link
-      itself. Confirmation UI: Apply to desk / Star only / Keep my order.
+      itself. Confirmation UI: Apply to desk / Star only / Keep my order. Delivered in
+      [VERM-8](https://youtrack.kevininscoe.com/issue/VERM-8),
+      [PR #93](https://github.com/kevinpinscoe/vermilian/pull/93).
 - [ ] **Daily Review** — reuse the existing Daily Stand-up capability to surface completed work,
       active focus slots, blocked focus work, and agent work awaiting a human decision.
 
