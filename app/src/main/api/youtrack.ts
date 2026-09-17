@@ -374,6 +374,104 @@ export async function patchIssue(
   });
 }
 
+// --- Recommendation fetch (VERM-8) ---
+// A fresh, bounded fetch by exact id list — never reused from the board
+// cache (BoardIssue has no `description`) and never a project-wide query.
+// See PLAN.md § "Data scope".
+
+export interface RecommendationLinkedIssue {
+  idReadable: string;
+  summary: string;
+  status: string | null;
+}
+
+export interface RecommendationLink {
+  linkType: string;
+  direction: 'OUTWARD' | 'INWARD' | 'BOTH';
+  issues: RecommendationLinkedIssue[];
+}
+
+export interface RecommendationIssue {
+  id: string;
+  idReadable: string;
+  summary: string;
+  description: string | null;
+  status: string | null;
+  priority: string | null;
+  links: RecommendationLink[];
+}
+
+const RECOMMENDATION_FIELDS =
+  'id,idReadable,summary,description,resolved,customFields(name,$type,value(name)),' +
+  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
+
+interface RawRecommendationIssue extends RawIssue {
+  description: string | null;
+}
+
+// Linked issues' customFields carry no $type (same shape as ISSUE_FIELDS's
+// links() embed above), so extractFields' name+$type match can't be reused
+// here — this mirrors typeNameOf's name-only lookup, generalized to any
+// field name.
+function fieldStringByName(customFields: RawCustomField[] | undefined, name: string): string | null {
+  const field = customFields?.find((f) => f.name === name);
+  return field ? parseFieldStringValue(field) : null;
+}
+
+function rawToRecommendationIssue(raw: RawRecommendationIssue): RecommendationIssue {
+  const fields = extractFields(raw.customFields ?? []);
+  return {
+    id: raw.id,
+    idReadable: raw.idReadable,
+    summary: raw.summary,
+    description: raw.description ?? null,
+    status: fields.status,
+    priority: fields.priority,
+    links: (raw.links ?? []).map((link) => ({
+      linkType: link.linkType.name,
+      direction: link.direction,
+      issues: link.issues.map((li) => ({
+        idReadable: li.idReadable,
+        summary: li.summary,
+        status: fieldStringByName(li.customFields, 'Status'),
+      })),
+    })),
+  };
+}
+
+// Fetches exactly the given ids — one request per id (never a project-wide
+// query), bounded by the caller to the ≤7 currently displayed candidates.
+export async function getIssuesForRecommendation(
+  url: string,
+  token: string,
+  issueIds: string[],
+): Promise<RecommendationIssue[]> {
+  if (!issueIds.length) return [];
+  const raws = await Promise.all(
+    issueIds.map((id) =>
+      request<RawRecommendationIssue>(url, token, `/api/issues/${id}?fields=${RECOMMENDATION_FIELDS}`),
+    ),
+  );
+  return raws.map(rawToRecommendationIssue);
+}
+
+// --- Comments ---
+// No comment-posting function existed before VERM-8 — every comment on
+// record so far was posted by hand outside the app. Used only by the
+// recommendation audit-comment path (main/ipc.ts's postRecommendationAudit
+// handler), which never calls this except after a confirmed user choice.
+export async function postComment(
+  url: string,
+  token: string,
+  issueId: string,
+  text: string,
+): Promise<void> {
+  await request<unknown>(url, token, `/api/issues/${issueId}/comments?fields=id`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
 // --- Move issue to another project ---
 
 export async function moveIssue(

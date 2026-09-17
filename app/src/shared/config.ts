@@ -39,6 +39,10 @@ export interface AppConfig {
 
   modelForCreate: string;
   modelForStandup: string;
+  // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
+  // context/time constraints") — exists with a sensible default, matching
+  // modelForCreate/modelForStandup's *existence* but not their *editability*.
+  modelForRecommendation: string;
   pomodoro: PomodoroConfig;
   soundOnBlockEnd: boolean;
   osNotifications: boolean;
@@ -59,6 +63,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   claudeKeyFile: '',
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
+  modelForRecommendation: 'claude-sonnet-4-6',
   pomodoro: { work: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 4 },
   soundOnBlockEnd: true,
   osNotifications: true,

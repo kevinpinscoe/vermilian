@@ -4,8 +4,16 @@
 // access and no API key. Outputs are derived from the inputs so e2e specs can
 // assert on them.
 
-import type { AiCreateTaskFields, AiCreateTaskResult, TestClaudeResult } from '../../shared/ipc';
-import type { StandupIssues, StandupTask } from './youtrack';
+import type {
+  AiCreateTaskFields,
+  AiCreateTaskResult,
+  RecommendationCandidateContext,
+  RecommendationItem,
+  RecommendationResult,
+  TestClaudeResult,
+} from '../../shared/ipc';
+import type { Outcome } from '../../shared/masterPlan';
+import type { RecommendationIssue, StandupIssues, StandupTask } from './youtrack';
 import { matchProjectByName } from './aiExtract';
 import { formatDuration } from './standupPrompt';
 
@@ -72,4 +80,44 @@ export async function generateStandupReport(
     section('In Progress', issues.inProgress),
     section('Blocked', issues.blocked),
   ].filter(Boolean).join('\n\n');
+}
+
+// --- Priority Desk "Ask for recommendation" (VERM-8) ---
+// Deterministic, input-derived output — no network, no API key. Set
+// VERMILIAN_E2E_RECOMMENDATION_CLARIFICATION=1 to exercise the
+// clarification-only path instead of a ranked result.
+
+export async function getRecommendation(
+  _key: string,
+  issues: RecommendationIssue[],
+  _candidateContext: RecommendationCandidateContext[],
+  outcome: Outcome,
+  _model: string,
+): Promise<RecommendationResult> {
+  if (process.env.VERMILIAN_E2E_RECOMMENDATION_CLARIFICATION === '1') {
+    return {
+      kind: 'clarification',
+      question: 'Fake adviser: not enough signal to rank confidently — which of these matters more to you right now?',
+    };
+  }
+  if (issues.length === 0) {
+    return { kind: 'clarification', question: 'No candidates were provided.' };
+  }
+
+  const makeItem = (issue: RecommendationIssue, i: number): RecommendationItem => ({
+    issueId: issue.id,
+    idReadable: issue.idReadable,
+    summary: issue.summary,
+    evidence: {
+      outcomeContribution: `Fake: contributes to ${outcome.name} (rank ${i + 1}).`,
+      dependencyReadiness: issue.links.length > 0 ? 'Fake: has linked issues to check.' : 'Fake: no blocking links found.',
+      urgency: issue.priority ? `Fake: Priority ${issue.priority}.` : 'Fake: no priority set.',
+      effort: 'Fake: moderate effort.',
+      risk: 'Fake: no known risk.',
+    },
+  });
+
+  const ranked = issues.slice(0, 3).map(makeItem);
+  const alternates = issues.slice(3, 5).map(makeItem);
+  return { kind: 'ranked', ranked, alternates };
 }
