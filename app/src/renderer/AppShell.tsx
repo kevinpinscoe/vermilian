@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
-import { Sun, Settings } from '@vibe/icons';
+import { Sun, Settings, CheckList } from '@vibe/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceNav } from './features/workspace-nav/WorkspaceNav';
 import { PriorityDesk } from './features/priority-desk/PriorityDesk';
@@ -10,6 +10,7 @@ import { TaskDetailPanel } from './features/task-detail/TaskDetailPanel';
 import { CreateTaskModal } from './features/create-task/CreateTaskModal';
 import { AiCreateModal } from './features/create-task/AiCreateModal';
 import { StandupModal } from './features/standup/StandupModal';
+import { DailyReviewModal } from './features/daily-review/DailyReviewModal';
 import { FocusOverlay } from './features/timer/FocusOverlay';
 import { BreakBanner } from './features/timer/BreakBanner';
 import { SearchBar } from './features/search/SearchBar';
@@ -118,6 +119,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showAiCreate, setShowAiCreate] = useState(false);
   const [showStandup, setShowStandup] = useState(false);
+  const [showDailyReview, setShowDailyReview] = useState(false);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [quitDialog, setQuitDialog] = useState(false);
   const [quitting, setQuitting] = useState(false);
@@ -389,6 +391,15 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
             Stand-up
           </Button>
         </Tooltip>
+        <Button
+          data-testid="daily-review-btn"
+          size="small"
+          kind="tertiary"
+          leftIcon={CheckList}
+          onClick={() => setShowDailyReview(true)}
+        >
+          Daily Review
+        </Button>
       </div>
 
       {/* Connection banner — the projects query is the canary. If it failed,
@@ -509,6 +520,12 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onClose={() => setShowStandup(false)}
           onScopeChange={handleScopeChange}
           onWindowChange={handleWindowChange}
+        />
+      )}
+      {showDailyReview && (
+        <DailyReviewModal
+          onClose={() => setShowDailyReview(false)}
+          onSelectIssue={(id) => setSelectedIssue(id)}
         />
       )}
 

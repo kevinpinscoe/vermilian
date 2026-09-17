@@ -1,0 +1,111 @@
+/* DailyReviewModal */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 8px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  padding-bottom: 14px;
+}
+
+.section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 2px;
+}
+
+.sectionHint {
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issueRow {
+  display: block;
+  text-align: left;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.issueRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.issueRowStatic {
+  padding: 6px 8px;
+  color: var(--primary-text-color, var(--primary-text-color, #111111));
+  font-size: 14px;
+}
+
+.issueId {
+  font-weight: 700;
+  color: var(--primary-color, #0073ea);
+  margin-right: 6px;
+}
+
+.slotRow {
+  display: flex;
+  gap: 12px;
+}
+
+.slot {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slotLabel {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+.emptySlot {
+  color: var(--secondary-text-color, var(--secondary-text-color, #444444));
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
