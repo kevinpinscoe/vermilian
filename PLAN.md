@@ -1,131 +1,80 @@
-# PLAN — VERM-7: Priority Desk Epic context and Master Plan
+# PLAN — VERM-8: Priority Desk AI adviser (Ask for recommendation)
 
-Tracked in [VERM-7](https://youtrack.kevininscoe.com/issue/VERM-7). Depends on VERM-6
-(Choose next), which shipped without the active-Epic filter this ticket completes.
+Tracked in [VERM-8](https://youtrack.kevininscoe.com/issue/VERM-8). Depends on VERM-7
+(Epic context / Master Plan), merged.
 
-## Scope
+## Constraints (Kevin, given before starting)
 
-- Read native YouTrack Epic → Subtask issue links; no synthetic field, no custom-field
-  surrogate for Epic membership.
-- Show a task's parent Epic on Now-mode cards when resolvable.
-- Populate and wire the active-Epic filter in Choose next (deferred by VERM-6).
-- Settle the Master Plan storage decision (ADR-0008: YouTrack Knowledge Base article) and
-  document its minimum template.
-- Out of scope: AI recommendation (VERM-8), Daily Review, automated Epic restructuring,
-  automated issue-link writes, Epic re-parenting UI.
+1. Consume existing Epic-to-outcome associations (`resolveEpicOutcome` from VERM-7) —
+   never re-derive.
+2. Never write `Focus`/`Focus rank`/`Status`/Epic links automatically — only via one of
+   the three confirmation actions.
+3. Use only the bounded candidate set (`useChooseNextCandidates`, ≤7) — never a wider query.
+4. Require explicit user choice before applying anything.
+5. Audit comment only after a ranked recommendation AND a user choice.
+6. Clarification-only responses: no audit comment, no task changes.
 
 ## Design decisions
 
-### 1. Master Plan storage — ADR-0008
+### Data scope — a fresh, bounded fetch, not the board cache
 
-Decision: a single YouTrack Knowledge Base article, matching the existing
-`_vermilian-config` pattern, rather than a dedicated planning project. See
-`docs/adr/0008-master-plan-storage.md`.
+`BoardIssue` has no `description` field (never fetched anywhere in the app), and the
+board's `links(...)` embed (VERM-7) only surfaces Subtask-type buckets' linked-issue Type.
+The recommendation call needs the issue `description` and *all* link types (for
+"dependency readiness"), so it uses a **new, separate fetch by exact id list** —
+`getIssuesForRecommendation(url, token, ids)` — called only with the ids of the currently
+displayed candidate cards (≤7). This is deliberately not folded into the shared
+`['youtrack','issues',...]` cache: it is a one-shot, request-scoped payload, not board
+state, and reusing that cache would either bloat every board load with `description` or
+require a second field-shape variant of the same query key (rejected during VERM-7's
+review for the same architectural reason).
 
-### 2. Epic/Subtask relationship resolution — do not trust the direction bucket alone
+### No numeric score
 
-YouTrack's `Subtask` issue-link type is directed: `sourceToTarget: "parent for"`,
-`targetToSource: "subtask of"`. Querying `/api/issues/{id}/links` returns both direction
-buckets (`OUTWARD`, `INWARD`) for every link type, each carrying the issues on the other
-side of a link stored in that direction.
+The Claude tool schema's evidence fields (`outcome_contribution`, `dependency_readiness`,
+`urgency`, `effort`, `risk`) are free-text strings. There is no numeric field anywhere in
+the request or response shape.
 
-**Live data proves the stored direction is not reliable evidence of which side is the
-parent.** VERM-3 (Type `Epic`) and its five subtasks were inspected directly against the
-production instance (2026-09-16): four subtasks (VERM-5, 6, 7, 8, 9) carry the expected
-`INWARD` "Subtask" link back to VERM-3. The fifth, VERM-4 (Type `Task`, the Foundation
-delivery step), carries an **`OUTWARD`** "Subtask" link *to* VERM-3 — i.e. the link was
-authored in the reverse direction from every other subtask, and a naive "children are
-whatever's in the parent's OUTWARD bucket" reading would both miss VERM-4 as a subtask of
-VERM-3 and misread it as VERM-3's parent.
+### Confirmation actions and field writes
 
-**Resolution:** for a given issue, collect every issue appearing in either direction
-bucket of its own `Subtask`-type link (`linkType.name === 'Subtask'`), then treat as its
-parent Epic whichever of those linked issues has its own `Type` field equal to `Epic`.
-This is direction-independent and survives the reversed-link case, because it keys off
-what the linked issue *is* rather than which bucket the link landed in. A task with no
-Subtask-type link, or one whose only Subtask-type links point at non-Epic issues, has no
-parent Epic.
+- **Apply to desk** — assigns Focus rank 1/2/3 to the top three via the *existing*
+  `useFocusMutations().setRank` (VERM-4), never a second ranking mechanism. If any of
+  ranks 1-3 is already held by a *different* issue, the action is refused with a message
+  pointing at the existing holder rather than silently displacing it or reimplementing the
+  conflict-resolution dialog inline — a deliberate scope trim (see "Trims" below).
+- **Star only** — `useFocusMutations().toggleFocus` on each of the top three not already
+  Focus=Yes. No rank assigned.
+- **Keep my order** — no field writes. Still a real "user choice" for audit purposes.
 
-This needs the linked issue's `Type` field, so the links query embeds
-`issues(idReadable,summary,customFields(name,value(name)))` rather than a bare
-`issues(idReadable,summary)`.
+### Audit comment
 
-### 3. Fetch shape — bounded, shared, no per-card N+1
+`shared/recommendationAudit.ts` exports a pure `buildAuditComment(items, action)` —
+unit-testable with no network/Electron dependency. The IPC handler calls it and posts the
+result via a new `youtrack.postComment` (no such function existed before this ticket —
+every comment on record so far was posted outside the app). Only ever called from the
+confirmed-choice path, targeting the top-ranked issue.
 
-`youtrack.ts`'s existing per-project issue query (`getIssues`, called once per project in
-the active workspace via `useQueries` — see `candidates.ts`) already returns every
-`BoardIssue` a card needs. Extending that single query's `fields` string to also embed
-`links(...)` costs nothing beyond a slightly larger response for the same one request per
-project; it introduces **no new IPC channel and no new React Query cache key**. Resolved
-`parentEpic` rides on `BoardIssue` itself, under the existing `['youtrack','issues',
-shortName]` cache Now mode, Choose next, and the boards already share.
+### Clarification-only path
 
-`BoardIssue.parentEpic: { id: string; idReadable: string; summary: string } | null` is a
-top-level field, deliberately **not** added to `FIELD_DEFS`/`BoardIssueFields` — it is
-issue-link metadata, not a custom field, and does not belong in the field registry that
-drives board columns, the create-task form, or `patchIssue`.
+`RecommendationResult` is a discriminated union (`kind: 'ranked' | 'clarification'`). The
+panel renders the question and offers no confirmation actions at all when `kind ===
+'clarification'` — there is nothing to confirm, so no audit call is reachable from that
+state by construction, not just by convention.
 
-### 4. Active-Epic filter — derived, not enumerated
+## Trims made under context/time constraints (flagged, not hidden)
 
-The filter's options are the distinct `parentEpic` values found across every issue
-already fetched for the active workspace (before Status/dismissal/rank filtering) — no
-hard-coded list, no additional query. Selecting one adds a conjunctive
-`issue.parentEpic?.id === epicFilter` check in `computeCandidates`, alongside every
-existing VERM-6 eligibility rule (workspace scope, Status ≠ Done, no Focus rank 1–3, not
-dismissed this week, the Status filter). Ordering (`Due Date` → `Priority` →
-`idReadable`) and the seven-item cap are unaffected — the Epic filter narrows the
-eligible set the same way the Status filter already does, before sorting and capping run.
-
-### 5. Master Plan discovery, parsing, and Epic→outcome association
-
-Built against the live `_vermilian-master-plan` article (`VERM-A-2`, project `VERM`,
-top-level — see ADR-0008's "Implementation (VERM-7)" section for the full design). Four
-design points worth calling out beyond what ADR-0008 already covers:
-
-- **Discovery completeness is proven, not assumed.** `_vermilian-config`'s finder trusts
-  one `$top=500` global request; the Master Plan finder instead pages the project-scoped
-  `/api/admin/projects/VERM/articles` endpoint to exhaustion, and returns a distinct
-  `discovery-incomplete` state (rather than `none`) if a safety cap is hit before
-  completeness can be established — a documented, tested bound rather than a silent
-  assumption.
-- **Matching key vs. display value are kept strictly separate.** `normalizeEpicRef`
-  (trim + case-fold) is used only to decide *whether* an Epic reference matches; the
-  Epic identifier rendered on a card is always `BoardIssue.parentEpic.idReadable`, read
-  from the native YouTrack relationship, never from the article's own text.
-- **A duplicate Epic→outcome association is a conflict, not a pick.** If the same Epic
-  idReadable appears under two outcomes, `resolveEpicOutcome` returns `conflict`
-  (never the first match) and the card shows no outcome line for it — the ambiguity is
-  reported through the same diagnostic banner as every other Master Plan problem.
-- **No cache to go stale.** `main/services/masterPlan.ts` deliberately does not mirror
-  `articleConfig.ts`'s singleton-cache shape — every call re-fetches and re-parses, and
-  the renderer's own `staleTime: 60_000` (matching `candidates.ts`'s issue queries) is
-  what governs how often that happens in practice.
-
-## Master Plan template
-
-Minimum structure for the KB article, one Master Plan article covering every workspace:
-
-```
-## <Outcome / theme name>
-- Active epics: VERM-3, ...        (native YouTrack idReadable references)
-- Success measure: <what "done" looks like, measurably>
-- Target window: <date range or milestone>
-- Risks / dependencies: <free text>
-```
-
-Referencing active Epics by their `idReadable` — the same identifier Vermilian already
-displays everywhere — is what lets VERM-8's AI recommendation step deterministically
-resolve "the epics under this outcome" back to real YouTrack issues without inventing a
-second identifier scheme. As of this ticket the association itself (Epic idReadable →
-outcome) is built and tested; VERM-8 consumes it rather than establishing it.
-
-## Task breakdown
-
-See `CHECKPOINT.md` at the repository root (primary working tree) for the live,
-timestamped task list. This file records the design; that one tracks progress.
+- **No Settings UI for a dedicated recommendation model.** `AppConfig.modelForRecommendation`
+  exists with a sensible default (`claude-sonnet-4-6`, matching ADR-0006's quality-over-speed
+  choice for prose/reasoning tasks), but there is no Settings form field to override it yet —
+  matches `modelForCreate`/`modelForStandup`'s *existence* but not their *editability*. Fast
+  follow, not a correctness or safety gap.
+- **Apply-to-desk conflict handling is refuse-not-resolve.** Rather than reusing the full
+  displace-conflict dialog (`focus-rank-conflict-dialog`), a rank already held by a
+  different issue blocks the action with a message rather than prompting to displace. Safer
+  default (never a surprise reassignment), simpler to verify, at the cost of one extra
+  manual step for the user in that specific collision case.
 
 ## Verification
 
-`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm package`, `pnpm test:e2e`, plus a
-visual QA pass against a **freshly packaged build** (not the dev server) with the fake
-YouTrack backend (`VERMILIAN_E2E=1`), before the pull request is opened.
+`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm package`, `pnpm test:e2e`, plus visual QA
+against the packaged app with the fake backend.
