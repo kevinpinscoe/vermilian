@@ -4,7 +4,7 @@
 
 import type { AppConfig } from './config';
 import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
-import type { MasterPlanState } from './masterPlan';
+import type { MasterPlanState, Outcome } from './masterPlan';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -49,6 +49,15 @@ export const IPC = {
   createIssue: 'youtrack:createIssue',
   deleteIssue: 'youtrack:deleteIssue',
   moveIssue: 'youtrack:moveIssue',
+  // Priority Desk "Ask for recommendation" (VERM-8, docs/requirements.md §
+  // Priority Desk). getRecommendation composes a bounded, request-scoped
+  // fetch (never the board cache) with a Claude tool-use call and never
+  // writes any field. postRecommendationAudit is the only path that ever
+  // writes a YouTrack comment for this feature, and only after the caller
+  // supplies a completed ranked recommendation plus the user's chosen
+  // confirmation action — see shared/recommendationAudit.ts.
+  getRecommendation: 'priorityDesk:getRecommendation',
+  postRecommendationAudit: 'priorityDesk:postRecommendationAudit',
 } as const;
 
 export interface CredentialStatus {
@@ -110,6 +119,89 @@ export interface PatchIssueArgs {
 export interface MoveIssueArgs {
   issueId: string;
   targetProjectId: string;
+}
+
+// ─── Priority Desk "Ask for recommendation" (VERM-8) ───────────────────────
+// docs/requirements.md § Priority Desk, "Ask for recommendation". The AI
+// never writes Focus/Focus rank/Status/Epic links itself — only one of the
+// three confirmation actions below does, and each writes exactly the field
+// it documents (see shared/recommendationAudit.ts and
+// features/priority-desk/recommendationApi.ts).
+
+export type ConfirmationAction = 'apply-to-desk' | 'star-only' | 'keep-my-order';
+
+export interface RecommendationEvidence {
+  outcomeContribution: string;
+  dependencyReadiness: string;
+  urgency: string;
+  effort: string;
+  risk: string;
+}
+
+// idReadable/summary are resolved server-side from the fetched candidate
+// issues by matching Claude's chosen issueId (constrained to the candidate
+// set via a JSON-schema enum) — never taken from the model's own prose, so a
+// hallucinated summary can never reach the UI or the audit comment.
+export interface RecommendationItem {
+  issueId: string;
+  idReadable: string;
+  summary: string;
+  evidence: RecommendationEvidence;
+}
+
+// A discriminated union by construction (PLAN.md "Clarification-only path")
+// — a 'clarification' result carries no ranked/alternates data at all, so a
+// caller cannot accidentally build an audit comment or a confirmation UI
+// from one.
+export type RecommendationResult =
+  | { kind: 'ranked'; ranked: RecommendationItem[]; alternates: RecommendationItem[] }
+  | { kind: 'clarification'; question: string };
+
+// How a candidate's own parent Epic relates to the *selected* Outcome,
+// resolved via the existing shared/masterPlan.ts `resolveEpicOutcome` —
+// never re-derived. Computed in the renderer (which already holds both the
+// candidate's BoardIssue.parentEpic and the loaded Master Plan outcomes) and
+// sent as already-resolved context, so neither the main process nor the
+// model has to re-run that matching logic.
+export type EpicOutcomeContext =
+  | 'matches-selected-outcome'
+  | 'different-outcome'
+  | 'no-outcome-association'
+  | 'no-parent-epic';
+
+export interface RecommendationCandidateContext {
+  issueId: string;
+  epicOutcomeContext: EpicOutcomeContext;
+  parentEpicIdReadable: string | null;
+}
+
+export interface GetRecommendationArgs {
+  // The currently displayed candidate ids (≤7, useChooseNextCandidates) —
+  // never a wider query. issueIds and candidateContext must be the same set.
+  issueIds: string[];
+  candidateContext: RecommendationCandidateContext[];
+  // The single selected Master Plan outcome's fields — reused verbatim from
+  // shared/masterPlan.ts's Outcome, never a re-shaped copy.
+  outcome: Outcome;
+}
+
+export interface GetRecommendationResult {
+  ok: boolean;
+  result?: RecommendationResult;
+  error?: string;
+}
+
+export interface PostRecommendationAuditArgs {
+  // Must be a 'ranked' result — the handler refuses (ok: false) for a
+  // 'clarification' result, defense-in-depth alongside the UI never
+  // offering a confirmation action for one.
+  result: RecommendationResult;
+  action: ConfirmationAction;
+}
+
+export interface PostRecommendationAuditResult {
+  ok: boolean;
+  error?: string;
 }
 
 export interface CreateIssueArgs {
@@ -275,6 +367,15 @@ export interface VermilianAPI {
   deleteIssue(issueId: string): Promise<{ ok: boolean; error?: string }>;
   moveIssue(args: MoveIssueArgs): Promise<{ ok: boolean; error?: string }>;
   quitApp(): Promise<void>;
+  // Priority Desk "Ask for recommendation" (VERM-8)
+  getRecommendation(args: GetRecommendationArgs): Promise<GetRecommendationResult>;
+  postRecommendationAudit(args: PostRecommendationAuditArgs): Promise<PostRecommendationAuditResult>;
+  // e2e-only test hook (VERMILIAN_E2E=1) — reads back what
+  // postRecommendationAudit actually posted, from the in-memory fake. The
+  // main-process handler is registered only under the e2e harness; calling
+  // this outside it rejects. Optional because it carries no production
+  // behavior of its own.
+  debugGetPostedComments?(): Promise<Array<{ issueId: string; text: string }>>;
 }
 
 declare global {

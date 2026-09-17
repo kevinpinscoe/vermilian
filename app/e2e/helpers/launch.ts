@@ -116,3 +116,15 @@ export async function launchAppWithMasterPlanError(): Promise<ElectronApplicatio
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_ERROR: '1' },
   });
 }
+
+// General-purpose launcher for combining several VERMILIAN_E2E_* fixture
+// flags at once (e.g. a seeded Master Plan article plus a forced fake-Claude
+// clarification response) without a dedicated named helper per combination —
+// see priority-desk-recommendation.spec.ts (VERM-8).
+export async function launchAppWithEnv(extraEnv: Record<string, string>): Promise<ElectronApplication> {
+  return electron.launch({
+    executablePath: EXECUTABLE,
+    args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
+    env: { ...process.env, VERMILIAN_E2E: '1', ...extraEnv },
+  });
+}

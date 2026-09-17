@@ -165,9 +165,13 @@ links; the desk is a curated view onto it, never a second store. See
     unrelated projects, or any other unselected YouTrack data.
   - **Audit record**: the recommendation shown and the user's resulting choice (Apply to
     desk / Star only / Keep my order) are recorded as a YouTrack comment on the
-    top-ranked recommended issue — the canonical audit record. A Master Plan article is a
-    planning document Kevin edits by hand (see "Master Plan" above); it is not a target
-    for automated writes.
+    top-ranked recommended issue — the canonical audit record. **The comment is written
+    only after both (1) a ranked recommendation has actually been presented and (2) the
+    user has made one of the three choices** — a clarification-only response (no ranked
+    recommendation exists yet) never creates an audit comment, and nothing is recorded
+    while a recommendation is merely on screen awaiting the user's choice. A Master Plan
+    article is a planning document Kevin edits by hand (see "Master Plan" above); it is not
+    a target for automated writes.
 - **Daily Review**: reuses the existing Daily Stand-up capability to surface completed
   work, active focus slots, blocked focus work, and agent work awaiting a human decision.
   AI agents stay executors throughout — they can propose work and report results, never

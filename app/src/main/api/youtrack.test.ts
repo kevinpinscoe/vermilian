@@ -8,6 +8,8 @@ import {
   patchIssue,
   createIssue,
   findMasterPlanArticle,
+  getIssuesForRecommendation,
+  postComment,
 } from './youtrack';
 
 const URL = 'https://yt.example.com/';
@@ -719,5 +721,75 @@ describe('findMasterPlanArticle', () => {
     fetchMock.mockImplementation(() => Promise.resolve(jsonRes(fillerArticles(100))));
     const result = await findMasterPlanArticle(URL, TOKEN);
     expect(result).toEqual({ status: 'discovery-incomplete' });
+  });
+});
+
+// ─── getIssuesForRecommendation (VERM-8) ───────────────────────────────────
+
+describe('getIssuesForRecommendation', () => {
+  it('returns an empty array with no request made for an empty id list', async () => {
+    const result = await getIssuesForRecommendation(URL, TOKEN, []);
+    expect(result).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fetches exactly one request per given id — never a project-wide query', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes({
+        id: 'p-1', idReadable: 'TEST-1', summary: 'First', description: 'Detail one', resolved: null,
+        customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'To do' } }],
+        links: [],
+      }))
+      .mockResolvedValueOnce(jsonRes({
+        id: 'p-2', idReadable: 'TEST-2', summary: 'Second', description: null, resolved: null,
+        customFields: [{ name: 'Priority', $type: 'SingleEnumIssueCustomField', value: { name: 'Critical' } }],
+        links: [],
+      }));
+
+    const result = await getIssuesForRecommendation(URL, TOKEN, ['p-1', 'p-2']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const urls = fetchMock.mock.calls.map(([u]) => u as string);
+    expect(urls[0]).toContain('/api/issues/p-1');
+    expect(urls[1]).toContain('/api/issues/p-2');
+    // Never a bounded/project-wide query string like getIssues uses.
+    expect(urls.every((u) => !u.includes('query='))).toBe(true);
+
+    expect(result).toEqual([
+      { id: 'p-1', idReadable: 'TEST-1', summary: 'First', description: 'Detail one', status: 'To do', priority: null, links: [] },
+      { id: 'p-2', idReadable: 'TEST-2', summary: 'Second', description: null, status: null, priority: 'Critical', links: [] },
+    ]);
+  });
+
+  it('carries full link-type/direction/linked-issue data, not just Subtask buckets', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({
+      id: 'p-1', idReadable: 'TEST-1', summary: 'First', description: null, resolved: null,
+      customFields: [],
+      links: [
+        {
+          direction: 'OUTWARD', linkType: { name: 'Depends on' },
+          issues: [{ id: 'p-9', idReadable: 'TEST-9', summary: 'Blocker', customFields: [{ name: 'Status', value: { name: 'In Progress' } }] }],
+        },
+      ],
+    }));
+
+    const [result] = await getIssuesForRecommendation(URL, TOKEN, ['p-1']);
+    expect(result.links).toEqual([
+      { linkType: 'Depends on', direction: 'OUTWARD', issues: [{ idReadable: 'TEST-9', summary: 'Blocker', status: 'In Progress' }] },
+    ]);
+  });
+});
+
+// ─── postComment (VERM-8) ───────────────────────────────────────────────────
+
+describe('postComment', () => {
+  it('POSTs the comment text to the issue\'s comments endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: 'c-1' }));
+    await postComment(URL, TOKEN, 'p-1', 'Priority Desk recommendation\n\nRanked:\n1. TEST-1');
+
+    const [url, init] = lastCall();
+    expect(url).toContain('/api/issues/p-1/comments');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ text: 'Priority Desk recommendation\n\nRanked:\n1. TEST-1' });
   });
 });

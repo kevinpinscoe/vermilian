@@ -23,7 +23,13 @@ import {
   type PostWorklogArgs,
   type PostWorklogResult,
   type TimerCheckpointData,
+  type GetRecommendationArgs,
+  type GetRecommendationResult,
+  type PostRecommendationAuditArgs,
+  type PostRecommendationAuditResult,
 } from '../shared/ipc';
+import { maybeBuildAuditComment } from '../shared/recommendationAudit';
+import * as fakeYouTrackForE2E from './api/fakeYouTrack';
 import type { AppConfig } from '../shared/config';
 import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
 import { readConfig, writeConfig } from './services/config';
@@ -414,6 +420,73 @@ export function registerIpc(): void {
       }
     },
   );
+
+  // ─── Priority Desk "Ask for recommendation" (VERM-8) ─────────────────────
+  // getRecommendation composes the bounded recommendation fetch with the
+  // Claude call and never writes any field. postRecommendationAudit is the
+  // only path that ever posts a comment for this feature, gated by
+  // maybeBuildAuditComment (shared/recommendationAudit.ts) — it returns null
+  // for anything but a 'ranked' result with a chosen action, so a
+  // 'clarification' result can never reach youtrack.postComment from here.
+
+  ipcMain.handle(
+    IPC.getRecommendation,
+    async (_e, args: GetRecommendationArgs): Promise<GetRecommendationResult> => {
+      try {
+        if (!args.issueIds.length) return { ok: false, error: 'No candidates to evaluate.' };
+        const cfg = await readConfig();
+        const token = await loadYtToken(cfg);
+        const claudeKey = await loadClaudeKey(cfg);
+        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
+        if (!claudeKey) return { ok: false, error: 'No Claude API key configured.' };
+
+        const issues = await youtrack.getIssuesForRecommendation(cfg.youtrackUrl, token, args.issueIds);
+        const result = await claude.getRecommendation(
+          claudeKey,
+          issues,
+          args.candidateContext,
+          args.outcome,
+          cfg.modelForRecommendation,
+        );
+        return { ok: true, result };
+      } catch (e) {
+        const err = e as { message?: string };
+        return { ok: false, error: err.message ?? 'Recommendation request failed.' };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.postRecommendationAudit,
+    async (_e, args: PostRecommendationAuditArgs): Promise<PostRecommendationAuditResult> => {
+      const comment = maybeBuildAuditComment(args.result, args.action);
+      if (!comment || args.result.kind !== 'ranked') {
+        return { ok: false, error: 'No ranked recommendation to audit.' };
+      }
+      try {
+        const cfg = await readConfig();
+        const token = await loadYtToken(cfg);
+        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
+        const topIssueId = args.result.ranked[0].issueId;
+        await youtrack.postComment(cfg.youtrackUrl, token, topIssueId, comment);
+        return { ok: true };
+      } catch (e) {
+        const err = e as { message?: string };
+        return { ok: false, error: err.message ?? 'Failed to post audit comment.' };
+      }
+    },
+  );
+
+  // e2e-only test hook — wired directly to the fake module (never through
+  // api/client.ts, which has no such export on the real client) so specs can
+  // assert what was actually posted and when, without giving production code
+  // any way to read comments back out. Never registered outside the e2e
+  // harness.
+  if (IS_E2E) {
+    ipcMain.handle('e2e:getPostedComments', (): Array<{ issueId: string; text: string }> =>
+      fakeYouTrackForE2E.getPostedComments(),
+    );
+  }
 
   ipcMain.handle(
     IPC.standupGenerate,

@@ -19,22 +19,33 @@ import { Heading, Text, Button, AttentionBox } from '@vibe/core';
 import { Play } from '@vibe/icons';
 import type { BoardIssue, ParentEpic } from '../../../shared/workspace';
 import { STATUS_OPTIONS } from '../../../shared/workspace';
+import type { ConfirmationAction, RecommendationItem, RecommendationResult } from '../../../shared/ipc';
 import { ChipCell } from '../project-board/KanbanView';
 import { PRIORITY_COLORS } from '../project-board/colors';
 import { FocusControl } from '../project-board/FocusControl';
 import { FocusRankRepairBanner } from '../project-board/FocusRankRepairBanner';
 import {
   useWorkspaceFocusRankHolders,
+  useFocusMutations,
+  decideRankAssignment,
   type FocusRank,
   type FocusRankHolder,
 } from '../project-board/focus';
 import { useProjects } from '../workspace-nav/api';
+import { useCredentialStatus } from '../settings/api';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useChooseNextCandidates, type Candidate } from './candidates';
 import { currentWeekMonday, useDismissIssue } from './dismissals';
 import { useMasterPlan } from './masterPlanApi';
 import { MasterPlanDiagnosticBanner } from './MasterPlanDiagnosticBanner';
 import { resolveEpicOutcome } from '../../../shared/masterPlan';
+import type { Outcome } from '../../../shared/masterPlan';
+import {
+  buildCandidateContext,
+  planConfirmationWrites,
+  useGetRecommendation,
+  usePostRecommendationAudit,
+} from './recommendationApi';
 import styles from './PriorityDesk.module.css';
 
 interface PriorityDeskProps {
@@ -349,6 +360,10 @@ function ChooseNext({
         <EpicFilter value={epicFilter} options={epicOptions} onChange={onEpicFilterChange} />
       )}
 
+      {!isLoading && !isError && (
+        <AskForRecommendation candidates={candidates} />
+      )}
+
       {isError ? (
         <div data-testid="priority-desk-candidates-error">
           <AttentionBox
@@ -380,6 +395,281 @@ function ChooseNext({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Ask for recommendation (VERM-8) ───────────────────────────────────────
+// docs/requirements.md § Priority Desk "Ask for recommendation". Outcome
+// selection is mandatory before the button is enabled — no outcome means no
+// context to reason against. Never writes a field itself: the three
+// confirmation actions below are the only paths that do, and each does
+// exactly what it documents (PLAN.md "Confirmation actions and field
+// writes"). If the Claude API key is not configured, the button stays
+// disabled with an explanatory title rather than attempting (and failing) a
+// call — the rest of Choose next is completely unaffected.
+
+function AskForRecommendation({ candidates }: { candidates: Candidate[] }) {
+  const { data: masterPlan } = useMasterPlan();
+  const { data: credStatus } = useCredentialStatus();
+  const outcomes = masterPlan?.kind === 'loaded' ? masterPlan.outcomes : [];
+
+  const [selectedOutcomeName, setSelectedOutcomeName] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+
+  const getRecommendation = useGetRecommendation();
+
+  const selectedOutcome = outcomes.find((o) => o.name === selectedOutcomeName) ?? null;
+  const hasClaudeKey = credStatus?.hasClaudeKey ?? false;
+  const disabled =
+    !selectedOutcome || candidates.length === 0 || !hasClaudeKey || getRecommendation.isPending;
+
+  function disabledReason(): string | undefined {
+    if (candidates.length === 0) return 'No eligible candidates to evaluate.';
+    if (!hasClaudeKey) return 'Configure a Claude API key in Settings to use this.';
+    if (!selectedOutcome) return 'Select a Master Plan outcome first.';
+    return undefined;
+  }
+
+  async function handleAsk() {
+    if (!selectedOutcome) return;
+    setRequestError(null);
+    setRecommendation(null);
+    const candidateContext = buildCandidateContext(candidates, outcomes, selectedOutcome);
+    const issueIds = candidates.map((c) => c.issue.id);
+    try {
+      const res = await getRecommendation.mutateAsync({ issueIds, candidateContext, outcome: selectedOutcome });
+      if (!res.ok || !res.result) {
+        setRequestError(res.error ?? 'Recommendation request failed.');
+        return;
+      }
+      setRecommendation(res.result);
+    } catch (e) {
+      setRequestError(e instanceof Error ? e.message : 'Recommendation request failed.');
+    }
+  }
+
+  function handleOutcomeChange(name: string | null) {
+    setSelectedOutcomeName(name);
+    setRecommendation(null);
+    setRequestError(null);
+  }
+
+  return (
+    <div className={styles.recommendationSection} data-testid="priority-desk-recommendation-section">
+      {outcomes.length > 0 && (
+        <OutcomeSelector value={selectedOutcomeName} outcomes={outcomes} onChange={handleOutcomeChange} />
+      )}
+
+      <div className={styles.recommendationAskRow} title={disabledReason()}>
+        <Button
+          size="small"
+          kind="secondary"
+          disabled={disabled}
+          loading={getRecommendation.isPending}
+          onClick={() => { void handleAsk(); }}
+          data-testid="priority-desk-ask-recommendation"
+        >
+          Ask for recommendation
+        </Button>
+      </div>
+
+      {requestError && (
+        <div data-testid="priority-desk-recommendation-error">
+          <AttentionBox type="negative" title="Recommendation failed" text={requestError} />
+        </div>
+      )}
+
+      {recommendation && (
+        <RecommendationPanel
+          result={recommendation}
+          candidates={candidates}
+          onDismiss={() => setRecommendation(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function OutcomeSelector({
+  value, outcomes, onChange,
+}: {
+  value: string | null;
+  outcomes: Outcome[];
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className={styles.statusFilter} data-testid="priority-desk-outcome-selector">
+      {outcomes.map((outcome) => (
+        <button
+          key={outcome.name}
+          type="button"
+          data-testid="priority-desk-outcome-pill"
+          data-value={outcome.name}
+          className={`${styles.filterPill} ${value === outcome.name ? styles.filterPillActive : ''}`}
+          onClick={() => onChange(value === outcome.name ? null : outcome.name)}
+        >
+          {outcome.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RecommendationPanel({
+  result, candidates, onDismiss,
+}: {
+  result: RecommendationResult;
+  candidates: Candidate[];
+  onDismiss: () => void;
+}) {
+  const { byRank } = useWorkspaceFocusRankHolders();
+  const { toggleFocus, setRank } = useFocusMutations();
+  const postAudit = usePostRecommendationAudit();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function projectShortNameFor(issueId: string): string {
+    return candidates.find((c) => c.issue.id === issueId)?.projectShortName ?? '';
+  }
+  function currentlyFocused(issueId: string): boolean {
+    return candidates.find((c) => c.issue.id === issueId)?.issue.fields.focus === 'Yes';
+  }
+
+  async function confirmChoice(action: ConfirmationAction) {
+    const res = await postAudit.mutateAsync({ result, action });
+    if (!res.ok) {
+      setActionError(res.error ?? 'Failed to record the audit comment.');
+      return;
+    }
+    setActionError(null);
+    onDismiss();
+  }
+
+  async function handleApplyToDesk() {
+    if (result.kind !== 'ranked') return;
+    setActionError(null);
+    setBusy(true);
+    try {
+      // Refuse-not-resolve (PLAN.md "Trims"): if any of the top three's
+      // target rank is already held by a *different* issue, the whole
+      // action is refused with a message rather than silently displacing
+      // the existing holder or reimplementing the conflict dialog inline.
+      const conflicts = result.ranked.slice(0, 3).flatMap((item, i) => {
+        const rank = (i + 1) as FocusRank;
+        const decision = decideRankAssignment(byRank, rank, item.issueId);
+        if (decision.kind === 'direct') return [];
+        const holder = decision.kind === 'confirm' ? decision.holder : decision.holders[0];
+        return [{ rank, holder }];
+      });
+      if (conflicts.length > 0) {
+        setActionError(
+          `Focus rank ${conflicts.map((c) => c.rank).join(', ')} is already held by another issue ` +
+          `(${conflicts.map((c) => c.holder.issue.idReadable).join(', ')}) — resolve it from the board ` +
+          'or Now mode first, then try again.',
+        );
+        return;
+      }
+      const writes = planConfirmationWrites(result.ranked, 'apply-to-desk', currentlyFocused);
+      for (const write of writes) {
+        if (write.kind !== 'setRank') continue;
+        await setRank({ issueId: write.issueId, projectShortName: projectShortNameFor(write.issueId) }, write.rank);
+      }
+      await confirmChoice('apply-to-desk');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleStarOnly() {
+    if (result.kind !== 'ranked') return;
+    setActionError(null);
+    setBusy(true);
+    try {
+      const writes = planConfirmationWrites(result.ranked, 'star-only', currentlyFocused);
+      for (const write of writes) {
+        if (write.kind !== 'toggleFocusOn') continue;
+        await toggleFocus(write.issueId, projectShortNameFor(write.issueId), false);
+      }
+      await confirmChoice('star-only');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleKeepMyOrder() {
+    setActionError(null);
+    setBusy(true);
+    try {
+      await confirmChoice('keep-my-order');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (result.kind === 'clarification') {
+    return (
+      <div data-testid="priority-desk-recommendation-clarification">
+        <AttentionBox type="primary" title="Need more to go on" text={result.question} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.recommendationPanel} data-testid="priority-desk-recommendation-panel">
+      <Text type="text2" className={styles.recommendationHeading}>Ranked</Text>
+      {result.ranked.map((item, i) => (
+        <RecommendationRow key={item.issueId} item={item} rank={i + 1} testIdPrefix="priority-desk-recommendation-ranked" />
+      ))}
+
+      {result.alternates.length > 0 && (
+        <>
+          <Text type="text2" className={styles.recommendationHeading}>Alternates</Text>
+          {result.alternates.map((item) => (
+            <RecommendationRow key={item.issueId} item={item} rank={null} testIdPrefix="priority-desk-recommendation-alternate" />
+          ))}
+        </>
+      )}
+
+      {actionError && (
+        <div data-testid="priority-desk-recommendation-action-error">
+          <AttentionBox type="negative" title="Couldn't apply" text={actionError} />
+        </div>
+      )}
+
+      <div className={styles.recommendationActions}>
+        <Button size="small" disabled={busy} onClick={() => { void handleApplyToDesk(); }} data-testid="priority-desk-recommendation-apply">
+          Apply to desk
+        </Button>
+        <Button size="small" kind="secondary" disabled={busy} onClick={() => { void handleStarOnly(); }} data-testid="priority-desk-recommendation-star">
+          Star only
+        </Button>
+        <Button size="small" kind="tertiary" disabled={busy} onClick={() => { void handleKeepMyOrder(); }} data-testid="priority-desk-recommendation-keep">
+          Keep my order
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RecommendationRow({
+  item, rank, testIdPrefix,
+}: {
+  item: RecommendationItem;
+  rank: number | null;
+  testIdPrefix: string;
+}) {
+  return (
+    <div className={styles.recommendationRow} data-testid={`${testIdPrefix}-${item.issueId}`}>
+      <Text type="text1" weight="bold">
+        {rank !== null ? `${rank}. ` : ''}{item.idReadable} — {item.summary}
+      </Text>
+      <Text type="text2" className={styles.recommendationEvidence}>Outcome: {item.evidence.outcomeContribution}</Text>
+      <Text type="text2" className={styles.recommendationEvidence}>Dependencies: {item.evidence.dependencyReadiness}</Text>
+      <Text type="text2" className={styles.recommendationEvidence}>Urgency: {item.evidence.urgency}</Text>
+      <Text type="text2" className={styles.recommendationEvidence}>Effort: {item.evidence.effort}</Text>
+      <Text type="text2" className={styles.recommendationEvidence}>Risk: {item.evidence.risk}</Text>
     </div>
   );
 }

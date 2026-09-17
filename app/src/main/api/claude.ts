@@ -1,8 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AiCreateTaskResult, TestClaudeResult } from '../../shared/ipc';
-import type { StandupIssues } from './youtrack';
+import type { AiCreateTaskResult, RecommendationCandidateContext, RecommendationResult, TestClaudeResult } from '../../shared/ipc';
+import type { Outcome } from '../../shared/masterPlan';
+import type { RecommendationIssue, StandupIssues } from './youtrack';
 import { matchProjectByName } from './aiExtract';
 import { buildStandupSections } from './standupPrompt';
+import {
+  buildRecommendationPrompt,
+  buildRecommendationTool,
+  parseRecommendationToolInput,
+  RECOMMENDATION_SYSTEM_PROMPT,
+  type RecommendationRawInput,
+} from './recommendationPrompt';
 
 // Returns the flat TestClaudeResult shape (not a discriminated union) because this
 // tsconfig has strictNullChecks off, which disables discriminated-union narrowing.
@@ -183,4 +191,39 @@ Keep each bullet concise. You may lightly rephrase summaries for clarity. Omit e
 
   const textBlock = response.content.find((b) => b.type === 'text');
   return textBlock?.type === 'text' ? textBlock.text.trim() : '';
+}
+
+// --- Priority Desk "Ask for recommendation" (VERM-8) ---
+// Bounded strictly to the given candidate issues and the single selected
+// Outcome — see recommendationPrompt.ts's buildRecommendationPrompt for the
+// exact data scope. Never writes any field itself; this only returns a
+// recommendation for the renderer to display.
+
+export async function getRecommendation(
+  key: string,
+  issues: RecommendationIssue[],
+  candidateContext: RecommendationCandidateContext[],
+  outcome: Outcome,
+  model: string,
+): Promise<RecommendationResult> {
+  const client = new Anthropic({ apiKey: key });
+  const issueIds = issues.map((i) => i.id);
+  const tool = buildRecommendationTool(issueIds);
+  const prompt = buildRecommendationPrompt(issues, candidateContext, outcome);
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 2048,
+    tools: [tool as unknown as Anthropic.Tool],
+    tool_choice: { type: 'tool', name: tool.name },
+    system: RECOMMENDATION_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const toolUseBlock = response.content.find((b) => b.type === 'tool_use');
+  if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
+    return { kind: 'clarification', question: 'The model did not return structured output — please try again.' };
+  }
+
+  return parseRecommendationToolInput(toolUseBlock.input as RecommendationRawInput, issues);
 }

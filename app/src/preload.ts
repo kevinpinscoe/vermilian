@@ -21,6 +21,8 @@ import {
   type StandupSaveArgs,
   type PostWorklogArgs,
   type TimerCheckpointData,
+  type GetRecommendationArgs,
+  type PostRecommendationAuditArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
 import type { VermilianConfig } from './shared/workspace';
@@ -79,6 +81,10 @@ const api: VermilianAPI = {
   deleteIssue: (issueId: string) => ipcRenderer.invoke(IPC.deleteIssue, issueId),
   moveIssue: (args: MoveIssueArgs) => ipcRenderer.invoke(IPC.moveIssue, args),
   quitApp: () => ipcRenderer.invoke(IPC.quitApp),
+  getRecommendation: (args: GetRecommendationArgs) => ipcRenderer.invoke(IPC.getRecommendation, args),
+  postRecommendationAudit: (args: PostRecommendationAuditArgs) =>
+    ipcRenderer.invoke(IPC.postRecommendationAudit, args),
+  debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

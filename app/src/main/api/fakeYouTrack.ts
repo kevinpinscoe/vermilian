@@ -12,6 +12,7 @@ import type {
   StandupIssues,
   VermilianArticle,
   MasterPlanDiscovery,
+  RecommendationIssue,
 } from './youtrack';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
@@ -221,6 +222,62 @@ export async function createIssue(
 
 export async function deleteIssue(_url: string, _token: string, issueId: string): Promise<void> {
   issues = issues.filter((x) => x.id !== issueId && x.idReadable !== issueId);
+}
+
+// ─── Recommendation fetch + comments (VERM-8) ────────────────────────────────
+// Mirrors api/youtrack.ts's surface exactly (client.ts's `typeof real`
+// annotation enforces this at compile time). Descriptions are synthesized
+// (no `description` field exists on FakeIssue — the real client always
+// fetches it fresh, so the fake never needed to store one either); links
+// reuse the same parentEpic fixtures priority-desk-choose-next.spec.ts and
+// priority-desk-master-plan.spec.ts already rely on.
+
+export async function getIssuesForRecommendation(
+  _url: string, _token: string, issueIds: string[],
+): Promise<RecommendationIssue[]> {
+  return issueIds
+    .map((id) => issues.find((x) => x.id === id || x.idReadable === id))
+    .filter((i): i is FakeIssue => Boolean(i))
+    .map((i) => ({
+      id: i.id,
+      idReadable: i.idReadable,
+      summary: i.summary,
+      description: `Fake description for ${i.idReadable} — deterministic e2e fixture text.`,
+      status: i.fields.status,
+      priority: i.fields.priority,
+      links: i.parentEpic
+        ? [{
+            linkType: 'Subtask',
+            direction: 'INWARD' as const,
+            issues: [{ idReadable: i.parentEpic.idReadable, summary: i.parentEpic.summary, status: 'To do' }],
+          }]
+        : [],
+    }));
+}
+
+// In-memory, process-local — reset per launch like every other fake-module
+// mutable state. No IPC channel reads this in production; main/ipc.ts wires
+// a dedicated e2e-only channel directly to this module (never through
+// api/client.ts) purely so e2e specs can assert what was actually posted and
+// when, per CHECKPOINT.md Workflow 6's audit-comment-only-after-a-choice
+// coverage.
+let postedComments: Array<{ issueId: string; text: string }> = [];
+
+export async function postComment(_url: string, _token: string, issueId: string, text: string): Promise<void> {
+  postedComments.push({ issueId, text });
+}
+
+export function getPostedComments(): Array<{ issueId: string; text: string }> {
+  return postedComments;
+}
+
+// Test-only reset, not part of api/youtrack.ts's surface — not used by
+// production code or client.ts. Comments only need resetting between tests
+// within a single e2e run if a spec depends on an empty starting list;
+// nothing currently does, but this keeps parity with `issues`/`article`'s
+// module-local mutable-state pattern above.
+export function resetPostedCommentsForTests(): void {
+  postedComments = [];
 }
 
 export async function postWorklog(
