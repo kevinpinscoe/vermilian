@@ -43,7 +43,7 @@ importers:
         version: 5.102.8(react@19.3.0)
       '@vibe/core':
         specifier: ^4.5.33
-        version: 4.5.33(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+        version: 4.5.33(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons':
         specifier: ^4.1.0
         version: 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -62,7 +62,7 @@ importers:
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.11.2
-        version: 7.11.2(encoding@0.1.13)(postcss@8.5.28)
+        version: 7.11.2(encoding@0.1.14)(postcss@8.5.32)
       '@electron-forge/maker-dmg':
         specifier: ^7.11.2
         version: 7.11.2
@@ -116,7 +116,7 @@ importers:
         version: 8.70.1(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
       '@vitejs/plugin-react':
         specifier: ^5.2.0
-        version: 5.2.0(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
+        version: 5.2.0(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
       electron:
         specifier: 44.3.0
         version: 44.3.0
@@ -140,10 +140,10 @@ importers:
         version: 6.0.3
       vite:
         specifier: ^6.4.3
-        version: 6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
+        version: 6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
+        version: 5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
 
 packages:
 
@@ -383,7 +383,7 @@ packages:
     engines: {node: '>=22.12.0'}
 
   '@electron/node-gyp@https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2}
+    resolution: {gitHosted: true, integrity: sha512-MXgzlTDEEndJB3TBbvd5uFQO/8gaINo1Hfen8vef5rq/VHVPeB63uuv/uO5+8GFsAJ/rauu6XB79S6K4+aXc+w==, tarball: https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2}
     version: 10.2.0-electron.1
     engines: {node: '>=12.13.0'}
     hasBin: true
@@ -751,6 +751,13 @@ packages:
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
     engines: {node: '>= 12.13.0'}
 
+  '@napi-rs/lzma-linux-x64-gnu@1.5.1':
+    resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
+    engines: {node: ^22.20 || ^24.12 || >=25}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -851,141 +858,146 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.3':
     resolution: {integrity: sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==}
 
-  '@rollup/rollup-android-arm-eabi@4.60.4':
-    resolution: {integrity: sha512-F5QXMSiFebS9hKZj02XhWLLnRpJ3B3AROP0tWbFBSj+6kCbg5m9j5JoHKd4mmSVy5mS/IMQloYgYxCuJC0fxEQ==}
+  '@rollup/rollup-android-arm-eabi@4.67.4':
+    resolution: {integrity: sha512-/v/pUAPOcwp+r1Hjjdg0cBV1TE89CzGKrKh2FgkIQw2QBcIMmVPOCSfuOZStCn4Xh/98HXfo/ht6ztcssctPNg==}
     cpu: [arm]
     os: [android]
 
-  '@rollup/rollup-android-arm64@4.60.4':
-    resolution: {integrity: sha512-GxxTKApUpzRhof7poWvCJHRF51C67u1R7D6DiluBE8wKU1u5GWE8t+v81JvJYtbawoBFX1hLv5Ei4eVjkWokaw==}
+  '@rollup/rollup-android-arm64@4.67.4':
+    resolution: {integrity: sha512-6tmmB/P52Vt167FXXEw5auiEUgTtZz7aqUgWHqYXToIUE0HFDY6fTdAyeekjjsNk6O/8dtpSKtClxSj1mMneKQ==}
     cpu: [arm64]
     os: [android]
 
-  '@rollup/rollup-darwin-arm64@4.60.4':
-    resolution: {integrity: sha512-tua0TaJxMOB1R0V0RS1jFZ/RpURFDJIOR2A6jWwQeawuFyS4gBW+rntLRaQd0EQ4bd6Vp44Z2rXW+YYDBsj6IA==}
+  '@rollup/rollup-android-x64@4.67.4':
+    resolution: {integrity: sha512-8Z9Q4RmotVmuL4llOvqX814JNiOK1oqoBv+glG5KbpRfUiypqzz2/fxIzK4Pq129l4dT5a8Gszmpc0/XPYoFuQ==}
+    cpu: [x64]
+    os: [android]
+
+  '@rollup/rollup-darwin-arm64@4.67.4':
+    resolution: {integrity: sha512-pnq6hssxTtwuRAl6Kdi/+IDY+b1IhkUetjhUkdLAAJCssjfqtL2Oqy/FXJVJFtAWOu1oRlArIvf0Yk1O92x2HQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@rollup/rollup-darwin-x64@4.60.4':
-    resolution: {integrity: sha512-CSKq7MsP+5PFIcydhAiR1K0UhEI1A2jWXVKHPCBZ151yOutENwvnPocgVHkivu2kviURtCEB6zUQw0vs8RrhMg==}
+  '@rollup/rollup-darwin-x64@4.67.4':
+    resolution: {integrity: sha512-BeIrGZvHMVdJg/N+ohZfFywG/gF41684YhDj2wBvouj7m9ziP1tZDUNwzXRiDY+3WIKngaC4hiUBqVtBPGP5og==}
     cpu: [x64]
     os: [darwin]
 
-  '@rollup/rollup-freebsd-arm64@4.60.4':
-    resolution: {integrity: sha512-+O8OkVdyvXMtJEciu2wS/pzm1IxntEEQx3z5TAVy4l32G0etZn+RsA48ARRrFm6Ri8fvqPQfgrvNxSjKAbnd3g==}
+  '@rollup/rollup-freebsd-arm64@4.67.4':
+    resolution: {integrity: sha512-fRFX/oqNg/g780DKoS8RIfYcZD59Ru5O/bSeK1N7gQljBFrTxJY/q5EX4eMs5SrJf32VgVBVVYCdfPpzAwPPnQ==}
     cpu: [arm64]
     os: [freebsd]
 
-  '@rollup/rollup-freebsd-x64@4.60.4':
-    resolution: {integrity: sha512-Iw3oMskH3AfNuhU0MSN7vNbdi4me/NiYo2azqPz/Le16zHSa+3RRmliCMWWQmh4lcndccU40xcJuTYJZxNo/lw==}
+  '@rollup/rollup-freebsd-x64@4.67.4':
+    resolution: {integrity: sha512-bSrBRopG1q+0RuOsW0NtYTtIODlvNA3T3ebx5WnQVdSxWIoXFmj+rZdHUHdSLgFdZ5M6VGmekYE7r4RMGQXjfg==}
     cpu: [x64]
     os: [freebsd]
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.60.4':
-    resolution: {integrity: sha512-EIPRXTVQpHyF8WOo219AD2yEltPehLTcTMz2fn6JsatLYSzQf00hj3rulF+yauOlF9/FtM2WpkT/hJh/KJFGhA==}
+  '@rollup/rollup-linux-arm-gnueabihf@4.67.4':
+    resolution: {integrity: sha512-L8IvdrJVtl65g1ozwDSyjGPG+FmibhCdFUwmqTItJLw0S3+Oj4QzFs7rfgTUiK7rsPjkCLdG1/GApFxoynXFJQ==}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-arm-musleabihf@4.60.4':
-    resolution: {integrity: sha512-J3Yh9PzzF1Ovah2At+lHiGQdsYgArxBbXv/zHfSyaiFQEqvNv7DcW98pCrmdjCZBrqBiKrKKe2V+aaSGWuBe/w==}
+  '@rollup/rollup-linux-arm-musleabihf@4.67.4':
+    resolution: {integrity: sha512-h7PcoQOzC31jshNpQ48J0akB9tsghjkSjSl5AZ6XsVGTxVsln7t7C4SQyw62tNVSaz2SeHgk4VT2ELbL17BSHQ==}
     cpu: [arm]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-arm64-gnu@4.60.4':
-    resolution: {integrity: sha512-BFDEZMYfUvLn37ONE1yMBojPxnMlTFsdyNoqncT0qFq1mAfllL+ATMMJd8TeuVMiX84s1KbcxcZbXInmcO2mRg==}
+  '@rollup/rollup-linux-arm64-gnu@4.67.4':
+    resolution: {integrity: sha512-KSPuOBNHoOl7AsVjeY1KZci8+0up0U4TFAHU5IzBYN8P+Z6cB9DZq28+JQycZW7f6WLLa/tSzhV7Rdy95bVi+g==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-arm64-musl@4.60.4':
-    resolution: {integrity: sha512-pc9EYOSlOgdQ2uPl1o9PF6/kLSgaUosia7gOuS8mB69IxJvlclko1MECXysjs5ryez1/5zjYqx3+xYU0TU6R1A==}
+  '@rollup/rollup-linux-arm64-musl@4.67.4':
+    resolution: {integrity: sha512-0E/mKmVk1PlQeQYygIwQm0jlwjANTzGSiNBMPrFx+rdFGFj/2Axh4p6XwcrystQIqXZVudTaGsdbDpzYgJ4wSA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-loong64-gnu@4.60.4':
-    resolution: {integrity: sha512-NxnomyxYerDh5n4iLrNa+sH+Z+U4BMEE46V2PgQ/hoB909i8gV1M5wPojWg9fk1jWpO3IQnOs20K4wyZuFLEFQ==}
+  '@rollup/rollup-linux-loong64-gnu@4.67.4':
+    resolution: {integrity: sha512-Fvw7dOSc2Sa9UOipRZVI0zOgdLCzsjVyD/6JuHXzUHTXFu7mMgmeX/0/bCVBIut1dz+nWz3pV4WpS/Qg0XVnxw==}
     cpu: [loong64]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-loong64-musl@4.60.4':
-    resolution: {integrity: sha512-nbJnQ8a3z1mtmrwImCYhc6BGpThAyYVRQxw9uKSKG4wR6aAYno9sVjJ0zaZcW9BPJX1GbrDPf+SvdWjgTuDmnw==}
+  '@rollup/rollup-linux-loong64-musl@4.67.4':
+    resolution: {integrity: sha512-jzxbVHaE7V3F+P0wEK7UydQtvv7Twfdtx58jI5/3VRx1jJxyrn+qFwfXmqjVFxPhBl+zjaRs+ZJMFJw7vdHaQA==}
     cpu: [loong64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-ppc64-gnu@4.60.4':
-    resolution: {integrity: sha512-2EU6acNrQLd8tYvo/LXW535wupT3m6fo7HKo6lr7ktQoItxTyOL1ZCR/GfGCuXl2vR+zmfI6eRXkSemafv+iVg==}
+  '@rollup/rollup-linux-ppc64-gnu@4.67.4':
+    resolution: {integrity: sha512-fhtrzp9p4GjEJVaigaap9g6X9nP6xgJtKiLLXSDgpE18HXufA5aqfltGn+KAqMtVZReJZfOrXm//y5YSA9BWbA==}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-ppc64-musl@4.60.4':
-    resolution: {integrity: sha512-WeBtoMuaMxiiIrO2IYP3xs6GMWkJP2C0EoT8beTLkUPmzV1i/UcOSVw1d5r9KBODtHKilG5yFxsGRnBbK3wJ4A==}
+  '@rollup/rollup-linux-ppc64-musl@4.67.4':
+    resolution: {integrity: sha512-uynaF7IUHwAckV0S+yC1f5esy9gB+aqCBsPH5BOck32TYdCuAn2lVG5tvUcFnEsrviGEmRZxE1NHSOieUPYJEg==}
     cpu: [ppc64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-riscv64-gnu@4.60.4':
-    resolution: {integrity: sha512-FJHFfqpKUI3A10WrWKiFbBZ7yVbGT4q4B5o1qKFFojqpaYoh9LrQgqWCmmcxQzVSXYtyB5bzkXrYzlHTs21MYA==}
+  '@rollup/rollup-linux-riscv64-gnu@4.67.4':
+    resolution: {integrity: sha512-uaqRFdfb8eIa2bVHN/FE3ndCvR0zV2xv0AwjCfxrqSu6l6fp/54VhjfhslKlf2RIik9L1jwlt4E56PeVX6tQtQ==}
     cpu: [riscv64]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-riscv64-musl@4.60.4':
-    resolution: {integrity: sha512-mcEl6CUT5IAUmQf1m9FYSmVqCJlpQ8r8eyftFUHG8i9OhY7BkBXSUdnLH5DOf0wCOjcP9v/QO93zpmF1SptCCw==}
+  '@rollup/rollup-linux-riscv64-musl@4.67.4':
+    resolution: {integrity: sha512-JZRow7kmxUDEASnxHuVG5itTm+nTXi9BQUABcVUnUEngC+OPwMrpx1uJ9hIA/v+IcAEBL52ktCSPXk5OJn9Jqg==}
     cpu: [riscv64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-s390x-gnu@4.60.4':
-    resolution: {integrity: sha512-ynt3JxVd2w2buzoKDWIyiV1pJW93xlQic1THVLXilz429oijRpSHivZAgp65KBu+cMcgf1eVVjdnTLvPxgCuoQ==}
+  '@rollup/rollup-linux-s390x-gnu@4.67.4':
+    resolution: {integrity: sha512-rdrh4e+Lq9fCNKoDPaCqeHXbQCe7yl77Ukl45tlSClwYdZ1gpFGZz1XLJdYtY++FRlfL5aHvb6/0n3GDW/Nxsw==}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-x64-gnu@4.60.4':
-    resolution: {integrity: sha512-Boiz5+MsaROEWDf+GGEwF8VMHGhlUoQMtIPjOgA5fv4osupqTVnJteQNKJwUcnUog2G55jYXH7KZFFiJe0TEzQ==}
+  '@rollup/rollup-linux-x64-gnu@4.67.4':
+    resolution: {integrity: sha512-wL7MS4r0fYcxluF3ne2plofHZiB/LsqNCnyaUlyiKpAJLb6agPSFz7DEFCfkonWAZXMrLwCmC08b2ZEnEdJkog==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-x64-musl@4.60.4':
-    resolution: {integrity: sha512-+qfSY27qIrFfI/Hom04KYFw3GKZSGU4lXus51wsb5EuySfFlWRwjkKWoE9emgRw/ukoT4Udsj4W/+xxG8VbPKg==}
+  '@rollup/rollup-linux-x64-musl@4.67.4':
+    resolution: {integrity: sha512-4H0XHfd2VufGjX7NjUyeue78sD0bRIoKSGjGqO+F5nSvL6jN48NAU7esdmtFEYxZXwObLtt3MJ/kHS0jASMW3g==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-openbsd-x64@4.60.4':
-    resolution: {integrity: sha512-VpTfOPHgVXEBeeR8hZ2O0F3aSso+JDWqTWmTmzcQKted54IAdUVbxE+j/MVxUsKa8L20HJhv3vUezVPoquqWjA==}
+  '@rollup/rollup-openbsd-x64@4.67.4':
+    resolution: {integrity: sha512-osRHQbE55pZpCLetpMsFmhkapyZnAUH73qRKMh+npi3boUom6u6hdaTTPSxlInXxwJHsn9r2uDhdz0V7Yoxx2A==}
     cpu: [x64]
     os: [openbsd]
 
-  '@rollup/rollup-openharmony-arm64@4.60.4':
-    resolution: {integrity: sha512-IPOsh5aRYuLv/nkU51X10Bf75Bsf6+gZdx1X+QP5QM6lIJFHHqbHLG0uJn/hWthzo13UAc2umiUorqZy3axoZg==}
+  '@rollup/rollup-openharmony-arm64@4.67.4':
+    resolution: {integrity: sha512-95+exYEyOwrZePsE0czi4q7X5lxKPa21+lmyAZlwbYENITQ0Unk4HAQAFp/p+KhXBHBx9mUABXRYjOC5A1wY3Q==}
     cpu: [arm64]
     os: [openharmony]
 
-  '@rollup/rollup-win32-arm64-msvc@4.60.4':
-    resolution: {integrity: sha512-4QzE9E81OohJ/HKzHhsqU+zcYYojVOXlFMs1DdyMT6qXl/niOH7AVElmmEdUNHHS/oRkc++d5k6Vy85zFs0DEw==}
+  '@rollup/rollup-win32-arm64-msvc@4.67.4':
+    resolution: {integrity: sha512-FOXOcKhNQpO4Po+Ynan6IbtM67SrXZbgpRJWVYwz53CT5veI7sVzDwVBmWS65N5Imv+wK3SVhIPAl+C5DXXNCg==}
     cpu: [arm64]
     os: [win32]
 
-  '@rollup/rollup-win32-ia32-msvc@4.60.4':
-    resolution: {integrity: sha512-zTPgT1YuHHcd+Tmx7h8aml0FWFVelV5N54oHow9SLj+GfoDy/huQ+UV396N/C7KpMDMiPspRktzM1/0r1usYEA==}
+  '@rollup/rollup-win32-ia32-msvc@4.67.4':
+    resolution: {integrity: sha512-cklKh0gJOkAZQcWziQa3hrjxZKN+PCHZ7SPTyGJDAiBVr05ZXlEjGFCG7zFJMaVibxsmzAe1FimN4u/HBns9+Q==}
     cpu: [ia32]
     os: [win32]
 
-  '@rollup/rollup-win32-x64-gnu@4.60.4':
-    resolution: {integrity: sha512-DRS4G7mi9lJxqEDezIkKCaUIKCrLUUDCUaCsTPCi/rtqaC6D/jjwslMQyiDU50Ka0JKpeXeRBFBAXwArY52vBw==}
+  '@rollup/rollup-win32-x64-gnu@4.67.4':
+    resolution: {integrity: sha512-AegwxJPc9bvUp8fQtlsUHkFMOMkGylWU7glyL+YD4vwG+QaYoGXYLSsQoeTD7kvoLZrVlMWNVhTg1dedY5C1VQ==}
     cpu: [x64]
     os: [win32]
 
-  '@rollup/rollup-win32-x64-msvc@4.60.4':
-    resolution: {integrity: sha512-QVTUovf40zgTqlFVrKA1uXMVvU2QWEFWfAH8Wdc48IxLvrJMQVMBRjuQyUpzZCDkakImib9eVazbWlC6ksWtJw==}
+  '@rollup/rollup-win32-x64-msvc@4.67.4':
+    resolution: {integrity: sha512-RJZnrwTWj7Iq2ooBwoGbDdC65tDwYawneGcAfFMJqVUrRZMcskka6nTkBpXR/47G7kzn3EW2qupExnaBy11vwg==}
     cpu: [x64]
     os: [win32]
 
@@ -1054,8 +1066,8 @@ packages:
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
 
-  '@types/estree@1.0.8':
-    resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
+  '@types/estree@1.0.10':
+    resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -2079,8 +2091,9 @@ packages:
   encode-utf8@1.0.3:
     resolution: {integrity: sha512-ucAnuBEhUK4boH2HjVYG5Q2mQyPorvv0u/ocS+zhdw0S8AlHYY+GOFhP1Gio5z4icpP2ivFSvhtFjQi8+T9ppw==}
 
-  encoding@0.1.13:
-    resolution: {integrity: sha512-ETBauow1T35Y/WZMkio9jiM0Z5xjHHmJ4XmjZOq1l/dXz3lr2sRn87nJy20RupqSh1F2m3HHPSp8ShIPQJrJ3A==}
+  encoding@0.1.14:
+    resolution: {integrity: sha512-pqH+jIxIhwX5U4w+Tnu3jjowTo5QTACbqef2C5Cw2RhApr7COQqgnai53u8VbtqjWRcSoAcTf7uZ62dO5kC8Iw==}
+    engines: {node: '>=20.0.0'}
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
@@ -2509,6 +2522,9 @@ packages:
   http-cache-semantics@4.2.0:
     resolution: {integrity: sha512-dTxcvPXqPvXBQpq5dUr6mEMJX4oIEFv6bwom3FDwKRDsuIjjJGANqhBuoAn9c1RQJIdAKav33ED65E2ys+87QQ==}
 
+  http-cache-semantics@4.3.0:
+    resolution: {integrity: sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA==}
+
   http-proxy-agent@5.0.0:
     resolution: {integrity: sha512-n2hY8YdoRE1i7r6M0w9DIw5GgZN0G25P8zLCRQ8rjXtTU3vsNFBI/vWK/UIeE6g5MUUz6avwAPXmL6Fy9D/90w==}
     engines: {node: '>= 6'}
@@ -2528,8 +2544,8 @@ packages:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
     engines: {node: '>=0.10.0'}
 
-  iconv-lite@0.6.3:
-    resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
+  iconv-lite@0.7.3:
+    resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
 
   ieee754@1.2.1:
@@ -2589,8 +2605,8 @@ packages:
     resolution: {integrity: sha512-6xwYfHbajpoF0xLW+iwLkhwgvLoZDfjYfoFNu8ftMoXINzwuymNLd9u/KmwtdT2GbR+/Cz66otEGEVVUHX9QLQ==}
     engines: {node: '>=10.13.0'}
 
-  ip-address@10.7.2:
-    resolution: {integrity: sha512-7H/2gFSIitxc0hG3nOI1glS8QLo/EHBFFLk8vEUjXY/xu0AdL8jZ9U1IzO2PUm0d2D/ofQcAifb0g6OBkt8U7w==}
+  ip-address@10.7.5:
+    resolution: {integrity: sha512-t2v0rkILYv9WXmSL7TpAaU3HXgaFYOPUcH3QHgwQ++gpJuH3bqyMy4Fvt/DJCTKwzH3Cf+bAp5W/mFL39KPLzA==}
     engines: {node: '>= 12'}
 
   is-arrayish@0.2.1:
@@ -2964,13 +2980,8 @@ packages:
   nan@2.27.0:
     resolution: {integrity: sha512-hC+0LidcL3XE4rp1C4H54KujgXKzbfyTngZTwBByQxsOxCEKZT0MPQ4hOKUH2jU1OYstqdDH4onyHPDzcV0XdQ==}
 
-  nanoid@3.3.18:
-    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
-    hasBin: true
-
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
+  nanoid@3.3.20:
+    resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -3203,8 +3214,8 @@ packages:
   postcss-media-query-parser@0.2.3:
     resolution: {integrity: sha512-3sOlxmbKcSHMjlUXQZKQ06jOswE7oVkXPxmZdoB1r5l0q6gTFTQSHxNxOrCccElbW7dxNytifNEo8qidX2Vsig==}
 
-  postcss-resolve-nested-selector@0.1.6:
-    resolution: {integrity: sha512-0sglIs9Wmkzbr8lQwEyIzlDOOC9bGmfVKcJTaxv3vMmd3uo4o4DerC3En0bnmgceeql9BfC8hRkp7cg0fjdVqw==}
+  postcss-resolve-nested-selector@0.1.7:
+    resolution: {integrity: sha512-lFcugRCQXWManq7nyZ0dDtir52wc7gKYJfWpSuz4GxvnGc7dtlpXcZYX4A0asatzTuqpQ3ngDdyD+QG/szeXWw==}
 
   postcss-safe-parser@6.0.0:
     resolution: {integrity: sha512-FARHN8pwH+WiS2OPCxJI8FuRJpTVnn6ZNFiqAM2aeW2LwTHWWmWgIyKC6cUo0L8aeKiF/14MNvnpls6R2PBeMQ==}
@@ -3218,19 +3229,15 @@ packages:
     peerDependencies:
       postcss: ^8.5.18
 
-  postcss-selector-parser@6.1.4:
-    resolution: {integrity: sha512-bIoJLOmjCO1S9XdY/DcnR5hJxvrDir1PbGChrzXG3vw0/FOliy/fA3dmdhQ441kah4gKv+TwckGzex6wNS5cnQ==}
+  postcss-selector-parser@6.1.5:
+    resolution: {integrity: sha512-TEHFzb5KRDKaOgJ4TYE+0jyJtFbjLvkdVOu0fZ2b6MTWzoqZd4Le+61aEppWkvTlYePgOX4ATL1wsAIPMLTw6Q==}
     engines: {node: '>=4'}
 
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
-  postcss@8.5.23:
-    resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
-    engines: {node: ^10 || ^12 || >=14}
-
-  postcss@8.5.28:
-    resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
+  postcss@8.5.32:
+    resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
     engines: {node: ^10 || ^12 || >=14}
 
   postject@1.0.0-alpha.6:
@@ -3493,8 +3500,8 @@ packages:
     resolution: {integrity: sha512-CHhPh+UNHD2GTXNYhPWLnU8ONHdI+5DI+4EYIAOaiD63rHeYlZvyh8P+in5999TTSFgUYuKUAjzRI4mdh/p+2A==}
     engines: {node: '>=8.0'}
 
-  rollup@4.60.4:
-    resolution: {integrity: sha512-WHeFSbZYsPu3+bLoNRUuAO+wavNlocOPf3wSHTP7hcFKVnJeWsYlCDbr3mTS14FCizf9ccIxXA8sGL8zKeQN3g==}
+  rollup@4.67.4:
+    resolution: {integrity: sha512-Lsv3oKcz5jgOQJej/p7nfwbVEdAbDT+z6OPf/SCdI+nF+q2ENp0pTKT35ZwXAmH8g45mfrIiJeEyAqKYSYoL9Q==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
@@ -3532,6 +3539,11 @@ packages:
 
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  semver@7.8.6:
+    resolution: {integrity: sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -3586,8 +3598,8 @@ packages:
     resolution: {integrity: sha512-e0VyvkVTwVYViNovRkZ9aodhxVlyoMn7eJhVUPxZ+eK9P/7CBkxvvsBOHqFPEH416726W8tLXXXjKwqgTErrCQ==}
     engines: {node: '>= 10.0.0', npm: '>= 3.0.0'}
 
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
+  source-map-js@1.2.2:
+    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
   source-map-support@0.5.21:
@@ -3922,8 +3934,8 @@ packages:
   validate-npm-package-license@3.0.4:
     resolution: {integrity: sha512-DpKm2Ui/xN7/HQKCtpZxoRWBhZ9Z0kqtygG8XCgNQ8ZlDnxuQmWhj566j8fN4Cu3/JmbhsDo7fcAJq4s9h27Ew==}
 
-  vite@6.4.3:
-    resolution: {integrity: sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==}
+  vite@6.4.5:
+    resolution: {integrity: sha512-4enwjFfi4IwtEh0w+jPzpLVOFQiPHmmzPxcHXQOyEur47o6u0jE573DmGpjA+7irXoMLYRZD5ZaFUEneS3abPg==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -4278,9 +4290,9 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
-  '@csstools/selector-specificity@2.2.0(postcss-selector-parser@6.1.4)':
+  '@csstools/selector-specificity@2.2.0(postcss-selector-parser@6.1.5)':
     dependencies:
-      postcss-selector-parser: 6.1.4
+      postcss-selector-parser: 6.1.5
 
   '@dnd-kit/accessibility@3.1.1(react@19.3.0)':
     dependencies:
@@ -4307,9 +4319,9 @@ snapshots:
       react: 19.3.0
       tslib: 2.8.1
 
-  '@electron-forge/cli@7.11.2(encoding@0.1.13)(postcss@8.5.28)':
+  '@electron-forge/cli@7.11.2(encoding@0.1.14)(postcss@8.5.32)':
     dependencies:
-      '@electron-forge/core': 7.11.2(encoding@0.1.13)(postcss@8.5.28)
+      '@electron-forge/core': 7.11.2(encoding@0.1.14)(postcss@8.5.32)
       '@electron-forge/core-utils': 7.11.2
       '@electron-forge/shared-types': 7.11.2
       '@electron/get': 3.1.0
@@ -4356,7 +4368,7 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/core@7.11.2(encoding@0.1.13)(postcss@8.5.28)':
+  '@electron-forge/core@7.11.2(encoding@0.1.14)(postcss@8.5.32)':
     dependencies:
       '@electron-forge/core-utils': 7.11.2
       '@electron-forge/maker-base': 7.11.2
@@ -4367,7 +4379,7 @@ snapshots:
       '@electron-forge/template-vite': 7.11.2
       '@electron-forge/template-vite-typescript': 7.11.2
       '@electron-forge/template-webpack': 7.11.2
-      '@electron-forge/template-webpack-typescript': 7.11.2(postcss@8.5.28)
+      '@electron-forge/template-webpack-typescript': 7.11.2(postcss@8.5.32)
       '@electron-forge/tracer': 7.11.2
       '@electron/get': 3.1.0
       '@electron/packager': 18.4.4
@@ -4387,7 +4399,7 @@ snapshots:
       jiti: 2.7.0
       listr2: 7.0.2
       log-symbols: 4.1.0
-      node-fetch: 2.7.0(encoding@0.1.13)
+      node-fetch: 2.7.0(encoding@0.1.14)
       rechoir: 0.8.0
       semver: 7.8.0
       source-map-support: 0.5.21
@@ -4554,13 +4566,13 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/template-webpack-typescript@7.11.2(postcss@8.5.28)':
+  '@electron-forge/template-webpack-typescript@7.11.2(postcss@8.5.32)':
     dependencies:
       '@electron-forge/shared-types': 7.11.2
       '@electron-forge/template-base': 7.11.2
       fs-extra: 10.1.0
       typescript: 5.4.5
-      webpack: 5.107.0(postcss@8.5.28)
+      webpack: 5.107.0(postcss@8.5.32)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/core'
@@ -5023,6 +5035,9 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
 
+  '@napi-rs/lzma-linux-x64-gnu@1.5.1':
+    optional: true
+
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -5139,79 +5154,82 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
-  '@rollup/rollup-android-arm-eabi@4.60.4':
+  '@rollup/rollup-android-arm-eabi@4.67.4':
     optional: true
 
-  '@rollup/rollup-android-arm64@4.60.4':
+  '@rollup/rollup-android-arm64@4.67.4':
     optional: true
 
-  '@rollup/rollup-darwin-arm64@4.60.4':
+  '@rollup/rollup-android-x64@4.67.4':
     optional: true
 
-  '@rollup/rollup-darwin-x64@4.60.4':
+  '@rollup/rollup-darwin-arm64@4.67.4':
     optional: true
 
-  '@rollup/rollup-freebsd-arm64@4.60.4':
+  '@rollup/rollup-darwin-x64@4.67.4':
     optional: true
 
-  '@rollup/rollup-freebsd-x64@4.60.4':
+  '@rollup/rollup-freebsd-arm64@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.60.4':
+  '@rollup/rollup-freebsd-x64@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-arm-musleabihf@4.60.4':
+  '@rollup/rollup-linux-arm-gnueabihf@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-arm64-gnu@4.60.4':
+  '@rollup/rollup-linux-arm-musleabihf@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-arm64-musl@4.60.4':
+  '@rollup/rollup-linux-arm64-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-loong64-gnu@4.60.4':
+  '@rollup/rollup-linux-arm64-musl@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-loong64-musl@4.60.4':
+  '@rollup/rollup-linux-loong64-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-ppc64-gnu@4.60.4':
+  '@rollup/rollup-linux-loong64-musl@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-ppc64-musl@4.60.4':
+  '@rollup/rollup-linux-ppc64-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-riscv64-gnu@4.60.4':
+  '@rollup/rollup-linux-ppc64-musl@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-riscv64-musl@4.60.4':
+  '@rollup/rollup-linux-riscv64-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-s390x-gnu@4.60.4':
+  '@rollup/rollup-linux-riscv64-musl@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-x64-gnu@4.60.4':
+  '@rollup/rollup-linux-s390x-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-linux-x64-musl@4.60.4':
+  '@rollup/rollup-linux-x64-gnu@4.67.4':
     optional: true
 
-  '@rollup/rollup-openbsd-x64@4.60.4':
+  '@rollup/rollup-linux-x64-musl@4.67.4':
     optional: true
 
-  '@rollup/rollup-openharmony-arm64@4.60.4':
+  '@rollup/rollup-openbsd-x64@4.67.4':
     optional: true
 
-  '@rollup/rollup-win32-arm64-msvc@4.60.4':
+  '@rollup/rollup-openharmony-arm64@4.67.4':
     optional: true
 
-  '@rollup/rollup-win32-ia32-msvc@4.60.4':
+  '@rollup/rollup-win32-arm64-msvc@4.67.4':
     optional: true
 
-  '@rollup/rollup-win32-x64-gnu@4.60.4':
+  '@rollup/rollup-win32-ia32-msvc@4.67.4':
     optional: true
 
-  '@rollup/rollup-win32-x64-msvc@4.60.4':
+  '@rollup/rollup-win32-x64-gnu@4.67.4':
+    optional: true
+
+  '@rollup/rollup-win32-x64-msvc@4.67.4':
     optional: true
 
   '@sindresorhus/is@4.6.0': {}
@@ -5285,7 +5303,7 @@ snapshots:
 
   '@types/esrecurse@4.3.1': {}
 
-  '@types/estree@1.0.8': {}
+  '@types/estree@1.0.10': {}
 
   '@types/estree@1.0.9': {}
 
@@ -5429,19 +5447,19 @@ snapshots:
       '@typescript-eslint/types': 8.70.1
       eslint-visitor-keys: 5.0.1
 
-  '@vibe/a11y@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/a11y@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/accordion@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/accordion@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/expand-collapse': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/expand-collapse': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5449,16 +5467,16 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/alert-banner@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/alert-banner@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5466,16 +5484,16 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/attention-box@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/attention-box@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5483,18 +5501,18 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/avatar-group@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/avatar-group@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5502,13 +5520,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/avatar@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/avatar@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5517,10 +5535,10 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/badge@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/badge@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5529,15 +5547,15 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/base-list@4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/base-list@4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5545,9 +5563,9 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/base@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/base@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       react: 19.3.0
@@ -5556,16 +5574,16 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/breadcrumbs@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/breadcrumbs@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5573,28 +5591,14 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/button-group@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/button-group@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      classnames: 2.5.1
-      es-toolkit: 1.52.0
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
-    transitivePeerDependencies:
-      - stylelint
-      - vitest
-
-  '@vibe/button@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
-    dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/style': 4.1.0(stylelint@14.16.1)
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5603,13 +5607,27 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/checkbox@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/button@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/style': 4.1.0(stylelint@14.16.1)
+      classnames: 2.5.1
+      es-toolkit: 1.52.0
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+    transitivePeerDependencies:
+      - stylelint
+      - vitest
+
+  '@vibe/checkbox@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+    dependencies:
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5618,17 +5636,17 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/chips@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/chips@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5636,9 +5654,9 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/clickable@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/clickable@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -5648,16 +5666,16 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/color-picker@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/color-picker@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5666,20 +5684,20 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/combobox@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/combobox@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/search': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/search': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5688,71 +5706,71 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/core@4.5.33(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/core@4.5.33(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
       '@floating-ui/react-dom': 2.1.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/accordion': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/alert-banner': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/attention-box': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/avatar-group': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/badge': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/breadcrumbs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/button-group': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/checkbox': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/color-picker': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/combobox': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/date-picker': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dropdown': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/editable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/empty-state': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/expand-collapse': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/formatted-number': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/accordion': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/alert-banner': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/attention-box': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar-group': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/badge': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/breadcrumbs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button-group': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/checkbox': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/color-picker': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/combobox': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/counter': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/date-picker': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dropdown': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/editable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/empty-state': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/expand-collapse': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/formatted-number': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/info': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/label': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/list': 4.0.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/modal': 4.0.3(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/progress-bars': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/radio-button': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/search': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/skeleton': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/slider': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/split-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/info': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/label': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/list': 4.0.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/modal': 4.0.3(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/progress-bars': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/radio-button': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/search': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/skeleton': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/slider': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/split-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/table': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tabs': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/text-with-highlight': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/theme-provider': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tipseen': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/toast': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/toggle': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/transitions': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-grid': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/table': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tabs': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/text-with-highlight': 4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/theme-provider': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tipseen': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/toast': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/toggle': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/transitions': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-grid': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       browserslist-config-monday: 1.0.6
       classnames: 2.5.1
       date-fns: 2.30.0
@@ -5771,10 +5789,10 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/counter@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/counter@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -5785,13 +5803,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/date-picker@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/date-picker@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/dropdown': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dropdown': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       date-fns: 2.30.0
@@ -5803,12 +5821,12 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/dialog@4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/dialog@4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
       '@floating-ui/react-dom': 2.1.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -5819,32 +5837,32 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/divider@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/divider@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/dropdown@4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/dropdown@4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
       '@floating-ui/react-dom': 2.1.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/chips': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       downshift: 9.4.0(react@19.3.0)
       react: 19.3.0
@@ -5853,13 +5871,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/editable@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/editable@4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5868,13 +5886,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/empty-state@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/empty-state@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5882,13 +5900,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/expand-collapse@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/expand-collapse@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5896,18 +5914,18 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/formatted-number@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/formatted-number@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/hooks@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/hooks@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5915,13 +5933,13 @@ snapshots:
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/icon-button@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/icon-button@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5930,9 +5948,9 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/icon@4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/icon@4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5946,15 +5964,15 @@ snapshots:
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
 
-  '@vibe/info@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/info@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -5962,13 +5980,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/label@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/label@4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5977,11 +5995,11 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/layer@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/layer@4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -5989,23 +6007,10 @@ snapshots:
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/layout@4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/layout@4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/style': 4.1.0(stylelint@14.16.1)
-      classnames: 2.5.1
-      es-toolkit: 1.52.0
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
-    transitivePeerDependencies:
-      - stylelint
-      - vitest
-
-  '@vibe/link@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
-    dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -6015,16 +6020,11 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/list@4.0.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/link@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6033,23 +6033,41 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/loader@4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/list@4.0.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base-list': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/style': 4.1.0(stylelint@14.16.1)
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      classnames: 2.5.1
+      es-toolkit: 1.52.0
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+    transitivePeerDependencies:
+      - stylelint
+      - vitest
+
+  '@vibe/loader@4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+    dependencies:
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/menu-button@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/menu-button@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6058,24 +6076,24 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/menu@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/menu@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
       '@floating-ui/react-dom': 2.1.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/avatar': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/label': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/label': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6084,21 +6102,21 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/modal@4.0.3(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/modal@4.0.3(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layer': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6111,9 +6129,9 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/progress-bars@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/progress-bars@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -6123,12 +6141,12 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/radio-button@4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/radio-button@4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -6136,16 +6154,16 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/search@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/search@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -6153,15 +6171,15 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/shared@4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/shared@4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
       es-toolkit: 1.52.0
       react: 19.3.0
-      vitest: 5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
+      vitest: 5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
 
-  '@vibe/skeleton@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/skeleton@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6169,16 +6187,16 @@ snapshots:
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/slider@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/slider@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/text-inputs': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6187,13 +6205,13 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/split-button@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/split-button@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6204,25 +6222,25 @@ snapshots:
 
   '@vibe/style@4.1.0(stylelint@14.16.1)':
     dependencies:
-      postcss: 8.5.28
-      postcss-scss: 4.0.9(postcss@8.5.28)
+      postcss: 8.5.32
+      postcss-scss: 4.0.9(postcss@8.5.32)
       postcss-value-parser: 4.2.0
       stylelint: 14.16.1
 
-  '@vibe/table@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/table@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/skeleton': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/menu-button': 4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/skeleton': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/virtualized-list': 4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6233,14 +6251,14 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/tabs@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/tabs@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6249,21 +6267,21 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/text-inputs@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/text-inputs@4.0.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/base': 4.0.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -6271,12 +6289,12 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/text-with-highlight@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/text-with-highlight@4.0.9(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -6284,27 +6302,27 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/theme-provider@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/theme-provider@4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/tipseen@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/tipseen@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/wizard': 4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6313,18 +6331,18 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/toast@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/toast@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon-button': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/link': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/loader': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6334,12 +6352,12 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/toggle@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/toggle@4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6348,12 +6366,12 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/tooltip@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/tooltip@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/dialog': 4.1.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/layout': 4.0.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       es-toolkit: 1.52.0
@@ -6363,21 +6381,21 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/transitions@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/transitions@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:
       - vitest
 
-  '@vibe/typography@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/typography@4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/tooltip': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6386,10 +6404,10 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/virtualized-grid@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/virtualized-grid@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       react: 19.3.0
@@ -6400,10 +6418,10 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/virtualized-list@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/virtualized-list@4.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/hooks': 4.0.14(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
       classnames: 2.5.1
       react: 19.3.0
@@ -6414,17 +6432,17 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vibe/wizard@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
+  '@vibe/wizard@4.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))':
     dependencies:
-      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
-      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/a11y': 4.0.7(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/button': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/clickable': 4.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/divider': 4.0.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/icon': 4.0.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/icons': 4.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/shared': 4.0.10(react@19.3.0)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       '@vibe/style': 4.1.0(stylelint@14.16.1)
-      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
+      '@vibe/typography': 4.0.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(stylelint@14.16.1)(vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)))
       classnames: 2.5.1
       es-toolkit: 1.52.0
       react: 19.3.0
@@ -6434,7 +6452,7 @@ snapshots:
       - stylelint
       - vitest
 
-  '@vitejs/plugin-react@5.2.0(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))':
+  '@vitejs/plugin-react@5.2.0(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -6442,18 +6460,18 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.3
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
+      vite: 6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/mocker@5.0.2(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))':
+  '@vitest/mocker@5.0.2(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.2
       estree-walker: 3.0.3
       magic-string: 1.4.2
     optionalDependencies:
-      vite: 6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
+      vite: 6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
 
   '@vitest/spy@5.0.2': {}
 
@@ -7007,9 +7025,9 @@ snapshots:
   encode-utf8@1.0.3:
     optional: true
 
-  encoding@0.1.13:
+  encoding@0.1.14:
     dependencies:
-      iconv-lite: 0.6.3
+      iconv-lite: 0.7.3
     optional: true
 
   end-of-stream@1.4.5:
@@ -7162,7 +7180,7 @@ snapshots:
 
   estree-walker@3.0.3:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
 
   esutils@2.0.3: {}
 
@@ -7233,6 +7251,10 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  fdir@6.5.0(picomatch@4.0.7):
+    optionalDependencies:
+      picomatch: 4.0.7
 
   file-entry-cache@11.1.5:
     dependencies:
@@ -7526,6 +7548,8 @@ snapshots:
 
   http-cache-semantics@4.2.0: {}
 
+  http-cache-semantics@4.3.0: {}
+
   http-proxy-agent@5.0.0:
     dependencies:
       '@tootallnate/once': 2.0.1
@@ -7554,7 +7578,7 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
-  iconv-lite@0.6.3:
+  iconv-lite@0.7.3:
     dependencies:
       safer-buffer: 2.1.2
     optional: true
@@ -7597,7 +7621,7 @@ snapshots:
 
   interpret@3.1.1: {}
 
-  ip-address@10.7.2: {}
+  ip-address@10.7.5: {}
 
   is-arrayish@0.2.1: {}
 
@@ -7798,7 +7822,7 @@ snapshots:
     dependencies:
       agentkeepalive: 4.6.0
       cacache: 16.1.3
-      http-cache-semantics: 4.2.0
+      http-cache-semantics: 4.3.0
       http-proxy-agent: 5.0.0
       https-proxy-agent: 5.0.1
       is-lambda: 1.0.1
@@ -7913,7 +7937,7 @@ snapshots:
       minipass-sized: 1.0.3
       minizlib: 2.1.2
     optionalDependencies:
-      encoding: 0.1.13
+      encoding: 0.1.14
 
   minipass-flush@1.0.7:
     dependencies:
@@ -7965,9 +7989,7 @@ snapshots:
   nan@2.27.0:
     optional: true
 
-  nanoid@3.3.18: {}
-
-  nanoid@3.3.19: {}
+  nanoid@3.3.20: {}
 
   natural-compare@1.4.0: {}
 
@@ -7985,11 +8007,11 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  node-fetch@2.7.0(encoding@0.1.13):
+  node-fetch@2.7.0(encoding@0.1.14):
     dependencies:
       whatwg-url: 5.0.0
     optionalDependencies:
-      encoding: 0.1.13
+      encoding: 0.1.14
 
   node-releases@2.0.55: {}
 
@@ -8008,7 +8030,7 @@ snapshots:
     dependencies:
       hosted-git-info: 4.1.0
       is-core-module: 2.17.0
-      semver: 7.8.5
+      semver: 7.8.6
       validate-npm-package-license: 3.0.4
 
   normalize-path@3.0.0: {}
@@ -8165,34 +8187,28 @@ snapshots:
 
   postcss-media-query-parser@0.2.3: {}
 
-  postcss-resolve-nested-selector@0.1.6: {}
+  postcss-resolve-nested-selector@0.1.7: {}
 
-  postcss-safe-parser@6.0.0(postcss@8.5.28):
+  postcss-safe-parser@6.0.0(postcss@8.5.32):
     dependencies:
-      postcss: 8.5.28
+      postcss: 8.5.32
 
-  postcss-scss@4.0.9(postcss@8.5.28):
+  postcss-scss@4.0.9(postcss@8.5.32):
     dependencies:
-      postcss: 8.5.28
+      postcss: 8.5.32
 
-  postcss-selector-parser@6.1.4:
+  postcss-selector-parser@6.1.5:
     dependencies:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
 
   postcss-value-parser@4.2.0: {}
 
-  postcss@8.5.23:
+  postcss@8.5.32:
     dependencies:
-      nanoid: 3.3.18
+      nanoid: 3.3.20
       picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.28:
-    dependencies:
-      nanoid: 3.3.19
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   postject@1.0.0-alpha.6:
     dependencies:
@@ -8442,35 +8458,37 @@ snapshots:
       sprintf-js: 1.1.3
     optional: true
 
-  rollup@4.60.4:
+  rollup@4.67.4:
     dependencies:
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.10
     optionalDependencies:
-      '@rollup/rollup-android-arm-eabi': 4.60.4
-      '@rollup/rollup-android-arm64': 4.60.4
-      '@rollup/rollup-darwin-arm64': 4.60.4
-      '@rollup/rollup-darwin-x64': 4.60.4
-      '@rollup/rollup-freebsd-arm64': 4.60.4
-      '@rollup/rollup-freebsd-x64': 4.60.4
-      '@rollup/rollup-linux-arm-gnueabihf': 4.60.4
-      '@rollup/rollup-linux-arm-musleabihf': 4.60.4
-      '@rollup/rollup-linux-arm64-gnu': 4.60.4
-      '@rollup/rollup-linux-arm64-musl': 4.60.4
-      '@rollup/rollup-linux-loong64-gnu': 4.60.4
-      '@rollup/rollup-linux-loong64-musl': 4.60.4
-      '@rollup/rollup-linux-ppc64-gnu': 4.60.4
-      '@rollup/rollup-linux-ppc64-musl': 4.60.4
-      '@rollup/rollup-linux-riscv64-gnu': 4.60.4
-      '@rollup/rollup-linux-riscv64-musl': 4.60.4
-      '@rollup/rollup-linux-s390x-gnu': 4.60.4
-      '@rollup/rollup-linux-x64-gnu': 4.60.4
-      '@rollup/rollup-linux-x64-musl': 4.60.4
-      '@rollup/rollup-openbsd-x64': 4.60.4
-      '@rollup/rollup-openharmony-arm64': 4.60.4
-      '@rollup/rollup-win32-arm64-msvc': 4.60.4
-      '@rollup/rollup-win32-ia32-msvc': 4.60.4
-      '@rollup/rollup-win32-x64-gnu': 4.60.4
-      '@rollup/rollup-win32-x64-msvc': 4.60.4
+      '@napi-rs/lzma-linux-x64-gnu': 1.5.1
+      '@rollup/rollup-android-arm-eabi': 4.67.4
+      '@rollup/rollup-android-arm64': 4.67.4
+      '@rollup/rollup-android-x64': 4.67.4
+      '@rollup/rollup-darwin-arm64': 4.67.4
+      '@rollup/rollup-darwin-x64': 4.67.4
+      '@rollup/rollup-freebsd-arm64': 4.67.4
+      '@rollup/rollup-freebsd-x64': 4.67.4
+      '@rollup/rollup-linux-arm-gnueabihf': 4.67.4
+      '@rollup/rollup-linux-arm-musleabihf': 4.67.4
+      '@rollup/rollup-linux-arm64-gnu': 4.67.4
+      '@rollup/rollup-linux-arm64-musl': 4.67.4
+      '@rollup/rollup-linux-loong64-gnu': 4.67.4
+      '@rollup/rollup-linux-loong64-musl': 4.67.4
+      '@rollup/rollup-linux-ppc64-gnu': 4.67.4
+      '@rollup/rollup-linux-ppc64-musl': 4.67.4
+      '@rollup/rollup-linux-riscv64-gnu': 4.67.4
+      '@rollup/rollup-linux-riscv64-musl': 4.67.4
+      '@rollup/rollup-linux-s390x-gnu': 4.67.4
+      '@rollup/rollup-linux-x64-gnu': 4.67.4
+      '@rollup/rollup-linux-x64-musl': 4.67.4
+      '@rollup/rollup-openbsd-x64': 4.67.4
+      '@rollup/rollup-openharmony-arm64': 4.67.4
+      '@rollup/rollup-win32-arm64-msvc': 4.67.4
+      '@rollup/rollup-win32-ia32-msvc': 4.67.4
+      '@rollup/rollup-win32-x64-gnu': 4.67.4
+      '@rollup/rollup-win32-x64-msvc': 4.67.4
       fsevents: 2.3.3
 
   run-parallel@1.2.0:
@@ -8500,6 +8518,8 @@ snapshots:
   semver@7.8.0: {}
 
   semver@7.8.5: {}
+
+  semver@7.8.6: {}
 
   serialize-error@7.0.1:
     dependencies:
@@ -8547,10 +8567,10 @@ snapshots:
 
   socks@2.8.10:
     dependencies:
-      ip-address: 10.7.2
+      ip-address: 10.7.5
       smart-buffer: 4.2.0
 
-  source-map-js@1.2.1: {}
+  source-map-js@1.2.2: {}
 
   source-map-support@0.5.21:
     dependencies:
@@ -8630,7 +8650,7 @@ snapshots:
 
   stylelint@14.16.1:
     dependencies:
-      '@csstools/selector-specificity': 2.2.0(postcss-selector-parser@6.1.4)
+      '@csstools/selector-specificity': 2.2.0(postcss-selector-parser@6.1.5)
       balanced-match: 2.0.0
       colord: 2.10.0
       cosmiconfig: 7.1.0
@@ -8653,11 +8673,11 @@ snapshots:
       micromatch: 4.0.8
       normalize-path: 3.0.0
       picocolors: 1.1.1
-      postcss: 8.5.28
+      postcss: 8.5.32
       postcss-media-query-parser: 0.2.3
-      postcss-resolve-nested-selector: 0.1.6
-      postcss-safe-parser: 6.0.0(postcss@8.5.28)
-      postcss-selector-parser: 6.1.4
+      postcss-resolve-nested-selector: 0.1.7
+      postcss-safe-parser: 6.0.0(postcss@8.5.32)
+      postcss-selector-parser: 6.1.5
       postcss-value-parser: 4.2.0
       resolve-from: 5.0.0
       string-width: 4.2.3
@@ -8718,15 +8738,15 @@ snapshots:
       rimraf: 2.6.3
     optional: true
 
-  terser-webpack-plugin@5.6.0(postcss@8.5.28)(webpack@5.107.0(postcss@8.5.28)):
+  terser-webpack-plugin@5.6.0(postcss@8.5.32)(webpack@5.107.0(postcss@8.5.32)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.47.1
-      webpack: 5.107.0(postcss@8.5.28)
+      webpack: 5.107.0(postcss@8.5.32)
     optionalDependencies:
-      postcss: 8.5.28
+      postcss: 8.5.32
 
   terser@5.47.1:
     dependencies:
@@ -8860,13 +8880,13 @@ snapshots:
       spdx-correct: 3.2.0
       spdx-expression-parse: 3.0.1
 
-  vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1):
+  vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.23
-      rollup: 4.60.4
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
+      postcss: 8.5.32
+      rollup: 4.67.4
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 26.5.1
@@ -8874,10 +8894,10 @@ snapshots:
       jiti: 2.7.0
       terser: 5.47.1
 
-  vitest@5.0.2(@types/node@26.5.1)(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)):
+  vitest@5.0.2(@types/node@26.5.1)(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.2(vite@6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
+      '@vitest/mocker': 5.0.2(vite@6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1))
       chai: 6.2.2
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -8888,7 +8908,7 @@ snapshots:
       tinybench: 6.2.0
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 6.4.3(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
+      vite: 6.4.5(@types/node@26.5.1)(jiti@2.7.0)(terser@5.47.1)
       why-is-node-running: 3.2.2
     optionalDependencies:
       '@types/node': 26.5.1
@@ -8908,9 +8928,9 @@ snapshots:
 
   webpack-sources@3.4.1: {}
 
-  webpack@5.107.0(postcss@8.5.28):
+  webpack@5.107.0(postcss@8.5.32):
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/json-schema': 7.0.15
       '@webassemblyjs/ast': 1.14.1
       '@webassemblyjs/wasm-edit': 1.14.1
@@ -8930,7 +8950,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.3
-      terser-webpack-plugin: 5.6.0(postcss@8.5.28)(webpack@5.107.0(postcss@8.5.28))
+      terser-webpack-plugin: 5.6.0(postcss@8.5.32)(webpack@5.107.0(postcss@8.5.32))
       watchpack: 2.5.1
       webpack-sources: 3.4.1
     transitivePeerDependencies:
