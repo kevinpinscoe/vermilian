@@ -5,7 +5,7 @@
 # Spec:        docs/requirements.md (§ Priority Desk), ADR-0007
 # Related:     screen-priority-desk-now.d2 (segmented-control sibling view)
 #              screen-priority-desk-recommendation.d2 (Ask for recommendation, step 4)
-#              flow-priority-desk.mmd (navigation between the three, incl. drag-to-slot)
+#              flow-priority-desk.mmd (navigation between the three, incl. rank selection)
 #              docs/design/priority-desk-mockup.html (higher-fidelity HTML reference)
 #
 # What this depicts: the second Priority Desk mode — a quiet comparison view of at
@@ -38,15 +38,6 @@ window: "Vermilian — Priority Desk · Choose next" {
     shape: rectangle
   }
 
-  dropstrip: "Drop zones" {
-    shape: rectangle
-    direction: right
-    # Vibe: dashed drop targets — dragging a candidate card here sets its Focus rank
-    drag_now: "DRAG TO NOW\nVERM-142 · filled" {shape: rectangle; style.stroke-dash: 4}
-    drag_next: "DRAG TO NEXT\nVERM-118 · filled" {shape: rectangle; style.stroke-dash: 4}
-    drag_then: "DRAG TO THEN\ndrop a card here" {shape: rectangle; style.stroke-dash: 4}
-  }
-
   candgrid: "Candidate grid — auto-fill, min 150px per card, max 7 candidates" {
     shape: rectangle
     direction: right
@@ -67,6 +58,5 @@ window: "Vermilian — Priority Desk · Choose next" {
     shape: rectangle
   }
 
-  segmented -> dropstrip: "toggle to this mode"
-  candgrid -> dropstrip: "drag card onto a zone → sets Focus rank, doubles back to Now"
+  segmented -> candgrid: "toggle to this mode; star + rank badge on a card sets Focus rank (ADR-0009)"
 }

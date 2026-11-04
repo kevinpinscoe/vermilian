@@ -31,7 +31,7 @@ flowchart TD
     SETFOCUS["PATCH issue: Focus = Yes"]
     UNSTAR["PATCH issue: Focus cleared, rank cleared, Why now preserved"]
 
-    DRAG{"Card dragged onto a slot?"}
+    RANKPICK{"Rank chosen with the Focus rank control?"}
     FULL{"Target slot already filled?"}
     ASKREPLACE(["Ask: replace this slot?"])
     SETRANK["PATCH issue: Focus rank = slot N (implies Focus = Yes)"]
@@ -61,8 +61,8 @@ flowchart TD
     STAR -->|"star (was empty)"| SETFOCUS --> CHOOSE
     STAR -->|"unstar (was filled)"| UNSTAR --> CHOOSE
 
-    CHOOSE --> DRAG
-    DRAG -->|"yes"| FULL
+    CHOOSE --> RANKPICK
+    RANKPICK -->|"yes"| FULL
     FULL -->|"yes"| ASKREPLACE
     ASKREPLACE -->|"confirmed"| SETRANK
     ASKREPLACE -->|"cancelled"| CHOOSE

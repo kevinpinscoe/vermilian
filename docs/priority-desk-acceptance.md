@@ -22,9 +22,22 @@ stays blocked until acceptance is complete.
 Do not rebuild while testing. A rebuild replaces this binary, and the results would no longer
 describe the commit above.
 
+**To launch it**, from `~/Projects/public/vermilian`:
+
+```bash
+bash private/launch-acceptance-build.sh
+```
+
+The script is gitignored and lives only on the FLDW, so a rebuild does not replace it. It compares
+`app.asar` with the hash above and refuses to launch on a mismatch. `--verify` runs the check without
+launching. If the test environment ever requires a rebuild, stop and record why, because results
+from before the rebuild would need re-baselining.
+
 ## How to record results
 
-- Tick one box per test: **Pass**, **Fail**, or **Not tested**.
+- Tests are run one at a time, and each result is **Pass**, **Fail**, or **Blocked**.
+- **VERM-10's comments are the authoritative live record.** This file's boxes are updated from them
+  by pull request, at the end of each section.
 - Put anything odd in **Notes**, even on a pass.
 - Classify every finding in [Findings](#findings). Do not mix the three categories.
 - Stop after any section. The sections are safe to run on different days.
@@ -41,6 +54,9 @@ one at a time.
 
 ### S2. Create an Acceptance workspace
 
+This is done by hand in the app: the `Claude_Code` YouTrack user cannot edit the `_vermilian-config`
+article (403, 2026-11-04).
+
 1. Open the workspace switcher at the top of the left rail and click **+ New workspace**.
 2. Name it `Acceptance` and confirm. It is now the active workspace.
 3. Click **+ Add projects** in the rail, tick your **TEST** and **VERM** projects, and save. Both
@@ -50,14 +66,19 @@ one at a time.
 **Why this is needed:** the Priority Desk only reads projects in the active workspace. Your
 `Kevin` workspace holds only the KEVIN project, and VERM is in no workspace at all.
 
-### S3. Create the test tasks
+### S3. Check the test tasks
 
-In the **TEST** board click **New task** five times. Use these summaries and set **Priority** to
-`Critical` on each. `Critical` keeps them above the `Normal` fixtures in Choose next.
+Claude Code created these on 2026-11-04 at Kevin's direction. Check that they appear on the **TEST**
+board. Each has Priority `Critical`, which keeps it above the `Normal` fixtures in Choose next, and
+Status `To do`.
 
-`ACC-1 alpha`, `ACC-2 bravo`, `ACC-3 charlie`, `ACC-4 delta`, `ACC-5 echo`
-
-YouTrack assigns its own IDs (`TEST-40` and up). This checklist calls them ACC-1 to ACC-5.
+| Checklist name | Issue | Summary begins |
+| --- | --- | --- |
+| ACC-1 | `TEST-40` | `ACC-1 alpha` |
+| ACC-2 | `TEST-41` | `ACC-2 bravo` |
+| ACC-3 | `TEST-42` | `ACC-3 charlie` |
+| ACC-4 | `TEST-43` | `ACC-4 delta` |
+| ACC-5 | `TEST-44` | `ACC-5 echo` |
 
 ### S4. Check the remaining prerequisites
 
@@ -553,7 +574,7 @@ Two things to weigh:
 
 ## Cleanup
 
-Do this after the last section you run.
+Do this only after Kevin has completed acceptance and approved cleanup.
 
 1. Delete the five `ACC` tasks from their detail panels, or leave them Done.
 2. Clear Focus and rank on `VERM-4`, `VERM-10` and `VERM-11`. The audit comments stay on the tickets.
@@ -590,14 +611,6 @@ and observed result.
   and `VERM` on 2026-11-04. If YouTrack refuses the write, `AppShell.tsx` keeps the timer and overlay
   running and shows a five-second error. This has not been run against the live instance.
 
-**K3. Requirements describe drag-to-slot, and the build has none (needs your ruling).**
-
-- **Behavior:** `docs/requirements.md` says cards can be "dragged into a Now/Next/Then slot". The rank
-  invariant mentions the same gesture.
-- **Observed:** VERM-6's scope says to assign ranks through the VERM-4 control, and `PriorityDesk.tsx`
-  says it deliberately has no drag. Rank assignment itself works (B6).
-- **Your decision:** amend the requirement, or file corrective work.
-
 **K6. Done issues appear to keep their focus slot (candidate; confirm in E8).**
 
 - **Behavior:** the desk and Daily Review describe their data as unresolved issues, but no requirement
@@ -610,6 +623,12 @@ and observed result.
   excludes only `Done`, as the requirement words it, so `Wont do` issues remain eligible.
 
 Add others here:
+
+### Resolved decisions
+
+**K3. Rank controls are the intended interaction, not drag-to-slot.** Kevin decided on 2026-11-04
+that reliable, explicit priority selection matters more than drag-and-drop. It is not a defect. The
+requirements were corrected: see [ADR-0009](adr/0009-priority-desk-rank-controls.md).
 
 ### Usability problems
 
@@ -660,7 +679,7 @@ Comparing the source and tests with `docs/requirements.md`, ADR-0007 and each ti
 | --- | --- | --- | --- |
 | VERM-4 | Focus, rank and Why now fields, three edit surfaces, rank invariant and repair | Present. `e2e/focus-toggle.spec.ts`. Fields read live on all 40 active projects | None found |
 | VERM-5 | Rail entry, Now mode, Start focus, repair state | Present. `e2e/priority-desk.spec.ts` | K1, K2, K6 |
-| VERM-6 | Choose next, seven-card cap, ordering, Status filter, Not this week | Present. `e2e/priority-desk-choose-next.spec.ts` | K3, K5 |
+| VERM-6 | Choose next, seven-card cap, ordering, Status filter, Not this week | Present. `e2e/priority-desk-choose-next.spec.ts` | K5 |
 | VERM-7 | Parent epic, Epic filter, Master Plan display | Present. `e2e/priority-desk-master-plan.spec.ts` | None found |
 | VERM-8 | Bounded recommendation, evidence, three choices, audit comment | Present. `e2e/priority-desk-recommendation.spec.ts` | None found |
 | VERM-9 | Deterministic review, placeholders | Present. `e2e/daily-review.spec.ts` | K6 |
