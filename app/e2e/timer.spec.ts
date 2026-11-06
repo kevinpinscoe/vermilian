@@ -12,7 +12,7 @@
  */
 
 import { test, expect, Page } from '@playwright/test';
-import { launchApp } from './helpers/launch';
+import { launchApp, launchAppWithEnv } from './helpers/launch';
 import type { ElectronApplication } from '@playwright/test';
 
 async function navigateToProject(page: Page) {
@@ -41,13 +41,18 @@ test.describe('Task timer', () => {
 
   test.afterEach(async () => {
     // A running timer triggers quit protection, which blocks app.close(). Stop
-    // whichever phase is active (clearing the timer turns protection off), then
-    // give the protection-off IPC a beat to reach the main process before close.
+    // whichever phase is active; the fake worklog always succeeds, so the
+    // success toast and a cleared timer are required, not hoped for — a stop
+    // that silently failed would otherwise surface only as a close() timeout.
     const stop = page.locator('[data-testid="focus-stop-btn"], [data-testid="break-stop-btn"]').first();
     if (await stop.count()) {
-      await stop.click().catch(() => {});
-      await page.getByText(/Logged \d+ min/).waitFor({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(500);
+      await stop.click();
+      await expect(page.getByText(/Logged \d+ min/)).toBeVisible();
+      await expect(page.locator('[data-testid="focus-overlay"], [data-testid="break-banner"]')).toHaveCount(0);
+      // The renderer clears quit protection from an effect after the timer
+      // clears. Clear it explicitly through the same IPC call, rather than
+      // sleeping and hoping the effect has run, so close() is never blocked.
+      await page.evaluate(() => window.vermilian.timerSetQuitProtection(false));
     }
     await app.close();
   });
@@ -95,6 +100,35 @@ test.describe('Task timer', () => {
     await startFirstRowTimer(page);
     await page.locator('[data-testid="focus-stop-btn"]').click();
 
+    await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
+    await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
+  });
+});
+
+// Finding K2 (B9 heads-up): YouTrack refuses the worklog when time tracking is
+// disabled on the project. The fake rejects the first post only, so this also
+// shows that a later Stop & log succeeds once the refusal clears.
+test.describe('Task timer — refused worklog', () => {
+  let app: ElectronApplication;
+  let page: Page;
+
+  test.beforeEach(async () => {
+    app = await launchAppWithEnv({ VERMILIAN_E2E_WORKLOG_REJECT: '1' });
+    page = await app.firstWindow();
+    await navigateToProject(page);
+  });
+  test.afterEach(async () => { await app.close(); });
+
+  test('a refused worklog is reported as a failure, not as logged, and the timer is kept', async () => {
+    await startFirstRowTimer(page);
+    await page.locator('[data-testid="focus-stop-btn"]').click();
+
+    await expect(page.getByText(/Failed to log worklog: Time tracking is disabled/)).toBeVisible();
+    await expect(page.getByText(/Logged \d+ min/)).toHaveCount(0);
+    await expect(page.locator('[data-testid="focus-overlay"]')).toBeVisible();
+
+    // Stopping again succeeds once the refusal clears, and only then reports success.
+    await page.locator('[data-testid="focus-stop-btn"]').click();
     await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
     await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
   });
