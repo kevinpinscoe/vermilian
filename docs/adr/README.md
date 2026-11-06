@@ -14,6 +14,7 @@ ADRs capture significant design decisions, their context, and their consequences
 | [0006](0006-claude-model-selection.md) | Claude model defaults for AI features | Accepted |
 | [0007](0007-priority-desk-field-model.md) | Priority Desk field model — dedicated Focus fields | Accepted |
 | [0008](0008-master-plan-storage.md) | Master Plan storage — YouTrack Knowledge Base article | Accepted |
+| [0009](0009-priority-desk-rank-controls.md) | Priority Desk ranks use explicit controls, not drag-and-drop | Accepted |
 
 ## Process
 

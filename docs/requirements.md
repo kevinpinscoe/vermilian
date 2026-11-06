@@ -70,8 +70,8 @@ links; the desk is a curated view onto it, never a second store. See
 - `Focus` is a low-friction toggle wherever a task is shown: board rows, Kanban cards, and
   the task detail panel.
 - **Focus-rank invariant**: within the active workspace, at most one issue may hold each
-  of rank `1`, `2`, and `3` at a time. Normal UI operations preserve this — dragging a
-  card onto an occupied slot, or setting a fourth rank while all three are already full,
+  of rank `1`, `2`, and `3` at a time. Normal UI operations preserve this — choosing a
+  rank that is already held, including a fourth rank while all three are already full,
   asks which issue keeps the slot rather than silently overwriting or evicting one. If
   Vermilian ever discovers two or more issues sharing a rank in the active workspace —
   stale local state, a partial write, a change made by another client or another machine,
@@ -85,7 +85,9 @@ links; the desk is a curated view onto it, never a second store. See
   that starts the existing per-task timer.
 - **Choose next mode**: no more than seven eligible candidates in a quiet comparison grid
   (see "Choose-next eligibility" below for what qualifies and how ties beyond seven are
-  broken). Cards can be starred, opened, or dragged into a Now/Next/Then slot. A "Not this
+  broken). Cards can be starred, opened, or given a rank with the Focus rank control, which places them
+  in a Now/Next/Then slot; there is no drag-to-slot
+  ([ADR-0009](adr/0009-priority-desk-rank-controls.md)). A "Not this
   week" dismissal removes a candidate from the decision surface until the dismissal
   expires (see "'Not this week' expiration" below), without changing its YouTrack
   `Priority`. Filters are limited to workspace, status, and active epic — full search

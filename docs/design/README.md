@@ -22,7 +22,7 @@ Reference: [monday.com Vibe Design System](https://style.monday.com) and [Vibe G
   three Priority Desk screens as standard sketch-mode wireframes, following the same
   conventions as every other `screen-*.d2` file here.
 - [`flow-priority-desk.mmd`](flow-priority-desk.mmd) — navigation between the three screens
-  plus every action that mutates `Focus`/`Focus rank`/`Why now` (star toggle, drag-to-slot,
+  plus every action that mutates `Focus`/`Focus rank`/`Why now` (star toggle, rank selection,
   "Not this week", and the Ask-for-recommendation confirm row).
 - See [ADR-0007](../adr/0007-priority-desk-field-model.md) for the field-model decision behind
   these screens, and `docs/requirements.md` § Priority Desk for the full requirement.
