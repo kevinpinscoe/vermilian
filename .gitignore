@@ -1,6 +1,8 @@
 # Playwright
 playwright-report/
 test-results/
+# Live acceptance harness evidence (app/live-results/<UTC>/), never committed
+live-results/
 .shots/
 
 # Node / Electron / pnpm

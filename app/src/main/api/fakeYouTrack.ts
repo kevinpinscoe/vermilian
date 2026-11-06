@@ -280,10 +280,19 @@ export function resetPostedCommentsForTests(): void {
   postedComments = [];
 }
 
+// VERMILIAN_E2E_WORKLOG_REJECT=<n> makes the first n worklog posts fail the
+// way YouTrack does when time tracking is disabled on the project (finding K2),
+// so the refused-worklog path is testable without a server. Later posts succeed.
+let worklogRejectionsLeft = Number(process.env.VERMILIAN_E2E_WORKLOG_REJECT ?? 0) || 0;
+
 export async function postWorklog(
   _url: string, _token: string, _issueId: string, _minutes: number, _worklogType: string,
 ): Promise<void> {
-  // no-op in the fake
+  if (worklogRejectionsLeft > 0) {
+    worklogRejectionsLeft -= 1;
+    throw new Error('Time tracking is disabled for this project');
+  }
+  // otherwise a no-op in the fake
 }
 
 export async function getIssuesForStandup(

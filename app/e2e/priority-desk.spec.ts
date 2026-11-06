@@ -160,9 +160,11 @@ test.describe('Priority Desk', () => {
     await expect(page.locator('[data-testid="focus-overlay"]')).toBeVisible();
     await expect(page.locator('[data-testid="focus-task-id"]')).toHaveText('TEST-1');
 
-    // Quit protection blocks app.close() while a timer runs.
+    // Quit protection blocks app.close() while a timer runs. The fake worklog
+    // always succeeds, so Stop & log must report it and clear the timer.
     await page.locator('[data-testid="focus-stop-btn"]').click();
-    await page.getByText(/Logged \d+ min/).waitFor({ timeout: 5000 }).catch(() => {});
+    await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
+    await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
   });
 
   test('Focus/rank edits made elsewhere are reflected on the desk after invalidation', async () => {
@@ -272,7 +274,8 @@ test.describe('Priority Desk', () => {
       await expect(page.locator('[data-testid="task-detail-panel"]')).toHaveCount(0);
 
       await page.locator('[data-testid="focus-stop-btn"]').click();
-      await page.getByText(/Logged \d+ min/).waitFor({ timeout: 5000 }).catch(() => {});
+      await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
+      await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
     });
 
     test('editing Why now through the detail panel updates the desk card without a reload', async () => {

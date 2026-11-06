@@ -99,4 +99,16 @@ export default [
       ],
     },
   },
+
+  {
+    // The live acceptance harness defines Playwright fixtures, whose callback
+    // is conventionally named `use` and whose "no fixtures needed" argument is
+    // an empty `{}` pattern. Neither is React: rules-of-hooks misreads `use`,
+    // and no-empty-pattern flags Playwright's own documented idiom.
+    files: ['e2e-live/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'no-empty-pattern': 'off',
+    },
+  },
 ];
