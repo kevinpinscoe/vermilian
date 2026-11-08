@@ -14,6 +14,7 @@
  */
 
 import { spawn } from 'child_process';
+import fs from 'fs';
 import type { LiveSettings } from './settings';
 
 /** A failure of the harness itself (setup, network, permissions), as opposed to an application defect. */
@@ -92,6 +93,15 @@ export function appIdentityClient(s: LiveSettings): Client {
   let token: string | null = null;
   async function getToken(): Promise<string> {
     if (token) return token;
+    if (s.appTokenFile) {
+      let value: string;
+      try { value = fs.readFileSync(s.appTokenFile, 'utf-8').trim(); } catch (e) {
+        throw new HarnessError(`the application token file is not readable: ${(e as Error).message}`);
+      }
+      if (!value) throw new HarnessError('the application token file is empty');
+      token = value;
+      return token;
+    }
     const res = await run('sh', ['-c', s.appTokenCommand], null);
     const value = res.stdout.trim();
     if (res.code !== 0 || !value) {

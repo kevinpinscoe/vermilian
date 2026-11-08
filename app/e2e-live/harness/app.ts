@@ -29,7 +29,7 @@ export function tempProfileDir(): string {
 
 export interface ProfileSeed {
   /** null = launch unconfigured (no server at all), used by the harness self-test. */
-  server: { url: string; login: string; tokenCommand: string } | null;
+  server: { url: string; login: string; tokenCommand: string; tokenFile: string } | null;
   projectIds: string[];
 }
 
@@ -41,6 +41,7 @@ export function seedProfile(dir: string, seed: ProfileSeed): void {
       youtrackUrl: seed.server.url,
       youtrackLogin: seed.server.login,
       youtrackTokenCommand: seed.server.tokenCommand,
+      youtrackTokenFile: seed.server.tokenFile,
     }, null, 2));
   }
   fs.writeFileSync(path.join(dir, 'workspace-config.json'), JSON.stringify({

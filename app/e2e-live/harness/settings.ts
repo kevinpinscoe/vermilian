@@ -17,8 +17,15 @@ export interface LiveSettings {
   appUrl: string;
   /** Login the application's token must resolve to (a dedicated harness account). */
   appLogin: string;
-  /** Shell command whose stdout is the harness account's token (run by the app and by the preflight). */
+  /**
+   * How the app gets the harness account's token: exactly one of these two.
+   * - a shell command whose stdout is the token, run by the app and by the preflight;
+   * - a file holding the token, such as the RAM-backed file `parzival exec` renders
+   *   for the duration of the run.
+   * Neither value is the token itself, and the token is never recorded.
+   */
   appTokenCommand: string;
+  appTokenFile: string;
   /** Harness project short name — time tracking enabled, in none of Kevin's workspaces. */
   project: string;
   /** Second harness project short name — time tracking disabled, used for B9's rejected-worklog case. */
@@ -80,6 +87,7 @@ export function loadSettings(): LiveSettings {
     appUrl: env('VERMILIAN_LIVE_YOUTRACK_URL').replace(/\/+$/, ''),
     appLogin: env('VERMILIAN_LIVE_APP_LOGIN'),
     appTokenCommand: env('VERMILIAN_LIVE_APP_TOKEN_COMMAND'),
+    appTokenFile: env('VERMILIAN_LIVE_APP_TOKEN_FILE'),
     project: env('VERMILIAN_LIVE_PROJECT'),
     rejectProject: env('VERMILIAN_LIVE_REJECT_PROJECT'),
     verifierUrl: env('VERMILIAN_LIVE_VERIFIER_URL', 'http://127.0.0.1:9000').replace(/\/+$/, ''),
@@ -98,9 +106,11 @@ export function missingSettings(s: LiveSettings): string[] {
   const required: Array<[keyof LiveSettings, string]> = [
     ['appUrl', 'VERMILIAN_LIVE_YOUTRACK_URL'],
     ['appLogin', 'VERMILIAN_LIVE_APP_LOGIN'],
-    ['appTokenCommand', 'VERMILIAN_LIVE_APP_TOKEN_COMMAND'],
     ['project', 'VERMILIAN_LIVE_PROJECT'],
     ['rejectProject', 'VERMILIAN_LIVE_REJECT_PROJECT'],
   ];
-  return required.filter(([k]) => !s[k]).map(([, name]) => name);
+  const missing = required.filter(([k]) => !s[k]).map(([, name]) => name);
+  if (!s.appTokenCommand && !s.appTokenFile) missing.push('VERMILIAN_LIVE_APP_TOKEN_FILE or VERMILIAN_LIVE_APP_TOKEN_COMMAND');
+  if (s.appTokenCommand && s.appTokenFile) missing.push('only one of VERMILIAN_LIVE_APP_TOKEN_FILE and VERMILIAN_LIVE_APP_TOKEN_COMMAND (both are set)');
+  return missing;
 }

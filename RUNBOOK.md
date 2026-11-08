@@ -164,6 +164,14 @@ VERMILIAN_LIVE_EXECUTABLE=~/Projects/public/vermilian/app/out/Vermilian-linux-x6
   pnpm test:live                                  # against the pinned acceptance build
 ```
 
+When the app's token comes from a broker that renders it into a temporary file for the life of
+one command, run the suite inside that command so the file exists throughout. The profile sets
+`VERMILIAN_LIVE_APP_TOKEN_FILE`:
+
+```bash
+parzival exec --as ai youtrack-vermilian-harness -- pnpm test:live
+```
+
 Do not pass `--reporter`. It replaces the configured reporters, so no `results.md`, manifest or
 HTML report is written.
 
@@ -176,8 +184,8 @@ HTML report is written.
 | `manifest.json` | Build and environment identity |
 | `test-output/` | Traces, screenshots, app logs, and server values before and after |
 
-Until the server setup in `HARNESS.md` exists, every checklist case reports **Blocked** with the
-failing preflight check, and the run exits non-zero. That is expected.
+Without the server setup in `HARNESS.md` → *Server setup*, every checklist case reports
+**Blocked** with the failing preflight check, and the run exits non-zero. That is expected.
 
 To open the evidence:
 

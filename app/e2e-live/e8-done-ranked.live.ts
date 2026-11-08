@@ -1,14 +1,10 @@
 /**
  * E8 — a ranked issue that is completed. Checklist: § E8, finding K6.
  *
- * What is asserted is only the checklist's own expectation: after the issue
- * is set to Done and the app restarted, it no longer holds the Now slot on
- * the Priority Desk or in Daily Review.
- *
- * What happens to the *stored* Focus and Focus rank is not specified
- * anywhere (cleared on completion, or kept and merely excluded from active
- * slots), so those values are recorded as observations pending Kevin's
- * decision — not asserted either way.
+ * Decided 2026-11-08 (VERM-10, requirements "Completed issues and focus"):
+ * once Done and after a restart, the issue leaves Now/Next/Then, Blocked
+ * focused work and Needs attention, while its stored Focus and Focus rank
+ * stay exactly as they were. Rank reuse and reopening are E9 and E10.
  */
 
 import { test, expect } from './harness/fixture';
@@ -16,8 +12,8 @@ import { openDailyReview, openDesk, openProject, textOrNull } from './harness/ui
 import { setFields } from './harness/server';
 
 test('E8 — completing a ranked issue: desk, Daily Review and stored rank', async ({ live }) => {
-  live.expected('After setting the Now issue to Done in the UI and restarting, it no longer holds the Now slot on the Priority Desk or in Daily Review.');
-  live.pendingDecision('Whether completion should clear the stored Focus / Focus rank, or only exclude the issue from active slots. Stored values before and after are recorded under Observed.');
+  live.expected('After setting the Now issue to Done in the UI and restarting, it is not a card on the Priority Desk and not in Daily Review\'s focus slots, Blocked focused work or Needs attention.');
+  live.expected('Its stored Focus (Yes) and Focus rank (1) are unchanged on the server: completion is not a focus edit.');
 
   const issue = await live.fixture('E8 finishing');
   await setFields(live.verifier, issue.id, { focus: 'Yes', focusRank: 1, whyNow: 'Live harness reason E8' });
@@ -47,16 +43,23 @@ test('E8 — completing a ranked issue: desk, Daily Review and stored rank', asy
   await openDailyReview(page2);
   const reviewNow = await textOrNull(page2, '[data-testid="daily-review-slot-now"]');
   const needsAttention = await textOrNull(page2, '[data-testid="daily-review-needs-attention"]');
+  const blocked = await textOrNull(page2, '[data-testid="daily-review-blocked"]');
+  const completed = await textOrNull(page2, '[data-testid="daily-review-completed"]');
   live.observe('Daily Review Now slot', reviewNow);
+  live.observe('Daily Review Blocked focused work', blocked);
+  live.observe('Daily Review Recently completed (eligible, not asserted)', completed);
   live.observe('Daily Review Needs attention', needsAttention);
   await live.app.screenshot('e8-daily-review');
 
   const stored = await live.server('after-restart', [issue.id]);
-  live.observe('stored values after restart (pending decision, not asserted)', stored[issue.idReadable]);
+  live.observe('stored values after restart', stored[issue.idReadable]);
 
   // Checklist assertions, made after every observation is captured so a
   // failure still leaves the full picture in the report.
   await expect.soft(page2.locator(`[data-testid="daily-review-slot-issue-${issue.id}"]`), 'Daily Review must not show the Done issue in a focus slot').toHaveCount(0);
+  expect.soft(needsAttention ?? '', 'Needs attention must not list the Done issue').not.toContain(issue.idReadable);
+  expect.soft(blocked ?? '', 'Blocked focused work must not list the Done issue').not.toContain(issue.idReadable);
+  expect.soft(stored[issue.idReadable], 'stored Focus and Focus rank must be unchanged').toMatchObject({ focus: 'Yes', focusRank: 1 });
   await page2.locator('#daily-review-modal').getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(page2.locator('[data-testid="daily-review-body"]')).toHaveCount(0);
   await openDesk(page2);

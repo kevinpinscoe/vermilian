@@ -20,7 +20,9 @@ Commands are in the repository `RUNBOOK.md` → *Step 6 — Live acceptance harn
 | A7/A8 | `a7-a8-duplicate-rank.live.ts` | An independent API client creates a duplicate rank. After a full restart the warning shows and no winner is chosen, so both still hold the rank on the server. The UI repair produces the right persisted state. |
 | A11 | `a11-persistence.live.ts` | Star, rank and Why now set through the UI reach YouTrack, then survive a complete process exit and a relaunch on the same profile. |
 | B9 | `b9-focus-worklog.live.ts` | **Success:** the reported worklog exists on the server with the reported minutes and the app identity as author. **Rejection:** there is no false success and no work item. The recovery path is recorded, not asserted. |
-| E8 | `e8-done-ranked.live.ts` | A ranked issue set to Done in the UI must leave the desk and Daily Review after a restart. That is asserted. The stored Focus and rank are recorded as an observation pending a decision. |
+| E8 | `e8-done-ranked.live.ts` | A ranked issue set to Done in the UI leaves the desk, Daily Review's focus slots, *Blocked focused work* and *Needs attention* after a restart, and its stored Focus and rank are unchanged. |
+| E9 | `e9-e10-completed-rank.live.ts` | A Done issue does not reserve its retained rank: giving that rank to an active issue raises no conflict and no repair state, and the Done issue's stored values are untouched. |
+| E10 | `e9-e10-completed-rank.live.ts` | Reopening it (by another client) makes the retained rank collide. After a restart the repair state names both, nothing changes on the server until the user chooses, and the choice persists. |
 | HARNESS | `harness-selftest.live.ts` | The binary launches on an isolated empty profile with the fake services off, and the trace, screenshots and log are captured. It needs no server. |
 
 Test titles start with the checklist ID, and the report keys every row by it.
@@ -91,7 +93,8 @@ project.
 | --- | --- | --- |
 | `VERMILIAN_LIVE_YOUTRACK_URL` | yes | YouTrack URL the app is configured with |
 | `VERMILIAN_LIVE_APP_LOGIN` | yes | Login the app's token must resolve to: the dedicated harness account |
-| `VERMILIAN_LIVE_APP_TOKEN_COMMAND` | yes | Shell command printing that account's token. The app and the preflight both run it, and it is never recorded |
+| `VERMILIAN_LIVE_APP_TOKEN_FILE` | one of these two | File holding that account's token, such as the temporary file a broker renders for the life of the run. The app reads it through its token-file setting |
+| `VERMILIAN_LIVE_APP_TOKEN_COMMAND` | one of these two | Shell command printing that account's token. The app and the preflight both run it |
 | `VERMILIAN_LIVE_PROJECT` | yes | Harness project short name, with time tracking **enabled** |
 | `VERMILIAN_LIVE_REJECT_PROJECT` | yes | Second harness project, with time tracking **disabled** (B9 rejection) |
 | `VERMILIAN_LIVE_EXECUTABLE` | no | Build under test. Default: this checkout's `out/` |
@@ -101,47 +104,42 @@ project.
 | `VERMILIAN_LIVE_FORBIDDEN_LOGINS` | no | Logins the app identity must not be. Default `admin,Claude_Code` |
 | `VERMILIAN_LIVE_OPEN_STATE`, `VERMILIAN_LIVE_DONE_STATE` | no | Status names. Default `To do` / `Done` |
 
-## Server setup still required
+## Server setup
 
-This setup exists so the live scenarios can run without touching Kevin's workspace, the TEST
-fixtures or real VERM issues. Until it is in place, every live scenario reports **Blocked** with
-the failing preflight check.
+The live scenarios need this setup, so that they never touch Kevin's workspace, the TEST fixtures
+or real VERM issues. Without it, every live scenario reports **Blocked** with the failing preflight
+check.
 
-1. **A dedicated YouTrack account** for the application identity, for example
-   `vermilian-harness`. It needs:
-   - read and update access on the two harness projects, plus `CREATE_WORK_ITEM` on the first;
-   - **no** read access to VERM's articles, so it cannot see `_vermilian-config`;
-   - **no** `CREATE_ARTICLE` in VERM.
-2. **A route for that account's token to the application.** Vermilian takes a token only as a
-   raw value from a command, a file or its keyring. The `youtrack-claude-code` parzival profile
-   deliberately issues the `Claude_Code` token only as a curl config, so it cannot serve here,
-   and extracting it would bypass that policy. This needs its own parzival rule, and that rule is
-   Kevin's decision.
-3. **Two harness projects.** Neither may be in any workspace, and each needs `Focus`, `Focus rank`,
-   `Why now` and a `Status` with `To do` and `Done`.
-   - The first has time tracking enabled.
-   - The second has time tracking disabled.
+1. **A dedicated YouTrack account** for the application identity (`vermilian-harness`). It can:
+   - read and update issues in the two harness projects, and add work items in the first;
+   - **not** read VERM's articles, so it cannot see `_vermilian-config`;
+   - **not** create articles in VERM.
+2. **A route for that account's token to the application.** Vermilian takes a token only as a raw
+   value from a command, a file or its keyring. A broker profile renders it into a temporary file
+   named by `VERMILIAN_LIVE_APP_TOKEN_FILE`, and the run happens inside that broker command. The
+   verifier's own credential is never used for this.
+3. **Two harness projects**, in no workspace, each with `Focus`, `Focus rank`, `Why now` and a
+   `Status` with `To do` and `Done`:
+   - `VLH`, with time tracking enabled;
+   - `VLHX`, with time tracking disabled.
 4. **Verifier permissions** for `Claude_Code` on both projects: read, create and update issues,
    and read work items.
 
-## Specification gaps
+B9's success case writes a real one-minute work item to a disposable `[VLH]` fixture as the
+harness account. Kevin approved that on 2026-11-08.
 
-These are decisions, not test failures. The harness does not encode the current behavior as the
-expected result.
+## Decisions (2026-11-08, VERM-10)
 
-- **B7: what the Choose next count means.** The badge counts *displayed* candidates. It is capped
-  at seven, by design (`PriorityDesk.tsx`, VERM-6 review, 2026-09-16). When more than seven issues
-  are eligible, as in TEST with 38 open issues, dismissing one lets the eighth fill the gap. The
-  count then stays at 7, while the checklist's B7 expects "the count drops".
-  **Recommendation:** keep the displayed count and correct B7 to expect that the dismissed card
-  leaves and the next eligible issue takes its place. The count drops only when seven or fewer are
-  eligible.
-- **K6/E8: what completion does to a rank.** No requirement says whether completing a ranked issue
-  clears its stored `Focus` and `Focus rank`, or only removes it from the active slots.
-  **Recommendation:** exclude resolved issues from Now/Next/Then, Daily Review and rank-conflict
-  checks, but do not clear the stored values automatically. That keeps the rule "Vermilian never
-  writes Focus without the user's action", and a reopened issue keeps its context. The harness
-  asserts only the exclusion, which is the part the checklist already states.
+These are now in `docs/requirements.md` and the checklist, and the harness asserts them.
+
+- **B7: the Choose next count** is the number of cards displayed, capped at seven. Dismissing a
+  card removes it at once, and another eligible issue may fill its place, so the count falls only
+  when fewer than seven eligible candidates remain. `e2e/priority-desk-choose-next.spec.ts` covers
+  both cases.
+- **K6/E8: completion and focus.** A Done issue leaves Now/Next/Then, *Blocked focused work* and
+  *Needs attention*, and stays eligible for *Recently completed*. Its stored `Focus` and
+  `Focus rank` are not cleared, but it reserves no rank. If it is reopened into a collision, the
+  repair state lets the user choose; nothing picks a winner. E8, E9 and E10 cover this live.
 
 ## Coverage gaps (beyond this pilot)
 
@@ -158,5 +156,8 @@ Recorded together rather than as separate tickets.
   checkout. The live harness can run against either build through `VERMILIAN_LIVE_EXECUTABLE`.
 - **Drag-and-drop row reordering** is still `test.fixme` in `e2e/dnd.spec.ts`. That is
   unrelated to the Priority Desk.
+- **E8 to E10 are live-only.** The deterministic fake YouTrack drops resolved issues from
+  `getIssues`, but the real client returns them (finding K6). A fake-suite test would pass for
+  the wrong reason, so none was added.
 - **No refresh control (K4).** A7's external-change detection relies on a full restart, as the
   checklist does.

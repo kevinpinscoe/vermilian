@@ -75,7 +75,7 @@ export default class LiveAcceptanceReporter implements Reporter {
     fs.writeFileSync(path.join(this.dir, 'manifest.json'), JSON.stringify({
       note: 'Supporting evidence only. VERM-10 comments are the authoritative acceptance record.',
       identity: this.identity,
-      settings: { ...s, appTokenCommand: s.appTokenCommand ? '[set — not recorded]' : '' },
+      settings: { ...s, appTokenCommand: s.appTokenCommand ? '[set — not recorded]' : '', appTokenFile: s.appTokenFile ? '[set — not recorded]' : '' },
     }, null, 2));
   }
 

@@ -79,6 +79,18 @@ links; the desk is a curated view onto it, never a second store. See
   It surfaces a repair state naming every issue holding the disputed rank and requires the
   user to choose which one keeps the slot; the others are cleared to unranked (`Focus`
   stays `Yes`, `Why now` is preserved) rather than silently reassigned to a different rank.
+- **Completed issues and focus** (decided 2026-11-08, VERM-10): an issue whose `Status` is
+  `Done` is no longer active focus work.
+  - It leaves Now/Next/Then, Daily Review's *Blocked focused work*, and *Needs attention*.
+  - It stays eligible for Daily Review's *Recently completed*, within that section's time
+    window.
+  - Vermilian does not clear its stored `Focus` or `Focus rank`. Completion is not a focus
+    edit, and a reopened issue keeps its context.
+  - It does not reserve its rank. Giving its former rank to an active issue raises no
+    occupied-rank question and no repair state.
+  - If it is reopened and its retained rank collides with an active issue's, the
+    focus-rank invariant's repair state applies. The user chooses which issue keeps the
+    rank. Vermilian never picks a winner or displaces either issue on its own.
 - **Now mode**: at most three ranked cards (Now / Next / Then) showing issue ID, summary,
   project, parent epic, priority, a blocker/dependency warning, and the `Why now` note.
   Empty slots are intentional and never forced to fill. "Now" has a `Start focus` action
@@ -91,7 +103,10 @@ links; the desk is a curated view onto it, never a second store. See
   week" dismissal removes a candidate from the decision surface until the dismissal
   expires (see "'Not this week' expiration" below), without changing its YouTrack
   `Priority`. Filters are limited to workspace, status, and active epic — full search
-  stays on the existing All-tasks table.
+  stays on the existing All-tasks table. The mode's count is the number of cards
+  displayed, capped at seven, not the number of eligible issues. Dismissing a card
+  removes it at once. The next eligible issue may fill its place, so the count falls
+  only when fewer than seven eligible candidates remain (decided 2026-11-08, VERM-10).
 - **Choose-next eligibility**: an issue is an eligible candidate only if all of the
   following hold:
   - it belongs to a project assigned to a folder in the **active workspace**;

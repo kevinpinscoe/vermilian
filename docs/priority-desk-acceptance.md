@@ -275,8 +275,10 @@ Start state: `ACC-1` rank 1, `ACC-2` rank 2, `ACC-3` rank 3, `ACC-4` starred wit
 - **Testing:** dismissal.
 - **Go to:** **Choose next** → the `ACC-5` card.
 - **Do:** click **Not this week**. Then restart Vermilian and return to **Choose next**.
-- **Expect:** the card leaves at once and the count drops. It is still gone after the restart. Its
-  Priority is unchanged in the web UI.
+- **Expect:** the card leaves at once. Another eligible issue may take its place, so the count
+  falls only if fewer than seven eligible candidates remain. The count is the cards on screen,
+  capped at seven (decided 2026-11-08). `ACC-5` is still gone after the restart. Its Priority is
+  unchanged in the web UI.
 - **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
 - **Notes:** There is no undo or list of dismissed issues (finding K5). Leave `ACC-5` open for B8.
 
@@ -537,8 +539,31 @@ until all three slots are empty. On **Choose next**, click the **VERM-3** pill.
 - **Testing:** what happens to a ranked issue once it is Done.
 - **Go to:** open `ACC-1`'s details.
 - **Do:** set **Status** to `Done`. Restart Vermilian, then open **Priority Desk** and **Daily Review**.
-- **Expect:** `ACC-1` no longer holds the Now slot in either place.
-- **Heads-up:** finding K6 says it probably still does, so a **Fail** is likely. Please confirm it.
+- **Expect:** `ACC-1` is gone from Now/Next/Then, *Blocked focused work* and *Needs attention*. It
+  may appear under *Recently completed*. In the web UI its `Focus` and `Focus rank` are unchanged:
+  Vermilian does not clear them (decided 2026-11-08).
+- **Heads-up:** finding K6 says it probably still holds the Now slot, so a **Fail** is likely.
+  Please confirm it.
+- **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
+- **Notes:** Leave `ACC-1` Done for E9 and E10.
+
+### E9. A finished issue's rank is free
+
+- **Testing:** a Done issue does not reserve its rank.
+- **Go to:** **Priority Desk** → **Choose next**, after E8.
+- **Do:** give `ACC-2` rank **1**, the rank `ACC-1` kept when it was finished.
+- **Expect:** `ACC-2` takes the Now slot at once. No "Focus rank 1 is already taken" question and no
+  repair banner appear.
+- **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
+- **Notes:**
+
+### E10. Reopening a ranked issue that collides
+
+- **Testing:** a reopened issue's retained rank collides with an active one.
+- **Go to:** `ACC-1` in the web UI, after E9.
+- **Do:** set its Status back to `To do`. Restart Vermilian and open **Priority Desk**.
+- **Expect:** the repair banner names `ACC-1` and `ACC-2` at rank 1, and neither has been moved or
+  cleared. Choose which keeps rank 1; the other stays focused, unranked.
 - **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
 - **Notes:**
 
@@ -616,7 +641,9 @@ and observed result.
 - **Behavior:** the desk and Daily Review describe their data as unresolved issues, but no requirement
   states what happens to a ranked issue when it closes.
 - **Steps:** rank an issue, set it to `Done`, and restart.
-- **Expected:** it leaves Now/Next/Then and Needs attention, and frees its rank.
+- **Expected (decided 2026-11-08):** it leaves Now/Next/Then, *Blocked focused work* and *Needs
+  attention*, and stays eligible for *Recently completed*. Its stored `Focus` and `Focus rank` are
+  not cleared, but it reserves no rank. A collision after reopening is shown for repair (E9, E10).
 - **Observed in the code:** `getIssues` ignores its `includeResolved` argument and returns resolved
   issues (the live `VERM` response includes the Done tickets). `useWorkspaceFocusRankHolders` and
   `deriveNeedsAttention` do not filter them out. The automated suite has no test for it. Choose next

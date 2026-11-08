@@ -74,7 +74,7 @@ export const test = base.extend<{ live: Live }, WorkerFixtures>({
 
     const profileDir = tempProfileDir();
     seedProfile(profileDir, {
-      server: { url: settings.appUrl, login: settings.appLogin, tokenCommand: settings.appTokenCommand },
+      server: { url: settings.appUrl, login: settings.appLogin, tokenCommand: settings.appTokenCommand, tokenFile: settings.appTokenFile },
       projectIds: [project.id, rejectProject.id],
     });
     const app = new LiveApp(settings, testInfo, profileDir);

@@ -196,9 +196,23 @@ test.describe('Priority Desk — Choose next', () => {
 
     await page.locator('[data-testid="priority-desk-candidate-dismiss-0-e1-1"]').click();
     await expect(page.locator('[data-testid="priority-desk-candidate-0-e1-1"]')).toHaveCount(0, { timeout: 10_000 });
-    // 9 eligible - 1 dismissed = 8, still capped at 7 — the count does not drop
-    // below the cap until fewer than 7 remain eligible.
+    // B7 (decided 2026-11-08): the count is the cards displayed, capped at 7.
+    // 8 eligible - 1 dismissed = 7, so the eighth candidate (TST2-1) fills the
+    // gap and the count stays at 7.
+    await expect(page.locator('[data-testid="priority-desk-candidate-0-e2-1"]')).toBeVisible();
+    await expect(page.locator('[data-testid="priority-desk-candidate-id"]')).toHaveCount(7);
     await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(7)');
+  });
+
+  test('B7: below the cap, "Not this week" lowers the count by one', async () => {
+    await openChooseNext(page);
+    await page.locator('[data-testid="priority-desk-status-pill"][data-value="In Progress"]').click();
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(3)');
+    const first = (await page.locator('[data-testid="priority-desk-candidate-id"]').first().textContent())?.trim();
+    await page.locator('[data-testid^="priority-desk-candidate-dismiss-"]').first().click();
+    await expect(page.locator('[data-testid="priority-desk-candidate-id"]')).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.locator('[data-testid="priority-desk-candidate-id"]', { hasText: new RegExp(`^${first}$`) })).toHaveCount(0);
+    await expect(page.locator('[data-testid="priority-desk-mode-choose-next"]')).toContainText('(2)');
   });
 
   test('"Not this week" survives a renderer reload (UI-state check only — see the Article test below for real persistence)', async () => {
