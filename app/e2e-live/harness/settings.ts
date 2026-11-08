@@ -37,6 +37,12 @@ export interface LiveSettings {
   verifierProfile: string;
   /** Logins the application identity must never be (Kevin's own, the verifier's). */
   forbiddenLogins: string[];
+  /**
+   * Accept the inherited "Registered Users: Observer in GLBL" role as read-only Hub
+   * permissions held globally (see isolation.ts). Off by default: strict isolation.
+   * Set VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER=1 only with Kevin's approval.
+   */
+  acceptGlblObserver: boolean;
   /** Status names used for fixture reset and for E8. */
   openState: string;
   doneState: string;
@@ -94,6 +100,7 @@ export function loadSettings(): LiveSettings {
     verifierAs: env('VERMILIAN_LIVE_VERIFIER_AS', 'ai'),
     verifierProfile: env('VERMILIAN_LIVE_VERIFIER_PROFILE', 'youtrack-claude-code'),
     forbiddenLogins: verifierLogins,
+    acceptGlblObserver: env('VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER') === '1',
     openState: env('VERMILIAN_LIVE_OPEN_STATE', 'To do'),
     doneState: env('VERMILIAN_LIVE_DONE_STATE', 'Done'),
     executable: env('VERMILIAN_LIVE_EXECUTABLE') || defaultExecutable(),

@@ -103,6 +103,7 @@ project.
 | `VERMILIAN_LIVE_VERIFIER_AS`, `VERMILIAN_LIVE_VERIFIER_PROFILE` | no | parzival identity and profile. Default `ai` / `youtrack-claude-code` |
 | `VERMILIAN_LIVE_FORBIDDEN_LOGINS` | no | Logins the app identity must not be. Default `admin,Claude_Code` |
 | `VERMILIAN_LIVE_OPEN_STATE`, `VERMILIAN_LIVE_DONE_STATE` | no | Status names. Default `To do` / `Done` |
+| `VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER` | no | `1` accepts the inherited GLBL Observer role (see *Isolation rule*). Only with Kevin's approval. Default: strict isolation |
 
 ## Server setup
 
@@ -114,6 +115,10 @@ check.
    - read and update issues in the two harness projects, and add work items in the first;
    - **not** read VERM's articles, so it cannot see `_vermilian-config`;
    - **not** create articles in VERM.
+
+   The preflight enforces this as an allowlist over the account's own permission cache (see
+   *Isolation rule*), and also checks that the account can read no VERM issue and no article
+   outside the harness projects.
 2. **A route for that account's token to the application.** Vermilian takes a token only as a raw
    value from a command, a file or its keyring. A broker profile renders it into a temporary file
    named by `VERMILIAN_LIVE_APP_TOKEN_FILE`, and the run happens inside that broker command. The
@@ -141,6 +146,32 @@ The broker rule for the harness token lets only the AI session use it, through `
 
 B9's success case writes a real one-minute work item to a disposable `[VLH]` fixture as the
 harness account. Kevin approved that on 2026-11-08.
+
+## Isolation rule
+
+**Strict, the original design and the default.** The application identity holds permissions
+only in the two harness projects, and nothing global.
+
+**GLBL exception: opt-in, and proposed to Kevin, not yet approved.** Every new Hub account joins
+*Registered Users*, which holds *Observer* in Hub's Global project (GLBL). A role in GLBL applies
+in every project. With `VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER=1`, the preflight accepts exactly
+these four read-only Hub permissions, held globally:
+
+- `project-read-basic`
+- `project-read`
+- `user-read-basic`
+- `user-read`
+
+Anything else still blocks the run:
+
+- any YouTrack permission (issues, comments, articles, attachments, work items) held globally or
+  outside the harness projects;
+- any global write, including `profile-updateSelf`;
+- any readable VERM issue;
+- any visible article outside the harness projects.
+
+What the exception does expose, the settings and metadata of the other projects, is recorded in
+the preflight result on every run. `harness/isolation.ts` holds the rule.
 
 ## Decisions (2026-11-08, VERM-10)
 

@@ -17,6 +17,7 @@ import { appIdentityClient, Client, HarnessError, verifierClient } from './clien
 import { buildIdentity, BuildIdentity } from './identity';
 import { auditProject, findProject, Project, timeTrackingEnabled } from './server';
 import { LiveSettings, missingSettings } from './settings';
+import { evaluateIsolation, PermEntry } from './isolation';
 
 export interface Check {
   name: string;
@@ -38,8 +39,6 @@ export interface Preflight {
 const CONFIG_ARTICLE = '_vermilian-config';
 const ARTICLE_PROJECT = 'VERM';
 
-interface PermEntry { permission: { key: string }; global: boolean; projects: Array<{ shortName: string }> | null }
-
 async function permissions(client: Client): Promise<PermEntry[]> {
   const res = await client.request<PermEntry[]>('GET', '/api/permissions/cache?fields=permission(key),global,projects(shortName)');
   if (res.status !== 200) throw new HarnessError(`${client.label} cannot read its own permissions (HTTP ${res.status})`);
@@ -48,6 +47,18 @@ async function permissions(client: Client): Promise<PermEntry[]> {
 
 function has(perms: PermEntry[], key: string, project: string): boolean {
   return perms.some((p) => p.permission.key === `JetBrains.YouTrack.${key}` && (p.global || (p.projects ?? []).some((x) => x.shortName === project)));
+}
+
+/** Articles the client can see outside the given projects, by project short name. */
+async function articlesOutside(client: Client, projects: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (let skip = 0; skip < 10_000; skip += 100) {
+    const res = await client.request<Array<{ idReadable: string; project: { shortName: string } | null }>>('GET', `/api/articles?fields=idReadable,project(shortName)&$top=100&$skip=${skip}`);
+    if (res.status !== 200) throw new HarnessError(`${client.label} article listing returned HTTP ${res.status}`);
+    for (const a of res.body) if (!projects.includes(a.project?.shortName ?? '')) out.push(a.idReadable);
+    if (res.body.length < 100) return out;
+  }
+  throw new HarnessError('article listing did not end within 10,000 articles');
 }
 
 async function visibleConfigArticles(client: Client): Promise<number> {
@@ -131,6 +142,33 @@ export async function runPreflight(s: LiveSettings): Promise<Preflight> {
     const canCreate = has(appPerms, 'CREATE_ARTICLE', ARTICLE_PROJECT);
     if (!add('app identity cannot create the config article', !canCreate,
       canCreate ? `holds CREATE_ARTICLE in ${ARTICLE_PROJECT}; on finding no config it would create a second ${CONFIG_ARTICLE}` : `no CREATE_ARTICLE in ${ARTICLE_PROJECT}`)) return finish();
+
+    // 3b. Effective permissions: an allowlist, not a spot check. Strict by
+    // default; the GLBL Observer exception only when Kevin has approved it.
+    const harnessProjects = [s.project, s.rejectProject];
+    const iso = evaluateIsolation(appPerms, harnessProjects, s.acceptGlblObserver);
+    if (!add('app identity permissions stay inside the harness projects', iso.ok,
+      iso.ok
+        ? (iso.acceptedGlobal.length
+          ? `ACCEPTED GLBL EXCEPTION (Registered Users: Observer in GLBL): global read-only ${iso.acceptedGlobal.join(', ')}; every YouTrack permission is in ${harnessProjects.join('/')} only`
+          : `strict isolation: no global permission; every permission is in ${harnessProjects.join('/')} only`)
+        : iso.violations.join('; '))) return finish();
+    const vermIssues = await app.request<unknown[]>('GET', `/api/issues?query=${encodeURIComponent(`project: ${ARTICLE_PROJECT}`)}&fields=idReadable&$top=1`);
+    const vermCount = vermIssues.status === 200 && Array.isArray(vermIssues.body) ? vermIssues.body.length : 0;
+    if (!add(`app identity cannot read ${ARTICLE_PROJECT} issues`, vermCount === 0,
+      vermCount ? `${ARTICLE_PROJECT} issues are readable` : `HTTP ${vermIssues.status}, no ${ARTICLE_PROJECT} issue returned`)) return finish();
+    const foreignArticles = await articlesOutside(app, harnessProjects);
+    if (!add('app identity sees no article outside the harness projects', foreignArticles.length === 0,
+      foreignArticles.length ? `visible: ${foreignArticles.slice(0, 10).join(', ')}` : 'none (so neither _vermilian-config nor _vermilian-master-plan)')) return finish();
+    // Recorded, not judged: project metadata that Read Project (global) exposes.
+    const meta = await app.request<Array<{ shortName: string }>>('GET', '/api/admin/projects?fields=shortName&$top=500');
+    const metaOthers = meta.status === 200 ? meta.body.map((x) => x.shortName).filter((sn) => !harnessProjects.includes(sn)) : [];
+    const metaOk = s.acceptGlblObserver || metaOthers.length === 0;
+    if (!add('project settings visible to the app identity', metaOk,
+      meta.status !== 200 ? `HTTP ${meta.status}: project settings not readable`
+        : metaOthers.length
+          ? `${metaOthers.length} other project(s) readable as settings/metadata only (names, descriptions, fields, teams)${s.acceptGlblObserver ? ', through the accepted GLBL Observer' : ': strict isolation forbids this'}`
+          : 'only the harness projects')) return finish();
 
     // 4. Projects: same server for both clients, outside Kevin's workspaces, right time-tracking state.
     const kevins = await projectsInKevinsWorkspaces(verifier);
