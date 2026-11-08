@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../../shared/fields';
 import {
@@ -12,6 +13,7 @@ import {
   withInvalidate,
   isCompletedIssue,
   groupFocusRankHolders,
+  invalidateFocusQueries,
   type FocusRank,
   type FocusRankHolder,
   type PatchFn,
@@ -353,5 +355,40 @@ describe('groupFocusRankHolders', () => {
     expect(byRank.get(1)?.map((h) => [h.issue.id, h.projectShortName])).toEqual([['a', 'VLH']]);
     expect(byRank.get(2)?.map((h) => [h.issue.id, h.projectShortName])).toEqual([['b', 'VLHX']]);
     expect(byRank.get(3)).toBeUndefined();
+  });
+});
+
+// ─── K7: the detail panel's star refreshes after a focus change (A3) ───────
+//
+// TaskDetailPanel renders FocusControl from ['youtrack','issue',id]. Focus and
+// rank writes used to invalidate only the board lists, so the panel kept the
+// old star while the board and Kanban updated (Kevin's A3, 2026-11-08).
+
+describe('invalidateFocusQueries', () => {
+  function seeded() {
+    const qc = new QueryClient();
+    for (const key of [
+      ['youtrack', 'issues', 'TEST'], ['youtrack', 'issues', 'TEST', 'all'],
+      ['youtrack', 'issue', 'a'], ['youtrack', 'issue', 'b'], ['youtrack', 'issue', 'other'],
+      ['youtrack', 'issues', 'VERM'],
+    ]) qc.setQueryData(key, []);
+    return qc;
+  }
+  const invalidated = (qc: QueryClient, key: unknown[]) => qc.getQueryState(key)?.isInvalidated;
+
+  it('invalidates the edited issue\'s detail query as well as its project lists', () => {
+    const qc = seeded();
+    invalidateFocusQueries(qc, ['TEST'], ['a']);
+    expect(invalidated(qc, ['youtrack', 'issue', 'a'])).toBe(true);
+    expect(invalidated(qc, ['youtrack', 'issues', 'TEST'])).toBe(true);
+    expect(invalidated(qc, ['youtrack', 'issues', 'TEST', 'all'])).toBe(true);
+  });
+
+  it('invalidates a displaced holder\'s detail too, and nothing unrelated', () => {
+    const qc = seeded();
+    invalidateFocusQueries(qc, ['TEST'], ['a', 'b']);
+    expect(invalidated(qc, ['youtrack', 'issue', 'b'])).toBe(true);
+    expect(invalidated(qc, ['youtrack', 'issue', 'other'])).toBe(false);
+    expect(invalidated(qc, ['youtrack', 'issues', 'VERM'])).toBe(false);
   });
 });

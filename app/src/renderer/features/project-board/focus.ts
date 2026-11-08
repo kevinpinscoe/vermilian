@@ -245,9 +245,22 @@ export async function withInvalidate(fn: () => Promise<void>, invalidate: () => 
 
 // ─── Mutations ──────────────────────────────────────────────────────────────
 
-function invalidateIssueQueries(qc: QueryClient, shortNames: Iterable<string>) {
+/**
+ * Refetch everything that shows a focus or rank after a write: each project's
+ * issue lists (the board, Kanban, desk and Daily Review share them; the prefix
+ * also covers the 'all' variant) and each touched issue's own detail query,
+ * which TaskDetailPanel renders its FocusControl from. Without the detail key
+ * the panel kept the old star while the board updated (K7, Kevin's A3,
+ * 2026-11-08).
+ */
+export function invalidateFocusQueries(
+  qc: QueryClient, shortNames: Iterable<string>, issueIds: Iterable<string>,
+) {
   for (const sn of new Set(shortNames)) {
     void qc.invalidateQueries({ queryKey: ['youtrack', 'issues', sn] });
+  }
+  for (const id of new Set(issueIds)) {
+    void qc.invalidateQueries({ queryKey: ['youtrack', 'issue', id] });
   }
 }
 
@@ -271,7 +284,7 @@ export function useFocusMutations() {
   async function toggleFocus(issueId: string, projectShortName: string, currentlyFocused: boolean) {
     await withInvalidate(
       () => runToggleFocus(patch, issueId, currentlyFocused),
-      () => invalidateIssueQueries(qc, [projectShortName]),
+      () => invalidateFocusQueries(qc, [projectShortName], [issueId]),
     );
   }
 
@@ -281,7 +294,7 @@ export function useFocusMutations() {
   async function clearRank(issueId: string, projectShortName: string) {
     await withInvalidate(
       () => runClearRank(patch, issueId),
-      () => invalidateIssueQueries(qc, [projectShortName]),
+      () => invalidateFocusQueries(qc, [projectShortName], [issueId]),
     );
   }
 
@@ -295,9 +308,10 @@ export function useFocusMutations() {
   ) {
     await withInvalidate(
       () => runSetRank(patch, target, rank, displace),
-      () => invalidateIssueQueries(
+      () => invalidateFocusQueries(
         qc,
         [target.projectShortName, displace?.projectShortName].filter(Boolean) as string[],
+        [target.issueId, displace?.issue.id].filter(Boolean) as string[],
       ),
     );
   }
