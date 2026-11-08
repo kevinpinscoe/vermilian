@@ -69,11 +69,13 @@ Examples of **B**:
 Examples of **C**:
 
 - Changing priorities or ranks on its own initiative.
-- Closing or resolving issues.
-- Deleting tickets.
+- Closing or resolving issues on its own initiative.
+- Deleting tickets on its own initiative.
 - Starting unrelated work.
 
 What matters is **whether Kevin authorized the action**, not whether it writes to a backend.
+Creating, editing, closing or deleting an issue is legitimate when Kevin explicitly authorizes
+it. Each one is class C only when an agent or the application decides on it by itself.
 
 ### 3. The Pomodoro timer stays as it is
 
@@ -91,15 +93,43 @@ authorized automation (B), not autonomous behavior.
 Vermilian should eventually offer the actions Kevin would otherwise take directly in YouTrack or
 Jira. A legitimate capability is not removed just because it modifies backend data.
 
-When Jira is added, its credentials will represent Kevin's own corporate identity, with API scopes
-he controls. No separate Jira test accounts or test projects will exist, so Jira testing must be
-designed around that constraint.
+#### Future Jira integration: constraints and testing approach
+
+Jira support is outside VERM-3 and the current release. These constraints are recorded for when
+it is planned, and they do not block VERM-10.
+
+- **Credentials.** Jira API credentials represent Kevin's existing corporate identity. Kevin
+  creates the API tokens and controls their scopes. The tokens are stored in OpenBao and reached
+  through Parzival.
+- **No test resources.** Separate Jira test accounts and new Jira test projects are prohibited.
+- **Authorization.** Vermilian should eventually provide the legitimate operations Kevin would
+  otherwise perform in Jira. Human authorization stays the controlling principle:
+  - routine operations within a workflow Kevin has already authorized are permitted automation
+    (class B);
+  - independent consequential decisions by AI agents are not authorized (class C).
+
+Testing differs from the isolated YouTrack harness, which uses dedicated disposable projects:
+
+1. Automated API-contract and functional tests against synthetic responses and simulated Jira
+   services.
+2. Live verification through Kevin's corporate account and brokered credentials, reading only.
+3. Narrowly scoped write tests, only on existing issues, and only when Kevin explicitly approves
+   suitable targets and operations.
+4. Verification of the resulting state and of any relevant side effects.
+5. No speculative or unauthorized change to corporate Jira data.
+
+If safe live write verification is not available, the test reports that limitation. It does not
+create test resources or modify unrelated tickets to work around it.
 
 ### 5. Security controls live outside the consoles
 
 - **OpenBao** is the credential store.
 - **Parzival** brokers access to credentials.
-- External brokers enforce operational security policy where it applies.
+- External, operation-level policy enforcement, where it applies, is a **future architectural
+  objective**. It does not describe the present broker: today Parzival controls which identity
+  can use which credential and in which mode (`exec`, `get`, `mount`), not which API operations
+  a credential's holder performs. Within those bounds, the provider's own permissions are the
+  limit.
 - Provider permissions (YouTrack, Jira) remain authoritative.
 - Human and AI execution contexts must remain distinguishable.
 - Audit records identify the operation that was requested and the authorization behind it.
