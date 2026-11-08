@@ -6,17 +6,22 @@
 // project-board/focus.ts uses for holdersOfRank/decideRankAssignment.
 import { useQueries } from '@tanstack/react-query';
 import type { BoardIssue } from '../../../shared/workspace';
-import { isFocusRank, useActiveWorkspaceProjectShortNames } from '../project-board/focus';
+import { isCompletedIssue, isFocusRank, useActiveWorkspaceProjectShortNames } from '../project-board/focus';
+
+// Completed issues are excluded from both sections (K6, see isCompletedIssue):
+// the live getIssues returns them even with includeResolved: false.
 
 /** Focus rank 1-3 AND Status is BLOCKED — a slot the desk shows, stalled. */
 export function deriveBlockedFocused(issues: BoardIssue[]): BoardIssue[] {
-  return issues.filter((i) => isFocusRank(i.fields.focusRank) && i.fields.status === 'BLOCKED');
+  return issues.filter((i) =>
+    !isCompletedIssue(i) && isFocusRank(i.fields.focusRank) && i.fields.status === 'BLOCKED');
 }
 
 /** Starred (Focus = Yes) but never assigned a Focus rank — a decision left
  * half-made (PLAN.md "Focus items needing attention"). */
 export function deriveNeedsAttention(issues: BoardIssue[]): BoardIssue[] {
-  return issues.filter((i) => i.fields.focus === 'Yes' && !isFocusRank(i.fields.focusRank));
+  return issues.filter((i) =>
+    !isCompletedIssue(i) && i.fields.focus === 'Yes' && !isFocusRank(i.fields.focusRank));
 }
 
 /**

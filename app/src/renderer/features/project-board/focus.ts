@@ -25,6 +25,39 @@ export interface FocusRankHolder {
 
 // ─── Pure decision logic ───────────────────────────────────────────────────
 
+/**
+ * A completed issue: resolved in YouTrack, or set to Done but not yet re-read
+ * (Done is a resolved state; the cached `resolved` lags a status edit until the
+ * next fetch). K6, docs/requirements.md, decided 2026-11-08: a completed issue
+ * leaves Now/Next/Then, Blocked focused work and Needs attention, and reserves
+ * no Focus rank. Its stored Focus and Focus rank are never cleared or
+ * rewritten; reopening it into a collision is shown for repair (no winner).
+ *
+ * Needed because the live getIssues returns resolved issues even with
+ * includeResolved: false (the fake honours the flag). The boards rely on that
+ * to show Done issues, so the filter lives here, in the focus consumers.
+ */
+export function isCompletedIssue(issue: BoardIssue): boolean {
+  return issue.resolved != null || issue.fields.status === 'Done';
+}
+
+/** Active (not completed) issues holding a Focus rank, grouped by rank. */
+export function groupFocusRankHolders(
+  perProject: ReadonlyArray<{ projectShortName: string; issues: readonly BoardIssue[] }>,
+): Map<FocusRank, FocusRankHolder[]> {
+  const byRank = new Map<FocusRank, FocusRankHolder[]>();
+  for (const { projectShortName, issues } of perProject) {
+    for (const issue of issues) {
+      const rank = issue.fields.focusRank;
+      if (!isFocusRank(rank) || isCompletedIssue(issue)) continue;
+      const list = byRank.get(rank) ?? [];
+      list.push({ issue, projectShortName });
+      byRank.set(rank, list);
+    }
+  }
+  return byRank;
+}
+
 /** Every OTHER issue currently holding `rank`, excluding `excludeIssueId`. */
 export function holdersOfRank(
   byRank: ReadonlyMap<FocusRank, readonly FocusRankHolder[]>,
@@ -98,8 +131,8 @@ export function useActiveWorkspaceProjectShortNames(): string[] {
 }
 
 /**
- * Every issue in the active workspace currently holding a Focus rank,
- * grouped by rank. Reuses the same ['youtrack','issues',shortName] query key
+ * Every active (not completed, see isCompletedIssue) issue in the active
+ * workspace currently holding a Focus rank, grouped by rank. Reuses the same ['youtrack','issues',shortName] query key
  * as the project board and "All tasks" workspace board, so this rides their
  * cache instead of firing extra requests when either is already mounted.
  */
@@ -116,18 +149,10 @@ export function useWorkspaceFocusRankHolders(): {
     })),
   });
 
-  const byRank = new Map<FocusRank, FocusRankHolder[]>();
-  results.forEach((r, i) => {
-    const projectShortName = projectShortNames[i];
-    for (const issue of (r.data as BoardIssue[] | undefined) ?? []) {
-      const rank = issue.fields.focusRank;
-      if (isFocusRank(rank)) {
-        const list = byRank.get(rank) ?? [];
-        list.push({ issue, projectShortName });
-        byRank.set(rank, list);
-      }
-    }
-  });
+  const byRank = groupFocusRankHolders(results.map((r, i) => ({
+    projectShortName: projectShortNames[i],
+    issues: (r.data as BoardIssue[] | undefined) ?? [],
+  })));
 
   return {
     byRank,

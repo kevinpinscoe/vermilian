@@ -10,6 +10,8 @@ import {
   runClearRank,
   runSetRank,
   withInvalidate,
+  isCompletedIssue,
+  groupFocusRankHolders,
   type FocusRank,
   type FocusRankHolder,
   type PatchFn,
@@ -287,5 +289,69 @@ describe('withInvalidate', () => {
     const invalidate = vi.fn();
     await withInvalidate(async () => {}, invalidate);
     expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── K6: completed issues hold no active rank (VERM-10 E8-E10) ─────────────
+//
+// The live getIssues returns resolved issues even with includeResolved:false
+// (the fake honours the flag, so the deterministic suite never saw them).
+// docs/requirements.md (K6, decided 2026-11-08): a Done issue leaves
+// Now/Next/Then and reserves no rank; its stored Focus and Focus rank are not
+// cleared; reopening it into a collision is shown for repair, no winner.
+
+describe('isCompletedIssue', () => {
+  it('treats a resolved issue as completed whatever its status', () => {
+    expect(isCompletedIssue({ ...issue('a', { status: 'Wont do' }), resolved: 1794171492074 })).toBe(true);
+  });
+  it('treats Status Done as completed even before YouTrack reports it resolved', () => {
+    expect(isCompletedIssue(issue('a', { status: 'Done' }))).toBe(true);
+  });
+  it('treats an unresolved, not-Done issue as active', () => {
+    expect(isCompletedIssue(issue('a', { status: 'To do' }))).toBe(false);
+    expect(isCompletedIssue(issue('a', { status: 'BLOCKED' }))).toBe(false);
+  });
+});
+
+describe('groupFocusRankHolders', () => {
+  const done = (id: string, rank: FocusRank) =>
+    ({ ...issue(id, { focus: 'Yes', focusRank: rank, status: 'Done' }), resolved: 1794171492074 });
+  const active = (id: string, rank: FocusRank) => issue(id, { focus: 'Yes', focusRank: rank, status: 'To do' });
+
+  it('E8: a Done issue keeps its stored rank but holds no slot', () => {
+    const doneIssue = done('vlh-7', 1);
+    const byRank = groupFocusRankHolders([{ projectShortName: 'VLH', issues: [doneIssue] }]);
+    expect(byRank.get(1)).toBeUndefined();
+    // Nothing is rewritten: the stored values are exactly what the server returned.
+    expect(doneIssue.fields.focus).toBe('Yes');
+    expect(doneIssue.fields.focusRank).toBe(1);
+  });
+
+  it('E9: giving a Done issue\'s retained rank to an active issue is a direct assignment', () => {
+    const byRank = groupFocusRankHolders([{ projectShortName: 'VLH', issues: [done('old', 1), active('new', 2)] }]);
+    expect(decideRankAssignment(byRank, 1, 'new')).toEqual({ kind: 'direct' });
+    expect(findDuplicateRanks(byRank)).toEqual([]);
+  });
+
+  it('E10: once reopened, the retained rank collides and is shown for repair with no winner', () => {
+    const reopened = issue('old', { focus: 'Yes', focusRank: 1, status: 'To do' });
+    const holderNow = active('new', 1);
+    const byRank = groupFocusRankHolders([{ projectShortName: 'VLH', issues: [holderNow, reopened] }]);
+    const dups = findDuplicateRanks(byRank);
+    expect(dups).toHaveLength(1);
+    expect(dups[0].rank).toBe(1);
+    expect(dups[0].holders.map((h) => h.issue.id).sort()).toEqual(['new', 'old']);
+    // A third claimant is refused; the repair banner is the only path.
+    expect(decideRankAssignment(byRank, 1, 'third').kind).toBe('blocked');
+  });
+
+  it('keeps active holders across projects, grouped by rank', () => {
+    const byRank = groupFocusRankHolders([
+      { projectShortName: 'VLH', issues: [active('a', 1), done('d', 2)] },
+      { projectShortName: 'VLHX', issues: [active('b', 2), issue('c', { focus: 'Yes' })] },
+    ]);
+    expect(byRank.get(1)?.map((h) => [h.issue.id, h.projectShortName])).toEqual([['a', 'VLH']]);
+    expect(byRank.get(2)?.map((h) => [h.issue.id, h.projectShortName])).toEqual([['b', 'VLHX']]);
+    expect(byRank.get(3)).toBeUndefined();
   });
 });

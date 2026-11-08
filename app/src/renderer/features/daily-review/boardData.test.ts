@@ -58,3 +58,17 @@ describe('deriveNeedsAttention', () => {
     expect(deriveNeedsAttention([unstarred])).toEqual([]);
   });
 });
+
+describe('K6: completed issues leave Daily Review\'s focus sections (VERM-10 E8)', () => {
+  const resolvedAt = 1794171492074;
+  it('excludes a resolved ranked BLOCKED issue from Blocked focused work', () => {
+    const doneBlocked = { ...issue('a', { focusRank: 1, focus: 'Yes', status: 'BLOCKED' }), resolved: resolvedAt };
+    expect(deriveBlockedFocused([doneBlocked])).toEqual([]);
+  });
+  it('excludes a Done, starred, unranked issue from Needs attention', () => {
+    const done = issue('a', { focus: 'Yes', focusRank: null, status: 'Done' });
+    const wontDo = { ...issue('b', { focus: 'Yes', focusRank: null, status: 'Wont do' }), resolved: resolvedAt };
+    const open = issue('c', { focus: 'Yes', focusRank: null, status: 'To do' });
+    expect(deriveNeedsAttention([done, wontDo, open])).toEqual([open]);
+  });
+});

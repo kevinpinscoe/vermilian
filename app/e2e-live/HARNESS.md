@@ -200,8 +200,10 @@ Recorded together rather than as separate tickets.
   checkout. The live harness can run against either build through `VERMILIAN_LIVE_EXECUTABLE`.
 - **Drag-and-drop row reordering** is still `test.fixme` in `e2e/dnd.spec.ts`. That is
   unrelated to the Priority Desk.
-- **E8 to E10 are live-only.** The deterministic fake YouTrack drops resolved issues from
-  `getIssues`, but the real client returns them (finding K6). A fake-suite test would pass for
-  the wrong reason, so none was added.
+- **E8 to E10 are live-only end to end.** The deterministic fake YouTrack drops resolved issues
+  from `getIssues`, but the real client returns them (finding K6). A fake-suite test would pass for
+  the wrong reason, so none was added. The K6 correction's logic is unit-tested instead
+  (`project-board/focus.test.ts` and `daily-review/boardData.test.ts`, named E8 to E10), and the
+  live cases remain the end-to-end check.
 - **No refresh control (K4).** A7's external-change detection relies on a full restart, as the
   checklist does.
