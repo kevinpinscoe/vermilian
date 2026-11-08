@@ -187,10 +187,10 @@ export async function runPreflight(s: LiveSettings): Promise<Preflight> {
       const appP = await permissions(app);
       const verP = await permissions(verifier);
       const need: Array<[Client, PermEntry[], string]> = [
-        [app, appP, 'READ_ISSUE'], [app, appP, 'UPDATE_ISSUE'],
+        [app, appP, 'READ_ISSUE'], [app, appP, 'CREATE_ISSUE'], [app, appP, 'UPDATE_ISSUE'],
         [verifier, verP, 'READ_ISSUE'], [verifier, verP, 'CREATE_ISSUE'], [verifier, verP, 'UPDATE_ISSUE'],
       ];
-      if (wantTracking) need.push([app, appP, 'CREATE_WORK_ITEM'], [verifier, verP, 'READ_WORK_ITEM']);
+      if (wantTracking) need.push([app, appP, 'READ_WORK_ITEM'], [app, appP, 'CREATE_WORK_ITEM'], [verifier, verP, 'READ_WORK_ITEM']);
       for (const [c, perms, key] of need) {
         if (!add(`${c.label} ${key} on ${sn}`, has(perms, key, sn), has(perms, key, sn) ? 'granted' : 'missing')) return finish();
       }
