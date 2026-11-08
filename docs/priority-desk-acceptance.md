@@ -10,28 +10,44 @@ stays blocked until acceptance is complete.
 
 ## Acceptance build
 
+Kevin designated this build on 2026-11-08. It is the previous build plus the K6 correction
+(finding K6 below). It is an acceptance candidate, not a release.
+
 | Item | Value |
 | --- | --- |
-| Source commit | `0348099ddf3b34c0b0c51f076210c6ada3190a18` (`main`, 2026-09-29) |
+| Source commit | `7cf54b1cfa550d3e96649f4efd1fbaf77176acb5` (branch `VERM-3`, PR #125, not merged) |
 | Application version | 1.2.9 (the version number was not bumped; this is not a release) |
-| Build location | `~/Projects/public/vermilian/app/out/Vermilian-linux-x64/Vermilian` |
-| Built | 2026-11-04 06:35 EST by `pnpm package` |
-| `app.asar` SHA-256 | `44d4ee7e866a6b2ea7c162001fb9966eb3255e94fce37ddc7d957a4355855055` |
-| Contains VERM-4 to VERM-9 | Yes. Built from a `main` that includes all of their merges |
+| Build location | `~/.local/share/vermilian-acceptance/7cf54b1-k6/Vermilian-linux-x64/Vermilian` |
+| Built | 2026-11-08 21:23 UTC by `pnpm test:live:package`, from a clean tree |
+| `app.asar` SHA-256 | `d3127c4447ba7c5e18d6bd1252df251df087a997301b9514bcba86a2861e8e0c` |
+| Contains VERM-4 to VERM-9 | Yes. `main` at `f147cf4` plus the harness and the K6 fix |
 
-Do not rebuild while testing. A rebuild replaces this binary, and the results would no longer
-describe the commit above.
+The copy lives outside every checkout, so packaging or removing a worktree does not replace it. Do
+not rebuild into that directory while testing.
 
 **To launch it**, from `~/Projects/public/vermilian`:
 
 ```bash
-bash private/launch-acceptance-build.sh
+bash private/launch-acceptance-build-7cf54b1.sh
 ```
 
-The script is gitignored and lives only on the FLDW, so a rebuild does not replace it. It compares
-`app.asar` with the hash above and refuses to launch on a mismatch. `--verify` runs the check without
-launching. If the test environment ever requires a rebuild, stop and record why, because results
-from before the rebuild would need re-baselining.
+The script is gitignored and lives only on the FLDW. It compares `app.asar` with the hash above and
+refuses to launch on a mismatch, or while another Vermilian is running. `--verify` runs the check
+without launching. If the test environment ever requires a rebuild, stop and record why, because
+results from before the rebuild would need re-baselining.
+
+### Previous acceptance build (historical)
+
+Superseded on 2026-11-08 because the live harness confirmed K6 on it (E8, E9 and E10 failed). It is
+kept unchanged for comparison, with its own launcher, `private/launch-acceptance-build.sh`.
+
+| Item | Value |
+| --- | --- |
+| Source commit | `0348099ddf3b34c0b0c51f076210c6ada3190a18` (`main`, 2026-09-29) |
+| Build location | `~/Projects/public/vermilian/app/out/Vermilian-linux-x64/Vermilian` |
+| Built | 2026-11-04 06:35 EST by `pnpm package` |
+| `app.asar` SHA-256 | `44d4ee7e866a6b2ea7c162001fb9966eb3255e94fce37ddc7d957a4355855055` |
+| Live harness | 6 of 9 passed. E8, E9, E10 failed (`~/evidence/VERM-10/20261108T205731Z/`) |
 
 ## How to record results
 
@@ -275,8 +291,10 @@ Start state: `ACC-1` rank 1, `ACC-2` rank 2, `ACC-3` rank 3, `ACC-4` starred wit
 - **Testing:** dismissal.
 - **Go to:** **Choose next** → the `ACC-5` card.
 - **Do:** click **Not this week**. Then restart Vermilian and return to **Choose next**.
-- **Expect:** the card leaves at once and the count drops. It is still gone after the restart. Its
-  Priority is unchanged in the web UI.
+- **Expect:** the card leaves at once. Another eligible issue may take its place, so the count
+  falls only if fewer than seven eligible candidates remain. The count is the cards on screen,
+  capped at seven (decided 2026-11-08). `ACC-5` is still gone after the restart. Its Priority is
+  unchanged in the web UI.
 - **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
 - **Notes:** There is no undo or list of dismissed issues (finding K5). Leave `ACC-5` open for B8.
 
@@ -537,8 +555,35 @@ until all three slots are empty. On **Choose next**, click the **VERM-3** pill.
 - **Testing:** what happens to a ranked issue once it is Done.
 - **Go to:** open `ACC-1`'s details.
 - **Do:** set **Status** to `Done`. Restart Vermilian, then open **Priority Desk** and **Daily Review**.
-- **Expect:** `ACC-1` no longer holds the Now slot in either place.
-- **Heads-up:** finding K6 says it probably still does, so a **Fail** is likely. Please confirm it.
+- **Expect:** `ACC-1` is gone from Now/Next/Then, *Blocked focused work* and *Needs attention*. It
+  may appear under *Recently completed*. In the web UI its `Focus` and `Focus rank` are unchanged:
+  Vermilian does not clear them (decided 2026-11-08).
+- **Live harness:** failed on the previous build (finding K6); passed on this build
+  (`~/evidence/VERM-10/20261108T212524Z/`). Your manual result is still needed.
+- **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
+- **Notes:** Leave `ACC-1` Done for E9 and E10.
+
+### E9. A finished issue's rank is free
+
+- **Testing:** a Done issue does not reserve its rank.
+- **Go to:** **Priority Desk** → **Choose next**, after E8.
+- **Do:** give `ACC-2` rank **1**, the rank `ACC-1` kept when it was finished.
+- **Expect:** `ACC-2` takes the Now slot at once. No "Focus rank 1 is already taken" question and no
+  repair banner appear.
+- **Live harness:** failed on the previous build; passed on this build. Your manual result is still
+  needed.
+- **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
+- **Notes:**
+
+### E10. Reopening a ranked issue that collides
+
+- **Testing:** a reopened issue's retained rank collides with an active one.
+- **Go to:** `ACC-1` in the web UI, after E9.
+- **Do:** set its Status back to `To do`. Restart Vermilian and open **Priority Desk**.
+- **Expect:** the repair banner names `ACC-1` and `ACC-2` at rank 1, and neither has been moved or
+  cleared. Choose which keeps rank 1; the other stays focused, unranked.
+- **Live harness:** failed on the previous build; passed on this build. Your manual result is still
+  needed.
 - **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
 - **Notes:**
 
@@ -611,16 +656,27 @@ and observed result.
   and `VERM` on 2026-11-04. If YouTrack refuses the write, `AppShell.tsx` keeps the timer and overlay
   running and shows a five-second error. This has not been run against the live instance.
 
-**K6. Done issues appear to keep their focus slot (candidate; confirm in E8).**
+**K6. Done issues kept their focus slot. Fixed in the acceptance build (`7cf54b1`).**
 
 - **Behavior:** the desk and Daily Review describe their data as unresolved issues, but no requirement
   states what happens to a ranked issue when it closes.
 - **Steps:** rank an issue, set it to `Done`, and restart.
-- **Expected:** it leaves Now/Next/Then and Needs attention, and frees its rank.
+- **Expected (decided 2026-11-08):** it leaves Now/Next/Then, *Blocked focused work* and *Needs
+  attention*, and stays eligible for *Recently completed*. Its stored `Focus` and `Focus rank` are
+  not cleared, but it reserves no rank. A collision after reopening is shown for repair (E9, E10).
 - **Observed in the code:** `getIssues` ignores its `includeResolved` argument and returns resolved
   issues (the live `VERM` response includes the Done tickets). `useWorkspaceFocusRankHolders` and
   `deriveNeedsAttention` do not filter them out. The automated suite has no test for it. Choose next
   excludes only `Done`, as the requirement words it, so `Wont do` issues remain eligible.
+- **Confirmed (2026-11-08):** the live harness failed E8, E9 and E10 on the previous build
+  (`~/evidence/VERM-10/20261108T205731Z/`). That evidence is kept.
+- **Fixed in `7cf54b1`:** in `project-board/focus.ts` and `daily-review/boardData.ts`, an issue that is
+  resolved or `Done` holds no slot, reserves no rank, and is left out of *Blocked focused work* and
+  *Needs attention*. Its stored `Focus` and `Focus rank` are not touched. A reopened issue counts
+  again, so a collision goes to the repair banner. `getIssues` and the boards are unchanged. Unit
+  tests named E8 to E10 cover it.
+- **Verified:** E8, E9 and E10 passed live on the acceptance build, and so did all nine live cases
+  (`~/evidence/VERM-10/20261108T212524Z/`).
 
 Add others here:
 
@@ -670,6 +726,24 @@ and they have nothing to do with the Priority Desk.
 **What these results do not show:** the e2e suite runs against an in-memory fake YouTrack and a fake
 Claude. Nothing in it exercises the live instance or a real Claude call. That is what this checklist
 is for.
+
+The table above is for the previous build. For the acceptance build (`7cf54b1`, 2026-11-08):
+`pnpm test` 345 passed, `pnpm typecheck` clean, `pnpm lint` 0 errors, `pnpm test:e2e` 160 passed and
+2 skipped (the same two), and CI passed on PR #125.
+
+### Live acceptance harness
+
+Supporting evidence only (`app/e2e-live/HARNESS.md`). VERM-10's comments remain the record, and the
+harness does not replace any human test here. It ran as the dedicated `vermilian-harness` account on
+the disposable `VLH` and `VLHX` projects, with the approved GLBL Observer exception.
+
+| Build | Result | Evidence |
+| --- | --- | --- |
+| Previous (`0348099`, `44d4ee7e…`) | 6 of 9 passed. E8, E9, E10 failed (K6) | `~/evidence/VERM-10/20261108T205731Z/` |
+| Acceptance (`7cf54b1`, `d3127c44…`) | E8, E9, E10 passed | `~/evidence/VERM-10/20261108T212501Z/` |
+| Acceptance (`7cf54b1`, `d3127c44…`) | All 9 passed: A5/A6, A7/A8, A11, B9 success, B9 rejection, E8, E9, E10, HARNESS | `~/evidence/VERM-10/20261108T212524Z/` |
+
+A1 to A4 are not automated and remain **pending** Kevin's manual run.
 
 ### Implementation against requirements
 

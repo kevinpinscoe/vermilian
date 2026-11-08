@@ -135,4 +135,22 @@ test.describe('Focus toggle and Focus-rank invariant', () => {
     await expect(page.locator('[data-testid="task-detail-panel"]')).toBeVisible();
     await expect(page.locator('[data-testid="task-detail-panel"] [data-testid="focus-star-0-e1-1"]')).toBeVisible();
   });
+
+  // K7 (Kevin's A3, 2026-11-08): the panel renders from its own issue-detail
+  // query, which focus writes did not refresh, so its star never changed.
+  test('the task detail panel star reflects each click (K7)', async () => {
+    await page.locator('[data-task-id="0-e1-1"] [data-testid="issue-id"]').click();
+    const panel = page.locator('[data-testid="task-detail-panel"]');
+    await expect(panel).toBeVisible();
+    const star = panel.locator('[data-testid="focus-star-0-e1-1"]');
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    await expect(panel.locator('[data-testid="focus-rank-badge-0-e1-1"]')).toHaveText('–');
+
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
+    await expect(panel.locator('[data-testid="focus-rank-badge-0-e1-1"]')).toHaveCount(0);
+  });
 });

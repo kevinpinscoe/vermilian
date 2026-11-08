@@ -18,7 +18,9 @@
     "test:e2e": "[ -d out ] || electron-forge package && playwright test",
     "test:e2e:fresh": "electron-forge package && playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:live": "playwright test -c playwright.live.config.ts",
+    "test:live:package": "bash e2e-live/package-dev-build.sh"
   },
   "keywords": [],
   "author": {

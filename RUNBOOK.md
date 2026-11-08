@@ -6,12 +6,13 @@ source_path: /home/kinscoe/Projects/public/vermilian/RUNBOOK.md
 ---
 
 > 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-projects-public-vermilian.md` (symlink → this file).
+
 # RUNBOOK.md — Vermilian
 
 ## Metadata
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | **Owner** | Kevin P. Inscoe |
 | **Last Updated** | 2026-06-24 |
 | **Last Tested** | 2026-05-22 |
@@ -46,7 +47,7 @@ Day-to-day development operations for Vermilian — starting, building, packagin
 ## Stack
 
 | Component | Details |
-|---|---|
+| --- | --- |
 | **App shell** | Electron 42 via electron-forge 7 |
 | **Renderer** | React 18 + TypeScript 5 + Vite 5 |
 | **Design system** | monday.com Vibe (`@vibe/core` 4, `@vibe/icons` 4) |
@@ -76,7 +77,8 @@ pnpm start
 ```
 
 **Expected output:**
-```
+
+```text
 ✔ Found pnpm@11.x
 ✔ Checking your system
 [@electron-forge/plugin-vite] target built src/preload.ts
@@ -133,6 +135,68 @@ pnpm test
 
 ---
 
+### Step 6 — Live acceptance harness
+
+A pilot that runs selected Priority Desk checklist cases against a real YouTrack server.
+`app/e2e-live/HARNESS.md` covers its design, settings, the server setup it still needs, and the
+open decisions. Its reports are supporting evidence only. VERM-10's comments are the acceptance
+record.
+
+**Never package in the checkout that holds the human-acceptance build.** Use a worktree.
+`test:live:package` refuses if `out/` holds the pinned build.
+
+```bash
+cd <worktree>/app
+pnpm test:live:package                       # dev build + out/live-build-info.json (source commit)
+pnpm test:e2e                                # deterministic suite (fake YouTrack)
+pnpm exec playwright test e2e/timer.spec.ts  # one deterministic spec
+```
+
+Run the live suite. Settings come from the environment; see `HARNESS.md` → *Settings*.
+
+```bash
+export VERMILIAN_LIVE_EVIDENCE_DIR=~/evidence/VERM-10
+pnpm test:live                                    # every live case, serially
+pnpm test:live -g "A5/A6"                         # one checklist case, by ID
+pnpm test:live -g "B9"                            # both B9 cases
+pnpm test:live -g HARNESS                         # self-test only; needs no server
+VERMILIAN_LIVE_EXECUTABLE=~/Projects/public/vermilian/app/out/Vermilian-linux-x64/Vermilian \
+  pnpm test:live                                  # against the pinned acceptance build
+```
+
+When the app's token comes from a broker that renders it into a temporary file for the life of
+one command, run the suite inside that command so the file exists throughout. The profile sets
+`VERMILIAN_LIVE_APP_TOKEN_FILE`:
+
+```bash
+parzival exec --as ai youtrack-vermilian-harness -- pnpm test:live
+```
+
+Do not pass `--reporter`. It replaces the configured reporters, so no `results.md`, manifest or
+HTML report is written.
+
+**Expected output:** the run ends by printing its evidence directory,
+`$VERMILIAN_LIVE_EVIDENCE_DIR/<UTC timestamp>/`. That directory holds:
+
+| File | Contents |
+| --- | --- |
+| `results.md` | One row per checklist ID (Pass, Fail, Blocked or Not run), with expected and observed behavior |
+| `manifest.json` | Build and environment identity |
+| `test-output/` | Traces, screenshots, app logs, and server values before and after |
+
+Without the server setup in `HARNESS.md` → *Server setup*, every checklist case reports
+**Blocked** with the failing preflight check, and the run exits non-zero. That is expected.
+
+To open the evidence:
+
+```bash
+less <run dir>/results.md
+pnpm exec playwright show-report <run dir>/html
+pnpm exec playwright show-trace <run dir>/test-output/<test>/trace-launch-1.zip
+```
+
+---
+
 ## Verification
 
 ```bash
@@ -163,7 +227,7 @@ Gatekeeper quarantine flag on install.
 ### Required repo secrets
 
 | Secret | Purpose |
-|---|---|
+| --- | --- |
 | `HOMEBREW_TAP_TOKEN` | Push the Cask commit to `homebrew-tap` |
 | `SCOOP_BUCKET_TOKEN` | Push the manifest commit to `scoop-bucket` |
 | `GITHUB_TOKEN` | Auto-injected; creates the release |
@@ -213,7 +277,7 @@ None yet. Future runbooks for the YouTrack Go CLI and packaging pipeline will be
 ## Troubleshooting
 
 | Symptom | Likely Cause | Resolution |
-|---|---|---|
+| --- | --- | --- |
 | `node-linker must be set to "hoisted"` on `pnpm start` | `nodeLinker: hoisted` missing from `pnpm-workspace.yaml`, or ran `pnpm install` before it was set | Verify `pnpm-workspace.yaml` has `nodeLinker: hoisted`, then `rm -rf node_modules && pnpm install` |
 | `[ERR_PNPM_EXOTIC_SUBDEP]` on `pnpm install` | `block-exotic-subdeps=false` missing from `app/.npmrc` | Verify `.npmrc` has the line; if lost, re-add and reinstall |
 | `pnpm create electron-app` fails with exotic subdep error | pnpm dlx reads global config, not project `.npmrc` | Use `npm create electron-app@latest` for the initial scaffold only; switch to pnpm afterwards |
@@ -251,7 +315,7 @@ tail -f /tmp/vermilian.log
 electron-forge 7 has three pnpm 11 requirements that are not obvious from the error messages alone. All three must be in place:
 
 | Setting | File | Value | Why |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `block-exotic-subdeps` | `app/.npmrc` | `false` | `@electron/rebuild` has a git-URL subdependency (`@electron/node-gyp`) that pnpm 11 blocks by default |
 | `nodeLinker` | `app/pnpm-workspace.yaml` | `hoisted` | electron-forge requires flat `node_modules`; pnpm 11's default isolated linker breaks module resolution at runtime |
 | `allowBuilds.esbuild` / `allowBuilds.electron-winstaller` | `app/pnpm-workspace.yaml` | `true` | pnpm 11 blocks install-time build scripts by default; both packages need them |
