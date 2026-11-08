@@ -122,8 +122,22 @@ check.
    `Status` with `To do` and `Done`:
    - `VLH`, with time tracking enabled;
    - `VLHX`, with time tracking disabled.
+
+   `Status` must use the same value set as TEST. A new YouTrack project attaches `Status`
+   automatically with the server's default value set, which has neither `To do` nor `Done`.
 4. **Verifier permissions** for `Claude_Code` on both projects: read, create and update issues,
    and read work items.
+
+Kevin provisions all of this with an administrator script kept in his private YouTrack
+administration repository, not here. The script:
+
+- refuses to write anything in dry-run mode;
+- stops if a new account would inherit any role from an auto-join group;
+- changes an existing VLH or VLHX project only when its name and description identify it;
+- never widens a team on a rerun.
+
+The broker rule for the harness token lets only the AI session use it, through `exec`. Neither
+`get` nor `mount` is allowed, and the token has no human or service identity.
 
 B9's success case writes a real one-minute work item to a disposable `[VLH]` fixture as the
 harness account. Kevin approved that on 2026-11-08.
