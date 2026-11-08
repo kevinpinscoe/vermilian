@@ -152,21 +152,20 @@ harness account. Kevin approved that on 2026-11-08.
 **Strict, the original design and the default.** The application identity holds permissions
 only in the two harness projects, and nothing global.
 
-**GLBL exception: opt-in, and proposed to Kevin, not yet approved.** Every new Hub account joins
+**GLBL exception: opt-in, approved by Kevin on 2026-11-08.** Every new Hub account joins
 *Registered Users*, which holds *Observer* in Hub's Global project (GLBL). A role in GLBL applies
-in every project. With `VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER=1`, the preflight accepts exactly
-these four read-only Hub permissions, held globally:
+in every project. Kevin's administrator dry run confirmed that Observer grants exactly three Hub
+permissions. With `VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER=1`, the preflight accepts exactly those,
+held globally:
 
-- `project-read-basic`
-- `project-read`
-- `user-read-basic`
-- `user-read`
+- `user-read-basic` and `user-read`: read other users' profiles;
+- `profile-updateSelf`: edit the account's own profile, and no other user, group or role.
 
 Anything else still blocks the run:
 
 - any YouTrack permission (issues, comments, articles, attachments, work items) held globally or
   outside the harness projects;
-- any global write, including `profile-updateSelf`;
+- any other global permission;
 - any readable VERM issue;
 - any visible article outside the harness projects.
 

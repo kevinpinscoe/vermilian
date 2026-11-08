@@ -150,7 +150,7 @@ export async function runPreflight(s: LiveSettings): Promise<Preflight> {
     if (!add('app identity permissions stay inside the harness projects', iso.ok,
       iso.ok
         ? (iso.acceptedGlobal.length
-          ? `ACCEPTED GLBL EXCEPTION (Registered Users: Observer in GLBL): global read-only ${iso.acceptedGlobal.join(', ')}; every YouTrack permission is in ${harnessProjects.join('/')} only`
+          ? `ACCEPTED GLBL EXCEPTION (Registered Users: Observer in GLBL): global ${iso.acceptedGlobal.join(', ')}; every YouTrack permission is in ${harnessProjects.join('/')} only`
           : `strict isolation: no global permission; every permission is in ${harnessProjects.join('/')} only`)
         : iso.violations.join('; '))) return finish();
     const vermIssues = await app.request<unknown[]>('GET', `/api/issues?query=${encodeURIComponent(`project: ${ARTICLE_PROJECT}`)}&fields=idReadable&$top=1`);

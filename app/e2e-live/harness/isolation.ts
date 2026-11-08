@@ -5,24 +5,25 @@
  * holds permissions only in the two harness projects, and nothing global.
  *
  * GLBL exception (opt-in, VERMILIAN_LIVE_ACCEPT_GLBL_OBSERVER=1, Kevin's
- * decision): every new Hub account inherits "Registered Users: Observer in
- * GLBL". A role in Hub's Global project applies in every project, so it is
- * accepted only as exactly the read-only Hub permissions below, held globally.
- * Any YouTrack permission (issues, comments, articles, attachments, work
- * items) held globally or outside the harness projects, and any write held
- * globally, still fails.
+ * decision, approved 2026-11-08): every new Hub account inherits "Registered
+ * Users: Observer in GLBL". A role in Hub's Global project applies in every
+ * project, so it is accepted only as exactly the Hub permissions below, held
+ * globally, which Kevin's admin dry run confirmed are all Observer grants:
+ * reading user profiles, and editing the account's own profile (no other
+ * user, group or role). Any YouTrack permission (issues, comments, articles,
+ * attachments, work items) held globally or outside the harness projects, and
+ * any other global permission, still fails.
  *
  * Pure: takes the permission cache, returns findings. No I/O.
  */
 
 export interface PermEntry { permission: { key: string }; global: boolean; projects: Array<{ shortName: string }> | null }
 
-/** Read-only Hub permissions the GLBL exception accepts, held globally. Nothing else. */
+/** Hub permissions the GLBL exception accepts, held globally. Nothing else. */
 export const GLBL_ACCEPTED_GLOBAL = [
-  'jetbrains.jetpass.project-read-basic',
-  'jetbrains.jetpass.project-read',
   'jetbrains.jetpass.user-read-basic',
   'jetbrains.jetpass.user-read',
+  'jetbrains.jetpass.profile-updateSelf',
 ] as const;
 
 export interface IsolationResult {
@@ -42,7 +43,7 @@ export function evaluateIsolation(perms: PermEntry[], harnessProjects: string[],
     const key = p.permission.key;
     if (p.global) {
       if (accepted.has(key)) acceptedGlobal.push(key);
-      else violations.push(`${key} held globally${acceptGlblObserver ? ' (not in the accepted GLBL read-only set)' : ' (strict isolation allows no global permission)'}`);
+      else violations.push(`${key} held globally${acceptGlblObserver ? ' (not in the accepted GLBL set)' : ' (strict isolation allows no global permission)'}`);
       continue;
     }
     const outside = (p.projects ?? []).map((x) => x.shortName).filter((sn) => !allowed.has(sn));
