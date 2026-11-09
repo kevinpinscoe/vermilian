@@ -7,8 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-11-08
+
 ### Added
 
+- **Priority Desk**, a new entry above *All tasks* in the left rail that answers one
+  question: what should I work on now? It reads across every project in the active
+  workspace. YouTrack stays the source of truth, and the desk stores nothing of its own.
+  - **Focus, Focus rank and Why now.** A star marks an issue as focused, and a rank of
+    1, 2 or 3 gives it a slot. The star is available on table rows, Kanban cards and the
+    task detail panel. *Why now* is a short reason shown on the card. Unstarring clears
+    the rank but keeps the reason.
+  - **No silent replacement.** At most one issue holds each rank in a workspace. Taking a
+    rank that is already held asks which issue keeps it. If two issues ever share a rank
+    (an edit in the web UI, another machine), a repair banner names both and lets you
+    choose. Vermilian never picks a winner on its own.
+  - **Now mode** shows up to three cards, Now, Next and Then, with the issue's project,
+    parent epic, priority, a blocker warning and the *Why now* note. *Start focus* on the
+    Now card starts the existing focus timer. Empty slots stay empty.
+  - **Choose next** shows up to seven candidates, earliest due date first, then by
+    priority, with filters for status and active epic. A card can be starred, opened or given a rank. *Not this week*
+    hides a candidate until the following Monday without changing its YouTrack priority.
+  - **Epic context.** Cards show their parent epic and that epic's outcome, read from a
+    `_vermilian-master-plan` Knowledge Base article. A banner explains when the outcome
+    cannot be found.
+  - **Ask for recommendation** (AI). Claude suggests a ranked order for a chosen outcome,
+    with its reasoning and dependency readiness. Nothing changes until you choose an
+    action, and that action posts an audit comment on the issues it touched.
+  - **Daily Review**, a read-only summary: the current focus slots, blocked focused
+    work, starred-but-unranked issues, recently completed work, and placeholders for
+    agent work.
 - **Three new fields: `Issue domain`, `Edit host`, and `Affected host`.** They
   were added to the YouTrack instance on 2026-08-01 and record whose work an
   issue is (`Personal` / `Employer work` / `Client work`), which machine it is
@@ -21,8 +49,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Affected host`'s 21 values mirror the k-fed service catalog's fleet-host
   list. Adding a host to the fleet means adding a value here too.
 
+### Changed
+
+- **Electron 43 to 44**, with routine dependency updates (React, TanStack Query, the
+  Anthropic SDK, Vibe, ESLint, Vitest, Playwright).
+
 ### Fixed
 
+- **A finished issue kept its Priority Desk slot and rank.** A ranked issue set to `Done`
+  stayed on the Now card after a restart, and its old rank raised an "already taken"
+  question for an active issue. YouTrack returns resolved issues to the desk's query. The
+  desk, *Blocked focused work* and *Needs attention* now skip completed issues. Their
+  stored Focus and Focus rank are left as they were, and a reopened issue that collides
+  with an active one goes to the repair banner.
+- **The task detail panel's star did not change when clicked**, although the board and
+  Kanban card did and the change was saved. The panel now refreshes after any star or
+  rank change.
 - **`Project health` could not be set at all.** The dropdown still offered
   `Yellow`, which was renamed to `Amber` in YouTrack on 2026-08-01 when the
   field adopted standard RAG nomenclature. Selecting it failed with *"An X-type
@@ -32,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and it was missing `Backlog` and `Scheduled` — both live, both previously
   unreachable from Vermilian. The list now matches the instance's `Statuses`
   bundle exactly, in the same order.
+
+### Security
+
+- Raised dependency floors past published advisories (`brace-expansion`, CVE-2026-69152;
+  `fast-uri` 3.1.5; `nanoid` 3.3.18), and cleared 16 of the 18 open Dependabot alerts.
 
 ## [1.2.9] - 2026-07-31
 
