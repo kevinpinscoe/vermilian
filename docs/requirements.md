@@ -4,6 +4,8 @@
 
 Vermilian is an Electron desktop client for a self-hosted JetBrains YouTrack instance. YouTrack is the backend and source of truth. Vermilian communicates with it exclusively through the YouTrack REST API.
 
+Product direction beyond this scope (Vermilian as a human-directed operational console, and what automation it may perform without asking) is recorded in [ADR-0010](adr/0010-human-directed-operational-console.md). It does not change the current scope.
+
 ## Functional requirements
 
 ### Task browsing and management
