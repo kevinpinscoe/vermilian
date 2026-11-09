@@ -18,6 +18,7 @@ const execAsync = promisify(exec);
 export const FILES = {
   youtrackToken: 'youtrack.token.bin',
   claudeKey: 'claude.key.bin',
+  jiraToken: 'jira.token.bin',
 } as const;
 
 const SECURE_LINUX_BACKENDS = new Set([

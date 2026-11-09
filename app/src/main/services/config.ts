@@ -43,6 +43,7 @@ export async function writeConfig(patch: Partial<AppConfig>): Promise<AppConfig>
   const sanitized = next as unknown as Record<string, unknown>;
   delete sanitized.youtrackToken;
   delete sanitized.claudeKey;
+  delete sanitized.jiraToken;
   delete sanitized.apiKey;
 
   const file = configPath();
