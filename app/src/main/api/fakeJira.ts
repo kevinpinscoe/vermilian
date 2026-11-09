@@ -5,8 +5,16 @@
 
 import type { JiraProfile } from '../../shared/jiraProfile';
 import type { JiraAccount, JiraProbeResult } from './jira';
+import type { JiraSearchIssue } from '../../shared/jiraIssue';
 
-export { JIRA_GATEWAY, siteApiBase, gatewayApiBase } from './jira';
+export {
+  JIRA_GATEWAY,
+  siteApiBase,
+  gatewayApiBase,
+  MY_OPEN_ISSUES_JQL,
+  SEARCH_PAGE_SIZE,
+  SEARCH_MAX_PAGES,
+} from './jira';
 export type { JiraError, JiraTokenKind, JiraAccount, JiraProbeResult } from './jira';
 
 export const FAKE_JIRA_CLOUD_ID = 'e2e00000-0000-4000-8000-000000000000';
@@ -39,4 +47,55 @@ export async function probeJiraToken(profile: JiraProfile, token: string): Promi
     };
   }
   return { ok: true, kind: 'classic', cloudId, account: { ...ACCOUNT } };
+}
+
+// Deterministic issues for the read-only list (VERM-21). One has no priority
+// field, as on a project whose scheme omits it.
+export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
+  {
+    id: '10001',
+    key: 'DEMO-101',
+    fields: {
+      summary: 'Rotate the staging database credentials',
+      status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } },
+      priority: { name: 'High' },
+      updated: '2026-11-09T14:00:00.000+0000',
+    },
+  },
+  {
+    id: '10002',
+    key: 'DEMO-102',
+    fields: {
+      summary: 'Document the on-call handover',
+      status: { name: 'To Do', statusCategory: { key: 'new' } },
+      priority: { name: 'Medium' },
+      updated: '2026-11-08T09:30:00.000+0000',
+    },
+  },
+  {
+    id: '10003',
+    key: 'OPS-7',
+    fields: {
+      summary: 'Review alert thresholds',
+      status: { name: 'Waiting', statusCategory: { key: 'indeterminate' } },
+      priority: null,
+      updated: '2026-11-07T16:45:00.000+0000',
+    },
+  },
+];
+
+export async function searchJql(
+  _base: string,
+  _email: string,
+  token: string,
+  _jql: string,
+  _fields: readonly string[],
+  _maxPages?: number,
+): Promise<JiraSearchIssue[]> {
+  if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
+  return FAKE_JIRA_ISSUES.map((i) => ({ ...i, fields: { ...i.fields } }));
+}
+
+export async function searchMyOpenIssues(_profile: JiraProfile, token: string): Promise<JiraSearchIssue[]> {
+  return searchJql('', '', token, '', []);
 }

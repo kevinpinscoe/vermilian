@@ -10,6 +10,7 @@ import {
   type SaveJiraProfileResult,
   type TestJiraArgs,
   type TestJiraResult,
+  type ListJiraIssuesResult,
   type GetWorklogTypesArgs,
   type GetIssuesArgs,
   type SearchIssuesArgs,
@@ -56,6 +57,7 @@ import { getMasterPlanState } from './services/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import { jira } from './api/jiraClient';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
+import { toJiraIssueRow } from '../shared/jiraIssue';
 import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
@@ -287,6 +289,26 @@ export function registerIpc(): void {
       return { ok: false, reason: r.reason, cloudId: r.cloudId, message, status: r.status };
     },
   );
+
+  ipcMain.handle(IPC.listMyJiraIssues, async (): Promise<ListJiraIssuesResult> => {
+    const NOT_CONFIGURED = 'Jira is not set up. Open Settings and fill in the Jira section.';
+    let token: string | null = null;
+    try {
+      const cfg = await readConfig();
+      const ytToken = await loadYtToken(cfg);
+      if (!cfg.youtrackUrl || !ytToken) return { ok: false, reason: 'not-configured', message: NOT_CONFIGURED };
+      const profile = await jiraProfile.getJiraProfile(cfg.youtrackUrl, ytToken);
+      token = await loadJiraToken(cfg);
+      if (!profile || !token) return { ok: false, reason: 'not-configured', message: NOT_CONFIGURED };
+      const issues = await jira.searchMyOpenIssues(profile, token);
+      return { ok: true, siteUrl: profile.siteUrl, issues: issues.map((i) => toJiraIssueRow(i, profile.siteUrl)) };
+    } catch (e) {
+      let message = (e as { message?: string }).message ?? 'Loading Jira issues failed.';
+      // Never echo the credential back to the renderer.
+      if (token && message.includes(token)) message = message.split(token).join('[redacted]');
+      return { ok: false, reason: 'error', message };
+    }
+  });
 
   ipcMain.handle(
     IPC.aiCreateTask,

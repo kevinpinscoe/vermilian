@@ -6,6 +6,7 @@ import type { AppConfig } from './config';
 import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
 import type { MasterPlanState, Outcome } from './masterPlan';
 import type { JiraProfile } from './jiraProfile';
+import type { JiraIssueRow } from './jiraIssue';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -22,6 +23,8 @@ export const IPC = {
   saveJiraProfile: 'jira:saveProfile',
   saveJiraToken: 'credentials:saveJiraToken',
   testJira: 'jira:testConnection',
+  // Read-only list of open Jira issues assigned to me (VERM-21).
+  listMyJiraIssues: 'jira:listMyIssues',
   aiCreateTask: 'claude:aiCreateTask',
   standupGenerate: 'standup:generate',
   standupSave: 'standup:save',
@@ -115,6 +118,10 @@ export interface TestClaudeResult {
 export type SaveJiraProfileResult =
   | { ok: true; profile: JiraProfile }
   | { ok: false; message: string };
+
+export type ListJiraIssuesResult =
+  | { ok: true; siteUrl: string; issues: JiraIssueRow[] }
+  | { ok: false; reason: 'not-configured' | 'error'; message: string };
 
 export interface TestJiraArgs {
   profile: Partial<JiraProfile>; // the unsaved form values
@@ -376,6 +383,7 @@ export interface VermilianAPI {
   saveJiraProfile(profile: Partial<JiraProfile>): Promise<SaveJiraProfileResult>;
   saveJiraToken(token: string): Promise<SaveSecretResult>;
   testJira(args: TestJiraArgs): Promise<TestJiraResult>;
+  listMyJiraIssues(): Promise<ListJiraIssuesResult>;
   aiCreateTask(args: AiCreateTaskArgs): Promise<AiCreateTaskResult>;
   standupGenerate(args: StandupGenerateArgs): Promise<StandupGenerateResult>;
   standupSave(args: StandupSaveArgs): Promise<StandupSaveResult>;

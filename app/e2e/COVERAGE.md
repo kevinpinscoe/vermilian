@@ -90,6 +90,7 @@ notifications, or the timer worklog round-trip.
 | Connection — Test connection | 🧪 Unit | `youtrack.test.ts` (getCurrentUser), `errors.test.ts` |
 | AI — keys / model fields / test | 🧪 Unit | `errors.test.ts` |
 | Jira — profile fields, Test connection, Save to YouTrack (VERM-20) | ✅ E2E | `jira-settings.spec.ts` (fake Jira: classic probe result + detected cloudId, rejected token, invalid profile, seeded profile); probe logic 🧪 `jira.test.ts` |
+| Jira — read-only list of my open issues (VERM-21) | ✅ E2E | `jira-list.spec.ts` (key, summary, status, priority from fake Jira; not-set-up state → Settings); paging + transform 🧪 `jira.test.ts`, `jiraIssue.test.ts` |
 | Timer & Pomodoro inputs | ⬜ Gap | — |
 | Daily notes folder (Browse picker) | 🚫 Out of harness | OS dialog |
 | Appearance — theme switch | ✅ E2E | `theme.spec.ts` (dark toggle) |

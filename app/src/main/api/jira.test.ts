@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   detectCloudId,
+  searchJql,
+  searchMyOpenIssues,
+  MY_OPEN_ISSUES_JQL,
+  SEARCH_PAGE_SIZE,
   gatewayApiBase,
   getMyself,
   probeJiraToken,
@@ -218,5 +222,102 @@ describe('probeJiraToken', () => {
   it('never throws', async () => {
     fetchMock.mockImplementation(() => Promise.reject(new Error('boom')));
     await expect(probeJiraToken(profile(), CLASSIC)).resolves.toMatchObject({ ok: false, reason: 'error' });
+  });
+});
+
+// ─── searchJql / searchMyOpenIssues (VERM-21) ───────────────────────────────
+
+function searchIssue(n: number) {
+  return { id: String(n), key: `DEMO-${n}`, fields: { summary: `Issue ${n}` } };
+}
+
+function searchBodies(): Array<Record<string, unknown>> {
+  return fetchMock.mock.calls
+    .filter((c) => (c[0] as string).endsWith('/rest/api/3/search/jql'))
+    .map((c) => JSON.parse((c[1] as RequestInit).body as string) as Record<string, unknown>);
+}
+
+describe('searchJql', () => {
+  it('POSTs the JQL, fields and page size, with Basic auth', async () => {
+    fetchMock.mockResolvedValueOnce(res(200, { issues: [searchIssue(1)], isLast: true }));
+    await searchJql(SITE, EMAIL, CLASSIC, 'project = DEMO', ['summary']);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${SITE}/rest/api/3/search/jql`);
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>).Authorization).toBe(basic(CLASSIC));
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(searchBodies()[0]).toEqual({ jql: 'project = DEMO', fields: ['summary'], maxResults: SEARCH_PAGE_SIZE });
+  });
+
+  it('follows nextPageToken until isLast, in order', async () => {
+    fetchMock
+      .mockResolvedValueOnce(res(200, { issues: [searchIssue(1), searchIssue(2)], nextPageToken: 'p2', isLast: false }))
+      .mockResolvedValueOnce(res(200, { issues: [searchIssue(3)], nextPageToken: 'p3', isLast: false }))
+      .mockResolvedValueOnce(res(200, { issues: [searchIssue(4)], isLast: true }));
+    const issues = await searchJql(SITE, EMAIL, CLASSIC, 'x', ['summary']);
+    expect(issues.map((i) => i.key)).toEqual(['DEMO-1', 'DEMO-2', 'DEMO-3', 'DEMO-4']);
+    const bodies = searchBodies();
+    expect(bodies.map((b) => b.nextPageToken)).toEqual([undefined, 'p2', 'p3']);
+  });
+
+  it('stops when a page has no nextPageToken even if isLast is missing', async () => {
+    fetchMock.mockResolvedValueOnce(res(200, { issues: [searchIssue(1)] }));
+    const issues = await searchJql(SITE, EMAIL, CLASSIC, 'x', ['summary']);
+    expect(issues).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops after maxPages even if Jira keeps returning tokens', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(res(200, { issues: [searchIssue(1)], nextPageToken: 'again', isLast: false })),
+    );
+    const issues = await searchJql(SITE, EMAIL, CLASSIC, 'x', ['summary'], 3);
+    expect(issues).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('treats a page with no issues array as empty', async () => {
+    fetchMock.mockResolvedValueOnce(res(200, { isLast: true }));
+    expect(await searchJql(SITE, EMAIL, CLASSIC, 'x', ['summary'])).toEqual([]);
+  });
+
+  it('throws a JiraError on a rejected search', async () => {
+    fetchMock.mockResolvedValueOnce(res(400, { errorMessages: ["The value 'NOPE' does not exist for the field 'project'."] }));
+    await expect(searchJql(SITE, EMAIL, CLASSIC, 'project = NOPE', ['summary'])).rejects.toEqual({
+      status: 400,
+      message: "The value 'NOPE' does not exist for the field 'project'.",
+    });
+  });
+});
+
+describe('searchMyOpenIssues', () => {
+  function withSearch(base: string) {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === `${base}/rest/api/3/search/jql`
+        ? Promise.resolve(res(200, { issues: [searchIssue(9)], isLast: true }))
+        : fakeJira(url, init),
+    );
+  }
+
+  it('searches through the site URL for a classic token, with the my-open-issues JQL', async () => {
+    withSearch(SITE);
+    const issues = await searchMyOpenIssues(profile({ cloudId: CLOUD_ID }), CLASSIC);
+    expect(issues.map((i) => i.key)).toEqual(['DEMO-9']);
+    expect(searchBodies()[0]).toMatchObject({ jql: MY_OPEN_ISSUES_JQL, fields: ['summary', 'status', 'priority', 'updated'] });
+  });
+
+  it('searches through the gateway for a scoped token', async () => {
+    const gateway = `${JIRA_GATEWAY}/ex/jira/${CLOUD_ID}`;
+    withSearch(gateway);
+    const issues = await searchMyOpenIssues(profile({ cloudId: CLOUD_ID }), SCOPED);
+    expect(issues.map((i) => i.key)).toEqual(['DEMO-9']);
+    expect(calledUrls()).toContain(`${gateway}/rest/api/3/search/jql`);
+  });
+
+  it('throws the probe explanation when the token is rejected', async () => {
+    await expect(searchMyOpenIssues(profile({ cloudId: CLOUD_ID }), 'wrong-token')).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining('rejected the token'),
+    });
   });
 });

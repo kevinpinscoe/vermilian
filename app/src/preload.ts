@@ -42,6 +42,7 @@ const api: VermilianAPI = {
   saveJiraProfile: (profile: Partial<JiraProfile>) => ipcRenderer.invoke(IPC.saveJiraProfile, profile),
   saveJiraToken: (token: string) => ipcRenderer.invoke(IPC.saveJiraToken, token),
   testJira: (args: TestJiraArgs) => ipcRenderer.invoke(IPC.testJira, args),
+  listMyJiraIssues: () => ipcRenderer.invoke(IPC.listMyJiraIssues),
   aiCreateTask: (args: AiCreateTaskArgs) => ipcRenderer.invoke(IPC.aiCreateTask, args),
   standupGenerate: (args: StandupGenerateArgs) => ipcRenderer.invoke(IPC.standupGenerate, args),
   standupSave: (args: StandupSaveArgs) => ipcRenderer.invoke(IPC.standupSave, args),

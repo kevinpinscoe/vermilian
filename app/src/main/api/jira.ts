@@ -11,6 +11,7 @@
 // hand-entered cloudId as the fallback when detection fails.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
+import { JIRA_LIST_FIELDS, type JiraSearchIssue } from '../../shared/jiraIssue';
 
 export const JIRA_GATEWAY = 'https://api.atlassian.com';
 
@@ -72,9 +73,21 @@ async function toError(res: Response): Promise<JiraError> {
   return { status: res.status, message };
 }
 
-async function request<T>(base: string, email: string, token: string, path: string): Promise<T> {
+async function request<T>(
+  base: string,
+  email: string,
+  token: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: basicAuth(email, token), Accept: 'application/json' },
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {
+      Authorization: basicAuth(email, token),
+      Accept: 'application/json',
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!res.ok) throw await toError(res);
   return (await res.json()) as T;
@@ -166,4 +179,58 @@ export async function probeJiraToken(profile: JiraProfile, token: string): Promi
     }
     return { ok: false, reason: 'error', cloudId, message: errorMessage(e), status: (e as JiraError)?.status };
   }
+}
+
+// --- Issue search (VERM-21) ---
+
+// Unresolved issues assigned to the token's user, most recently updated first.
+export const MY_OPEN_ISSUES_JQL = 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC';
+
+export const SEARCH_PAGE_SIZE = 100;
+// A runaway guard, not a feature limit: 10 pages is 1,000 issues.
+export const SEARCH_MAX_PAGES = 10;
+
+interface SearchJqlResponse {
+  issues?: JiraSearchIssue[];
+  nextPageToken?: string;
+  isLast?: boolean;
+}
+
+// POST /rest/api/3/search/jql, following nextPageToken until isLast (the
+// endpoint reports no total, CHANGE-2046). Stops after maxPages. Throws JiraError.
+export async function searchJql(
+  base: string,
+  email: string,
+  token: string,
+  jql: string,
+  fields: readonly string[],
+  maxPages = SEARCH_MAX_PAGES,
+): Promise<JiraSearchIssue[]> {
+  const issues: JiraSearchIssue[] = [];
+  let nextPageToken: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const res = await request<SearchJqlResponse>(base, email, token, '/rest/api/3/search/jql', {
+      jql,
+      fields,
+      maxResults: SEARCH_PAGE_SIZE,
+      ...(nextPageToken ? { nextPageToken } : {}),
+    });
+    issues.push(...(res.issues ?? []));
+    if (res.isLast !== false || !res.nextPageToken) break;
+    nextPageToken = res.nextPageToken;
+  }
+  return issues;
+}
+
+// The read-only Jira list: probes first to learn which route this token works
+// through (site URL or gateway), then searches there. Throws JiraError when
+// the probe fails, carrying the probe's explanation.
+export async function searchMyOpenIssues(profile: JiraProfile, token: string): Promise<JiraSearchIssue[]> {
+  const probe = await probeJiraToken(profile, token);
+  if (!probe.ok) {
+    const err: JiraError = { status: probe.status, message: probe.message };
+    throw err;
+  }
+  const base = probe.kind === 'classic' ? siteApiBase(profile.siteUrl) : gatewayApiBase(probe.cloudId);
+  return searchJql(base, profile.email, token, MY_OPEN_ISSUES_JQL, JIRA_LIST_FIELDS);
 }
