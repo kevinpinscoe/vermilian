@@ -786,6 +786,46 @@ export async function getVermilianArticle(
   }
 }
 
+// --- _vermilian-jira-overlay Article (application-managed JSON) ---
+// Holds the shared Jira connection profile (shared/jiraProfile.ts). Kept
+// separate from _vermilian-config so older clients cannot drop it.
+
+const JIRA_ARTICLE_SUMMARY = '_vermilian-jira-overlay';
+
+export async function findJiraArticle(
+  url: string,
+  token: string,
+): Promise<VermilianArticle | null> {
+  const articles = await request<RawArticle[]>(
+    url,
+    token,
+    `/api/articles?fields=${ARTICLE_FIELDS}&$top=500`,
+  );
+  const match = articles.find((a) => a.summary === JIRA_ARTICLE_SUMMARY);
+  return match ? { id: match.id, content: match.content ?? '{}', updated: match.updated ?? 0 } : null;
+}
+
+export async function createJiraArticle(
+  url: string,
+  token: string,
+  content: string,
+): Promise<VermilianArticle> {
+  const result = await request<RawArticle>(
+    url,
+    token,
+    `/api/articles?fields=${ARTICLE_FIELDS}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        summary: JIRA_ARTICLE_SUMMARY,
+        content,
+        project: { shortName: VERMILIAN_ARTICLE_PROJECT_SHORT_NAME },
+      }),
+    },
+  );
+  return { id: result.id, content: result.content ?? content, updated: result.updated ?? 0 };
+}
+
 // --- _vermilian-master-plan discovery (read-only — Vermilian never creates,
 // updates, or overwrites this article; Kevin authors it by hand in YouTrack.
 // See ADR-0008.) ---

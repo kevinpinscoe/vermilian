@@ -37,6 +37,12 @@ export interface AppConfig {
   claudeKeyCommand: string;
   claudeKeyFile: string;
 
+  // Jira API token sources — same priority chain as above. Per host: the
+  // shared, non-secret Jira profile (site URL, email, cloudId) lives in the
+  // _vermilian-jira-overlay YouTrack Article instead (shared/jiraProfile.ts).
+  jiraTokenCommand: string;
+  jiraTokenFile: string;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -61,6 +67,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   youtrackTokenFile: '',
   claudeKeyCommand: '',
   claudeKeyFile: '',
+  jiraTokenCommand: '',
+  jiraTokenFile: '',
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',

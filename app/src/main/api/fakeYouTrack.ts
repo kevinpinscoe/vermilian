@@ -336,6 +336,11 @@ export async function createVermilianArticle(
 export async function updateVermilianArticle(
   _url: string, _token: string, articleId: string, content: string,
 ): Promise<{ updated: number } | null> {
+  if (articleId === 'e2e-jira-article') {
+    if (!jiraArticle) return null;
+    jiraArticle = { id: articleId, content, updated: Date.now() };
+    return { updated: jiraArticle.updated };
+  }
   article = { id: articleId, content, updated: Date.now() };
   return { updated: article.updated };
 }
@@ -343,11 +348,32 @@ export async function updateVermilianArticle(
 export async function getVermilianArticle(
   _url: string, _token: string, articleId: string,
 ): Promise<VermilianArticle | null> {
+  if (articleId === 'e2e-jira-article') return jiraArticle ? { ...jiraArticle } : null;
   if (!article || article.id !== articleId) return null;
   return { id: article.id, content: article.content, updated: article.updated };
 }
 
-// ─── _vermilian-master-plan discovery (in-memory) ────────────────────────────────
+// ─── _vermilian-jira-overlay Article (in-memory) ────────────────────────────────
+// VERMILIAN_E2E_JIRA_ARTICLE_CONTENT seeds it; updates go through
+// updateVermilianArticle like the real client, so they share one id space.
+
+let jiraArticle: { id: string; content: string; updated: number } | null =
+  process.env.VERMILIAN_E2E_JIRA_ARTICLE_CONTENT
+    ? { id: 'e2e-jira-article', content: process.env.VERMILIAN_E2E_JIRA_ARTICLE_CONTENT, updated: Date.now() }
+    : null;
+
+export async function findJiraArticle(_url: string, _token: string): Promise<VermilianArticle | null> {
+  return jiraArticle ? { ...jiraArticle } : null;
+}
+
+export async function createJiraArticle(
+  _url: string, _token: string, content: string,
+): Promise<VermilianArticle> {
+  jiraArticle = { id: 'e2e-jira-article', content, updated: Date.now() };
+  return { ...jiraArticle };
+}
+
+// ─── _vermilian-master-plan discovery (in-memory)────────────────────────────────
 // VERMILIAN_E2E_MASTER_PLAN_CONTENT seeds a single matching article.
 // VERMILIAN_E2E_MASTER_PLAN_DUPLICATE=1 simulates two matching articles
 // (ambiguous discovery) instead, using that same content (or a default) for
