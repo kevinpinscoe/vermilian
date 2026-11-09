@@ -84,11 +84,12 @@ jobs:
         # Pinned runner images for reproducible release builds (avoid -latest drift):
         #   ubuntu-24.04      -> Linux x86_64 AppImage
         #   ubuntu-24.04-arm  -> Linux arm64 AppImage (Raspberry Pi 5)
-        #   macos-14          -> Apple Silicon; builds the arm64 .dmg
+        #   macos-15          -> Apple Silicon; builds the arm64 .dmg (macos-14 was retired:
+        #                        "configuration not supported", v1.2.10 run 42542330858)
         #   windows-2022      -> Windows x86_64 Squirrel installer + portable .zip
         # @reforged/maker-appimage builds for the host arch, so the arm runner
         # yields an arm64 AppImage with no extra config.
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, windows-2022]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -113,7 +114,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # macOS builds native arm64 (the macos-14 host arch); Linux x86_64; Windows x86_64.
+      # macOS builds native arm64 (the macos-15 host arch); Linux x86_64; Windows x86_64.
       - name: Make & publish to draft release
         run: pnpm run publish
         env:
