@@ -10,17 +10,17 @@ stays blocked until acceptance is complete.
 
 ## Acceptance build
 
-Kevin designated this build on 2026-11-08. It is the previous build plus the K6 correction
-(finding K6 below). It is an acceptance candidate, not a release.
+Kevin designated this build on 2026-11-08. It contains the K6 and K7 corrections (findings below).
+It is an acceptance candidate, not a release.
 
 | Item | Value |
 | --- | --- |
-| Source commit | `7cf54b1cfa550d3e96649f4efd1fbaf77176acb5` (branch `VERM-3`, PR #125, not merged) |
+| Source commit | `d64ef5d59561210150f6d497e3b7bbfeccfc1639` (PR #125 head, merged to `main` as `e98c35d`) |
 | Application version | 1.2.9 (the version number was not bumped; this is not a release) |
-| Build location | `~/.local/share/vermilian-acceptance/7cf54b1-k6/Vermilian-linux-x64/Vermilian` |
-| Built | 2026-11-08 21:23 UTC by `pnpm test:live:package`, from a clean tree |
-| `app.asar` SHA-256 | `d3127c4447ba7c5e18d6bd1252df251df087a997301b9514bcba86a2861e8e0c` |
-| Contains VERM-4 to VERM-9 | Yes. `main` at `f147cf4` plus the harness and the K6 fix |
+| Build location | `~/.local/share/vermilian-acceptance/d64ef5d-k7/Vermilian-linux-x64/Vermilian` |
+| Built | 2026-11-08 23:09 UTC by `pnpm test:live:package`, from a clean tree |
+| `app.asar` SHA-256 | `263b255391b27f3c3d835878122bfd24629c4c96faca82cbc2490cef5dce6b48` |
+| Contains VERM-4 to VERM-9 | Yes. `main` at `f147cf4` plus the harness and the K6 and K7 fixes |
 
 The copy lives outside every checkout, so packaging or removing a worktree does not replace it. Do
 not rebuild into that directory while testing.
@@ -28,7 +28,7 @@ not rebuild into that directory while testing.
 **To launch it**, from `~/Projects/public/vermilian`:
 
 ```bash
-bash private/launch-acceptance-build-7cf54b1.sh
+bash private/launch-acceptance-build-d64ef5d.sh
 ```
 
 The script is gitignored and lives only on the FLDW. It compares `app.asar` with the hash above and
@@ -36,10 +36,23 @@ refuses to launch on a mismatch, or while another Vermilian is running. `--verif
 without launching. If the test environment ever requires a rebuild, stop and record why, because
 results from before the rebuild would need re-baselining.
 
-### Previous acceptance build (historical)
+### Previous acceptance builds (historical)
 
-Superseded on 2026-11-08 because the live harness confirmed K6 on it (E8, E9 and E10 failed). It is
-kept unchanged for comparison, with its own launcher, `private/launch-acceptance-build.sh`.
+Both are kept unchanged for comparison, each with its own launcher in `private/`.
+
+**`7cf54b1` (K6 fix only).** Designated earlier on 2026-11-08, then superseded the same day, because
+Kevin's A3 failed on it (finding K7). Launcher: `private/launch-acceptance-build-7cf54b1.sh`.
+
+| Item | Value |
+| --- | --- |
+| Source commit | `7cf54b1cfa550d3e96649f4efd1fbaf77176acb5` |
+| Build location | `~/.local/share/vermilian-acceptance/7cf54b1-k6/Vermilian-linux-x64/Vermilian` |
+| `app.asar` SHA-256 | `d3127c4447ba7c5e18d6bd1252df251df087a997301b9514bcba86a2861e8e0c` |
+| Live harness | 9 of 9 passed (`~/evidence/VERM-10/20261108T212524Z/`) |
+| Manual | A1, A2, A4 Pass; A3 Fail (K7) |
+
+**`0348099` (original).** Superseded on 2026-11-08 because the live harness confirmed K6 on it (E8, E9
+and E10 failed). Launcher: `private/launch-acceptance-build.sh`.
 
 | Item | Value |
 | --- | --- |
@@ -135,6 +148,9 @@ whenever a test asks you to pick up a change made outside Vermilian.
 - **Go to:** click the `ACC-3` task to open its details.
 - **Do:** click the star beside the issue ID at the top of the panel.
 - **Expect:** filled star with a `–` badge.
+- **Before you start:** if `ACC-3`'s star is already filled, click it once on the Main table first.
+- **Earlier run:** **Fail** on `7cf54b1`. The panel's star did not change, although the Kanban card
+  did (finding K7, fixed in `d64ef5d`). Rerun on the acceptance build.
 - **Result:** [ ] Pass  [ ] Fail  [ ] Not tested
 - **Notes:**
 
@@ -675,8 +691,21 @@ and observed result.
   *Needs attention*. Its stored `Focus` and `Focus rank` are not touched. A reopened issue counts
   again, so a collision goes to the repair banner. `getIssues` and the boards are unchanged. Unit
   tests named E8 to E10 cover it.
-- **Verified:** E8, E9 and E10 passed live on the acceptance build, and so did all nine live cases
-  (`~/evidence/VERM-10/20261108T212524Z/`).
+- **Verified:** E8, E9 and E10 passed live on `7cf54b1`, and so did all nine live cases
+  (`~/evidence/VERM-10/20261108T212524Z/`). They pass on the acceptance build `d64ef5d` too
+  (`~/evidence/VERM-10/20261108T231036Z/`).
+
+**K7. The task detail panel's star did not change when clicked. Fixed in the acceptance build
+(`d64ef5d`).**
+
+- **Found by:** Kevin's A3 on `7cf54b1`, 2026-11-08. The Kanban card changed and the writes reached
+  YouTrack (`TEST-42`'s history), but the panel kept showing the old star.
+- **Cause:** `TaskDetailPanel` renders `FocusControl` from its own issue-detail query
+  (`['youtrack','issue',id]`). Focus and rank writes refreshed only the project issue lists.
+- **Fixed in `d64ef5d`:** `invalidateFocusQueries` also refreshes the detail query of every issue a
+  write touched, the target and any displaced holder. Unit tests, and an e2e test that clicks the
+  panel's star twice. Both failed on `7cf54b1` and pass on `d64ef5d`.
+- **To confirm:** Kevin reruns A3 on the acceptance build.
 
 Add others here:
 
@@ -727,8 +756,9 @@ and they have nothing to do with the Priority Desk.
 Claude. Nothing in it exercises the live instance or a real Claude call. That is what this checklist
 is for.
 
-The table above is for the previous build. For the acceptance build (`7cf54b1`, 2026-11-08):
-`pnpm test` 345 passed, `pnpm typecheck` clean, `pnpm lint` 0 errors, `pnpm test:e2e` 160 passed and
+The table above is for the original `0348099` build. For `7cf54b1` (2026-11-08): `pnpm test` 345
+passed, `pnpm test:e2e` 160 passed and 2 skipped. For the acceptance build `d64ef5d` (2026-11-08):
+`pnpm test` 347 passed, `pnpm typecheck` clean, `pnpm lint` 0 errors, `pnpm test:e2e` 161 passed and
 2 skipped (the same two), and CI passed on PR #125.
 
 ### Live acceptance harness
@@ -740,10 +770,13 @@ the disposable `VLH` and `VLHX` projects, with the approved GLBL Observer except
 | Build | Result | Evidence |
 | --- | --- | --- |
 | Previous (`0348099`, `44d4ee7e…`) | 6 of 9 passed. E8, E9, E10 failed (K6) | `~/evidence/VERM-10/20261108T205731Z/` |
-| Acceptance (`7cf54b1`, `d3127c44…`) | E8, E9, E10 passed | `~/evidence/VERM-10/20261108T212501Z/` |
-| Acceptance (`7cf54b1`, `d3127c44…`) | All 9 passed: A5/A6, A7/A8, A11, B9 success, B9 rejection, E8, E9, E10, HARNESS | `~/evidence/VERM-10/20261108T212524Z/` |
+| K6 build (`7cf54b1`, `d3127c44…`) | E8, E9, E10 passed | `~/evidence/VERM-10/20261108T212501Z/` |
+| K6 build (`7cf54b1`, `d3127c44…`) | All 9 passed: A5/A6, A7/A8, A11, B9 success, B9 rejection, E8, E9, E10, HARNESS | `~/evidence/VERM-10/20261108T212524Z/` |
 
-A1 to A4 are not automated and remain **pending** Kevin's manual run.
+| Acceptance (`d64ef5d`, `263b2553…`) | All 9 passed | `~/evidence/VERM-10/20261108T231036Z/` |
+
+A1 to A4 are not automated. Kevin's manual results are recorded on VERM-10. A3's rerun on the
+acceptance build is **pending**.
 
 ### Implementation against requirements
 
