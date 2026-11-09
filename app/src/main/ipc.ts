@@ -7,6 +7,9 @@ import {
   type TestYouTrackResult,
   type TestClaudeArgs,
   type TestClaudeResult,
+  type SaveJiraProfileResult,
+  type TestJiraArgs,
+  type TestJiraResult,
   type GetWorklogTypesArgs,
   type GetIssuesArgs,
   type SearchIssuesArgs,
@@ -50,6 +53,9 @@ import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
 import { getMasterPlanState } from './services/masterPlan';
+import * as jiraProfile from './services/jiraProfile';
+import { jira } from './api/jiraClient';
+import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
@@ -77,6 +83,10 @@ async function loadYtToken(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-token';
   const c = cfg ?? (await readConfig());
   return loadSecretWithSources(FILES.youtrackToken, c.youtrackTokenCommand, c.youtrackTokenFile);
+}
+async function loadJiraToken(cfg?: AppConfig): Promise<string | null> {
+  if (IS_E2E) return 'e2e-jira-token';
+  return jiraProfile.loadJiraToken(cfg ?? (await readConfig()));
 }
 async function loadClaudeKey(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-claude-key';
@@ -119,7 +129,7 @@ export function registerIpc(): void {
     IPC.credentialStatus,
     async (): Promise<CredentialStatus> => {
       if (IS_E2E) {
-        return { hasYouTrackToken: true, hasClaudeKey: true, backend: 'e2e', secure: true };
+        return { hasYouTrackToken: true, hasClaudeKey: true, hasJiraToken: true, backend: 'e2e', secure: true };
       }
       const cfg = await readConfig();
       return {
@@ -133,6 +143,7 @@ export function registerIpc(): void {
           cfg.claudeKeyCommand,
           cfg.claudeKeyFile,
         ),
+        hasJiraToken: await jiraProfile.hasJiraToken(cfg),
         backend: getBackend(),
         secure: isSecure(),
       };
@@ -207,6 +218,73 @@ export function registerIpc(): void {
         return { ok: false, error: result.error.replace(key, '[redacted]') };
       }
       return result;
+    },
+  );
+
+  // Null when YouTrack is not configured or unreachable: the Jira section then
+  // starts empty rather than blocking Settings, which must always open.
+  ipcMain.handle(IPC.getJiraProfile, async (): Promise<JiraProfile | null> => {
+    try {
+      const cfg = await readConfig();
+      const token = await loadYtToken(cfg);
+      if (!cfg.youtrackUrl || !token) return null;
+      return await jiraProfile.getJiraProfile(cfg.youtrackUrl, token);
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle(
+    IPC.saveJiraProfile,
+    async (_e, input: Partial<JiraProfile>): Promise<SaveJiraProfileResult> => {
+      try {
+        const cfg = await readConfig();
+        const token = await loadYtToken(cfg);
+        if (!cfg.youtrackUrl || !token) {
+          return { ok: false, message: 'Connect YouTrack first — the Jira profile is stored there.' };
+        }
+        const profile = await jiraProfile.saveJiraProfile(cfg.youtrackUrl, token, input);
+        return { ok: true, profile };
+      } catch (e) {
+        const code = (e as { message?: string }).message;
+        if (code === 'JIRA_PROFILE_INVALID') {
+          return { ok: false, message: 'Enter an https site URL and an account email.' };
+        }
+        if (code === 'JIRA_PROFILE_WRITE_FAILED') {
+          return { ok: false, message: 'YouTrack did not accept the update to the Jira profile.' };
+        }
+        return { ok: false, message: code ?? 'Saving the Jira profile failed.' };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.saveJiraToken,
+    (_e, token: string): Promise<SaveSecretResult> => saveSecret(FILES.jiraToken, token),
+  );
+
+  ipcMain.handle(
+    IPC.testJira,
+    async (_e, args: TestJiraArgs): Promise<TestJiraResult> => {
+      const profile = normaliseJiraProfile(args.profile);
+      const givenCloudId = args.profile.cloudId?.trim() ?? '';
+      if (!profile) {
+        return { ok: false, reason: 'invalid-profile', cloudId: givenCloudId, message: 'Enter an https site URL and an account email.' };
+      }
+      let token: string | null;
+      try {
+        token = (args.token?.trim() || '') || (await loadJiraToken());
+      } catch {
+        token = null;
+      }
+      if (!token) {
+        return { ok: false, reason: 'no-token', cloudId: profile.cloudId, message: 'No Jira API token found (check command, file, or paste a token).' };
+      }
+      const r = await jira.probeJiraToken(profile, token);
+      if (r.ok) return { ok: true, kind: r.kind, cloudId: r.cloudId, displayName: r.account.displayName };
+      // Never echo the credential back to the renderer.
+      const message = r.message.includes(token) ? r.message.split(token).join('[redacted]') : r.message;
+      return { ok: false, reason: r.reason, cloudId: r.cloudId, message, status: r.status };
     },
   );
 

@@ -89,6 +89,7 @@ notifications, or the timer worklog round-trip.
 | Layout (sections, Save/Cancel footer) | ✅ E2E | `settings.spec.ts` |
 | Connection — Test connection | 🧪 Unit | `youtrack.test.ts` (getCurrentUser), `errors.test.ts` |
 | AI — keys / model fields / test | 🧪 Unit | `errors.test.ts` |
+| Jira — profile fields, Test connection, Save to YouTrack (VERM-20) | ✅ E2E | `jira-settings.spec.ts` (fake Jira: classic probe result + detected cloudId, rejected token, invalid profile, seeded profile); probe logic 🧪 `jira.test.ts` |
 | Timer & Pomodoro inputs | ⬜ Gap | — |
 | Daily notes folder (Browse picker) | 🚫 Out of harness | OS dialog |
 | Appearance — theme switch | ✅ E2E | `theme.spec.ts` (dark toggle) |

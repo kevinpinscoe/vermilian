@@ -11,6 +11,13 @@ export interface SettingsDraft {
   claudeKey: string;           // direct-paste path → saved to safeStorage on Save
   claudeKeyCommand: string;    // shell command path (priority 1)
   claudeKeyFile: string;       // file path (priority 2)
+  // Jira profile — shared through YouTrack, loaded after the draft is built.
+  jiraSiteUrl: string;
+  jiraEmail: string;
+  jiraCloudId: string;
+  jiraToken: string;           // direct-paste path → saved to safeStorage on Save
+  jiraTokenCommand: string;    // shell command path (priority 1), this host only
+  jiraTokenFile: string;       // file path (priority 2), this host only
   modelForCreate: string;
   modelForStandup: string;
   pomodoro: PomodoroConfig;

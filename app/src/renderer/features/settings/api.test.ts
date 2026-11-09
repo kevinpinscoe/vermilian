@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CONFIG_QUERY_KEY, CRED_STATUS_QUERY_KEY } from './api';
+import { CONFIG_QUERY_KEY, CRED_STATUS_QUERY_KEY, JIRA_PROFILE_QUERY_KEY } from './api';
 
 // These constants are the single source of truth shared by useConfig(),
 // useCredentialStatus(), and the invalidateQueries() calls in SettingsView.
@@ -15,5 +15,9 @@ describe('settings query keys', () => {
 
   it('CRED_STATUS_QUERY_KEY is ["cred-status"]', () => {
     expect(CRED_STATUS_QUERY_KEY).toEqual(['cred-status']);
+  });
+
+  it('JIRA_PROFILE_QUERY_KEY is ["jira-profile"]', () => {
+    expect(JIRA_PROFILE_QUERY_KEY).toEqual(['jira-profile']);
   });
 });

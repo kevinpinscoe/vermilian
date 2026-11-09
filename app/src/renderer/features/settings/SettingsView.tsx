@@ -3,11 +3,20 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalHeader } from '@vibe/core';
 import type { AppConfig } from '../../../shared/config';
 import { DEFAULT_CONFIG } from '../../../shared/config';
-import { useConfig, useCredentialStatus, CONFIG_QUERY_KEY, CRED_STATUS_QUERY_KEY } from './api';
+import {
+  useConfig,
+  useCredentialStatus,
+  useJiraProfile,
+  CONFIG_QUERY_KEY,
+  CRED_STATUS_QUERY_KEY,
+  JIRA_PROFILE_QUERY_KEY,
+} from './api';
+import type { JiraProfile } from '../../../shared/jiraProfile';
 import type { SettingsDraft, TestState } from './types';
-import { friendlyYouTrackError, friendlyClaudeError } from './errors';
+import { friendlyYouTrackError, friendlyClaudeError, describeJiraTest } from './errors';
 import { ConnectionSection } from './sections/ConnectionSection';
 import { AISection } from './sections/AISection';
+import { JiraSection } from './sections/JiraSection';
 import { TimerPomodoroSection } from './sections/TimerPomodoroSection';
 import { DailyNotesSection } from './sections/DailyNotesSection';
 import { AppearanceSection } from './sections/AppearanceSection';
@@ -29,6 +38,12 @@ function draftFromConfig(c: AppConfig): SettingsDraft {
     claudeKey: '',
     claudeKeyCommand: c.claudeKeyCommand,
     claudeKeyFile: c.claudeKeyFile,
+    jiraSiteUrl: '',
+    jiraEmail: '',
+    jiraCloudId: '',
+    jiraToken: '',
+    jiraTokenCommand: c.jiraTokenCommand,
+    jiraTokenFile: c.jiraTokenFile,
     modelForCreate: c.modelForCreate,
     modelForStandup: c.modelForStandup,
     pomodoro: { ...c.pomodoro },
@@ -37,6 +52,16 @@ function draftFromConfig(c: AppConfig): SettingsDraft {
     defaultWorklogType: c.defaultWorklogType,
     dailyNotesFolder: c.dailyNotesFolder,
   };
+}
+
+// True when the Jira fields differ from the profile loaded from YouTrack, so
+// Save writes the shared Article only when there is something to write.
+function jiraProfileChanged(d: SettingsDraft, loaded: JiraProfile | null): boolean {
+  return (
+    d.jiraSiteUrl.trim() !== (loaded?.siteUrl ?? '') ||
+    d.jiraEmail.trim() !== (loaded?.email ?? '') ||
+    d.jiraCloudId.trim() !== (loaded?.cloudId ?? '')
+  );
 }
 
 const FAIL_CLOSED_MSG =
@@ -48,6 +73,7 @@ const PLAINTEXT_SAVE_MSG =
 export function SettingsView({ canCancel, onClose }: Props) {
   const { data: config } = useConfig();
   const { data: cred } = useCredentialStatus();
+  const { data: jiraProfile, isFetched: jiraProfileFetched } = useJiraProfile();
   const qc = useQueryClient();
 
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
@@ -58,11 +84,31 @@ export function SettingsView({ canCancel, onClose }: Props) {
   const [worklogTypes, setWorklogTypes] = useState<string[]>(['Development']);
   const [ytTest, setYtTest] = useState<TestState>({ status: 'idle' });
   const [claudeTest, setClaudeTest] = useState<TestState>({ status: 'idle' });
+  const [jiraTest, setJiraTest] = useState<TestState>({ status: 'idle' });
+  const [jiraLoaded, setJiraLoaded] = useState(false);
+  const [jiraSaveError, setJiraSaveError] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     if (config && !draft) setDraft(draftFromConfig(config));
   }, [config, draft]);
+
+  // The Jira profile arrives from YouTrack after the draft is built; fill it
+  // in once, so a later refetch never overwrites what the user has typed.
+  useEffect(() => {
+    if (!draft || jiraLoaded || !jiraProfileFetched) return;
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            jiraSiteUrl: jiraProfile?.siteUrl ?? '',
+            jiraEmail: jiraProfile?.email ?? '',
+            jiraCloudId: jiraProfile?.cloudId ?? '',
+          }
+        : d,
+    );
+    setJiraLoaded(true);
+  }, [draft, jiraLoaded, jiraProfileFetched, jiraProfile]);
 
   useEffect(() => {
     void window.vermilian
@@ -114,11 +160,24 @@ export function SettingsView({ canCancel, onClose }: Props) {
     }
   }
 
+  async function testJira() {
+    if (!draft) return;
+    setJiraTest({ status: 'testing' });
+    const res = await window.vermilian.testJira({
+      profile: { siteUrl: draft.jiraSiteUrl, email: draft.jiraEmail, cloudId: draft.jiraCloudId },
+      token: draft.jiraToken || undefined,
+    });
+    // Fill in a detected cloudId; it is saved with the profile on Save.
+    if (res.cloudId && !draft.jiraCloudId.trim()) update({ jiraCloudId: res.cloudId });
+    setJiraTest({ status: res.ok ? 'success' : 'error', message: describeJiraTest(res) });
+  }
+
   async function handleSave() {
     if (!draft) return;
     setSaving(true);
     setFailClosed(null);
     setPlaintextWarn(false);
+    setJiraSaveError(null);
 
     try {
       await window.vermilian.saveConfig({
@@ -128,6 +187,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
         youtrackTokenFile: draft.youtrackTokenFile.trim(),
         claudeKeyCommand: draft.claudeKeyCommand.trim(),
         claudeKeyFile: draft.claudeKeyFile.trim(),
+        jiraTokenCommand: draft.jiraTokenCommand.trim(),
+        jiraTokenFile: draft.jiraTokenFile.trim(),
         modelForCreate: draft.modelForCreate,
         modelForStandup: draft.modelForStandup,
         pomodoro: draft.pomodoro,
@@ -149,6 +210,27 @@ export function SettingsView({ canCancel, onClose }: Props) {
         if (!r.ok) saveFailed = true;
         else if (r.secure === false) usedPlaintext = true;
       }
+      if (draft.jiraToken) {
+        const r = await window.vermilian.saveJiraToken(draft.jiraToken);
+        if (!r.ok) saveFailed = true;
+        else if (r.secure === false) usedPlaintext = true;
+      }
+
+      // Blank Jira fields mean "not set up": never write an empty profile.
+      let jiraError: string | null = null;
+      const jiraAnyField = Boolean(draft.jiraSiteUrl.trim() || draft.jiraEmail.trim() || draft.jiraCloudId.trim());
+      if (jiraLoaded && jiraAnyField && jiraProfileChanged(draft, jiraProfile ?? null)) {
+        const r = await window.vermilian.saveJiraProfile({
+          siteUrl: draft.jiraSiteUrl,
+          email: draft.jiraEmail,
+          cloudId: draft.jiraCloudId,
+        });
+        if (r.ok) {
+          qc.setQueryData(JIRA_PROFILE_QUERY_KEY, r.profile);
+        } else {
+          jiraError = r.message;
+        }
+      }
 
       await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
@@ -158,7 +240,12 @@ export function SettingsView({ canCancel, onClose }: Props) {
         setFailClosed(FAIL_CLOSED_MSG);
         return;
       }
-      setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '' } : d));
+      setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '', jiraToken: '' } : d));
+      // Stay open so the user can fix the profile; everything else is saved.
+      if (jiraError) {
+        setJiraSaveError(jiraError);
+        return;
+      }
       if (usedPlaintext) {
         setPlaintextWarn(true);
       } else {
@@ -213,9 +300,18 @@ export function SettingsView({ canCancel, onClose }: Props) {
         )}
 
         {failClosed && <AttentionBox type="negative" title="Credentials not saved" text={failClosed} />}
+        {jiraSaveError && (
+          <AttentionBox
+            data-testid="jira-save-error"
+            type="negative"
+            title="Jira profile not saved"
+            text={`${jiraSaveError} Your other settings were saved.`}
+          />
+        )}
 
         <ConnectionSection draft={draft} update={update} hasToken={cred.hasYouTrackToken} onTest={testYouTrack} test={ytTest} />
         <AISection draft={draft} update={update} hasKey={cred.hasClaudeKey} onTest={testClaude} test={claudeTest} />
+        <JiraSection draft={draft} update={update} hasToken={cred.hasJiraToken} onTest={testJira} test={jiraTest} />
         <TimerPomodoroSection draft={draft} update={update} worklogTypes={worklogTypes} />
         <DailyNotesSection draft={draft} update={update} />
         <AppearanceSection />
@@ -233,7 +329,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
               kind="tertiary"
               onClick={() => {
                 // Guard against silently dropping a typed-but-unsaved token/key.
-                if (draft.youtrackToken || draft.claudeKey) setConfirmCancel(true);
+                if (draft.youtrackToken || draft.claudeKey || draft.jiraToken) setConfirmCancel(true);
                 else onClose();
               }}
               disabled={saving}
