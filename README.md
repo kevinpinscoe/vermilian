@@ -18,7 +18,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.2.9 — current release.** Vermilian is feature-complete against its specification and
+**v1.2.10 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -31,11 +31,16 @@ each release.
   cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
   stale project ids, with a manual "Force resync from server" recovery action); workspace
   organisation, including an "+ Add projects" picker for moving projects between workspaces and a
-  workspace delete that re-homes any projects it still holds; and light/dark themes.
-- **Tested:** over 175 unit tests cover the core logic (board grouping/sorting/filtering, the timer
-  state machine, API transforms, search query building, and workspace-config sync), alongside an
-  end-to-end (Playwright) suite over the board, detail panel, settings, timer, AI, stand-up, search,
-  and workspace-config sync flows. Verified on Linux (Fedora 42) and macOS; the Windows build is
+  workspace delete that re-homes any projects it still holds; the **Priority Desk** (Focus, Focus
+  rank and Why now; Now/Next/Then cards; Choose next with *Not this week*; epic and Master Plan
+  context; AI recommendations that change nothing until you act; and a read-only Daily Review);
+  and light/dark themes.
+- **Tested:** over 340 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+  state machine, API transforms, search query building, workspace-config sync, and the Priority
+  Desk's rank rules), alongside an end-to-end (Playwright) suite over the board, detail panel,
+  settings, timer, AI, stand-up, search, workspace-config sync, and Priority Desk flows. A separate
+  live acceptance harness (`app/e2e-live/`) runs selected Priority Desk cases against a real
+  YouTrack server. Verified on Linux (Fedora 42) and macOS; the Windows build is
   published but less extensively exercised. Lint, the unit suite, and a full packaged build run in
   CI on every pull request into `main`; the end-to-end suite is run locally before a release, since
   it drives the packaged binary.
