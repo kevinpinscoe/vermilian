@@ -11,6 +11,7 @@ import { CreateTaskModal } from './features/create-task/CreateTaskModal';
 import { AiCreateModal } from './features/create-task/AiCreateModal';
 import { StandupModal } from './features/standup/StandupModal';
 import { DailyReviewModal } from './features/daily-review/DailyReviewModal';
+import { JiraListModal } from './features/jira-list/JiraListModal';
 import { FocusOverlay } from './features/timer/FocusOverlay';
 import { BreakBanner } from './features/timer/BreakBanner';
 import { SearchBar } from './features/search/SearchBar';
@@ -120,6 +121,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const [showAiCreate, setShowAiCreate] = useState(false);
   const [showStandup, setShowStandup] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
+  const [showJiraList, setShowJiraList] = useState(false);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [quitDialog, setQuitDialog] = useState(false);
   const [quitting, setQuitting] = useState(false);
@@ -400,6 +402,14 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         >
           Daily Review
         </Button>
+        <Button
+          data-testid="jira-list-btn"
+          size="small"
+          kind="tertiary"
+          onClick={() => setShowJiraList(true)}
+        >
+          Jira
+        </Button>
       </div>
 
       {/* Connection banner — the projects query is the canary. If it failed,
@@ -527,6 +537,10 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onClose={() => setShowDailyReview(false)}
           onSelectIssue={(id) => setSelectedIssue(id)}
         />
+      )}
+
+      {showJiraList && (
+        <JiraListModal onClose={() => setShowJiraList(false)} onOpenSettings={onOpenSettings} />
       )}
 
       {/* Timer conflict dialog */}

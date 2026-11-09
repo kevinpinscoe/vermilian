@@ -1,0 +1,61 @@
+/* JiraListModal — a plain wireframe list (VERM-21) */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 8px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  vertical-align: top;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--secondary-text-color, #444444);
+}
+
+.key {
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--link-color, #1f76c2);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--secondary-text-color, #444444);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
