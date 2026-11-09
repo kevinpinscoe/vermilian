@@ -10,6 +10,7 @@ import {
   type ConfigSyncStatus,
   type TestYouTrackArgs,
   type TestClaudeArgs,
+  type TestJiraArgs,
   type GetWorklogTypesArgs,
   type GetIssuesArgs,
   type SearchIssuesArgs,
@@ -25,6 +26,7 @@ import {
   type PostRecommendationAuditArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
+import type { JiraProfile } from './shared/jiraProfile';
 import type { VermilianConfig } from './shared/workspace';
 
 const api: VermilianAPI = {
@@ -36,6 +38,10 @@ const api: VermilianAPI = {
   testYouTrack: (args: TestYouTrackArgs) => ipcRenderer.invoke(IPC.testYouTrack, args),
   getWorklogTypes: (args: GetWorklogTypesArgs) => ipcRenderer.invoke(IPC.getWorklogTypes, args),
   testClaude: (args: TestClaudeArgs) => ipcRenderer.invoke(IPC.testClaude, args),
+  getJiraProfile: () => ipcRenderer.invoke(IPC.getJiraProfile),
+  saveJiraProfile: (profile: Partial<JiraProfile>) => ipcRenderer.invoke(IPC.saveJiraProfile, profile),
+  saveJiraToken: (token: string) => ipcRenderer.invoke(IPC.saveJiraToken, token),
+  testJira: (args: TestJiraArgs) => ipcRenderer.invoke(IPC.testJira, args),
   aiCreateTask: (args: AiCreateTaskArgs) => ipcRenderer.invoke(IPC.aiCreateTask, args),
   standupGenerate: (args: StandupGenerateArgs) => ipcRenderer.invoke(IPC.standupGenerate, args),
   standupSave: (args: StandupSaveArgs) => ipcRenderer.invoke(IPC.standupSave, args),

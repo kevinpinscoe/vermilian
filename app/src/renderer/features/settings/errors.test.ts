@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { friendlyYouTrackError, friendlyClaudeError, connectionErrorMessage } from './errors';
+import { friendlyYouTrackError, friendlyClaudeError, connectionErrorMessage, describeJiraTest } from './errors';
 
 const URL = 'https://yt.example.com';
 
@@ -84,5 +84,31 @@ describe('friendlyClaudeError', () => {
 
   it('uses a default when no message is given', () => {
     expect(friendlyClaudeError(undefined)).toBe('Key check failed.');
+  });
+});
+
+describe('describeJiraTest', () => {
+  it('names the user and the classic route', () => {
+    expect(describeJiraTest({ ok: true, kind: 'classic', cloudId: 'c', displayName: 'Ada' })).toBe(
+      'Connected — logged in as Ada (classic API token, via the site URL).',
+    );
+  });
+
+  it('names the scoped route through the gateway', () => {
+    expect(describeJiraTest({ ok: true, kind: 'scoped', cloudId: 'c', displayName: 'Ada' })).toContain(
+      'scoped API token, via the api.atlassian.com gateway',
+    );
+  });
+
+  it('turns a status-less error into a reachability hint', () => {
+    expect(describeJiraTest({ ok: false, reason: 'error', cloudId: '', message: 'fetch failed' })).toBe(
+      'Could not reach Jira. Check the site URL and your network.',
+    );
+  });
+
+  it('passes the probe message through for other failures', () => {
+    expect(
+      describeJiraTest({ ok: false, reason: 'unauthorized', cloudId: 'c', message: 'rejected', status: 401 }),
+    ).toBe('rejected');
   });
 });

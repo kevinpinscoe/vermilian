@@ -1,6 +1,8 @@
 // Map raw API failures to actionable messages rather than echoing server jargon.
 // Pure — extracted from SettingsView.tsx so it can be unit-tested.
 
+import type { TestJiraResult } from '../../../shared/ipc';
+
 export function friendlyYouTrackError(res: { status?: number; message?: string }, url: string): string {
   if (res.status === 401 || res.status === 403) return 'Invalid token or insufficient permissions.';
   if (res.status === 404) return `No YouTrack REST API found at ${url}. Check the URL.`;
@@ -40,4 +42,18 @@ export function friendlyClaudeError(raw?: string): string {
     return 'Could not reach the Claude API. Check your network connection.';
   }
   return msg;
+}
+
+// The result line for the Jira section's Test connection button. Says which
+// kind of token it is, because a scoped token only works through the gateway
+// and expires (proposal §4 B3) — the user should know which one they have.
+export function describeJiraTest(res: TestJiraResult): string {
+  if (res.ok) {
+    const how = res.kind === 'classic' ? 'classic API token, via the site URL' : 'scoped API token, via the api.atlassian.com gateway';
+    return `Connected — logged in as ${res.displayName || 'user'} (${how}).`;
+  }
+  if (res.reason === 'error' && !res.status) {
+    return 'Could not reach Jira. Check the site URL and your network.';
+  }
+  return res.message;
 }

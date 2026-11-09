@@ -5,6 +5,7 @@
 import type { AppConfig } from './config';
 import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
 import type { MasterPlanState, Outcome } from './masterPlan';
+import type { JiraProfile } from './jiraProfile';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -15,6 +16,12 @@ export const IPC = {
   testYouTrack: 'youtrack:testConnection',
   getWorklogTypes: 'youtrack:getWorklogTypes',
   testClaude: 'claude:testKey',
+  // Jira connection (VERM-20): the shared profile lives in YouTrack, the token
+  // stays on this host (shared/jiraProfile.ts).
+  getJiraProfile: 'jira:getProfile',
+  saveJiraProfile: 'jira:saveProfile',
+  saveJiraToken: 'credentials:saveJiraToken',
+  testJira: 'jira:testConnection',
   aiCreateTask: 'claude:aiCreateTask',
   standupGenerate: 'standup:generate',
   standupSave: 'standup:save',
@@ -69,6 +76,7 @@ export const IPC = {
 export interface CredentialStatus {
   hasYouTrackToken: boolean;
   hasClaudeKey: boolean;
+  hasJiraToken: boolean;
   backend: string;
   secure: boolean;
 }
@@ -103,6 +111,26 @@ export interface TestClaudeResult {
   ok: boolean;
   error?: string;
 }
+
+export type SaveJiraProfileResult =
+  | { ok: true; profile: JiraProfile }
+  | { ok: false; message: string };
+
+export interface TestJiraArgs {
+  profile: Partial<JiraProfile>; // the unsaved form values
+  token?: string; // freshly-typed token; falls back to the stored one if omitted
+}
+// Mirrors JiraProbeResult (main/api/jira.ts) plus a 'no-token' / 'invalid-profile'
+// pre-check. cloudId is the detected or given value, so the form can fill it in.
+export type TestJiraResult =
+  | { ok: true; kind: 'classic' | 'scoped'; cloudId: string; displayName: string }
+  | {
+      ok: false;
+      reason: 'unauthorized' | 'cloudid-unavailable' | 'error' | 'no-token' | 'invalid-profile';
+      cloudId: string;
+      message: string;
+      status?: number;
+    };
 
 export interface GetIssuesArgs {
   projectShortName: string;
@@ -344,6 +372,10 @@ export interface VermilianAPI {
   testYouTrack(args: TestYouTrackArgs): Promise<TestYouTrackResult>;
   getWorklogTypes(args: GetWorklogTypesArgs): Promise<string[]>;
   testClaude(args: TestClaudeArgs): Promise<TestClaudeResult>;
+  getJiraProfile(): Promise<JiraProfile | null>;
+  saveJiraProfile(profile: Partial<JiraProfile>): Promise<SaveJiraProfileResult>;
+  saveJiraToken(token: string): Promise<SaveSecretResult>;
+  testJira(args: TestJiraArgs): Promise<TestJiraResult>;
   aiCreateTask(args: AiCreateTaskArgs): Promise<AiCreateTaskResult>;
   standupGenerate(args: StandupGenerateArgs): Promise<StandupGenerateResult>;
   standupSave(args: StandupSaveArgs): Promise<StandupSaveResult>;
