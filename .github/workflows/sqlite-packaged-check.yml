@@ -1,0 +1,93 @@
+name: SQLite packaged check
+
+# Proves that Node's built-in `node:sqlite` works inside the *packaged* app on
+# every release platform (ADR-0011). Unit tests run under plain Node, which says
+# nothing about the packaged app: there the RunAsNode fuse is off, the main
+# bundle is built by Vite, and the code loads from an asar archive. This job
+# packages the app on the same runner images as release.yml, launches the real
+# binary with VERMILIAN_SQLITE_SELFTEST_OUT set, and asserts the JSON result
+# (file database, pragmas, unique index, backup API, integrity check of the copy).
+#
+# It runs on demand, and on pull requests that touch the things that could
+# break it: dependencies (Electron decides the bundled Node), build config,
+# the main entry, or the self-test itself.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/package.json
+      - app/pnpm-lock.yaml
+      - app/forge.config.ts
+      - app/vite.main.config.ts
+      - app/src/main.ts
+      - app/src/main/services/sqliteSelfTest.ts
+      - .github/workflows/sqlite-packaged-check.yml
+
+concurrency:
+  group: sqlite-packaged-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: SQLite in packaged app (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Same runner images as release.yml's build matrix.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Package
+        run: pnpm package
+
+      - name: Run the self-test in the packaged app
+        env:
+          VERMILIAN_SQLITE_SELFTEST_OUT: ${{ runner.temp }}/sqlite-selftest.json
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              # No display on the runner; --no-sandbox because Ubuntu 24.04
+              # restricts the unprivileged user namespaces Chromium's sandbox uses.
+              bin=$(ls -d out/Vermilian-linux-*/Vermilian)
+              xvfb-run -a "$bin" --no-sandbox ;;
+            macOS)
+              bin=$(ls -d out/Vermilian-darwin-*/Vermilian.app/Contents/MacOS/Vermilian)
+              "$bin" ;;
+            Windows)
+              bin=$(ls -d out/Vermilian-win32-*/Vermilian.exe)
+              "$bin" ;;
+          esac
+          echo "exit code: $?"
+
+      - name: Check the result
+        env:
+          RESULT: ${{ runner.temp }}/sqlite-selftest.json
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync(process.env.RESULT, "utf8"));
+            console.log(JSON.stringify(r, null, 2));
+            if (!r.ok) process.exit(1);
+          '
