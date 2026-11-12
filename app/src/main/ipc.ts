@@ -15,6 +15,9 @@ import {
   type GetIssuesArgs,
   type SearchIssuesArgs,
   type PatchIssueArgs,
+  type RunwayGetArgs,
+  type RunwayUpdateArgs,
+  type RunwayResult,
   type MoveIssueArgs,
   type CreateIssueArgs,
   type CreateIssueResult,
@@ -58,6 +61,17 @@ import * as jiraProfile from './services/jiraProfile';
 import { jira } from './api/jiraClient';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import { toJiraIssueRow } from '../shared/jiraIssue';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
+import {
+  createJiraRunwayStore,
+  createYouTrackRunwayStore,
+  storeForIssue,
+  type RunwayMetadataStore,
+  type RunwayStores,
+} from './services/runwayStore';
+import type { NamespacedIssueId } from '../shared/tracker';
 import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
@@ -94,6 +108,55 @@ async function loadClaudeKey(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-claude-key';
   const c = cfg ?? (await readConfig());
   return loadSecretWithSources(FILES.claudeKey, c.claudeKeyCommand, c.claudeKeyFile);
+}
+
+// Runway metadata stores (ADR-0011 §6, VERM-37). The SQLite database is
+// opened on first Jira use, in userData, and closed when the app quits.
+// YouTrack never touches it, so a database problem cannot affect the
+// existing YouTrack Focus fields.
+let runwayDb: DatabaseSync | null = null;
+let jiraRunwayStore: RunwayMetadataStore | null = null;
+
+const youtrackRunwayStore = createYouTrackRunwayStore({
+  async readFields(issueId) {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
+    return (await youtrack.getIssueDetail(cfg.youtrackUrl, token, issueId)).fields;
+  },
+  async patch(issueId, field, value) {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
+    await youtrack.patchIssue(cfg.youtrackUrl, token, issueId, field, value);
+  },
+});
+
+const runwayStores: RunwayStores = {
+  youtrack: youtrackRunwayStore,
+  get jira(): RunwayMetadataStore {
+    if (!jiraRunwayStore) {
+      runwayDb = openRunwayDb(path.join(app.getPath('userData'), RUNWAY_DB_FILENAME));
+      jiraRunwayStore = createJiraRunwayStore(runwayDb);
+    }
+    return jiraRunwayStore;
+  },
+};
+
+function closeRunwayDb(): void {
+  runwayDb?.close();
+  runwayDb = null;
+  jiraRunwayStore = null;
+}
+
+function runwayFailure(e: unknown): { ok: false; error: string; code?: string } {
+  const err = e as { message?: string; code?: unknown };
+  return {
+    ok: false,
+    error: err.message ?? 'Runway metadata request failed',
+    // RunwayStoreError / RunwayDbError codes ('rank-taken', 'newer-schema', ...).
+    code: typeof err.code === 'string' ? err.code : undefined,
+  };
 }
 
 // Project short names in the active workspace, resolved the same way
@@ -790,6 +853,31 @@ export function registerIpc(): void {
     }
     return articleConfig.getDismissals();
   });
+
+  ipcMain.handle(IPC.runwayGet, async (_e, args: RunwayGetArgs): Promise<RunwayResult> => {
+    try {
+      // storeForIssue rejects a malformed or bare ID before any store is used.
+      const issueId = args.issueId as NamespacedIssueId;
+      const entry = await storeForIssue(runwayStores, issueId).get(args.workspaceId, issueId);
+      return { ok: true, entry };
+    } catch (e) {
+      return runwayFailure(e);
+    }
+  });
+
+  ipcMain.handle(IPC.runwayUpdate, async (_e, args: RunwayUpdateArgs): Promise<RunwayResult> => {
+    try {
+      const issueId = args.issueId as NamespacedIssueId;
+      const entry = await storeForIssue(runwayStores, issueId).update(
+        args.workspaceId, issueId, args.patch,
+      );
+      return { ok: true, entry };
+    } catch (e) {
+      return runwayFailure(e);
+    }
+  });
+
+  app.on('will-quit', closeRunwayDb);
 
   ipcMain.handle(IPC.saveDismissal, async (_e, entry: NotThisWeekDismissal): Promise<void> => {
     articleConfig.setDismissal(entry);

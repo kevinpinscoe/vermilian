@@ -39,6 +39,8 @@ export const IPC = {
   resetBoardConfig: 'board:resetConfig',
   getDismissals: 'priorityDesk:getDismissals',
   saveDismissal: 'priorityDesk:saveDismissal',
+  runwayGet: 'runway:get',
+  runwayUpdate: 'runway:update',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -150,6 +152,19 @@ export interface SearchIssuesArgs {
   projectShortNames: string[];
   query: string; // user's free-text terms
 }
+
+export interface RunwayGetArgs {
+  workspaceId: string;
+  issueId: string; // namespaced: yt:<id> or jira:<KEY>
+}
+
+export interface RunwayUpdateArgs extends RunwayGetArgs {
+  patch: import('./runway').RunwayPatch;
+}
+
+export type RunwayResult =
+  | { ok: true; entry: import('./runway').RunwayEntry }
+  | { ok: false; error: string; code?: string };
 
 export interface PatchIssueArgs {
   issueId: string;
@@ -407,6 +422,11 @@ export interface VermilianAPI {
   // _vermilian-config Article's `dismissals` map, same pattern as board config.
   getDismissals(): Promise<import('./boardConfig').Dismissals>;
   saveDismissal(entry: import('./boardConfig').NotThisWeekDismissal): Promise<void>;
+  // Provider-neutral Runway metadata (ADR-0011 §6, VERM-37): Focus, Focus rank
+  // and Why now. A yt: issue reads/writes its YouTrack custom fields; a jira:
+  // issue reads/writes the local SQLite database. Never writes to Jira.
+  runwayGet(args: RunwayGetArgs): Promise<RunwayResult>;
+  runwayUpdate(args: RunwayUpdateArgs): Promise<RunwayResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board
