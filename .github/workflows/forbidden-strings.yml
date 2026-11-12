@@ -19,6 +19,21 @@ name: Forbidden strings
 # Every pattern is also registered with ::add-mask:: before scanning.
 #
 # The checker's own self-test (made-up patterns only) runs first.
+#
+# Security model (keep it this way; the patterns must stay private):
+# - Trigger is `pull_request`, never `pull_request_target` or `workflow_run`.
+#   Fork PRs get no secrets, so fork code never sees the patterns; the scan
+#   fails closed there and a maintainer runs the script locally instead.
+# - Dependabot PRs get only Dependabot secrets, hence the second copy. This
+#   job installs no dependencies and runs no project code, so nothing from a
+#   dependency update ever executes next to the secret. Do not add install,
+#   build or test steps to this job.
+# - Only the Scan step receives the secret. Never add `set -x`, and never print
+#   FORBIDDEN_PATTERNS: GitHub does not guarantee redaction of a multi-line
+#   secret, so the script's own masking and location-only output are what
+#   keep the patterns out of the public log.
+# - Anyone with write access can read repository secrets (GitHub's model), so
+#   the list is only as private as the set of people with write access.
 
 on:
   pull_request:
@@ -66,7 +81,13 @@ jobs:
       - name: Scan
         env:
           FORBIDDEN_PATTERNS: ${{ secrets.FORBIDDEN_STRINGS }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
+          if [[ -z "$FORBIDDEN_PATTERNS" && "$GITHUB_EVENT_NAME" == "pull_request" \
+                && "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::This PR comes from a fork, and GitHub does not pass secrets to fork PRs, so the forbidden-strings list is unavailable. A maintainer must run scripts/check-forbidden-strings.sh locally against this PR before merging."
+            exit 1
+          fi
           args=()
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             args+=(--text "PR title=$RUNNER_TEMP/fs/pr-title.txt")
