@@ -1,0 +1,76 @@
+name: Forbidden strings
+
+# Keeps this public repository free of employer names, personal data and local
+# database files (ADR-0011; Jira proposal B7).
+#
+# The denylist is NOT in the repository — a check that greps for forbidden
+# words would itself contain them. It lives in the repository secret
+# FORBIDDEN_STRINGS: one fixed string per line, matched case-insensitively.
+# Dependabot pull requests cannot read Actions secrets, so the same value must
+# also be set as a Dependabot secret of the same name. A missing secret fails
+# the job (fail closed) rather than passing silently.
+#
+# Scanned: every tracked file's content and path at the PR head, the PR's
+# commit messages, and the PR title and body. Also fails on any committed
+# SQLite database or Runway metadata snapshot (by name or by SQLite header).
+#
+# Findings print only the location and the pattern's line number, never the
+# matched text or the pattern: Actions logs on a public repository are public.
+# Every pattern is also registered with ::add-mask:: before scanning.
+#
+# The checker's own self-test (made-up patterns only) runs first.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: forbidden-strings-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Forbidden strings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Self-test the checker
+        run: bash scripts/check-forbidden-strings.test.sh
+
+      # PR text comes in through env vars, never interpolated into the script,
+      # so a crafted title or body cannot inject shell.
+      - name: Collect PR title, body and commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/fs"
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/fs/pr-title.txt"
+          printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/fs/pr-body.txt"
+          git log --format='%B' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/fs/commit-messages.txt"
+
+      - name: Scan
+        env:
+          FORBIDDEN_PATTERNS: ${{ secrets.FORBIDDEN_STRINGS }}
+        run: |
+          args=()
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            args+=(--text "PR title=$RUNNER_TEMP/fs/pr-title.txt")
+            args+=(--text "PR body=$RUNNER_TEMP/fs/pr-body.txt")
+            args+=(--text "commit messages=$RUNNER_TEMP/fs/commit-messages.txt")
+          fi
+          bash scripts/check-forbidden-strings.sh "${args[@]}"
