@@ -1,0 +1,57 @@
+name: Repository hygiene
+
+# Public, non-confidential protections for this public repository (VERM-25).
+#
+# The forbidden-strings list (employer names, Jira hosts, project keys, work
+# addresses) is private. It is NEVER stored in GitHub, in Actions or
+# Dependabot secrets, or downloaded to a runner; it is checked locally before
+# a push by .githooks/pre-push. See CONTRIBUTING.md, "Keeping the public
+# repository clean". This workflow therefore uses no secrets at all and runs
+# identically for fork and Dependabot pull requests.
+#
+# It checks:
+#   1. the scanner's self-test (made-up patterns only, local bare remotes, no
+#      network): pre-push refusals, database detection, output never printing
+#      a matched value;
+#   2. no SQLite database or Runway metadata snapshot in the tree, by name or
+#      by SQLite header;
+#   3. on pull requests, the same for every commit in the PR, so a database
+#      added and later deleted cannot enter main's history through a merge
+#      commit.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: repo-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scanner self-test
+        run: bash scripts/check-forbidden-strings.test.sh
+
+      - name: No database files in the tree
+        run: bash scripts/check-forbidden-strings.sh --db-only
+
+      - name: No database files in the PR's commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/check-forbidden-strings.sh --db-only --range "$BASE_SHA..$HEAD_SHA"
