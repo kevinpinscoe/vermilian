@@ -196,7 +196,8 @@ user exports a snapshot on one and imports it on the other.
 
 - **Scope.** A snapshot is always the whole database. Export and import cover every workspace's
   metadata at once; there is no partial or per-workspace import.
-- **Export** writes a consistent single-file copy (`VACUUM INTO`) to a location the user chooses.
+- **Export** writes a consistent single-file copy of the whole database, using SQLite's online
+  backup API (`backup()` in `node:sqlite`), to a location the user chooses.
 - **Import** never touches the live database until every check has passed:
   1. the file is opened read-only and must pass `PRAGMA integrity_check`;
   2. its `application_id` must match, and its `user_version` must be one this version can read; a
