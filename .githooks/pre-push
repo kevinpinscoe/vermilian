@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Repository pre-push hook: refuse to publish employer identifiers, personal data
+# or database files (VERM-25). See CONTRIBUTING.md, "Keeping the public
+# repository clean".
+#
+# Not installed by copying anywhere. It is reached in one of two ways:
+#   - a shared global pre-push hook (core.hooksPath) that delegates to a
+#     repository's .githooks/pre-push, replaying Git's ref list on stdin; or
+#   - on a host with no global hooks path: git config core.hooksPath .githooks
+# scripts/check-push-guard.sh reports which applies on this host.
+#
+# Git passes the remote name and URL as arguments and the refs on stdin; both
+# go straight to the scanner. Bypass (human decision only): git push --no-verify
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+exec bash "$root/scripts/check-forbidden-strings.sh" --push "${1:-origin}"
