@@ -13,7 +13,9 @@ import type {
   VermilianArticle,
   MasterPlanDiscovery,
   RecommendationIssue,
+  WorkspaceArticleListing,
 } from './youtrack';
+import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 // Project 0 ("Test Project") is the one e2e navigates into first; it deliberately
@@ -336,6 +338,7 @@ export async function createVermilianArticle(
 export async function updateVermilianArticle(
   _url: string, _token: string, articleId: string, content: string,
 ): Promise<{ updated: number } | null> {
+  if (wsArticles.has(articleId)) return writeWsArticle(articleId, content);
   if (articleId === 'e2e-jira-article') {
     if (!jiraArticle) return null;
     jiraArticle = { id: articleId, content, updated: Date.now() };
@@ -348,9 +351,74 @@ export async function updateVermilianArticle(
 export async function getVermilianArticle(
   _url: string, _token: string, articleId: string,
 ): Promise<VermilianArticle | null> {
+  const ws = wsArticles.get(articleId);
+  if (ws) return { id: ws.id, content: ws.content, updated: ws.updated };
   if (articleId === 'e2e-jira-article') return jiraArticle ? { ...jiraArticle } : null;
   if (!article || article.id !== articleId) return null;
   return { id: article.id, content: article.content, updated: article.updated };
+}
+
+// ─── _vermilian-ws-<id> workspace articles (in-memory, VERM-43) ──────────────────
+// Like YouTrack: updates are unconditional and titles are not unique.
+// VERMILIAN_E2E_WS_ARTICLES seeds a JSON array of { summary, content } — two
+// with the same title model a create race that already happened. Content
+// updates go through updateVermilianArticle, as with the real client.
+
+interface FakeWsArticle { id: string; summary: string; content: string; updated: number }
+
+const wsArticles = new Map<string, FakeWsArticle>();
+let wsSeq = 0;
+let wsClock = 0;
+
+// Strictly increasing, so two writes in the same millisecond still differ.
+function nextUpdated(): number {
+  wsClock = Math.max(Date.now(), wsClock + 1);
+  return wsClock;
+}
+
+function addWsArticle(summary: string, content: string): FakeWsArticle {
+  const a = { id: `e2e-ws-${++wsSeq}`, summary, content, updated: nextUpdated() };
+  wsArticles.set(a.id, a);
+  return a;
+}
+
+function writeWsArticle(articleId: string, content: string): { updated: number } | null {
+  const a = wsArticles.get(articleId);
+  if (!a) return null;
+  a.content = content;
+  a.updated = nextUpdated();
+  return { updated: a.updated };
+}
+
+if (process.env.VERMILIAN_E2E_WS_ARTICLES) {
+  for (const seed of JSON.parse(process.env.VERMILIAN_E2E_WS_ARTICLES) as Array<{ summary: string; content: string }>) {
+    addWsArticle(seed.summary, seed.content);
+  }
+}
+
+export async function listWorkspaceArticles(_url: string, _token: string): Promise<WorkspaceArticleListing> {
+  return {
+    ok: true,
+    articles: [...wsArticles.values()]
+      .filter((a) => a.summary.startsWith(WORKSPACE_ARTICLE_PREFIX))
+      .map((a) => ({ ...a })),
+  };
+}
+
+export async function createWorkspaceArticle(
+  _url: string, _token: string, workspaceId: string, content: string,
+): Promise<(VermilianArticle & { summary: string }) | null> {
+  return { ...addWsArticle(workspaceArticleTitle(workspaceId), content) };
+}
+
+// e2e-only: every workspace article as stored, unknown fields and all.
+export function getWorkspaceArticlesForTests(): FakeWsArticle[] {
+  return [...wsArticles.values()].map((a) => ({ ...a }));
+}
+
+// e2e-only: another machine overwrites an article's body.
+export function writeWorkspaceArticleForTests(articleId: string, content: string): boolean {
+  return writeWsArticle(articleId, content) !== null;
 }
 
 // ─── _vermilian-jira-overlay Article (in-memory) ────────────────────────────────

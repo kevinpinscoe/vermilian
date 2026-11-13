@@ -92,6 +92,7 @@ notifications, or the timer worklog round-trip.
 | Jira — profile fields, Test connection, Save to YouTrack (VERM-20) | ✅ E2E | `jira-settings.spec.ts` (fake Jira: classic probe result + detected cloudId, rejected token, invalid profile, seeded profile); probe logic 🧪 `jira.test.ts` |
 | Jira — read-only list of my open issues (VERM-21) | ✅ E2E | `jira-list.spec.ts` (key, summary, status, priority from fake Jira; not-set-up state → Settings); paging + transform 🧪 `jira.test.ts`, `jiraIssue.test.ts` |
 | Runway metadata store — Jira Focus / rank / Why now in local SQLite (VERM-37) | ✅ E2E | `runway-store.spec.ts` (Jira entry survives relaunch; duplicate rank and bare ID refused, via IPC); stores and rules 🧪 `runwayStore.test.ts`, `runway.test.ts`, `runwayDb.test.ts` |
+| Per-workspace configuration articles — `_vermilian-ws-<id>` discovery, read, create, update (VERM-43) | ✅ E2E | `workspace-articles.spec.ts` (two workspaces independently, two-machine merge and same-field conflict, unknown fields kept, duplicates refused and left alone, via IPC); merge, stale-write retries and create race 🧪 `workspaceMerge.test.ts`, `workspaceArticles.test.ts` |
 | Timer & Pomodoro inputs | ⬜ Gap | — |
 | Daily notes folder (Browse picker) | 🚫 Out of harness | OS dialog |
 | Appearance — theme switch | ✅ E2E | `theme.spec.ts` (dark toggle) |
