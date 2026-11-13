@@ -3,6 +3,7 @@
 
 import { youtrack as yt } from './client';
 import type { WorkspaceArticleClient } from '../services/workspaceArticles';
+import type { WorkspaceMigrationClient } from '../services/workspaceMigration';
 
 export function youtrackWorkspaceArticleClient(url: string, token: string): WorkspaceArticleClient {
   return {
@@ -14,5 +15,13 @@ export function youtrackWorkspaceArticleClient(url: string, token: string): Work
     },
     create: (workspaceId, content) => yt.createWorkspaceArticle(url, token, workspaceId, content),
     update: (articleId, content) => yt.updateVermilianArticle(url, token, articleId, content),
+  };
+}
+
+// The same client plus the source listing migration reads (VERM-44).
+export function youtrackWorkspaceMigrationClient(url: string, token: string): WorkspaceMigrationClient {
+  return {
+    ...youtrackWorkspaceArticleClient(url, token),
+    listSources: () => yt.listMigrationSourceArticles(url, token),
   };
 }

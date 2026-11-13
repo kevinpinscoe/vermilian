@@ -244,12 +244,16 @@ fixtures use fictional values such as `example.atlassian.net`, `DEMO-123`, `Work
 
 ### 11. Migration
 
-On first run of a version that implements this ADR:
+Migration occurs during the first activation of per-workspace configuration storage, not merely
+the first startup of a version that contains the migration code. Until then `_vermilian-config`
+stays authoritative. At that activation:
 
 - each workspace in `_vermilian-config` becomes its own article, keeping its ID, name, order,
   folders, projects, board configuration and dismissals, with a YouTrack backend on the current
   server;
-- the existing Jira profile article is copied into the workspace it is assigned to;
+- a Jira profile migrates into a separate, newly created Jira-backed workspace when an explicit
+  name is supplied. It never converts or overwrites an existing YouTrack workspace. Without a
+  name, the profile remains unassigned and unchanged;
 - `_vermilian-config` and the Jira profile article are left unchanged, not deleted;
 - YouTrack Focus, Focus rank and Why now fields are not touched;
 - the SQLite database is created empty. No Jira Runway metadata exists before this version, so

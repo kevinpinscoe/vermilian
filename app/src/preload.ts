@@ -30,6 +30,7 @@ import {
 import type { AppConfig } from './shared/config';
 import type { JiraProfile } from './shared/jiraProfile';
 import type { WorkspaceDocument } from './shared/workspaceSchema';
+import type { WorkspaceMigrationOptions } from './shared/workspaceMigration';
 import type { VermilianConfig } from './shared/workspace';
 
 const api: VermilianAPI = {
@@ -106,6 +107,9 @@ const api: VermilianAPI = {
   debugGetWorkspaceArticles: () => ipcRenderer.invoke('e2e:getWorkspaceArticles'),
   debugWriteWorkspaceArticle: (articleId: string, content: string) =>
     ipcRenderer.invoke('e2e:writeWorkspaceArticle', articleId, content),
+  planWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.planWorkspaceMigration, options),
+  applyWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.applyWorkspaceMigration, options),
+  debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

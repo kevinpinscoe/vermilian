@@ -13,6 +13,7 @@ import type {
   ReadWorkspaceArticleResult,
   SaveWorkspaceArticleResult,
 } from './workspaceArticle';
+import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from './workspaceMigration';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -61,6 +62,10 @@ export const IPC = {
   readWorkspaceArticle: 'workspaceArticles:read',
   createWorkspaceArticle: 'workspaceArticles:create',
   updateWorkspaceArticle: 'workspaceArticles:update',
+  // Migration to per-workspace articles (VERM-44, shared/workspaceMigration.ts).
+  // Nothing calls these on startup; VERM-46 runs migration at activation.
+  planWorkspaceMigration: 'workspaceMigration:plan',
+  applyWorkspaceMigration: 'workspaceMigration:apply',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -485,6 +490,12 @@ export interface VermilianAPI {
   // fake's raw workspace articles, and overwrite one as "another machine".
   debugGetWorkspaceArticles?(): Promise<Array<{ id: string; summary: string; content: string; updated: number }>>;
   debugWriteWorkspaceArticle?(articleId: string, content: string): Promise<boolean>;
+  // Migration (VERM-44). plan is a dry run that writes nothing; apply re-reads
+  // the source articles and creates the workspace articles that are missing.
+  planWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
+  applyWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
+  // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
+  debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
 }
 
 declare global {
