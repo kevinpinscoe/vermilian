@@ -251,7 +251,9 @@ stays authoritative. At that activation:
 - each workspace in `_vermilian-config` becomes its own article, keeping its ID, name, order,
   folders, projects, board configuration and dismissals, with a YouTrack backend on the current
   server;
-- the existing Jira profile article is copied into the workspace it is assigned to;
+- a Jira profile migrates into a separate, newly created Jira-backed workspace when an explicit
+  name is supplied. It never converts or overwrites an existing YouTrack workspace. Without a
+  name, the profile remains unassigned and unchanged;
 - `_vermilian-config` and the Jira profile article are left unchanged, not deleted;
 - YouTrack Focus, Focus rank and Why now fields are not touched;
 - the SQLite database is created empty. No Jira Runway metadata exists before this version, so

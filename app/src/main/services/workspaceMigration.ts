@@ -19,6 +19,7 @@ import {
   JIRA_PROFILE_ARTICLE_TITLE,
   buildMigrationTargets,
   documentDifferences,
+  jiraProfileAllowsCompletion,
   jiraWorkspaceIdFor,
   parseJiraProfileSource,
   parseLegacyConfig,
@@ -148,16 +149,20 @@ async function plan(
   if (jira.kind === 'empty') jiraProfile = { status: 'none', articleId: jira.articleId };
   if (jira.kind === 'invalid') jiraProfile = { status: 'invalid', articleId: jira.articleId, message: jira.message };
   if (jira.kind === 'profile') {
-    const workspaceId = jiraWorkspaceIdFor(jira.articleId);
-    if (typeof options.jiraWorkspaceName === 'string' && workspaceId) {
-      jiraProfile = { status: 'assigned', articleId: jira.articleId, workspaceId };
-    } else if (workspaceId && existing.has(workspaceId)) {
-      jiraProfile = { status: 'assigned', articleId: jira.articleId, workspaceId }; // migrated by an earlier run
+    const workspaceId = jiraWorkspaceIdFor(jira.articleId) ?? '';
+    if (typeof options.jiraWorkspaceName === 'string') {
+      // Settled from the Jira workspace's item by jiraOutcome below.
+      jiraProfile = { status: 'pending', articleId: jira.articleId, workspaceId, message: '' };
     } else {
+      const earlier = workspaceId && existing.has(workspaceId) ? workspaceId : undefined;
       jiraProfile = {
         status: 'unassigned',
         articleId: jira.articleId,
-        message: 'The Jira profile was not migrated: name a new Jira workspace to hold it. The profile article is unchanged.',
+        message:
+          'The Jira profile was intentionally not migrated: no name was given for a new Jira workspace. ' +
+          'The profile article is unchanged.' +
+          (earlier ? ` An article for Jira workspace ${earlier} exists from an earlier run; it was not checked.` : ''),
+        ...(earlier ? { existingWorkspaceId: earlier } : {}),
       };
     }
   }
@@ -165,12 +170,36 @@ async function plan(
   return {
     ok: true,
     mode: 'plan',
-    complete: items.every((i) => i.action === 'unchanged'),
-    items,
-    jiraProfile,
+    ...finish(items, jiraProfile),
     notMigrated,
     configArticleId: configs[0].id,
   };
+}
+
+// When a name was given, the Jira outcome is the Jira workspace item's outcome:
+// migrated only once its article exists and matches.
+function jiraOutcome(j: JiraProfileMigration, items: WorkspaceMigrationItem[]): JiraProfileMigration {
+  if (j.status !== 'pending' && j.status !== 'assigned' && j.status !== 'failed') return j;
+  const item = items.find((i) => i.backend === 'jira');
+  const workspaceId = item?.workspaceId || j.workspaceId;
+  if (item && (item.action === 'created' || item.action === 'unchanged')) {
+    return { status: 'assigned', articleId: j.articleId, workspaceId };
+  }
+  if (item?.action === 'create') {
+    return { status: 'pending', articleId: j.articleId, workspaceId, message: `Apply would create Jira workspace ${workspaceId}.` };
+  }
+  return {
+    status: 'failed',
+    articleId: j.articleId,
+    workspaceId,
+    message: `The Jira profile was not migrated: ${item?.message ?? 'no Jira workspace could be built from it.'}`,
+  };
+}
+
+function finish(items: WorkspaceMigrationItem[], j: JiraProfileMigration) {
+  const jiraProfile = jiraOutcome(j, items);
+  const done = items.every((i) => i.action === 'created' || i.action === 'unchanged');
+  return { items, jiraProfile, complete: done && jiraProfileAllowsCompletion(jiraProfile) };
 }
 
 /** A dry run: what migration would do, from the articles as they are now. Writes nothing. */
@@ -222,10 +251,5 @@ export async function applyWorkspaceMigration(
     }
   }
 
-  return {
-    ...fresh,
-    mode: 'apply',
-    complete: items.every((i) => i.action === 'created' || i.action === 'unchanged'),
-    items,
-  };
+  return { ...fresh, mode: 'apply', ...finish(items, fresh.jiraProfile) };
 }

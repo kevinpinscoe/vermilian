@@ -78,6 +78,7 @@ test.describe('Migration to per-workspace configuration articles', () => {
     const applied = await api.apply(page, { jiraWorkspaceName: 'Workspace J' });
     if (!applied.ok) throw new Error(JSON.stringify(applied));
     expect(applied.complete).toBe(true);
+    expect(applied.jiraProfile).toMatchObject({ status: 'assigned' });
     expect(applied.items.map((i) => [i.backend, i.action])).toEqual([
       ['youtrack', 'created'],
       ['youtrack', 'created'],

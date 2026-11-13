@@ -70,18 +70,37 @@ export interface WorkspaceMigrationItem {
   notCarried?: string[]; // source paths the workspace schema has no place for
 }
 
+// What happened to the Jira profile. `none` and `unassigned` are deliberate
+// outcomes and allow completion; `invalid`, `ambiguous`, `pending` and
+// `failed` never do.
 export type JiraProfileMigration =
   | { status: 'none'; articleId?: string } // no profile article, or one holding no profile
-  | { status: 'unassigned'; articleId: string; message: string }
+  // A profile exists and no name was given, so it was intentionally not
+  // migrated. Never described as migrated, even if an earlier run created a
+  // Jira workspace for it (`existingWorkspaceId`, not verified by this run).
+  | { status: 'unassigned'; articleId: string; message: string; existingWorkspaceId?: string }
+  // A name was given and the Jira workspace's article exists and matches.
   | { status: 'assigned'; articleId: string; workspaceId: string }
+  // Plan only: a name was given and apply would create the Jira workspace.
+  | { status: 'pending'; articleId: string; workspaceId: string; message: string }
+  // A name was given but the Jira workspace could not be created or verified
+  // (see its item for why).
+  | { status: 'failed'; articleId: string; workspaceId: string; message: string }
   | { status: 'invalid'; articleId: string; message: string }
   | { status: 'ambiguous'; articleIds: string[]; message: string };
+
+/** Jira outcomes that allow a migration to be complete. */
+export function jiraProfileAllowsCompletion(j: JiraProfileMigration): boolean {
+  return j.status === 'none' || j.status === 'unassigned' || j.status === 'assigned';
+}
 
 export interface WorkspaceMigrationReport {
   ok: true;
   mode: 'plan' | 'apply';
-  // Every workspace's article exists and holds what migration writes. Only a
-  // complete apply may be followed by switching storage (VERM-46).
+  // Every workspace's article exists and holds what migration writes, and the
+  // Jira profile is absent, intentionally unassigned, or migrated and
+  // verified. Only a complete apply may be followed by switching storage
+  // (VERM-46).
   complete: boolean;
   items: WorkspaceMigrationItem[];
   jiraProfile: JiraProfileMigration;

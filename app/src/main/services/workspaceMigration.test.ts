@@ -327,7 +327,10 @@ describe('Jira profile', () => {
     const again = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
     expect(again.items.find((i) => i.backend === 'jira')!.action).toBe('unchanged');
     const noName = report(await applyWorkspaceMigration(yt, SERVER));
-    expect(noName.jiraProfile).toMatchObject({ status: 'assigned' });
+    // Without a name it is reported unassigned, never as migrated — the
+    // earlier run's workspace is mentioned but not vouched for.
+    const jiraId = again.items.find((i) => i.backend === 'jira')!.workspaceId;
+    expect(noName.jiraProfile).toMatchObject({ status: 'unassigned', existingWorkspaceId: jiraId });
     expect(yt.workspaceArticles()).toHaveLength(4);
     expect(yt.creates).toBe(4);
   });
@@ -353,6 +356,101 @@ describe('Jira profile', () => {
     r = report(await planWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'J' }));
     expect(r.jiraProfile).toMatchObject({ status: 'ambiguous' });
     expect(r.items.some((i) => i.backend === 'jira')).toBe(false);
+  });
+});
+
+// ─── Completion and the Jira profile ─────────────────────────────────────────
+//
+// `complete` is what VERM-46 activates on, so a Jira profile that should have
+// migrated and did not must keep it false.
+
+describe('completion and the Jira profile', () => {
+  const jiraArticleIds = () => [...yt.articles.values()].filter((a) => a.summary === JIRA_PROFILE_ARTICLE_TITLE).map((a) => a.id);
+
+  it('no Jira profile: completes normally', async () => {
+    const r = report(await applyWorkspaceMigration(yt, SERVER));
+    expect(r.jiraProfile).toEqual({ status: 'none' });
+    expect(r.complete).toBe(true);
+    expect(report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' })).complete).toBe(true);
+  });
+
+  it('an intentionally unassigned profile is reported as such, and does not block completion', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    const r = report(await applyWorkspaceMigration(yt, SERVER));
+    expect(r.jiraProfile).toMatchObject({ status: 'unassigned', articleId: jiraArticleIds()[0] });
+    expect(r.jiraProfile).not.toHaveProperty('existingWorkspaceId');
+    expect(r.complete).toBe(true);
+  });
+
+  it('an invalid profile never produces a complete migration, with or without a name', async () => {
+    seed(legacyConfig(), { version: 1, profile: { siteUrl: 'not a url', email: 'x' } });
+    for (const options of [{}, { jiraWorkspaceName: 'Workspace J' }]) {
+      const r = report(await applyWorkspaceMigration(yt, SERVER, options));
+      expect(r.jiraProfile.status).toBe('invalid');
+      expect(r.items.every((i) => i.action === 'created' || i.action === 'unchanged')).toBe(true);
+      expect(r.complete).toBe(false);
+    }
+    seed(legacyConfig(), '{ not json');
+    yt.rewrite(jiraArticleIds()[0], '{ not json');
+    expect(report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }))).toMatchObject({
+      complete: false,
+      jiraProfile: { status: 'invalid' },
+    });
+  });
+
+  it('duplicate profile articles are detected and prevent completion, and neither is used', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    yt.put(JIRA_PROFILE_ARTICLE_TITLE, JSON.stringify({ version: 1, profile: PROFILE }));
+    const r = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(r.jiraProfile).toMatchObject({ status: 'ambiguous', articleIds: jiraArticleIds().sort() });
+    expect(r.items.some((i) => i.backend === 'jira')).toBe(false);
+    expect(r.complete).toBe(false);
+  });
+
+  it('a supplied name requires the Jira workspace to be created and verified', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    const plan = report(await planWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(plan.jiraProfile).toMatchObject({ status: 'pending' });
+
+    // The YouTrack workspaces are already migrated; only the Jira create fails.
+    await applyWorkspaceMigration(yt, SERVER);
+    yt.failCreate = true;
+    const failed = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(failed.items.filter((i) => i.backend === 'youtrack').every((i) => i.action === 'unchanged')).toBe(true);
+    expect(failed.items.find((i) => i.backend === 'jira')).toMatchObject({ action: 'failed' });
+    expect(failed.jiraProfile).toMatchObject({ status: 'failed' });
+    expect(failed.complete).toBe(false);
+
+    yt.failCreate = false;
+    const ok = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(ok.jiraProfile).toMatchObject({ status: 'assigned' });
+    expect(ok.complete).toBe(true);
+  });
+
+  it('a Jira workspace article that differs, or is duplicated, is not overwritten and blocks completion', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' });
+    const before = yt.workspaceArticles();
+
+    const renamed = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Another name' }));
+    expect(renamed.items.find((i) => i.backend === 'jira')).toMatchObject({ action: 'conflict', differences: ['name'] });
+    expect(renamed.jiraProfile).toMatchObject({ status: 'failed' });
+    expect(renamed.complete).toBe(false);
+    expect(yt.workspaceArticles()).toEqual(before);
+
+    const jiraArticle = before.find((a) => a.summary.includes('ws-jira-'))!;
+    yt.put(jiraArticle.summary, jiraArticle.content);
+    const dup = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(dup.items.find((i) => i.backend === 'jira')).toMatchObject({ action: 'ambiguous' });
+    expect(dup.jiraProfile).toMatchObject({ status: 'failed' });
+    expect(dup.complete).toBe(false);
+  });
+
+  it('an unusable name blocks completion rather than being taken as no name', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    const r = report(await applyWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: '  ' }));
+    expect(r.jiraProfile).toMatchObject({ status: 'failed' });
+    expect(r.complete).toBe(false);
   });
 });
 
