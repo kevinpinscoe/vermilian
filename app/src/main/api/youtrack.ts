@@ -162,6 +162,7 @@ interface RawIssue {
 import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueSearchQuery } from '../../shared/search';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
+import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import {
   FIELD_DEFS,
   FIELD_KEYS,
@@ -686,7 +687,7 @@ export async function getIssuesForStandup(
 
 // --- _vermilian-config and _vermilian-master-plan Knowledge Base Articles ---
 
-const CONFIG_ARTICLE_SUMMARY = '_vermilian-config';
+const CONFIG_ARTICLE_SUMMARY = CONFIG_ARTICLE_TITLE;
 const MASTER_PLAN_ARTICLE_SUMMARY = '_vermilian-master-plan';
 const ARTICLE_FIELDS = 'id,summary,content,updated';
 // This YouTrack instance requires every Article to belong to a project.
@@ -791,7 +792,7 @@ export async function getVermilianArticle(
 // Holds the shared Jira connection profile (shared/jiraProfile.ts). Kept
 // separate from _vermilian-config so older clients cannot drop it.
 
-const JIRA_ARTICLE_SUMMARY = '_vermilian-jira-overlay';
+const JIRA_ARTICLE_SUMMARY = JIRA_PROFILE_ARTICLE_TITLE;
 
 export async function findJiraArticle(
   url: string,
@@ -921,6 +922,20 @@ export async function listWorkspaceArticles(url: string, token: string): Promise
     ok: true,
     articles: result.articles
       .filter((a) => typeof a.summary === 'string' && a.summary.startsWith(WORKSPACE_ARTICLE_PREFIX))
+      .map((a) => ({ id: a.id, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
+  };
+}
+
+// The source articles migration reads (VERM-44): _vermilian-config and the
+// Jira profile article, found by listing the VERM project to exhaustion, so a
+// duplicate is seen rather than the first match picked.
+export async function listMigrationSourceArticles(url: string, token: string): Promise<WorkspaceArticleListing> {
+  const result = await fetchAllProjectArticles(url, token, VERMILIAN_ARTICLE_PROJECT_SHORT_NAME);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    articles: result.articles
+      .filter((a) => a.summary === CONFIG_ARTICLE_SUMMARY || a.summary === JIRA_ARTICLE_SUMMARY)
       .map((a) => ({ id: a.id, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
   };
 }

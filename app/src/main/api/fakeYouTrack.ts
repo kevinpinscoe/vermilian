@@ -441,6 +441,22 @@ export async function createJiraArticle(
   return { ...jiraArticle };
 }
 
+// ─── Migration sources (VERM-44) ─────────────────────────────────────────────────
+// The fake holds at most one _vermilian-config and one Jira profile article.
+
+export async function listMigrationSourceArticles(_url: string, _token: string): Promise<WorkspaceArticleListing> {
+  const articles = [
+    ...(article ? [{ ...article, summary: '_vermilian-config' }] : []),
+    ...(jiraArticle ? [{ ...jiraArticle, summary: '_vermilian-jira-overlay' }] : []),
+  ];
+  return { ok: true, articles };
+}
+
+// e2e-only: the source articles as stored, to assert migration never writes them.
+export function getMigrationSourcesForTests(): Array<{ id: string; content: string; updated: number }> {
+  return [...(article ? [{ ...article }] : []), ...(jiraArticle ? [{ ...jiraArticle }] : [])];
+}
+
 // ─── _vermilian-master-plan discovery (in-memory)────────────────────────────────
 // VERMILIAN_E2E_MASTER_PLAN_CONTENT seeds a single matching article.
 // VERMILIAN_E2E_MASTER_PLAN_DUPLICATE=1 simulates two matching articles

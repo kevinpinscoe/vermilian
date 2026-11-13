@@ -244,7 +244,9 @@ fixtures use fictional values such as `example.atlassian.net`, `DEMO-123`, `Work
 
 ### 11. Migration
 
-On first run of a version that implements this ADR:
+Migration occurs during the first activation of per-workspace configuration storage, not merely
+the first startup of a version that contains the migration code. Until then `_vermilian-config`
+stays authoritative. At that activation:
 
 - each workspace in `_vermilian-config` becomes its own article, keeping its ID, name, order,
   folders, projects, board configuration and dismissals, with a YouTrack backend on the current

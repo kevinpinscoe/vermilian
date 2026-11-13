@@ -59,7 +59,9 @@ import * as articleConfig from './services/articleConfig';
 import { getMasterPlanState } from './services/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
-import { youtrackWorkspaceArticleClient } from './api/workspaceArticleClient';
+import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
+import * as workspaceMigration from './services/workspaceMigration';
+import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
   ReadWorkspaceArticleResult,
@@ -708,6 +710,7 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:writeWorkspaceArticle', (_e, articleId: string, content: string): boolean =>
       fakeYouTrackForE2E.writeWorkspaceArticleForTests(articleId, content),
     );
+    ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
   }
 
   // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
@@ -767,6 +770,32 @@ export function registerIpc(): void {
       }
       return workspaceArticles.updateWorkspaceArticle(client, base, edited);
     },
+  );
+
+  // ─── Migration to per-workspace articles (VERM-44) ──────────────────────────
+  // Only these two handlers run it — never startup. The backend server of every
+  // migrated workspace is the configuration YouTrack in main settings.
+
+  function migrationOptions(raw: unknown): WorkspaceMigrationOptions {
+    const name = typeof raw === 'object' && raw !== null ? (raw as WorkspaceMigrationOptions).jiraWorkspaceName : undefined;
+    return typeof name === 'string' ? { jiraWorkspaceName: name } : {};
+  }
+
+  async function runMigration(
+    run: typeof workspaceMigration.planWorkspaceMigration,
+    rawOptions: unknown,
+  ): Promise<WorkspaceMigrationResult> {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (!cfg.youtrackUrl || !token) return NOT_CONFIGURED_WS;
+    return run(youtrackWorkspaceMigrationClient(cfg.youtrackUrl, token), cfg.youtrackUrl, migrationOptions(rawOptions));
+  }
+
+  ipcMain.handle(IPC.planWorkspaceMigration, (_e, options: unknown) =>
+    runMigration(workspaceMigration.planWorkspaceMigration, options),
+  );
+  ipcMain.handle(IPC.applyWorkspaceMigration, (_e, options: unknown) =>
+    runMigration(workspaceMigration.applyWorkspaceMigration, options),
   );
 
   ipcMain.handle(
