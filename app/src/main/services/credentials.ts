@@ -13,6 +13,16 @@ import path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import {
+  blobFilenameFor,
+  checkCredentialValue,
+  isLegacyCredentialRef,
+  refFromBlobFilename,
+} from '../../shared/credentialRefs';
+import { isCredentialRef } from '../../shared/workspaceSchema';
+import type { CredentialRefWriteResult } from '../../shared/ipc';
+import type { CredentialSourceIO } from './credentialResolver';
+
 const execAsync = promisify(exec);
 
 export const FILES = {
@@ -179,4 +189,114 @@ export async function hasSecretWithSources(
     } catch { /* fall through */ }
   }
   return hasSecret(filename);
+}
+
+// ─── Per-reference credentials (ADR-0011 §5, VERM-45) ────────────────────────
+//
+// The raw source reads behind credentialResolver.ts, and the per-reference
+// blob store. Unlike the legacy chain above, nothing here falls through: each
+// read reports only whether it worked, and the resolver stops on the first
+// configured source that fails.
+
+/** Electron/Node reads for credentialResolver.ts. */
+export const credentialSourceIO: CredentialSourceIO = {
+  async runCommand(command) {
+    try {
+      const { stdout } = await execAsync(command, { timeout: 10_000 });
+      return { ok: true, stdout };
+    } catch {
+      return { ok: false };
+    }
+  },
+  async readFile(filePath) {
+    try {
+      return { ok: true, content: await fs.readFile(filePath, 'utf-8') };
+    } catch {
+      return { ok: false };
+    }
+  },
+  async blobPresent(filename, legacy) {
+    if (await exists(path.join(credentialsDir(), filename))) return true;
+    // A legacy credential saved where safeStorage encryption failed (macOS)
+    // lives in its plain-text fallback file; per-reference blobs never do.
+    return legacy && (await exists(plaintextPath(filename)));
+  },
+  async readBlob(filename, legacy) {
+    const encrypted = path.join(credentialsDir(), filename);
+    if (await exists(encrypted)) {
+      // An encrypted blob that cannot be decrypted is a failure, not a reason
+      // to read the plain-text file instead.
+      try {
+        return { ok: true, value: safeStorage.decryptString(await fs.readFile(encrypted)) };
+      } catch {
+        return { ok: false };
+      }
+    }
+    if (!legacy) return { ok: false };
+    try {
+      return { ok: true, value: await fs.readFile(plaintextPath(filename), 'utf-8') };
+    } catch {
+      return { ok: false };
+    }
+  },
+};
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Saves a per-reference credential as an encrypted safeStorage blob. Refuses
+ * a legacy reference (those keep their own Settings fields and blobs), a value
+ * that is not a single credential, and — unlike saveSecret — any host where
+ * safeStorage cannot encrypt: there is no plain-text fallback for a reference.
+ */
+export async function saveCredentialRefSecret(
+  ref: string,
+  value: string,
+): Promise<CredentialRefWriteResult> {
+  if (!isCredentialRef(ref)) return { ok: false, reason: 'invalid-reference' };
+  if (isLegacyCredentialRef(ref)) return { ok: false, reason: 'legacy-reference' };
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (checkCredentialValue(trimmed) !== 'ok') return { ok: false, reason: 'invalid-value' };
+  if (!isSecure()) return { ok: false, reason: 'encryption-unavailable' };
+  let encrypted: Buffer;
+  try {
+    encrypted = safeStorage.encryptString(trimmed);
+  } catch {
+    return { ok: false, reason: 'encryption-unavailable' };
+  }
+  try {
+    await atomicWrite(path.join(credentialsDir(), blobFilenameFor(ref)), encrypted);
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'write-failed' };
+  }
+}
+
+/** Deletes a per-reference blob. Refuses a legacy reference. Absent is success. */
+export async function clearCredentialRefSecret(ref: string): Promise<CredentialRefWriteResult> {
+  if (!isCredentialRef(ref)) return { ok: false, reason: 'invalid-reference' };
+  if (isLegacyCredentialRef(ref)) return { ok: false, reason: 'legacy-reference' };
+  try {
+    await fs.unlink(path.join(credentialsDir(), blobFilenameFor(ref)));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return { ok: false, reason: 'write-failed' };
+  }
+  return { ok: true };
+}
+
+/** References that have a per-reference blob on this host. */
+export async function listCredentialRefBlobs(): Promise<string[]> {
+  try {
+    const names = await fs.readdir(credentialsDir());
+    return names.map(refFromBlobFilename).filter((r): r is string => r !== null);
+  } catch {
+    return [];
+  }
 }

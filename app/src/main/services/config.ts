@@ -5,6 +5,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AppConfig, DEFAULT_CONFIG } from '../../shared/config';
+import { sanitiseCredentialSources } from '../../shared/credentialRefs';
 import { IS_E2E } from '../e2e';
 
 function configPath(): string {
@@ -16,6 +17,7 @@ function merge(partial: Partial<AppConfig>): AppConfig {
     ...DEFAULT_CONFIG,
     ...partial,
     pomodoro: { ...DEFAULT_CONFIG.pomodoro, ...(partial.pomodoro ?? {}) },
+    credentialSources: sanitiseCredentialSources(partial.credentialSources),
   };
 }
 

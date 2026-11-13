@@ -11,6 +11,16 @@ export interface PomodoroConfig {
   longBreakEvery: number; // long break every Nth work block
 }
 
+/**
+ * One credential reference's local, non-secret sources (ADR-0011 §5,
+ * VERM-45). An empty string means unconfigured. These are a command to run and
+ * a path to read — never the credential itself.
+ */
+export interface CredentialSourceConfig {
+  command: string;
+  file: string;
+}
+
 export type StandupScope = 'all-workspace' | 'active-workspace' | 'custom';
 export type StandupWindow = '24h' | '48h' | '7d' | 'custom';
 
@@ -43,6 +53,13 @@ export interface AppConfig {
   jiraTokenCommand: string;
   jiraTokenFile: string;
 
+  // Per-reference credential sources (ADR-0011 §5, VERM-45), keyed by
+  // credential reference. youtrack-1, anthropic-1 and jira-1 never appear
+  // here: they resolve through the legacy fields above
+  // (shared/credentialRefs.ts). The safeStorage source is the reference's
+  // blob, not an entry here.
+  credentialSources: Record<string, CredentialSourceConfig>;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -69,6 +86,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   claudeKeyFile: '',
   jiraTokenCommand: '',
   jiraTokenFile: '',
+  credentialSources: {},
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',

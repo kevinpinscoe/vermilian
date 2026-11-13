@@ -31,6 +31,7 @@ import type { AppConfig } from './shared/config';
 import type { JiraProfile } from './shared/jiraProfile';
 import type { WorkspaceDocument } from './shared/workspaceSchema';
 import type { WorkspaceMigrationOptions } from './shared/workspaceMigration';
+import type { CredentialSourceConfig } from './shared/credentialRefs';
 import type { VermilianConfig } from './shared/workspace';
 
 const api: VermilianAPI = {
@@ -109,6 +110,14 @@ const api: VermilianAPI = {
     ipcRenderer.invoke('e2e:writeWorkspaceArticle', articleId, content),
   planWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.planWorkspaceMigration, options),
   applyWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.applyWorkspaceMigration, options),
+  listCredentialRefs: () => ipcRenderer.invoke(IPC.listCredentialRefs),
+  setCredentialRefSources: (credentialRef: string, sources: CredentialSourceConfig) =>
+    ipcRenderer.invoke(IPC.setCredentialRefSources, credentialRef, sources),
+  saveCredentialRefSecret: (credentialRef: string, value: string) =>
+    ipcRenderer.invoke(IPC.saveCredentialRefSecret, credentialRef, value),
+  clearCredentialRefSecret: (credentialRef: string) => ipcRenderer.invoke(IPC.clearCredentialRefSecret, credentialRef),
+  checkWorkspaceCredential: (workspaceId: string, credentialRef: string | null) =>
+    ipcRenderer.invoke(IPC.checkWorkspaceCredential, workspaceId, credentialRef),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
 };
 
