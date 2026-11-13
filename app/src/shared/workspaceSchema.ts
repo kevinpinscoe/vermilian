@@ -1,4 +1,4 @@
-// Workspace schema v2 (ADR-0011): one self-contained document per workspace.
+// Workspace schema (ADR-0011): one self-contained document per workspace.
 //
 // A workspace is the isolation boundary. Each one names its own ticketing
 // backend (YouTrack or Jira) with non-secret connection details, opaque
@@ -23,8 +23,8 @@
 //   in a document — known field or not — makes it invalid. Errors name the
 //   field and never contain the value.
 // - **Lossless.** Unknown fields never reach the typed document, so nothing
-//   reads them, but parse returns the original JSON as `source`, and
-//   serialising with that source writes every unknown field back. A schema
+//   reads them, but an update must be written from the source handle that
+//   parse returns, which writes every unknown field back. A schema
 //   version this code does not know is rejected, never guessed at.
 //
 // Pure TypeScript: no Electron, no React. Safe in either process and in tests.
@@ -39,7 +39,9 @@ import { normaliseSiteUrl, type JiraProfile } from './jiraProfile';
 import { isTrackerKind } from './tracker';
 import type { WorkspaceFolder } from './workspace';
 
-export const WORKSPACE_SCHEMA_VERSION = 2;
+// The per-workspace article format is new with ADR-0011, so its first version
+// is 1 (the ADR's example). It is unrelated to `version` in _vermilian-config.
+export const WORKSPACE_SCHEMA_VERSION = 1;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,10 @@ export interface WorkspaceDocument {
   order: number;
   backend: WorkspaceBackend;
   ai: WorkspaceAiConfig;
+  // The workspace's projects, for either backend: YouTrack project IDs or Jira
+  // project keys, each in exactly one folder. There is no second project list
+  // (ADR-0011's example `backend.projects` is not used); read the selection
+  // with workspaceProjectIds.
   folders: WorkspaceFolder[];
   boards: Record<string, BoardConfig>; // keyed by boardId (project ID or key)
   dismissals: Dismissals; // keyed by dismissalKey(workspaceId, issueId)
@@ -83,10 +89,6 @@ export interface WorkspaceValidationError {
   code: WorkspaceValidationCode;
   message: string; // never contains the offending value when it may be a secret
 }
-
-export type WorkspaceParseResult =
-  | { ok: true; document: WorkspaceDocument; source: Record<string, unknown> }
-  | { ok: false; errors: WorkspaceValidationError[] };
 
 // ─── Identifiers ─────────────────────────────────────────────────────────────
 
@@ -109,6 +111,11 @@ export function generateWorkspaceId(): string {
   const bytes = new Uint8Array(6);
   globalThis.crypto.getRandomValues(bytes);
   return 'ws-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** The workspace's selected projects, in folder order then position. */
+export function workspaceProjectIds(doc: Pick<WorkspaceDocument, 'folders'>): string[] {
+  return [...doc.folders].sort((a, b) => a.order - b.order).flatMap((f) => f.projectIds);
 }
 
 // ─── Secret detection ────────────────────────────────────────────────────────
@@ -342,6 +349,7 @@ function validateBackend(c: Collector, backend: unknown) {
 function validateFolders(c: Collector, folders: unknown, backendKind: unknown) {
   if (!c.array(folders, 'folders')) return;
   const seen = new Set<string>();
+  const projects = new Set<string>();
   folders.forEach((f, i) => {
     const p = `folders[${i}]`;
     if (!c.object(f, p)) return;
@@ -357,6 +365,10 @@ function validateFolders(c: Collector, folders: unknown, backendKind: unknown) {
       const pp = `${p}.projectIds[${j}]`;
       if (!c.string(id, pp, { nonEmpty: true })) return;
       if (backendKind === 'jira' && !JIRA_PROJECT_KEY_RE.test(id)) c.add(pp, `${pp} must be a Jira project key, e.g. DEMO.`);
+      // Folders are the workspace's one project list, so a project is in at
+      // most one folder — the same rule setWorkspaceProjects keeps today.
+      if (projects.has(id)) c.add(pp, `${pp} is already in another folder of this workspace.`, 'duplicate');
+      projects.add(id);
     });
   });
 }
@@ -593,11 +605,35 @@ function overlay(shape: Shape, next: unknown, src: unknown): unknown {
 }
 
 // ─── Parse and serialise ─────────────────────────────────────────────────────
+//
+// Two writers, deliberately not one function with an optional argument:
+//
+//   serialiseNewWorkspaceDocument(doc)            creating a workspace that has
+//                                                 no article yet
+//   serialiseUpdatedWorkspaceDocument(source, doc) writing over an existing
+//                                                 article; `source` is required
+//
+// `source` is an opaque handle that only parseWorkspaceDocument can produce,
+// so an update cannot be written without first reading the existing article,
+// and the unknown fields that article carries are always written back. A
+// hand-built or copied source (for example one that crossed IPC) is refused,
+// and so is a source belonging to a different workspace.
+
+declare const workspaceSourceBrand: unique symbol;
+
+/** The original document an update must preserve. Only parseWorkspaceDocument makes one. */
+export type WorkspaceSource = { readonly [workspaceSourceBrand]: true };
+
+const SOURCES = new WeakMap<WorkspaceSource, Record<string, unknown>>();
+
+export type WorkspaceParseResult =
+  | { ok: true; document: WorkspaceDocument; source: WorkspaceSource }
+  | { ok: false; errors: WorkspaceValidationError[] };
 
 /**
  * Parse an article body (or an already-parsed value). Tolerates the ```json
  * fence YouTrack's editor may add. Never falls back to an empty workspace: a
- * malformed, invalid, secret-bearing or newer-schema document is an error.
+ * malformed, invalid, secret-bearing or unsupported-schema document is an error.
  */
 export function parseWorkspaceDocument(raw: unknown): WorkspaceParseResult {
   let value: unknown = raw;
@@ -610,7 +646,8 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceParseResult {
   }
   const errors = validateWorkspaceDocument(value);
   if (errors.length > 0) return { ok: false, errors };
-  const source = clone(value) as Record<string, unknown>;
+  const source = Object.freeze({}) as WorkspaceSource;
+  SOURCES.set(source, clone(value) as Record<string, unknown>);
   return { ok: true, document: project(DOCUMENT_SHAPE, value) as WorkspaceDocument, source };
 }
 
@@ -618,29 +655,39 @@ function describe(errors: WorkspaceValidationError[]): string {
   return errors.map((e) => e.message).join(' ');
 }
 
-/**
- * Serialise a workspace document. Pass the `source` that parseWorkspaceDocument
- * returned to write unknown fields back unchanged (read-modify-write). Throws on
- * an invalid document, a secret anywhere in the output, or a source whose schema
- * version this code cannot preserve.
- */
-export function serialiseWorkspaceDocument(doc: WorkspaceDocument, source?: unknown): string {
+function finish(doc: WorkspaceDocument, build: () => unknown): string {
   const errors = validateWorkspaceDocument(doc);
   if (errors.length > 0) throw new Error(`Invalid workspace: ${describe(errors)}`);
-
-  let out: unknown;
-  if (source === undefined) {
-    out = project(DOCUMENT_SHAPE, doc);
-  } else {
-    if (!isPlainObject(source) || source.schema !== WORKSPACE_SCHEMA_VERSION) {
-      throw new Error(
-        `Cannot preserve fields from a workspace source that is not schema ${WORKSPACE_SCHEMA_VERSION}; refusing to write.`,
-      );
-    }
-    out = overlay(DOCUMENT_SHAPE, doc, source);
-  }
-
+  const out = build();
   const secrets = findSecretShapedValues(out);
   if (secrets.length > 0) throw new Error(`Invalid workspace: ${describe(secrets)}`);
   return JSON.stringify(out, null, 2);
+}
+
+/**
+ * Serialise a workspace that has no article yet. Never use this to write over
+ * an existing article: read it with parseWorkspaceDocument and use
+ * serialiseUpdatedWorkspaceDocument, or its unknown fields are lost.
+ */
+export function serialiseNewWorkspaceDocument(doc: WorkspaceDocument): string {
+  return finish(doc, () => project(DOCUMENT_SHAPE, doc));
+}
+
+/**
+ * Serialise an edited workspace over the article it was read from. Every field
+ * this version does not know is written back unchanged; known fields take
+ * their values from `doc`. Throws if `source` did not come from
+ * parseWorkspaceDocument or belongs to a different workspace.
+ */
+export function serialiseUpdatedWorkspaceDocument(source: WorkspaceSource, doc: WorkspaceDocument): string {
+  const original = SOURCES.get(source);
+  if (!original) {
+    throw new Error(
+      'Refusing to update a workspace without its original document: read the existing article with parseWorkspaceDocument first.',
+    );
+  }
+  if (original.workspaceId !== doc.workspaceId) {
+    throw new Error('Refusing to update a workspace from the source of a different workspace (workspaceId differs).');
+  }
+  return finish(doc, () => overlay(DOCUMENT_SHAPE, doc, original));
 }

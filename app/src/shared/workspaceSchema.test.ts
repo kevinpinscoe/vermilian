@@ -8,8 +8,10 @@ import {
   isCredentialRef,
   isValidWorkspaceId,
   parseWorkspaceDocument,
-  serialiseWorkspaceDocument,
+  serialiseNewWorkspaceDocument,
+  serialiseUpdatedWorkspaceDocument,
   validateWorkspaceDocument,
+  workspaceProjectIds,
   type WorkspaceDocument,
 } from './workspaceSchema';
 
@@ -171,7 +173,7 @@ describe('validateWorkspaceDocument — invalid documents', () => {
     const { schema: _omit, ...noSchema } = youtrackDoc();
     void _omit;
     expect(validateWorkspaceDocument(noSchema)[0]).toMatchObject({ path: 'schema', code: 'unsupported-schema' });
-    for (const schema of [1, 3, '2']) {
+    for (const schema of [0, 2, '1']) {
       const errors = validateWorkspaceDocument({ ...youtrackDoc(), schema });
       expect(errors).toEqual([expect.objectContaining({ path: 'schema', code: 'unsupported-schema' })]);
     }
@@ -372,7 +374,7 @@ describe('secret-shaped values', () => {
     const doc = youtrackDoc({ name: secret });
     let message = '';
     try {
-      serialiseWorkspaceDocument(doc);
+      serialiseNewWorkspaceDocument(doc);
     } catch (e) {
       message = (e as Error).message;
     }
@@ -385,7 +387,7 @@ describe('secret-shaped values', () => {
 
 describe('parseWorkspaceDocument', () => {
   it('tolerates a ```json fence, as YouTrack’s editor may add one', () => {
-    const parsed = parseWorkspaceDocument('```json\n' + serialiseWorkspaceDocument(jiraDoc()) + '\n```');
+    const parsed = parseWorkspaceDocument('```json\n' + serialiseNewWorkspaceDocument(jiraDoc()) + '\n```');
     expect(parsed.ok && parsed.document).toEqual(jiraDoc());
   });
 
@@ -413,16 +415,16 @@ describe('round trips', () => {
     ['YouTrack', youtrackDoc()],
     ['Jira', jiraDoc()],
   ])('%s: serialise → parse returns an identical document', (_label, doc) => {
-    const parsed = parseWorkspaceDocument(serialiseWorkspaceDocument(doc));
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.document).toEqual(doc);
   });
 
   it('is stable: serialise(parse(serialise(doc))) is byte-identical', () => {
-    const once = serialiseWorkspaceDocument(youtrackDoc());
+    const once = serialiseNewWorkspaceDocument(youtrackDoc());
     const parsed = parseWorkspaceDocument(once);
     if (!parsed.ok) throw new Error('parse failed');
-    expect(serialiseWorkspaceDocument(parsed.document, parsed.source)).toBe(once);
+    expect(serialiseUpdatedWorkspaceDocument(parsed.source, parsed.document)).toBe(once);
   });
 
   it('preserves unknown fields at every level through read-modify-write', () => {
@@ -460,7 +462,7 @@ describe('round trips', () => {
     const cols = edited.boards['0-12'].views[0].columns;
     cols.unshift(cols.pop()!);
 
-    const out = JSON.parse(serialiseWorkspaceDocument(edited, parsed.source));
+    const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
     expect(out.name).toBe('Workspace A (renamed)');
     expect(out.futureTop).toEqual({ nested: [1, 2] });
     expect(out.backend.futureBackend).toBe('b');
@@ -479,14 +481,14 @@ describe('round trips', () => {
   it('drops a removed known value instead of resurrecting it from the source', () => {
     const doc = youtrackDoc();
     doc.boards['0-12'].views[0].sort = { field: 'status', direction: 'asc' };
-    const parsed = parseWorkspaceDocument(serialiseWorkspaceDocument(doc));
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
     if (!parsed.ok) throw new Error('parse failed');
 
     const edited = structuredClone(parsed.document);
     delete edited.boards['0-12'].views[0].sort;
     edited.dismissals = {};
     edited.folders = [];
-    const out = JSON.parse(serialiseWorkspaceDocument(edited, parsed.source));
+    const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
     expect(out.boards['0-12'].views[0].sort).toBeUndefined();
     expect(out.dismissals).toEqual({});
     expect(out.folders).toEqual([]);
@@ -498,16 +500,119 @@ describe('round trips', () => {
     if (!parsed.ok) throw new Error('parse failed');
     // Switching backend also switches project IDs to the new backend's form.
     const edited = { ...parsed.document, backend: jiraDoc().backend, folders: jiraDoc().folders, boards: {}, dismissals: {} };
-    const out = JSON.parse(serialiseWorkspaceDocument(edited, parsed.source));
+    const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
     expect(out.backend).toEqual(jiraDoc().backend);
   });
 
   it('refuses to serialise an invalid document', () => {
-    expect(() => serialiseWorkspaceDocument({ ...jiraDoc(), workspaceId: 'Bad ID' })).toThrow(/workspaceId/);
+    expect(() => serialiseNewWorkspaceDocument({ ...jiraDoc(), workspaceId: 'Bad ID' })).toThrow(/workspaceId/);
   });
 
-  it('refuses to write over a source of an unsupported schema version', () => {
-    const source = { ...jiraDoc(), schema: 3 };
-    expect(() => serialiseWorkspaceDocument(jiraDoc(), source)).toThrow(/schema/);
+});
+
+// ─── Update contract: an existing article is never rewritten without its source ─
+
+describe('creating versus updating a workspace document', () => {
+  function storedArticle(): string {
+    // An article written by a newer Vermilian, carrying fields this one does not know.
+    return JSON.stringify({ ...jiraDoc(), statusMapping: { DEMO: { Done: 'done' } }, masterPlan: 'plan-a' });
+  }
+
+  it('regression: read-modify-write of an existing article keeps fields this version does not know', () => {
+    const parsed = parseWorkspaceDocument(storedArticle());
+    if (!parsed.ok) throw new Error('parse failed');
+    const edited = { ...parsed.document, name: 'Workspace B (renamed)' };
+
+    const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
+    expect(out.name).toBe('Workspace B (renamed)');
+    expect(out.statusMapping).toEqual({ DEMO: { Done: 'done' } });
+    expect(out.masterPlan).toBe('plan-a');
+  });
+
+  it('cannot update without the source handle that parse returned', () => {
+    const parsed = parseWorkspaceDocument(storedArticle());
+    if (!parsed.ok) throw new Error('parse failed');
+    // @ts-expect-error — an update requires the source; the document alone is not enough.
+    expect(() => serialiseUpdatedWorkspaceDocument(parsed.document)).toThrow(/original document/);
+    // @ts-expect-error — a hand-built object is not a WorkspaceSource.
+    expect(() => serialiseUpdatedWorkspaceDocument({ ...jiraDoc() }, parsed.document)).toThrow(/original document/);
+    // A copy (as after crossing IPC) is not the handle either.
+    expect(() => serialiseUpdatedWorkspaceDocument(structuredClone(parsed.source), parsed.document)).toThrow(
+      /original document/,
+    );
+  });
+
+  it('refuses to update one workspace from another workspace’s source', () => {
+    const parsed = parseWorkspaceDocument(storedArticle());
+    if (!parsed.ok) throw new Error('parse failed');
+    expect(() => serialiseUpdatedWorkspaceDocument(parsed.source, youtrackDoc())).toThrow(/different workspace/);
+  });
+
+  it('the source handle exposes nothing and cannot be edited', () => {
+    const parsed = parseWorkspaceDocument(storedArticle());
+    if (!parsed.ok) throw new Error('parse failed');
+    expect(Object.keys(parsed.source)).toEqual([]);
+    expect(Object.isFrozen(parsed.source)).toBe(true);
+  });
+
+  it('serialiseNewWorkspaceDocument writes known fields only, for a workspace with no article yet', () => {
+    const out = JSON.parse(serialiseNewWorkspaceDocument(jiraDoc()));
+    expect(out).toEqual(jiraDoc());
+  });
+});
+
+// ─── Projects: folders are the one project list, for either backend ──────────
+
+describe('workspace projects', () => {
+  it('stores selected Jira projects in folders and reads them back in folder order', () => {
+    const doc = jiraDoc({
+      folders: [
+        { id: 'folder-b', name: 'Later', order: 1, parentId: null, projectIds: ['OPS'] },
+        { id: 'folder-a', name: 'First', order: 0, parentId: null, projectIds: ['DEMO', 'TEST'] },
+      ],
+    });
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
+    expect(workspaceProjectIds(parsed.document)).toEqual(['DEMO', 'TEST', 'OPS']);
+  });
+
+  it('accepts a workspace with no projects selected yet', () => {
+    expect(validateWorkspaceDocument(jiraDoc({ folders: [] }))).toEqual([]);
+    expect(workspaceProjectIds(jiraDoc({ folders: [] }))).toEqual([]);
+  });
+
+  it('rejects the same project in two folders of one workspace', () => {
+    const errors = validateWorkspaceDocument(
+      jiraDoc({
+        folders: [
+          { id: 'folder-a', name: 'A', order: 0, parentId: null, projectIds: ['DEMO'] },
+          { id: 'folder-b', name: 'B', order: 1, parentId: null, projectIds: ['DEMO'] },
+        ],
+      }),
+    );
+    expect(errors).toEqual([expect.objectContaining({ path: 'folders[1].projectIds[0]', code: 'duplicate' })]);
+  });
+
+  it('lets two workspaces select the same project independently', () => {
+    const a = jiraDoc();
+    const b = jiraDoc({ workspaceId: 'ws-0000aa', name: 'Workspace C' });
+    expect(validateWorkspaceDocument(a)).toEqual([]);
+    expect(validateWorkspaceDocument(b)).toEqual([]);
+    expect(workspaceProjectIds(a)).toEqual(workspaceProjectIds(b));
+  });
+
+  it('has no second project list: a stray backend.projects is an unknown field, never read', () => {
+    const raw = { ...jiraDoc(), backend: { ...jiraDoc().backend, projects: ['OTHER'] } };
+    const parsed = parseWorkspaceDocument(JSON.stringify(raw));
+    if (!parsed.ok) throw new Error('parse failed');
+    expect('projects' in parsed.document.backend).toBe(false);
+    expect(workspaceProjectIds(parsed.document)).toEqual(['DEMO']);
+  });
+});
+
+describe('schema version', () => {
+  it('is 1, as in ADR-0011’s example', () => {
+    expect(WORKSPACE_SCHEMA_VERSION).toBe(1);
+    expect(JSON.parse(serialiseNewWorkspaceDocument(jiraDoc())).schema).toBe(1);
   });
 });
