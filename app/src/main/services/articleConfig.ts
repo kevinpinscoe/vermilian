@@ -185,12 +185,15 @@ export function removeBoardConfig(projectId: string): void {
   cache = { ...cache, boards };
 }
 
+// The active workspace is per-machine (VERM-46, ADR-0011 §2) and lives in
+// userData/active-workspace.json. The article's activeWorkspaceId is kept as
+// it is — never taken from the caller — so switching on one machine cannot
+// move another, and older clients still find the value they expect.
 export function updateWorkspaceConfig(wsConfig: VermilianConfig): void {
   if (!cache) cache = emptyArticleConfig();
   cache = {
     ...cache,
     workspaces: wsConfig.workspaces,
-    activeWorkspaceId: wsConfig.activeWorkspaceId,
   };
 }
 

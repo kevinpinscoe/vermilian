@@ -262,7 +262,7 @@ export function WorkspaceBoard({
   const colSpan = 1 + VISIBLE_COLS.length;
 
   return (
-    <div className={pbStyles.board} style={{ position: 'relative' }}>
+    <div className={pbStyles.board} style={{ position: 'relative' }} data-testid="workspace-board">
       {/* Header */}
       <div className={pbStyles.boardHeader}>
         <div className={pbStyles.boardTitleRow}>

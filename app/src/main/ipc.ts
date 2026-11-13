@@ -56,6 +56,21 @@ import {
   FILES,
 } from './services/credentials';
 import { readWorkspaceConfig, writeWorkspaceConfig } from './services/workspaceConfig';
+import {
+  readStoredActiveWorkspaceId,
+  writeStoredActiveWorkspaceId,
+  workspaceStorageMode,
+} from './services/activeWorkspace';
+import {
+  backendContextOf,
+  buildActiveContext,
+  resolveActiveWorkspaceId,
+  workspacesFromDocuments,
+  type ActiveWorkspaceContext,
+  type SetActiveWorkspaceResult,
+  type WorkspaceChoice,
+} from '../shared/activeWorkspace';
+import { MIGRATED_YOUTRACK_CREDENTIAL_REF } from '../shared/workspaceMigration';
 import { youtrack } from './api/client';
 import { IS_E2E } from './e2e';
 import { claude } from './api/claudeClient';
@@ -192,10 +207,22 @@ function runwayFailure(e: unknown): { ok: false; error: string; code?: string } 
 async function activeWorkspaceProjectShortNames(url: string, token: string): Promise<string[]> {
   const allProjects = await youtrack.getProjects(url, token);
   const wsConfig = await readWorkspaceConfig();
-  const activeWs =
-    wsConfig?.workspaces.find((w) => w.id === wsConfig.activeWorkspaceId) ?? wsConfig?.workspaces[0];
+  const activeWs = await localActiveWorkspace(wsConfig);
   const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
   return allProjects.filter((p) => projectIds.has(p.id)).map((p) => p.shortName);
+}
+
+// The active workspace in a legacy VermilianConfig, chosen by this machine's
+// local setting (VERM-46) — never by the activeWorkspaceId the shared
+// _vermilian-config article carries, which is only a fallback hint.
+async function localActiveWorkspace(wsConfig: VermilianConfig | null) {
+  if (!wsConfig) return undefined;
+  const id = resolveActiveWorkspaceId(
+    wsConfig.workspaces,
+    await readStoredActiveWorkspaceId(),
+    wsConfig.activeWorkspaceId,
+  );
+  return wsConfig.workspaces.find((w) => w.id === id);
 }
 
 export function registerIpc(): void {
@@ -445,7 +472,8 @@ export function registerIpc(): void {
     }
   });
 
-  ipcMain.handle(IPC.getWorkspaceConfig, async () => {
+  // The legacy store: _vermilian-config, with the local file as fallback.
+  async function loadLegacyWorkspaceConfig(): Promise<VermilianConfig | null> {
     // Try Article first. If it hasn't hydrated yet, wait briefly (bounded)
     // rather than immediately falling back to the local file — serving that
     // stale fallback to the renderer is what let one machine's pre-rebuild
@@ -462,11 +490,102 @@ export function registerIpc(): void {
     }
     if (cached) return cached;
     return readWorkspaceConfig();
+  }
+
+  // Every workspace this machine can switch to, from whichever store the
+  // activation gate selects (shared/activeWorkspace.ts), plus the legacy
+  // activeWorkspaceId as a read-only hint for the first resolution.
+  async function workspaceChoices(): Promise<{
+    choices: WorkspaceChoice[];
+    legacyHint: string;
+    configuredServerUrl: string;
+  }> {
+    const cfg = await readConfig();
+    if (workspaceStorageMode() === 'per-workspace') {
+      const client = await workspaceArticleClient();
+      const listed = client ? await workspaceArticles.listWorkspaceArticles(client) : null;
+      const docs = listed?.ok
+        ? listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []))
+        : [];
+      return {
+        choices: docs.map((d) => ({ id: d.workspaceId, name: d.name, order: d.order, backend: backendContextOf(d) })),
+        legacyHint: articleConfig.getWorkspaceConfig()?.activeWorkspaceId ?? '',
+        configuredServerUrl: cfg.youtrackUrl,
+      };
+    }
+    const legacy = await loadLegacyWorkspaceConfig();
+    return {
+      choices: (legacy?.workspaces ?? []).map((w) => ({
+        id: w.id,
+        name: w.name,
+        order: w.order,
+        backend: { kind: 'youtrack', serverUrl: cfg.youtrackUrl, credentialRef: MIGRATED_YOUTRACK_CREDENTIAL_REF },
+      })),
+      legacyHint: legacy?.activeWorkspaceId ?? '',
+      configuredServerUrl: cfg.youtrackUrl,
+    };
+  }
+
+  async function activeWorkspaceContext(): Promise<ActiveWorkspaceContext> {
+    const { choices, legacyHint, configuredServerUrl } = await workspaceChoices();
+    const id = resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint);
+    return buildActiveContext(workspaceStorageMode(), choices, id, configuredServerUrl);
+  }
+
+  ipcMain.handle(IPC.getWorkspaceConfig, async (): Promise<VermilianConfig | null> => {
+    if (workspaceStorageMode() === 'per-workspace') {
+      // Read-only view of the per-workspace articles in the rail's shape.
+      const client = await workspaceArticleClient();
+      const listed = client ? await workspaceArticles.listWorkspaceArticles(client) : null;
+      if (!listed?.ok) return null;
+      const docs = listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []));
+      if (docs.length === 0) return null;
+      const workspaces = workspacesFromDocuments(docs);
+      const activeWorkspaceId = resolveActiveWorkspaceId(workspaces, await readStoredActiveWorkspaceId(), '');
+      return { version: 1, workspaces, activeWorkspaceId };
+    }
+    // The renderer sees this machine's own active workspace, not the value
+    // the shared article carries (VERM-46).
+    const legacy = await loadLegacyWorkspaceConfig();
+    if (!legacy) return null;
+    return {
+      ...legacy,
+      activeWorkspaceId: resolveActiveWorkspaceId(
+        legacy.workspaces,
+        await readStoredActiveWorkspaceId(),
+        legacy.activeWorkspaceId,
+      ),
+    };
   });
+
+  ipcMain.handle(IPC.getActiveWorkspace, (): Promise<ActiveWorkspaceContext> => activeWorkspaceContext());
+
+  ipcMain.handle(
+    IPC.setActiveWorkspace,
+    async (_e, workspaceId: unknown): Promise<SetActiveWorkspaceResult> => {
+      if (typeof workspaceId !== 'string' || workspaceId === '') {
+        return { ok: false, message: 'No workspace was given.' };
+      }
+      const { choices, configuredServerUrl } = await workspaceChoices();
+      if (!choices.some((c) => c.id === workspaceId)) {
+        return { ok: false, message: 'That workspace no longer exists.' };
+      }
+      // Local only: the shared _vermilian-config article is not written.
+      await writeStoredActiveWorkspaceId(workspaceId);
+      return {
+        ok: true,
+        context: buildActiveContext(workspaceStorageMode(), choices, workspaceId, configuredServerUrl),
+      };
+    },
+  );
 
   ipcMain.handle(
     IPC.saveWorkspaceConfig,
-    async (_e, config: VermilianConfig): Promise<{ ok: boolean }> => {
+    async (_e, config: VermilianConfig): Promise<{ ok: boolean; error?: string }> => {
+      if (workspaceStorageMode() === 'per-workspace') {
+        // Editing per-workspace articles from the rail arrives with VERM-53.
+        return { ok: false, error: 'Workspace layout cannot be edited with per-workspace storage yet.' };
+      }
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
 
@@ -883,9 +1002,7 @@ export function registerIpc(): void {
 
         let projectShortNames: string[];
         if (args.scope === 'active-workspace' && wsConfig) {
-          const activeWs =
-            wsConfig.workspaces.find((w) => w.id === wsConfig.activeWorkspaceId) ??
-            wsConfig.workspaces[0];
+          const activeWs = await localActiveWorkspace(wsConfig);
           const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
           projectShortNames = allProjects
             .filter((p) => projectIds.has(p.id))

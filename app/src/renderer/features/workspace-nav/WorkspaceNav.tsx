@@ -14,13 +14,19 @@ import type { VermilianConfig, Workspace, WorkspaceFolder, YouTrackProject, Boar
 import { makeInitialConfig, allAssignedProjectIds } from '../../../shared/workspace';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useBoardDragStore } from '../../stores/boardDrag';
-import { useProjects, useWorkspaceConfig, useSaveWorkspaceConfig } from './api';
+import { useProjects, useWorkspaceConfig, useSaveWorkspaceConfig, useActiveWorkspace } from './api';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
 import { AddProjectsModal } from './AddProjectsModal';
 import styles from './WorkspaceNav.module.css';
 
 interface WorkspaceNavProps {
   onOpenSettings: () => void;
+  // Switching goes through AppShell, which owns the running timer and asks
+  // "Stop timer or Cancel" first (VERM-46). Resolves true once switched.
+  onRequestSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
+  // Switch without the timer prompt: the active workspace is being deleted,
+  // so staying on it is not an option.
+  onForceSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -669,9 +675,10 @@ function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onNewWorkspace, onM
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
+export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForceSwitchWorkspace }: WorkspaceNavProps) {
   const projects = useProjects();
   const workspaceConfig = useWorkspaceConfig();
+  const activeContext = useActiveWorkspace();
   const saveConfig = useSaveWorkspaceConfig();
 
   const {
@@ -710,13 +717,15 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
     }
   }, [workspaceConfig.data, projects.data]);
 
-  // ── Sync activeWorkspaceId from config ──────────────────────────────────────
+  // ── Sync activeWorkspaceId from this machine's local choice (VERM-46) ─────
+  useEffect(() => {
+    const localId = activeContext.data?.workspaceId;
+    if (!activeWorkspaceId && localId) setActiveWorkspace(localId);
+  }, [activeContext.data, activeWorkspaceId, setActiveWorkspace]);
+
   useEffect(() => {
     const cfg = workspaceConfig.data;
     if (!cfg) return;
-    if (!activeWorkspaceId && cfg.activeWorkspaceId) {
-      setActiveWorkspace(cfg.activeWorkspaceId);
-    }
     // Expand all folders only on the very first launch (no persisted expand state).
     // Afterwards the user's per-folder collapse choices are restored from storage.
     if (!expandedHydrated) {
@@ -767,11 +776,10 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
     setActiveProject(p.id, p.shortName);
   }
 
+  // The choice is stored locally by AppShell; nothing is written to the
+  // shared configuration article.
   function handleSwitchWorkspace(id: string) {
-    setActiveWorkspace(id);
-    if (config) {
-      saveConfig.mutate({ ...config, activeWorkspaceId: id });
-    }
+    void onRequestSwitchWorkspace(id);
   }
 
   function handleProjectContextMenu(e: React.MouseEvent, project: YouTrackProject) {
@@ -781,8 +789,7 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
   function handleMoveProject(projectId: string, targetWorkspaceId: string) {
     if (!config) return;
     const updated = moveProjectToWorkspace(config, projectId, targetWorkspaceId);
-    saveConfig.mutate(updated);
-    setActiveWorkspace(targetWorkspaceId);
+    void saveConfig.mutateAsync(updated).then(() => onRequestSwitchWorkspace(targetWorkspaceId)).catch(() => undefined);
   }
 
   function handleMoveProjectToFolder(projectId: string, targetFolderId: string) {
@@ -886,8 +893,7 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
       workspaces: [...base.workspaces, newWorkspace],
       activeWorkspaceId: id,
     };
-    saveConfig.mutate(updated);
-    setActiveWorkspace(id);
+    void saveConfig.mutateAsync(updated).then(() => onRequestSwitchWorkspace(id)).catch(() => undefined);
   }
 
   return (
@@ -1170,7 +1176,7 @@ export function WorkspaceNav({ onOpenSettings }: WorkspaceNavProps) {
           config={config}
           onClose={() => setShowManage(false)}
           onSave={(updated) => saveConfig.mutate(updated)}
-          onActiveWorkspaceChanged={(id) => setActiveWorkspace(id)}
+          onActiveWorkspaceChanged={(id) => { void onForceSwitchWorkspace(id); }}
         />
       )}
     </nav>

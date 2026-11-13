@@ -18,7 +18,13 @@ import { SearchBar } from './features/search/SearchBar';
 import { useWorkspaceStore } from './stores/workspace';
 import { useTimerStore, getTotalWorkMs } from './stores/timer';
 import { useToastStore } from './stores/toast';
-import { useProjects, useWorkspaceConfig } from './features/workspace-nav/api';
+import {
+  useProjects,
+  useWorkspaceConfig,
+  useActiveWorkspace,
+  ACTIVE_WORKSPACE_QUERY_KEY,
+} from './features/workspace-nav/api';
+import type { ActiveBackendContext } from '../shared/activeWorkspace';
 import { connectionErrorMessage } from './features/settings/errors';
 import type { StandupScope, StandupWindow } from '../shared/config';
 import type { BoardIssue } from '../shared/workspace';
@@ -61,6 +67,49 @@ function TimerConflictDialog({
       </div>
     </div>
   );
+}
+
+// ─── Workspace-switch dialog (VERM-46) ───────────────────────────────────────
+
+function WorkspaceSwitchDialog({
+  timerSummary,
+  targetName,
+  stopping,
+  onStop,
+  onCancel,
+}: {
+  timerSummary: string;
+  targetName: string;
+  stopping: boolean;
+  onStop: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className={styles.dialogOverlay}>
+      <div className={styles.dialog} data-testid="workspace-switch-dialog">
+        <Text type="text1" weight="bold">Timer running — switch workspace?</Text>
+        <Text type="text2">
+          A timer is running on "{timerSummary}". Stop it and log the time before switching to
+          "{targetName}", or cancel and stay in this workspace.
+        </Text>
+        <div className={styles.dialogActions}>
+          <Button kind="secondary" onClick={onCancel} disabled={stopping} data-testid="workspace-switch-cancel">
+            Cancel
+          </Button>
+          <Button color="negative" onClick={onStop} loading={stopping} data-testid="workspace-switch-stop">
+            Stop timer
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function backendLabel(b: ActiveBackendContext): string {
+  const host = (u: string) => {
+    try { return new URL(u).host; } catch { return u; }
+  };
+  return b.kind === 'youtrack' ? `YouTrack · ${host(b.serverUrl)}` : `Jira · ${host(b.siteUrl)}`;
 }
 
 // ─── Quit-protection dialog ───────────────────────────────────────────────────
@@ -110,6 +159,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const setSelectedIssue = useWorkspaceStore((s) => s.setSelectedIssue);
   const projects = useProjects();
   const workspaceConfig = useWorkspaceConfig();
+  const activeContext = useActiveWorkspace();
+  const setActiveWorkspaceInStore = useWorkspaceStore((s) => s.setActiveWorkspace);
 
   const timer = useTimerStore((s) => s.timer);
   const startTimerStore = useTimerStore((s) => s.startTimer);
@@ -123,6 +174,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const [showDailyReview, setShowDailyReview] = useState(false);
   const [showJiraList, setShowJiraList] = useState(false);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
+  const [switchStopping, setSwitchStopping] = useState(false);
   const [quitDialog, setQuitDialog] = useState(false);
   const [quitting, setQuitting] = useState(false);
   const [crossBoardDrop, setCrossBoardDrop] = useState<{
@@ -259,8 +312,10 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   }
 
   // ─── Stop and log (shared across all stop paths) ────────────────────────────
-  async function stopAndLog(): Promise<void> {
-    if (!timer) return;
+  // Resolves true when the timer was stopped and its time logged (or there was
+  // no timer); false when the worklog was refused and the timer kept.
+  async function stopAndLogResult(): Promise<boolean> {
+    if (!timer) return true;
     const minutes = Math.max(1, Math.round(getTotalWorkMs(timer) / 60_000));
     const result = await window.vermilian.timerPostWorklog({
       issueId: timer.issueId,
@@ -271,9 +326,51 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
       await window.vermilian.timerClearCheckpoint();
       clearTimer();
       showToast('positive', `Logged ${minutes} min to '${timer.issueReadableId}'.`, 4000);
-    } else {
-      showToast('negative', `Failed to log worklog: ${result.error ?? 'unknown'}`, 5000);
+      return true;
     }
+    showToast('negative', `Failed to log worklog: ${result.error ?? 'unknown'}`, 5000);
+    return false;
+  }
+
+  async function stopAndLog(): Promise<void> {
+    await stopAndLogResult();
+  }
+
+  // ─── Workspace switching (VERM-46) ─────────────────────────────────────────
+  // One active workspace per machine. The choice is stored locally by the main
+  // process; the shared configuration article is never written.
+  async function performWorkspaceSwitch(id: string): Promise<boolean> {
+    const result = await window.vermilian.setActiveWorkspace(id);
+    if (!result.ok) {
+      showToast('negative', `Could not switch workspace: ${result.message}`, 5000);
+      return false;
+    }
+    setActiveWorkspaceInStore(id);
+    queryClient.setQueryData(ACTIVE_WORKSPACE_QUERY_KEY, result.context);
+    return true;
+  }
+
+  // A running timer asks first: Stop timer (logs the time, then switches) or
+  // Cancel (nothing changes — same workspace, timer still running).
+  async function requestWorkspaceSwitch(id: string): Promise<boolean> {
+    if (id === activeWorkspaceId) return true;
+    if (timer) {
+      const name = workspaceConfig.data?.workspaces.find((w) => w.id === id)?.name ?? 'the other workspace';
+      setPendingSwitch({ id, name });
+      return false;
+    }
+    return performWorkspaceSwitch(id);
+  }
+
+  async function handleSwitchStopTimer() {
+    if (!pendingSwitch) return;
+    setSwitchStopping(true);
+    const stopped = await stopAndLogResult();
+    setSwitchStopping(false);
+    const target = pendingSwitch;
+    setPendingSwitch(null);
+    // A refused worklog keeps the timer, so the switch does not happen.
+    if (stopped) await performWorkspaceSwitch(target.id);
   }
 
   // ─── Start timer ───────────────────────────────────────────────────────────
@@ -345,6 +442,16 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onSelectIssue={(id) => setSelectedIssue(id)}
         />
         <div className={styles.topBarSpacer} />
+        {activeContext.data?.backend && (
+          <span
+            className={styles.version}
+            data-testid="workspace-backend"
+            data-backend-kind={activeContext.data.backend.kind}
+            title="Active workspace backend"
+          >
+            {backendLabel(activeContext.data.backend)}
+          </span>
+        )}
         <span className={styles.version} title="Vermilian version">
           v{__APP_VERSION__}
         </span>
@@ -440,10 +547,20 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
       )}
 
       <div className={styles.body}>
-        <WorkspaceNav onOpenSettings={onOpenSettings} />
+        <WorkspaceNav
+          onOpenSettings={onOpenSettings}
+          onRequestSwitchWorkspace={requestWorkspaceSwitch}
+          onForceSwitchWorkspace={performWorkspaceSwitch}
+        />
 
         <main className={styles.content}>
-          {priorityDeskActive ? (
+          {activeContext.data && !activeContext.data.boardAvailable ? (
+            <div className={styles.placeholder} data-testid="workspace-board-unavailable">
+              <Text type="text1" style={{ color: 'var(--secondary-text-color, #444444)' }}>
+                {activeContext.data.boardUnavailableReason}
+              </Text>
+            </div>
+          ) : priorityDeskActive ? (
             <PriorityDesk
               onSelectIssue={(id) => setSelectedIssue(id)}
               onStartTimer={handleStartTimer}
@@ -541,6 +658,17 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
 
       {showJiraList && (
         <JiraListModal onClose={() => setShowJiraList(false)} onOpenSettings={onOpenSettings} />
+      )}
+
+      {/* Workspace switch with a running timer (VERM-46) */}
+      {pendingSwitch && timer && (
+        <WorkspaceSwitchDialog
+          timerSummary={timer.summary}
+          targetName={pendingSwitch.name}
+          stopping={switchStopping}
+          onStop={() => void handleSwitchStopTimer()}
+          onCancel={() => setPendingSwitch(null)}
+        />
       )}
 
       {/* Timer conflict dialog */}
