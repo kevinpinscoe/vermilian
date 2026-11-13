@@ -58,6 +58,15 @@ import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
 import { getMasterPlanState } from './services/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
+import * as workspaceArticles from './services/workspaceArticles';
+import { youtrackWorkspaceArticleClient } from './api/workspaceArticleClient';
+import type {
+  ListWorkspaceArticlesResult,
+  ReadWorkspaceArticleResult,
+  SaveWorkspaceArticleResult,
+  WorkspaceDiscoveryFailure,
+} from '../shared/workspaceArticle';
+import type { WorkspaceDocument } from '../shared/workspaceSchema';
 import { jira } from './api/jiraClient';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import { toJiraIssueRow } from '../shared/jiraIssue';
@@ -695,7 +704,70 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:getPostedComments', (): Array<{ issueId: string; text: string }> =>
       fakeYouTrackForE2E.getPostedComments(),
     );
+    ipcMain.handle('e2e:getWorkspaceArticles', () => fakeYouTrackForE2E.getWorkspaceArticlesForTests());
+    ipcMain.handle('e2e:writeWorkspaceArticle', (_e, articleId: string, content: string): boolean =>
+      fakeYouTrackForE2E.writeWorkspaceArticleForTests(articleId, content),
+    );
   }
+
+  // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
+  // Each handler reads and writes in one main-process operation
+  // (services/workspaceArticles.ts); no source handle ever crosses IPC.
+
+  const NOT_CONFIGURED_WS: WorkspaceDiscoveryFailure = {
+    ok: false,
+    reason: 'not-configured',
+    message: 'Connect YouTrack first — workspace configuration is stored there.',
+  };
+
+  async function workspaceArticleClient() {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    return cfg.youtrackUrl && token ? youtrackWorkspaceArticleClient(cfg.youtrackUrl, token) : null;
+  }
+
+  ipcMain.handle(IPC.listWorkspaceArticles, async (): Promise<ListWorkspaceArticlesResult> => {
+    const client = await workspaceArticleClient();
+    return client ? workspaceArticles.listWorkspaceArticles(client) : NOT_CONFIGURED_WS;
+  });
+
+  ipcMain.handle(
+    IPC.readWorkspaceArticle,
+    async (_e, workspaceId: unknown): Promise<ReadWorkspaceArticleResult> => {
+      const client = await workspaceArticleClient();
+      if (!client) return NOT_CONFIGURED_WS;
+      if (typeof workspaceId !== 'string') {
+        return { ok: false, reason: 'not-found', message: 'No workspace ID was given.' };
+      }
+      return workspaceArticles.readWorkspaceArticle(client, workspaceId);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.createWorkspaceArticle,
+    async (_e, doc: WorkspaceDocument): Promise<SaveWorkspaceArticleResult> => {
+      const client = await workspaceArticleClient();
+      return client ? workspaceArticles.createWorkspaceArticle(client, doc) : NOT_CONFIGURED_WS;
+    },
+  );
+
+  ipcMain.handle(
+    IPC.updateWorkspaceArticle,
+    async (_e, base: WorkspaceDocument, edited: WorkspaceDocument): Promise<SaveWorkspaceArticleResult> => {
+      const client = await workspaceArticleClient();
+      if (!client) return NOT_CONFIGURED_WS;
+      // An update always has a base; only a create may merge without one.
+      if (typeof base !== 'object' || base === null) {
+        return {
+          ok: false,
+          reason: 'invalid-edit',
+          errors: [{ path: '', code: 'invalid', message: 'An update needs the document it was edited from.' }],
+          message: 'An update needs the document it was edited from.',
+        };
+      }
+      return workspaceArticles.updateWorkspaceArticle(client, base, edited);
+    },
+  );
 
   ipcMain.handle(
     IPC.standupGenerate,

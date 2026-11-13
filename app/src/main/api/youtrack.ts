@@ -161,6 +161,7 @@ interface RawIssue {
 
 import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueSearchQuery } from '../../shared/search';
+import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import {
   FIELD_DEFS,
   FIELD_KEYS,
@@ -901,4 +902,51 @@ export async function findMasterPlanArticle(
   if (matches.length === 0) return { status: 'none' };
   if (matches.length > 1) return { status: 'ambiguous', articles: matches };
   return { status: 'found', article: matches[0] };
+}
+
+// --- _vermilian-ws-<workspaceId> per-workspace configuration articles
+// (VERM-43, ADR-0011 §4). Discovered by title prefix across every page of the
+// VERM project's articles; a partial listing is reported, never trusted. Reads
+// and content updates reuse getVermilianArticle / updateVermilianArticle. The
+// logic that uses these lives in main/services/workspaceArticles.ts. ---
+
+export type WorkspaceArticleListing =
+  | { ok: true; articles: Array<{ id: string; summary: string; content: string; updated: number }> }
+  | { ok: false; reason: 'fetch-error' | 'incomplete' };
+
+export async function listWorkspaceArticles(url: string, token: string): Promise<WorkspaceArticleListing> {
+  const result = await fetchAllProjectArticles(url, token, VERMILIAN_ARTICLE_PROJECT_SHORT_NAME);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    articles: result.articles
+      .filter((a) => typeof a.summary === 'string' && a.summary.startsWith(WORKSPACE_ARTICLE_PREFIX))
+      .map((a) => ({ id: a.id, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
+  };
+}
+
+export async function createWorkspaceArticle(
+  url: string,
+  token: string,
+  workspaceId: string,
+  content: string,
+): Promise<(VermilianArticle & { summary: string }) | null> {
+  try {
+    const result = await request<RawArticle>(url, token, `/api/articles?fields=${ARTICLE_FIELDS}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        summary: workspaceArticleTitle(workspaceId),
+        content,
+        project: { shortName: VERMILIAN_ARTICLE_PROJECT_SHORT_NAME },
+      }),
+    });
+    return {
+      id: result.id,
+      summary: result.summary ?? workspaceArticleTitle(workspaceId),
+      content: result.content ?? content,
+      updated: result.updated ?? 0,
+    };
+  } catch {
+    return null;
+  }
 }

@@ -29,6 +29,7 @@ import {
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
 import type { JiraProfile } from './shared/jiraProfile';
+import type { WorkspaceDocument } from './shared/workspaceSchema';
 import type { VermilianConfig } from './shared/workspace';
 
 const api: VermilianAPI = {
@@ -97,6 +98,14 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
   dailyReviewGet: () => ipcRenderer.invoke(IPC.dailyReviewGet),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
+  listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
+  readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),
+  createWorkspaceArticle: (doc: WorkspaceDocument) => ipcRenderer.invoke(IPC.createWorkspaceArticle, doc),
+  updateWorkspaceArticle: (base: WorkspaceDocument, edited: WorkspaceDocument) =>
+    ipcRenderer.invoke(IPC.updateWorkspaceArticle, base, edited),
+  debugGetWorkspaceArticles: () => ipcRenderer.invoke('e2e:getWorkspaceArticles'),
+  debugWriteWorkspaceArticle: (articleId: string, content: string) =>
+    ipcRenderer.invoke('e2e:writeWorkspaceArticle', articleId, content),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

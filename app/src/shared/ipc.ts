@@ -7,6 +7,12 @@ import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
 import type { MasterPlanState, Outcome } from './masterPlan';
 import type { JiraProfile } from './jiraProfile';
 import type { JiraIssueRow } from './jiraIssue';
+import type { WorkspaceDocument } from './workspaceSchema';
+import type {
+  ListWorkspaceArticlesResult,
+  ReadWorkspaceArticleResult,
+  SaveWorkspaceArticleResult,
+} from './workspaceArticle';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -48,6 +54,13 @@ export const IPC = {
   getWorkspaceConfig: 'workspace:getConfig',
   saveWorkspaceConfig: 'workspace:saveConfig',
   forceResyncWorkspaceConfig: 'workspace:forceResync',
+  // Per-workspace configuration articles (VERM-43, shared/workspaceArticle.ts).
+  // The renderer sends documents and edits as plain data; reading the article
+  // and writing it happen in one main-process operation.
+  listWorkspaceArticles: 'workspaceArticles:list',
+  readWorkspaceArticle: 'workspaceArticles:read',
+  createWorkspaceArticle: 'workspaceArticles:create',
+  updateWorkspaceArticle: 'workspaceArticles:update',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -461,6 +474,17 @@ export interface VermilianAPI {
   // this outside it rejects. Optional because it carries no production
   // behavior of its own.
   debugGetPostedComments?(): Promise<Array<{ issueId: string; text: string }>>;
+  // Per-workspace configuration articles (VERM-43). `base` is the document the
+  // edit started from, exactly as read; the merge needs it to tell this
+  // machine's changes from another machine's.
+  listWorkspaceArticles(): Promise<ListWorkspaceArticlesResult>;
+  readWorkspaceArticle(workspaceId: string): Promise<ReadWorkspaceArticleResult>;
+  createWorkspaceArticle(doc: WorkspaceDocument): Promise<SaveWorkspaceArticleResult>;
+  updateWorkspaceArticle(base: WorkspaceDocument, edited: WorkspaceDocument): Promise<SaveWorkspaceArticleResult>;
+  // e2e-only hooks (VERMILIAN_E2E=1), like debugGetPostedComments: read the
+  // fake's raw workspace articles, and overwrite one as "another machine".
+  debugGetWorkspaceArticles?(): Promise<Array<{ id: string; summary: string; content: string; updated: number }>>;
+  debugWriteWorkspaceArticle?(articleId: string, content: string): Promise<boolean>;
 }
 
 declare global {
