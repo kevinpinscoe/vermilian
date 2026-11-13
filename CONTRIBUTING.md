@@ -51,6 +51,10 @@ Set `FORBIDDEN_PATTERNS_FILE` to use another path. Format: one fixed string per 
 case-insensitively; blank lines and `#` comments are ignored. Pull the companion repository to
 get the latest list. The list holds identifiers only, never passwords or tokens.
 
+Well-formed integrity hashes (`sha512-…`, `sha384-…`, `sha256-…`, `sha1-…`, as in
+`pnpm-lock.yaml`) are skipped before matching. They are random base64, so a short pattern can turn
+up in one by chance; text elsewhere on the same line is still checked.
+
 ### Pre-push check
 
 `.githooks/pre-push` runs `scripts/check-forbidden-strings.sh --push` before Git publishes

@@ -121,13 +121,23 @@ pattern_numbers() {
   echo "${nums[*]}"
 }
 
+# Subresource-integrity hashes (sha512-<base64>, as in pnpm-lock.yaml) are
+# random base64. A short pattern matched case-insensitively turns up in them by
+# chance, so each one is blanked before matching. Only well-formed values are
+# blanked: the algorithm name followed by exactly its digest length in base64.
+# Line numbers are unchanged.
+sri_re='sha512-[A-Za-z0-9+/]{86}==|sha384-[A-Za-z0-9+/]{64}|sha256-[A-Za-z0-9+/]{43}=|sha1-[A-Za-z0-9+/]{27}='
+mask_hashes() { LC_ALL=C sed -E "s#$sri_re#(integrity-hash)#g"; }
+
 # scan_file LABEL FILE — forbidden strings in a text file's lines.
 scan_file() {
-  local label="$1" file="$2" n
+  local label="$1" file="$2" n masked="$work/masked"
   [[ ${#patterns[@]} -gt 0 && -s "$file" ]] || return 0
+  grep -q -I '' -- "$file" || return 0   # binary: nothing to scan as text
+  mask_hashes <"$file" >"$masked"
   while IFS= read -r n; do
-    finding "$label line $n contains forbidden pattern $(sed -n "${n}p" "$file" | pattern_numbers)"
-  done < <(grep -n -i -F -I -f "$plist" -- "$file" | cut -d: -f1 || true)
+    finding "$label line $n contains forbidden pattern $(sed -n "${n}p" "$masked" | pattern_numbers)"
+  done < <(grep -n -i -F -I -f "$plist" -- "$masked" | cut -d: -f1 || true)
 }
 
 # scan_path WHERE PATH — forbidden strings in a path; returns a display form.

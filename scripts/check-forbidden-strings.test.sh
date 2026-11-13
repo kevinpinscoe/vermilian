@@ -114,6 +114,23 @@ run "db by header" 1 "$r" --
 r="$(new_repo mention)"; echo 'kept in runway-metadata.sqlite' >"$r/README.md"; commit_all "$r"
 run "mentioning .sqlite is fine" 0 "$r" --
 
+# Integrity hashes are random base64; a pattern inside one is chance, not a leak.
+fill() { printf '%*s' "$1" '' | tr ' ' 'A'; }
+h512="sha512-$(fill 30)${PAT}$(fill $((86 - 30 - ${#PAT})))=="
+h256="sha256-${PAT}$(fill $((43 - ${#PAT})))="
+r="$(new_repo sri)"
+printf "packages:\n  'x@1.0.0':\n    resolution: {integrity: %s}\n  'y@1.0.0':\n    resolution: {integrity: %s}\n" "$h512" "$h256" >"$r/pnpm-lock.yaml"
+commit_all "$r"
+run "pattern inside an integrity hash is ignored" 0 "$r" --
+r="$(new_repo sri-beside)"
+printf "resolution: {integrity: %s} # %s\n" "$h512" "$PAT" >"$r/pnpm-lock.yaml"; commit_all "$r"
+run "pattern beside an integrity hash is still found" 1 "$r" --
+has "beside-hash location" "pnpm-lock.yaml line 1 contains forbidden pattern #2"
+no_leak "beside hash"
+r="$(new_repo sri-short)"
+printf "integrity: sha512-%s%s==\n" "$PAT" "$(fill 10)" >"$r/lock.yaml"; commit_all "$r"
+run "malformed (short) hash is not skipped" 1 "$r" --
+
 # ── --db-only (public CI): no list needed, strings ignored ───────────────────
 r="$(new_repo dbonly)"; echo "$PAT" >"$r/a.txt"; commit_all "$r"
 run "db-only ignores strings, needs no list" 0 "$r" FORBIDDEN_PATTERNS_FILE="$WORK/nope.txt" -- --db-only
@@ -171,6 +188,10 @@ echo e >"$r/${PAT}.txt"; commit_all "$r" "add e"
 push "path in pushed commit" 1 "$r" -- origin leak-path
 has "pushed path withheld" "(path withheld)"
 no_leak "push path"
+
+git -C "$r" switch -q main; git -C "$r" switch -q -c lockfile-update
+printf "resolution: {integrity: %s}\n" "$h512" >"$r/pnpm-lock.yaml"; commit_all "$r" "update lockfile"
+push "lockfile whose hash contains a pattern is pushed" 0 "$r" -- -q origin lockfile-update
 
 git -C "$r" switch -q main; git -C "$r" switch -q -c db-name
 echo x >"$r/runway.sqlite"; commit_all "$r" "add db"
