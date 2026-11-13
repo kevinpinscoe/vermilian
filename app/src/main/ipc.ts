@@ -3,6 +3,8 @@ import {
   IPC,
   type CredentialStatus,
   type SaveSecretResult,
+  type CredentialRefWriteResult,
+  type WorkspaceCredentialCheck,
   type TestYouTrackArgs,
   type TestYouTrackResult,
   type TestClaudeArgs,
@@ -45,6 +47,10 @@ import {
   saveSecret,
   loadSecretWithSources,
   hasSecretWithSources,
+  credentialSourceIO,
+  saveCredentialRefSecret,
+  clearCredentialRefSecret,
+  listCredentialRefBlobs,
   getBackend,
   isSecure,
   FILES,
@@ -61,6 +67,13 @@ import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
+import { checkWorkspaceCredential, credentialRefStatus } from './services/credentialResolver';
+import {
+  LEGACY_CREDENTIAL_REFS,
+  isLegacyCredentialRef,
+  type CredentialRefStatus,
+} from '../shared/credentialRefs';
+import { isCredentialRef } from '../shared/workspaceSchema';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
@@ -197,7 +210,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.getConfig, (): Promise<AppConfig> => readConfig());
 
   ipcMain.handle(IPC.saveConfig, async (_e, patch: Partial<AppConfig>) => {
-    await writeConfig(patch);
+    // Per-reference sources change only through setCredentialRefSources, one
+    // reference at a time, so a stale full map can never overwrite another
+    // reference's entry.
+    const { credentialSources: _ignored, ...rest } = (patch ?? {}) as Partial<AppConfig>;
+    void _ignored;
+    await writeConfig(rest);
     return { ok: true };
   });
 
@@ -796,6 +814,58 @@ export function registerIpc(): void {
   );
   ipcMain.handle(IPC.applyWorkspaceMigration, (_e, options: unknown) =>
     runMigration(workspaceMigration.applyWorkspaceMigration, options),
+  );
+
+  // ─── Per-reference credentials (VERM-45) ────────────────────────────────────
+  // Configuration, status and saving. The check resolves in this process and
+  // returns only which source worked, or the failure — never the value.
+
+  ipcMain.handle(IPC.listCredentialRefs, async (): Promise<CredentialRefStatus[]> => {
+    const cfg = await readConfig();
+    const refs = new Set<string>([
+      ...Object.keys(LEGACY_CREDENTIAL_REFS),
+      ...Object.keys(cfg.credentialSources),
+      ...(await listCredentialRefBlobs()),
+    ]);
+    return Promise.all([...refs].sort().map((ref) => credentialRefStatus(ref, cfg, credentialSourceIO)));
+  });
+
+  ipcMain.handle(
+    IPC.setCredentialRefSources,
+    async (_e, ref: unknown, sources: unknown): Promise<CredentialRefWriteResult> => {
+      if (!isCredentialRef(ref)) return { ok: false, reason: 'invalid-reference' };
+      if (isLegacyCredentialRef(ref)) return { ok: false, reason: 'legacy-reference' };
+      const s = (typeof sources === 'object' && sources !== null ? sources : {}) as Record<string, unknown>;
+      const command = typeof s.command === 'string' ? s.command.trim() : '';
+      const file = typeof s.file === 'string' ? s.file.trim() : '';
+      try {
+        const cfg = await readConfig();
+        const next = { ...cfg.credentialSources };
+        if (command || file) next[ref] = { command, file };
+        else delete next[ref];
+        await writeConfig({ credentialSources: next });
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: 'write-failed' };
+      }
+    },
+  );
+
+  ipcMain.handle(IPC.saveCredentialRefSecret, (_e, ref: unknown, value: unknown) =>
+    saveCredentialRefSecret(String(ref), typeof value === 'string' ? value : ''),
+  );
+
+  ipcMain.handle(IPC.clearCredentialRefSecret, (_e, ref: unknown) => clearCredentialRefSecret(String(ref)));
+
+  ipcMain.handle(
+    IPC.checkWorkspaceCredential,
+    async (_e, workspaceId: unknown, ref: unknown): Promise<WorkspaceCredentialCheck> => {
+      return checkWorkspaceCredential(
+        { workspaceId: String(workspaceId ?? ''), credentialRef: ref === null ? null : String(ref ?? '') },
+        await readConfig(),
+        credentialSourceIO,
+      );
+    },
   );
 
   ipcMain.handle(

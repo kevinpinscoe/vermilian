@@ -14,6 +14,12 @@ import type {
   SaveWorkspaceArticleResult,
 } from './workspaceArticle';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from './workspaceMigration';
+import type {
+  CredentialFailure,
+  CredentialRefStatus,
+  CredentialSourceConfig,
+  CredentialSourceKind,
+} from './credentialRefs';
 
 export const IPC = {
   getConfig: 'settings:getConfig',
@@ -66,6 +72,14 @@ export const IPC = {
   // Nothing calls these on startup; VERM-46 runs migration at activation.
   planWorkspaceMigration: 'workspaceMigration:plan',
   applyWorkspaceMigration: 'workspaceMigration:apply',
+  // Per-reference credentials (VERM-45, shared/credentialRefs.ts). Status,
+  // configuration and saving only: a resolved credential never crosses IPC,
+  // and nothing here touches the legacy YouTrack/Claude/Jira settings.
+  listCredentialRefs: 'credentialRefs:list',
+  setCredentialRefSources: 'credentialRefs:setSources',
+  saveCredentialRefSecret: 'credentialRefs:saveSecret',
+  clearCredentialRefSecret: 'credentialRefs:clearSecret',
+  checkWorkspaceCredential: 'credentialRefs:check',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -109,6 +123,19 @@ export interface SaveSecretResult {
   secure?: boolean; // true = encrypted via safeStorage; false = plain-text fallback (0o600 file)
   backend?: string;
 }
+
+/** Result of changing a per-reference credential's configuration or blob (VERM-45). */
+export type CredentialRefWriteResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'invalid-reference' | 'legacy-reference' | 'invalid-value' | 'encryption-unavailable' | 'write-failed';
+    };
+
+/** Whether a workspace's credential resolves on this host — never the value (VERM-45). */
+export type WorkspaceCredentialCheck =
+  | { ok: true; credentialRef: string; source: CredentialSourceKind }
+  | ({ ok: false } & CredentialFailure);
 
 export interface TestYouTrackArgs {
   url: string;
@@ -494,6 +521,11 @@ export interface VermilianAPI {
   // the source articles and creates the workspace articles that are missing.
   planWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
   applyWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
+  listCredentialRefs(): Promise<CredentialRefStatus[]>;
+  setCredentialRefSources(credentialRef: string, sources: CredentialSourceConfig): Promise<CredentialRefWriteResult>;
+  saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;
+  clearCredentialRefSecret(credentialRef: string): Promise<CredentialRefWriteResult>;
+  checkWorkspaceCredential(workspaceId: string, credentialRef: string | null): Promise<WorkspaceCredentialCheck>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
 }
