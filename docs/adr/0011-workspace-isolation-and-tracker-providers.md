@@ -113,8 +113,15 @@ server in Vermilian's main settings. This holds whichever backend the workspace 
 - The article holds configuration only: the backend, connection details, credential references,
   projects, board settings, per-project status mapping and due-date field choice, and an optional
   master plan. It holds no per-issue Runway metadata for Jira issues.
-- Only known fields are read back, so a value pasted into an article by hand, such as a token, is
-  never used.
+- The workspace's projects are its folders' `projectIds`: YouTrack project IDs or Jira project
+  keys, each in exactly one folder. Folders are the single project-selection structure for both
+  backends; there is no second project list.
+- Only known fields are interpreted or used. A field this version does not know is never read,
+  but it is written back unchanged whenever an existing workspace article is updated, so an older
+  client does not drop configuration a newer one added.
+- A secret-shaped value anywhere in the document, known field or not, such as a token pasted into
+  an article by hand, makes the document invalid. The error names the field and never shows the
+  value.
 
 A sanitized example:
 
@@ -129,15 +136,19 @@ A sanitized example:
     "siteUrl": "https://example.atlassian.net",
     "email": "user@example.com",
     "cloudId": "",
-    "credentialRef": "jira-1",
-    "projects": ["DEMO"]
+    "credentialRef": "jira-1"
   },
-  "ai": { "credentialRef": "anthropic-1" }
+  "ai": { "credentialRef": "anthropic-1" },
+  "folders": [
+    { "id": "folder-demo", "name": "Demo", "order": 0, "parentId": null, "projectIds": ["DEMO"] }
+  ],
+  "boards": {},
+  "dismissals": {}
 }
 ```
 
-A YouTrack-backed workspace has `"kind": "youtrack"` and a server URL in place of the Jira
-fields.
+A YouTrack-backed workspace has `"kind": "youtrack"` and a `serverUrl` in place of the Jira
+fields, and YouTrack project IDs in its folders.
 
 ### 5. Credential references, resolved per host
 
