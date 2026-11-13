@@ -25,6 +25,7 @@ class FakeArticles implements WorkspaceArticleClient {
   calls: Record<CallKind, number> = { list: 0, get: 0, create: 0, update: 0 };
   hooks: Array<{ kind: CallKind; n: number; run: () => void }> = [];
   failList = false;
+  incompleteList = false;
   private seq = 0;
   private clock = 1_000;
 
@@ -53,6 +54,7 @@ class FakeArticles implements WorkspaceArticleClient {
   async list() {
     this.enter('list');
     if (this.failList) return { ok: false as const, reason: 'fetch-error' as const };
+    if (this.incompleteList) return { ok: false as const, reason: 'incomplete' as const };
     return { ok: true as const, articles: [...this.articles.values()].map((a) => ({ ...a })) };
   }
 
@@ -187,6 +189,70 @@ describe('create versus update', () => {
     const r = await createWorkspaceArticle(yt, doc(A));
     expect(r).toMatchObject({ ok: false, reason: 'ambiguous' });
     if (!r.ok && r.reason === 'ambiguous') expect(r.articleIds).toHaveLength(2);
+  });
+
+  // Post-create verification: success only when rediscovery finds exactly
+  // one valid article under the title and it is the one just created. The
+  // new article is never modified, whatever verification finds.
+  describe('post-create verification', () => {
+    const createdId = () => [...yt.articles.values()].find((a) => a.summary === workspaceArticleTitle(A))!.id;
+
+    it('returns success when rediscovery finds exactly the new article', async () => {
+      const r = await okSave(createWorkspaceArticle(yt, doc(A)));
+      expect(r).toMatchObject({ created: true, articleId: createdId() });
+      expect(yt.calls.list).toBe(2); // the check before, and the verification after
+    });
+
+    it.each([
+      ['fails', () => { yt.failList = true; }],
+      ['is incomplete', () => { yt.incompleteList = true; }],
+    ])('does not claim success when the verifying discovery %s', async (_label, breakListing) => {
+      yt.on('list', 2, breakListing);
+      const r = await createWorkspaceArticle(yt, doc(A));
+      expect(r).toMatchObject({ ok: false, reason: 'create-unverified', articleId: createdId() });
+      // The created article is left exactly as written.
+      expect(yt.articles.size).toBe(1);
+      expect(yt.json(createdId())).toMatchObject({ workspaceId: A, name: doc(A).name });
+      expect(yt.calls.update).toBe(0);
+    });
+
+    it('does not claim success when the new article is not found afterwards', async () => {
+      yt.on('list', 2, () => yt.articles.clear());
+      expect(await createWorkspaceArticle(yt, doc(A))).toMatchObject({ ok: false, reason: 'create-unverified' });
+    });
+
+    it('does not accept a different article under the title as its own', async () => {
+      let ours = '';
+      yt.on('list', 2, () => {
+        ours = createdId();
+        yt.articles.delete(ours);
+        yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A, { name: 'Someone else' })));
+      });
+      const r = await createWorkspaceArticle(yt, doc(A));
+      expect(r).toMatchObject({ ok: false, reason: 'create-unverified', articleId: ours });
+    });
+
+    it('does not accept an article that has become invalid', async () => {
+      yt.on('list', 2, () => yt.overwrite(createdId(), '{ broken'));
+      const r = await createWorkspaceArticle(yt, doc(A));
+      expect(r).toMatchObject({ ok: false, reason: 'invalid-remote', articleId: createdId() });
+      expect(yt.articles.get(createdId())!.content).toBe('{ broken');
+      expect(yt.calls.update).toBe(0);
+    });
+
+    it('reports both articles of a create race and modifies neither', async () => {
+      let theirs = '';
+      yt.on('create', 1, () => {
+        theirs = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A, { name: 'Theirs' }))).id;
+      });
+      const r = await createWorkspaceArticle(yt, doc(A));
+      const ids = [...yt.articles.keys()].sort();
+      expect(r).toMatchObject({ ok: false, reason: 'ambiguous', articleIds: ids });
+      const ours = ids.find((id) => id !== theirs)!;
+      expect(yt.json(theirs).name).toBe('Theirs');
+      expect(yt.json(ours).name).toBe(doc(A).name);
+      expect(yt.calls.update).toBe(0);
+    });
   });
 
   it('an update of a workspace with no article is not-found, never a create', async () => {

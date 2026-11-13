@@ -313,17 +313,29 @@ export async function createWorkspaceArticle(
   const created = await client.create(doc.workspaceId, serialiseNewWorkspaceDocument(doc));
   if (!created) return { ok: false, reason: 'write-failed', message: `YouTrack did not create workspace ${doc.workspaceId}.` };
 
-  // Titles are not unique in YouTrack: another machine may have created the
-  // same workspace at the same moment. Look again and report it rather than
-  // carry on as if ours were the only one.
+  // Verify by discovering again. Titles are not unique in YouTrack, so another
+  // machine may have created the same workspace at the same moment. Success
+  // only when exactly one valid article holds the title and it is ours. Any
+  // other outcome is reported, and the new article is never touched: a failed
+  // verification does not mean the create failed.
   const recheck = await find(client, doc.workspaceId);
-  if (recheck.ok && recheck.parsed?.entry.status === 'ambiguous') return refusal(recheck.parsed.entry);
+  const unverified = (why: string): SaveWorkspaceArticleResult => ({
+    ok: false,
+    reason: 'create-unverified',
+    articleId: created.id,
+    message: `Workspace ${doc.workspaceId} was created as article ${created.id}, but ${why}. It may exist; check before creating it again.`,
+  });
+  if (!recheck.ok) return unverified(`it could not be confirmed (${recheck.message})`);
+  if (!recheck.parsed) return unverified('discovery did not find it afterwards');
+  if (recheck.parsed.kind !== 'ok') return refusal(recheck.parsed.entry); // ambiguous or invalid
+  const { entry } = recheck.parsed;
+  if (entry.articleId !== created.id) return unverified(`discovery found a different article (${entry.articleId}) under its title`);
 
   return {
     ok: true,
-    document: doc,
-    articleId: created.id,
-    updated: created.updated,
+    document: entry.document,
+    articleId: entry.articleId,
+    updated: entry.updated,
     created: true,
     unchanged: false,
   };

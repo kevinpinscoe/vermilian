@@ -71,4 +71,9 @@ export type SaveWorkspaceArticleResult =
   // have landed.
   | { ok: false; reason: 'race-unresolved'; attempts: number; message: string }
   | { ok: false; reason: 'write-failed'; message: string }
+  // A create was accepted (article `articleId`), but discovery afterwards
+  // could not confirm it is the workspace's one article: the listing failed or
+  // was incomplete, the article was not found, or a different article holds
+  // the title. The article may well exist; it is left exactly as written.
+  | { ok: false; reason: 'create-unverified'; articleId: string; message: string }
   | WorkspaceDiscoveryFailure;
