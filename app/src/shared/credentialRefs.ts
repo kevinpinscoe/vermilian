@@ -215,12 +215,16 @@ export function sanitiseCredentialSources(input: unknown): Record<CredentialRef,
   return out;
 }
 
-/** What the renderer may know about a reference: never a value, never output. */
+/**
+ * What status IPC may say about a reference: which sources exist, never what
+ * they are. Command text can embed a token and a path can be sensitive, so
+ * both are reduced to booleans; values and output never appear.
+ */
 export interface CredentialRefStatus {
   credentialRef: CredentialRef;
   legacy: boolean;
-  command: string;
-  file: string;
+  commandConfigured: boolean;
+  fileConfigured: boolean;
   blobPresent: boolean;
   /** The source resolution would use, or null when none is configured. */
   selected: CredentialSourceKind | null;

@@ -67,7 +67,7 @@ import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
-import { credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
+import { checkWorkspaceCredential, credentialRefStatus } from './services/credentialResolver';
 import {
   LEGACY_CREDENTIAL_REFS,
   isLegacyCredentialRef,
@@ -860,13 +860,11 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.checkWorkspaceCredential,
     async (_e, workspaceId: unknown, ref: unknown): Promise<WorkspaceCredentialCheck> => {
-      const r = await resolveWorkspaceCredential(
+      return checkWorkspaceCredential(
         { workspaceId: String(workspaceId ?? ''), credentialRef: ref === null ? null : String(ref ?? '') },
         await readConfig(),
         credentialSourceIO,
       );
-      if (!r.ok) return r;
-      return { ok: true, credentialRef: r.credentialRef, source: r.source };
     },
   );
 

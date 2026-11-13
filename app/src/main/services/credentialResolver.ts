@@ -22,6 +22,7 @@ import {
   type CredentialRefStatus,
 } from '../../shared/credentialRefs';
 import type { AppConfig } from '../../shared/config';
+import type { WorkspaceCredentialCheck } from '../../shared/ipc';
 import { isCredentialRef, type CredentialRef } from '../../shared/workspaceSchema';
 
 /** Raw reads, each reporting only whether it worked — never why in detail. */
@@ -91,7 +92,25 @@ export async function resolveWorkspaceCredential(
   return { ok: true, value, credentialRef: ref, source };
 }
 
-/** A reference's configuration, without running or reading any source. */
+/**
+ * Whether a workspace's credential resolves, for IPC: the source on success,
+ * the failure otherwise. The resolved value is dropped here, in the main
+ * process, and never returned.
+ */
+export async function checkWorkspaceCredential(
+  req: WorkspaceCredentialRequest,
+  cfg: AppConfig,
+  io: CredentialSourceIO,
+): Promise<WorkspaceCredentialCheck> {
+  const r = await resolveWorkspaceCredential(req, cfg, io);
+  if (!r.ok) return r;
+  return { ok: true, credentialRef: r.credentialRef, source: r.source };
+}
+
+/**
+ * A reference's configuration, without running or reading any source. Says
+ * which sources are configured, never their command text or path.
+ */
 export async function credentialRefStatus(
   ref: CredentialRef,
   cfg: AppConfig,
@@ -103,8 +122,8 @@ export async function credentialRefStatus(
   return {
     credentialRef: ref,
     legacy,
-    command: sources.command,
-    file: sources.file,
+    commandConfigured: sources.command.trim() !== '',
+    fileConfigured: sources.file.trim() !== '',
     blobPresent,
     selected: selectSource(sources, blobPresent),
   };

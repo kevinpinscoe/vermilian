@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveWorkspaceCredential, credentialRefStatus, type CredentialSourceIO } from './credentialResolver';
+import {
+  resolveWorkspaceCredential,
+  checkWorkspaceCredential,
+  credentialRefStatus,
+  type CredentialSourceIO,
+} from './credentialResolver';
 import { DEFAULT_CONFIG, type AppConfig } from '../../shared/config';
 
 // Fictional values only. Every "secret" is a marker string the tests look for
@@ -329,18 +334,95 @@ describe('resolveWorkspaceCredential: isolation between references and workspace
   });
 });
 
-describe('credentialRefStatus', () => {
-  it('reports configuration without running or reading any source', async () => {
+describe('credentialRefStatus: reports configuration as booleans only', () => {
+  // A command that embeds a token, and a revealing path: neither may come back.
+  const EMBEDDED = 'sk-ant-embedded-token-444';
+  const SECRET_PATH = '/home/someone/private/keys/anthropic-two';
+  const c = cfg({
+    claudeKeyCommand: `curl -H "x-api-key: ${EMBEDDED}" https://example.invalid`,
+    credentialSources: {
+      'ai-1': { command: '', file: SECRET_PATH },
+      'ai-2': { command: `printf ${EMBEDDED}`, file: SECRET_PATH },
+    },
+  });
+  const leaks = (s: unknown) => {
+    const text = JSON.stringify(s);
+    for (const bad of [EMBEDDED, SECRET_PATH, 'curl', 'printf', 'x-api-key', SECRET_BLOB]) expect(text).not.toContain(bad);
+  };
+
+  it('a custom reference: which sources exist, never their text or path', async () => {
     const io = new FakeIO({ blobs: { 'ref-ai-1.bin': SECRET_BLOB } });
-    const c = cfg({ credentialSources: { 'ai-1': { command: '', file: '/secrets/ai' } } });
     const s = await credentialRefStatus('ai-1', c, io);
-    expect(s).toEqual({ credentialRef: 'ai-1', legacy: false, command: '', file: '/secrets/ai', blobPresent: true, selected: 'file' });
-    expect(io.calls).toEqual(['blobPresent:ref-ai-1.bin']);
-    expectNoSecret({ ...s, file: '' });
+    expect(s).toEqual({
+      credentialRef: 'ai-1',
+      legacy: false,
+      commandConfigured: false,
+      fileConfigured: true,
+      blobPresent: true,
+      selected: 'file',
+    });
+    expect(io.calls).toEqual(['blobPresent:ref-ai-1.bin']); // nothing run or read
+    leaks(s);
   });
 
-  it('reports a legacy reference from the legacy fields', async () => {
-    const s = await credentialRefStatus('anthropic-1', cfg({ claudeKeyCommand: 'show-secret c' }), new FakeIO({}));
-    expect(s).toMatchObject({ legacy: true, command: 'show-secret c', selected: 'command' });
+  it('a command with an embedded token is reported only as configured', async () => {
+    const s = await credentialRefStatus('ai-2', c, new FakeIO({}));
+    expect(s).toMatchObject({ commandConfigured: true, fileConfigured: true, selected: 'command' });
+    expect(Object.keys(s).sort()).toEqual(['blobPresent', 'commandConfigured', 'credentialRef', 'fileConfigured', 'legacy', 'selected']);
+    leaks(s);
+  });
+
+  it('a legacy reference is reported from the legacy fields, without their text', async () => {
+    const s = await credentialRefStatus('anthropic-1', c, new FakeIO({}));
+    expect(s).toEqual({
+      credentialRef: 'anthropic-1',
+      legacy: true,
+      commandConfigured: true,
+      fileConfigured: false,
+      blobPresent: false,
+      selected: 'command',
+    });
+    leaks(s);
+  });
+
+  it('a legacy reference and a custom reference report independently', async () => {
+    const io = new FakeIO({ blobs: { 'claude.key.bin': SECRET_BLOB } });
+    expect(await credentialRefStatus('anthropic-1', cfg(), io)).toMatchObject({ legacy: true, blobPresent: true, selected: 'safeStorage' });
+    expect(await credentialRefStatus('anthropic-2', cfg(), io)).toMatchObject({ legacy: false, blobPresent: false, selected: null });
+  });
+
+  it('whitespace-only sources count as unconfigured', async () => {
+    const s = await credentialRefStatus('ai-3', cfg({ credentialSources: { 'ai-3': { command: '  ', file: '/x' } } }), new FakeIO({}));
+    expect(s).toMatchObject({ commandConfigured: false, fileConfigured: true, selected: 'file' });
+  });
+});
+
+describe('checkWorkspaceCredential: never returns the value', () => {
+  const c = cfg({ credentialSources: { 'ai-1': { command: 'show-secret ai', file: '/secrets/ai' } } });
+
+  it('success returns only the reference and the source', async () => {
+    const r = await checkWorkspaceCredential(
+      { workspaceId: WS_A, credentialRef: 'ai-1' },
+      c,
+      new FakeIO({ commands: { 'show-secret ai': SECRET_CMD } }),
+    );
+    expect(r).toEqual({ ok: true, credentialRef: 'ai-1', source: 'command' });
+    expectNoSecret(r);
+  });
+
+  it('failure is the same fail-closed result as resolution, with no source details', async () => {
+    const io = new FakeIO({ commands: { 'show-secret ai': 'fail' }, files: { '/secrets/ai': SECRET_FILE } });
+    const r = await checkWorkspaceCredential({ workspaceId: WS_A, credentialRef: 'ai-1' }, c, io);
+    expect(r).toMatchObject({ ok: false, workspaceId: WS_A, credentialRef: 'ai-1', source: 'command', reason: 'command-failed' });
+    expect(io.calls).toEqual(['command:show-secret ai']);
+    expectNoSecret(r);
+  });
+
+  it('a legacy reference check reads only legacy sources and returns no value', async () => {
+    const io = new FakeIO({ blobs: { 'claude.key.bin': SECRET_BLOB, 'ref-anthropic-1.bin': 'never' } });
+    const r = await checkWorkspaceCredential({ workspaceId: WS_A, credentialRef: 'anthropic-1' }, cfg(), io);
+    expect(r).toEqual({ ok: true, credentialRef: 'anthropic-1', source: 'safeStorage' });
+    expect(io.calls).toEqual(['blobPresent:claude.key.bin', 'readBlob:claude.key.bin']);
+    expectNoSecret(r);
   });
 });

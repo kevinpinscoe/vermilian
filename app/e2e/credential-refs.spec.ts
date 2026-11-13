@@ -46,7 +46,28 @@ test.describe('Per-reference credentials', () => {
       await page.evaluate((f) => window.vermilian.setCredentialRefSources('anthropic-2', { command: '', file: f }), keyFile),
     ).toEqual({ ok: true });
     const listed = await page.evaluate(() => window.vermilian.listCredentialRefs());
-    expect(listed.find((s) => s.credentialRef === 'anthropic-2')).toMatchObject({ legacy: false, selected: 'file' });
+    expect(listed.find((s) => s.credentialRef === 'anthropic-2')).toEqual({
+      credentialRef: 'anthropic-2',
+      legacy: false,
+      commandConfigured: false,
+      fileConfigured: true,
+      blobPresent: false,
+      selected: 'file',
+    });
+    // Status says a file is configured, never which one.
+    expect(JSON.stringify(listed)).not.toContain(dir);
+
+    // A command embedding a secret-looking value is reported only as configured.
+    const EMBEDDED = 'sk-ant-e2e-embedded-fictional';
+    await page.evaluate((v) => window.vermilian.setCredentialRefSources('anthropic-3', { command: `printf ${v}`, file: '' }), EMBEDDED);
+    const withCommand = await page.evaluate(() => window.vermilian.listCredentialRefs());
+    expect(withCommand.find((s) => s.credentialRef === 'anthropic-3')).toMatchObject({ commandConfigured: true, selected: 'command' });
+    expect(JSON.stringify(withCommand)).not.toContain(EMBEDDED);
+    expect(JSON.stringify(withCommand)).not.toContain('printf');
+    const cmdCheck = await page.evaluate(() => window.vermilian.checkWorkspaceCredential('workspace-b', 'anthropic-3'));
+    expect(cmdCheck).toEqual({ ok: true, credentialRef: 'anthropic-3', source: 'command' });
+    expect(JSON.stringify(cmdCheck)).not.toContain(EMBEDDED);
+    await page.evaluate(() => window.vermilian.setCredentialRefSources('anthropic-3', { command: '', file: '' }));
 
     // The check resolves in main and returns only the source.
     const ok = await page.evaluate(() => window.vermilian.checkWorkspaceCredential('workspace-a', 'anthropic-2'));
