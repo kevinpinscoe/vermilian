@@ -83,7 +83,10 @@ import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
-import { checkWorkspaceCredential, credentialRefStatus } from './services/credentialResolver';
+import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
+import { createJiraProvider } from './providers/jiraProvider';
+import { backendChangeProblem } from '../shared/workspaceSetup';
+import type { ListWorkspaceJiraProjectsResult } from '../shared/ipc';
 import {
   LEGACY_CREDENTIAL_REFS,
   isLegacyCredentialRef,
@@ -913,7 +916,52 @@ export function registerIpc(): void {
           message: 'An update needs the document it was edited from.',
         };
       }
+      // A change of backend never silently discards what the workspace holds
+      // for the old one (VERM-33).
+      const problem = typeof edited === 'object' && edited !== null && base.backend && edited.backend ? backendChangeProblem(base, edited) : null;
+      if (problem) {
+        return {
+          ok: false,
+          reason: 'invalid-edit',
+          errors: [{ path: 'backend.kind', code: 'invalid', message: problem }],
+          message: problem,
+        };
+      }
       return workspaceArticles.updateWorkspaceArticle(client, base, edited);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.listWorkspaceJiraProjects,
+    async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraProjectsResult> => {
+      const client = await workspaceArticleClient();
+      if (!client) return { ok: false, message: NOT_CONFIGURED_WS.message };
+      if (typeof workspaceId !== 'string' || workspaceId === '') return { ok: false, message: 'No workspace ID was given.' };
+      const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
+      if (!read.ok) return { ok: false, message: read.message };
+      if (read.entry.status !== 'ok') return { ok: false, message: read.entry.message };
+      const doc = read.entry.document;
+      if (doc.backend.kind !== 'jira') return { ok: false, message: `"${doc.name}" is not a Jira workspace.` };
+      const { siteUrl, email, cloudId, credentialRef } = doc.backend;
+
+      // The workspace's own credential reference, resolved here in the main
+      // process; the value never crosses IPC.
+      let token: string;
+      if (IS_E2E) {
+        token = 'e2e-jira-token';
+      } else {
+        const r = await resolveWorkspaceCredential({ workspaceId, credentialRef }, await readConfig(), credentialSourceIO);
+        if (!r.ok) return { ok: false, message: r.message };
+        token = r.value;
+      }
+      try {
+        const base = await jira.jiraApiBase({ siteUrl, email, cloudId }, token);
+        const projects = await createJiraProvider(jira, { base, email, token }).getProjects();
+        return { ok: true, projects };
+      } catch (e) {
+        const err = e as { message?: string };
+        return { ok: false, message: err.message ?? 'The Jira projects could not be listed.' };
+      }
     },
   );
 

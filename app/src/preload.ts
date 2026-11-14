@@ -120,6 +120,7 @@ const api: VermilianAPI = {
   clearCredentialRefSecret: (credentialRef: string) => ipcRenderer.invoke(IPC.clearCredentialRefSecret, credentialRef),
   checkWorkspaceCredential: (workspaceId: string, credentialRef: string | null) =>
     ipcRenderer.invoke(IPC.checkWorkspaceCredential, workspaceId, credentialRef),
+  listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
 };
 

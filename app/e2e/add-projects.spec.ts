@@ -14,6 +14,7 @@ async function newWorkspace(page: Page, name: string) {
   await page.locator('[data-testid="workspace-switcher"]').click();
   await page.locator('[data-testid="new-workspace-btn"]').click();
   await page.locator('[data-testid="new-workspace-input"]').fill(name);
+  await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
   await page.locator('[data-testid="new-workspace-submit"]').click();
   await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText(name);
 }

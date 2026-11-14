@@ -39,6 +39,7 @@ test.describe('Workspace navigation', () => {
     await page.locator('[data-testid="workspace-switcher"]').click();
     await page.locator('[data-testid="new-workspace-btn"]').click();
     await page.locator('[data-testid="new-workspace-input"]').fill('QA Space');
+    await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
     await page.locator('[data-testid="new-workspace-submit"]').click();
     await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('QA Space');
   });
@@ -48,6 +49,7 @@ test.describe('Workspace navigation', () => {
     await page.locator('[data-testid="workspace-switcher"]').click();
     await page.locator('[data-testid="new-workspace-btn"]').click();
     await page.locator('[data-testid="new-workspace-input"]').fill('Second');
+    await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
     await page.locator('[data-testid="new-workspace-submit"]').click();
     await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('Second');
 
@@ -75,6 +77,7 @@ test.describe('Workspace navigation', () => {
     await page.locator('[data-testid="workspace-switcher"]').click();
     await page.locator('[data-testid="new-workspace-btn"]').click();
     await page.locator('[data-testid="new-workspace-input"]').fill('Second');
+    await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
     await page.locator('[data-testid="new-workspace-submit"]').click();
     await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('Second');
 
