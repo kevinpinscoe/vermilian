@@ -87,6 +87,7 @@ import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredenti
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
+  CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
   GetWorkspaceJiraIssuesResult,
   ListWorkspaceJiraProjectsResult,
@@ -98,6 +99,7 @@ import {
 } from '../shared/credentialRefs';
 import { isCredentialRef, workspaceProjectIds } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
+import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
@@ -107,6 +109,7 @@ import type {
 } from '../shared/workspaceArticle';
 import type { WorkspaceDocument } from '../shared/workspaceSchema';
 import { jira } from './api/jiraClient';
+import { FAKE_JIRA_BAD_TOKEN } from './api/fakeJira';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import { toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
@@ -947,15 +950,17 @@ export function registerIpc(): void {
 
   async function workspaceJiraProvider(
     workspaceId: unknown,
-  ): Promise<{ ok: true; provider: JiraProvider; doc: WorkspaceDocument } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; provider: JiraProvider; doc: WorkspaceDocument } | WorkspaceJiraFailure> {
+    const fail = (message: string, reason: WorkspaceJiraFailure['reason'] = 'error', credentialRef: string | null = null): WorkspaceJiraFailure =>
+      ({ ok: false, message, reason, credentialRef });
     const client = await workspaceArticleClient();
-    if (!client) return { ok: false, message: NOT_CONFIGURED_WS.message };
-    if (typeof workspaceId !== 'string' || workspaceId === '') return { ok: false, message: 'No workspace ID was given.' };
+    if (!client) return fail(NOT_CONFIGURED_WS.message);
+    if (typeof workspaceId !== 'string' || workspaceId === '') return fail('No workspace ID was given.');
     const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
-    if (!read.ok) return { ok: false, message: read.message };
-    if (read.entry.status !== 'ok') return { ok: false, message: read.entry.message };
+    if (!read.ok) return fail(read.message);
+    if (read.entry.status !== 'ok') return fail(read.entry.message);
     const doc = read.entry.document;
-    if (doc.backend.kind !== 'jira') return { ok: false, message: `"${doc.name}" is not a Jira workspace.` };
+    if (doc.backend.kind !== 'jira') return fail(`"${doc.name}" is not a Jira workspace.`);
     const { siteUrl, email, cloudId, credentialRef } = doc.backend;
     const key = JSON.stringify([siteUrl, email, cloudId, credentialRef, doc.jiraProjects ?? {}]);
 
@@ -968,13 +973,18 @@ export function registerIpc(): void {
       }
     }
     const provider = (async () => {
+      const r = await resolveWorkspaceCredential({ workspaceId, credentialRef }, await readConfig(), credentialSourceIO);
       let token: string;
-      if (IS_E2E) {
-        token = 'e2e-jira-token';
-      } else {
-        const r = await resolveWorkspaceCredential({ workspaceId, credentialRef }, await readConfig(), credentialSourceIO);
-        if (!r.ok) throw { message: r.message };
+      if (r.ok) {
         token = r.value;
+      } else if (IS_E2E && e2eFakeJiraTokenAllowed(r)) {
+        // e2e: resolution runs as on a real host, and a configured source
+        // that fails stops it. Only a reference with nothing configured gets
+        // the fake's token, or its rejected one to simulate a revoked token
+        // (VERMILIAN_E2E_JIRA_401, VERM-40).
+        token = process.env.VERMILIAN_E2E_JIRA_401 === '1' ? FAKE_JIRA_BAD_TOKEN : 'e2e-jira-token';
+      } else {
+        throw { message: r.message, reason: 'credential' };
       }
       const base = await jira.jiraApiBase({ siteUrl, email, cloudId }, token);
       return createJiraProvider(jira, { base, email, token }, doc.jiraProjects ?? {});
@@ -984,14 +994,24 @@ export function registerIpc(): void {
       return { ok: true, provider: await provider, doc };
     } catch (e) {
       jiraProviders.delete(workspaceId);
-      return { ok: false, message: (e as { message?: string }).message ?? 'Jira could not be reached.' };
+      return classifyJiraFailure(e, 'Jira could not be reached.', credentialRef);
     }
   }
 
-  function jiraFailure(workspaceId: unknown, e: unknown, fallback: string): { ok: false; message: string } {
-    if (typeof workspaceId === 'string') jiraProviders.delete(workspaceId);
-    return { ok: false, message: (e as { message?: string }).message ?? fallback };
+  function classifyJiraFailure(e: unknown, fallback: string, credentialRef: string | null): WorkspaceJiraFailure {
+    const message = (e as { message?: string } | null)?.message ?? fallback;
+    const reason = (e as { reason?: unknown } | null)?.reason === 'credential' ? 'credential' : isJiraUnauthorized(e) ? 'unauthorized' : 'error';
+    return { ok: false, message, reason, credentialRef };
   }
+
+  function jiraFailure(workspaceId: unknown, doc: WorkspaceDocument, e: unknown, fallback: string): WorkspaceJiraFailure {
+    if (typeof workspaceId === 'string') jiraProviders.delete(workspaceId);
+    return classifyJiraFailure(e, fallback, doc.backend.credentialRef ?? null);
+  }
+
+  // A refusal by Vermilian itself, not by Jira.
+  const refused = (message: string, doc: WorkspaceDocument): WorkspaceJiraFailure =>
+    ({ ok: false, message, reason: 'error', credentialRef: doc.backend.credentialRef ?? null });
 
   ipcMain.handle(
     IPC.listWorkspaceJiraProjects,
@@ -1001,7 +1021,7 @@ export function registerIpc(): void {
       try {
         return { ok: true, projects: await p.provider.getProjects() };
       } catch (e) {
-        return jiraFailure(workspaceId, e, 'The Jira projects could not be listed.');
+        return jiraFailure(workspaceId, p.doc, e, 'The Jira projects could not be listed.');
       }
     },
   );
@@ -1016,7 +1036,7 @@ export function registerIpc(): void {
       // Only the workspace's own projects: a renderer cannot read any project
       // the user can browse just by naming it.
       if (!workspaceProjectIds(p.doc).includes(projectKey)) {
-        return { ok: false, message: `${projectKey || 'That project'} is not one of this workspace's Jira projects.` };
+        return refused(`${projectKey || 'That project'} is not one of this workspace's Jira projects.`, p.doc);
       }
       try {
         const [issues, priorities] = await Promise.all([
@@ -1025,7 +1045,7 @@ export function registerIpc(): void {
         ]);
         return { ok: true, issues, priorities };
       } catch (e) {
-        return jiraFailure(a.workspaceId, e, `The issues of ${projectKey} could not be loaded.`);
+        return jiraFailure(a.workspaceId, p.doc, e, `The issues of ${projectKey} could not be loaded.`);
       }
     },
   );
@@ -1035,13 +1055,13 @@ export function registerIpc(): void {
     async (_e, args: unknown): Promise<GetWorkspaceJiraIssueDetailResult> => {
       const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
       const issueKey = typeof a.issueKey === 'string' ? a.issueKey : '';
-      if (!isJiraIssueKey(issueKey)) return { ok: false, message: 'That is not a Jira issue key.' };
+      if (!isJiraIssueKey(issueKey)) return { ok: false, message: 'That is not a Jira issue key.', reason: 'error', credentialRef: null };
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
       // Only issues in the workspace's own projects, as for the board.
       const own = workspaceProjectIds(p.doc);
       if (!own.includes(jiraProjectKeyOf(issueKey))) {
-        return { ok: false, message: `${issueKey} is not in one of this workspace's Jira projects.` };
+        return refused(`${issueKey} is not in one of this workspace's Jira projects.`, p.doc);
       }
       try {
         const [issue, content] = await Promise.all([
@@ -1051,11 +1071,11 @@ export function registerIpc(): void {
         // Jira answers a moved issue's old key with the issue under its new
         // key and project, which may be outside the workspace.
         if (!own.includes(issue.project.shortName)) {
-          return { ok: false, message: `${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects.` };
+          return refused(`${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects.`, p.doc);
         }
         return { ok: true, issue, content };
       } catch (e) {
-        return jiraFailure(a.workspaceId, e, `${issueKey} could not be loaded.`);
+        return jiraFailure(a.workspaceId, p.doc, e, `${issueKey} could not be loaded.`);
       }
     },
   );
@@ -1126,6 +1146,15 @@ export function registerIpc(): void {
   );
 
   ipcMain.handle(IPC.clearCredentialRefSecret, (_e, ref: unknown) => clearCredentialRefSecret(String(ref)));
+
+  ipcMain.handle(IPC.getCredentialRefStatus, async (_e, ref: unknown): Promise<CredentialRefStatusResult> => {
+    if (!isCredentialRef(ref)) return { ok: false, message: 'That is not a valid credential reference.' };
+    try {
+      return { ok: true, status: await credentialRefStatus(ref, await readConfig(), credentialSourceIO) };
+    } catch {
+      return { ok: false, message: 'The credential configuration could not be read.' };
+    }
+  });
 
   ipcMain.handle(
     IPC.checkWorkspaceCredential,
