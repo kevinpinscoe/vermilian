@@ -11,6 +11,9 @@ interface JiraWorkspaceBoardProps {
   workspaceName: string;
   projectKeys: string[];
   onChooseProjects: () => void;
+  selectedIssueKey?: string | null;
+  // Opens the read-only detail panel (VERM-35).
+  onSelectIssue: (issueKey: string) => void;
 }
 
 export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
@@ -19,9 +22,17 @@ export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: str
 /**
  * A Jira workspace's board, read-only (VERM-34). Issues come from Jira through
  * the workspace's own connection; cards cannot be dragged, edited or used to
- * start a timer, because nothing in Phase 1 writes to Jira.
+ * start a timer, because nothing in Phase 1 writes to Jira. Clicking a card
+ * opens its read-only detail panel (VERM-35).
  */
-export function JiraWorkspaceBoard({ workspaceId, workspaceName, projectKeys, onChooseProjects }: JiraWorkspaceBoardProps) {
+export function JiraWorkspaceBoard({
+  workspaceId,
+  workspaceName,
+  projectKeys,
+  onChooseProjects,
+  selectedIssueKey = null,
+  onSelectIssue,
+}: JiraWorkspaceBoardProps) {
   const [showDone, setShowDone] = useState(false);
 
   const results = useQueries({
@@ -92,12 +103,22 @@ export function JiraWorkspaceBoard({ workspaceId, workspaceName, projectKeys, on
                   {col.issues.map((issue) => (
                     <article
                       key={issue.id}
-                      className={styles.card}
+                      className={`${styles.card} ${issue.idReadable === selectedIssueKey ? styles.cardSelected : ''}`}
                       data-testid="jira-card"
                       data-issue-key={issue.idReadable}
                       // Read-only: Jira cards are never draggable (VERM-34).
                       draggable={false}
+                      role="button"
+                      tabIndex={0}
                       aria-roledescription="read-only Jira issue"
+                      aria-current={issue.idReadable === selectedIssueKey ? 'true' : undefined}
+                      onClick={() => onSelectIssue(issue.idReadable)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectIssue(issue.idReadable);
+                        }
+                      }}
                     >
                       <div className={styles.cardKey}>{issue.idReadable}</div>
                       <div className={styles.cardSummary}>{issue.summary}</div>

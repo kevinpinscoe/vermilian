@@ -144,8 +144,44 @@ export async function getIssue(
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
   if (!issue) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
-  return { ...issue, fields: { ...issue.fields } };
+  // The detail panel's extra fields (VERM-35): project, due date, description.
+  const project = FAKE_JIRA_PROJECTS.find((p) => key.startsWith(`${p.key}-`));
+  const extra: Record<string, unknown> = { ...FAKE_JIRA_DETAIL_FIELDS[key] };
+  if (project) extra.project = { ...project };
+  return { ...issue, fields: { ...issue.fields, ...extra } as JiraSearchIssue['fields'] };
 }
+
+// ── Issue detail (VERM-35) ───────────────────────────────────────────────────
+// DEMO-101 carries an ADF description exercising headings, lists, code, a safe
+// link and an unsafe one (which must render as text); DEMO-102 has none.
+export const FAKE_JIRA_DETAIL_FIELDS: Record<string, Record<string, unknown>> = {
+  'DEMO-101': {
+    duedate: '2026-12-01',
+    description: {
+      type: 'doc',
+      version: 1,
+      content: [
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Steps' }] },
+        {
+          type: 'orderedList',
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Generate a new credential' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Update the ' }, { type: 'text', text: 'staging', marks: [{ type: 'strong' }] }, { type: 'text', text: ' secret' }] }] },
+          ],
+        },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Runbook', marks: [{ type: 'link', attrs: { href: 'https://example.com/runbook' } }] },
+            { type: 'text', text: ' and ' },
+            { type: 'text', text: 'not a link', marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }] },
+            { type: 'text', text: ' <b>raw html</b>' },
+          ],
+        },
+      ],
+    },
+  },
+};
 
 export async function listProjects(_base: string, _email: string, token: string, _maxPages?: number): Promise<JiraProject[]> {
   rejectBadToken(token);
@@ -188,7 +224,7 @@ export async function getEditMeta(_base: string, _email: string, token: string, 
 // ── Comments (VERM-32) ───────────────────────────────────────────────────────
 
 export const FAKE_JIRA_COMMENTS: Record<string, JiraComment[]> = {
-  'DEMO-1': [
+  'DEMO-101': [
     {
       id: '30001',
       author: { displayName: 'E2E Jira User' },
@@ -198,6 +234,13 @@ export const FAKE_JIRA_COMMENTS: Record<string, JiraComment[]> = {
         version: 1,
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Rotated in ' }, { type: 'text', text: 'staging', marks: [{ type: 'code' }] }] }],
       },
+    },
+    {
+      id: '30002',
+      author: { displayName: 'Fictional Reviewer' },
+      created: '2026-11-11T10:00:00.000+0000',
+      updated: '2026-11-11T11:30:00.000+0000',
+      body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Verified, thanks.' }] }] },
     },
   ],
 };

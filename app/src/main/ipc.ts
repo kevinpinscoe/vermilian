@@ -86,13 +86,18 @@ import * as workspaceMigration from './services/workspaceMigration';
 import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
-import type { GetWorkspaceJiraIssuesResult, ListWorkspaceJiraProjectsResult } from '../shared/ipc';
+import type {
+  GetWorkspaceJiraIssueDetailResult,
+  GetWorkspaceJiraIssuesResult,
+  ListWorkspaceJiraProjectsResult,
+} from '../shared/ipc';
 import {
   LEGACY_CREDENTIAL_REFS,
   isLegacyCredentialRef,
   type CredentialRefStatus,
 } from '../shared/credentialRefs';
 import { isCredentialRef, workspaceProjectIds } from '../shared/workspaceSchema';
+import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
@@ -1021,6 +1026,36 @@ export function registerIpc(): void {
         return { ok: true, issues, priorities };
       } catch (e) {
         return jiraFailure(a.workspaceId, e, `The issues of ${projectKey} could not be loaded.`);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.getWorkspaceJiraIssueDetail,
+    async (_e, args: unknown): Promise<GetWorkspaceJiraIssueDetailResult> => {
+      const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+      const issueKey = typeof a.issueKey === 'string' ? a.issueKey : '';
+      if (!isJiraIssueKey(issueKey)) return { ok: false, message: 'That is not a Jira issue key.' };
+      const p = await workspaceJiraProvider(a.workspaceId);
+      if (!p.ok) return p;
+      // Only issues in the workspace's own projects, as for the board.
+      const own = workspaceProjectIds(p.doc);
+      if (!own.includes(jiraProjectKeyOf(issueKey))) {
+        return { ok: false, message: `${issueKey} is not in one of this workspace's Jira projects.` };
+      }
+      try {
+        const [issue, content] = await Promise.all([
+          p.provider.getIssueDetail(issueKey),
+          p.provider.getIssueContent(issueKey),
+        ]);
+        // Jira answers a moved issue's old key with the issue under its new
+        // key and project, which may be outside the workspace.
+        if (!own.includes(issue.project.shortName)) {
+          return { ok: false, message: `${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects.` };
+        }
+        return { ok: true, issue, content };
+      } catch (e) {
+        return jiraFailure(a.workspaceId, e, `${issueKey} could not be loaded.`);
       }
     },
   );

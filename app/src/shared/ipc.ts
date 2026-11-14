@@ -87,6 +87,8 @@ export const IPC = {
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
   // One of a Jira workspace's projects, read-only, for its board (VERM-34).
   getWorkspaceJiraIssues: 'workspaceJira:getIssues',
+  // One Jira issue's fields, description and comments, read-only (VERM-35).
+  getWorkspaceJiraIssueDetail: 'workspaceJira:getIssueDetail',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -149,6 +151,20 @@ export interface GetWorkspaceJiraIssuesArgs {
 export type GetWorkspaceJiraIssuesResult =
   // priorities: the project's values, most urgent first ([] when unknown).
   | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[] }
+  | { ok: false; message: string };
+
+export interface GetWorkspaceJiraIssueDetailArgs {
+  workspaceId: string;
+  issueKey: string;
+}
+
+export type GetWorkspaceJiraIssueDetailResult =
+  | {
+      ok: true;
+      issue: import('./workspace').IssueDetail;
+      // Description and comments as Markdown, escaped; render without raw HTML.
+      content: import('./jiraContent').JiraIssueContent;
+    }
   | { ok: false; message: string };
 
 export type ListWorkspaceJiraProjectsResult =
@@ -558,6 +574,8 @@ export interface VermilianAPI {
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
   // A Jira workspace project's issues and priority order, read-only (VERM-34).
   getWorkspaceJiraIssues(args: GetWorkspaceJiraIssuesArgs): Promise<GetWorkspaceJiraIssuesResult>;
+  // One of those issues in full, read-only, for its detail panel (VERM-35).
+  getWorkspaceJiraIssueDetail(args: GetWorkspaceJiraIssueDetailArgs): Promise<GetWorkspaceJiraIssueDetailResult>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
 }
