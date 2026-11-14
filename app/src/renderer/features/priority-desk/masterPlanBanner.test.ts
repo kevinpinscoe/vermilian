@@ -58,4 +58,12 @@ describe('masterPlanBannerCopy', () => {
     });
     expect(partial?.title).not.toBe(unusable?.title);
   });
+
+  it('explains each workspace-reference failure, naming the article but never guessing another (VERM-48)', () => {
+    expect(masterPlanBannerCopy({ kind: 'reference-not-found', articleId: 'VERM-A-9' })?.text).toMatch(/VERM-A-9.*no such article/);
+    expect(masterPlanBannerCopy({ kind: 'reference-inaccessible', articleId: 'VERM-A-9' })?.text).toMatch(/not allowed to read VERM-A-9/);
+    expect(masterPlanBannerCopy({ kind: 'reference-error', articleId: 'VERM-A-9' })?.text).toMatch(/Reading VERM-A-9/);
+    expect(masterPlanBannerCopy({ kind: 'reference-error', articleId: '' })?.text).toMatch(/not a valid article ID/);
+    expect(masterPlanBannerCopy({ kind: 'reference-unsupported' })?.title).toMatch(/Jira/);
+  });
 });

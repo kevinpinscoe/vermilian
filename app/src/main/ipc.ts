@@ -1,4 +1,7 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
+import type { StandupWorkspace } from '../shared/standup';
+import { generateWorkspaceStandup } from './services/workspaceStandup';
+import { resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
 import {
   IPC,
   type CredentialStatus,
@@ -80,7 +83,8 @@ import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
-import { getMasterPlanState } from './services/masterPlan';
+import { getActiveWorkspaceMasterPlan, getMasterPlanState } from './services/masterPlan';
+import type { MasterPlanState } from '../shared/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
@@ -560,6 +564,28 @@ export function registerIpc(): void {
     };
   }
 
+  // A workspace's stand-up inputs — its backend and folders — from whichever
+  // store the activation gate selects; null when it does not exist (VERM-48).
+  async function standupWorkspace(workspaceId: string): Promise<StandupWorkspace | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      return doc ? { id: doc.workspaceId, backend: backendContextOf(doc), folders: doc.folders } : null;
+    }
+    const legacy = await loadLegacyWorkspaceConfig();
+    const ws = legacy?.workspaces.find((w) => w.id === workspaceId);
+    return ws ? { id: ws.id, backend: null, folders: ws.folders } : null;
+  }
+
+  // One per-workspace document by ID, or null.
+  async function perWorkspaceDocument(workspaceId: string): Promise<WorkspaceDocument | null> {
+    if (!workspaceId) return null;
+    const client = await workspaceArticleClient();
+    const listed = client ? await workspaceArticles.listWorkspaceArticles(client) : null;
+    if (!listed?.ok) return null;
+    const entry = listed.workspaces.find((e) => e.workspaceId === workspaceId);
+    return entry?.status === 'ok' ? entry.document : null;
+  }
+
   async function activeWorkspaceContext(): Promise<ActiveWorkspaceContext> {
     const { choices, legacyHint, configuredServerUrl } = await workspaceChoices();
     const id = resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint);
@@ -742,10 +768,33 @@ export function registerIpc(): void {
 
   // Re-fetches and re-parses _vermilian-master-plan on every call — see
   // services/masterPlan.ts for why there is no persistent cache here.
-  ipcMain.handle(IPC.getMasterPlan, async () => {
+  //
+  // Legacy storage: the one global article, found by title, as before VERM-53.
+  // Per-workspace storage (VERM-48): the named workspace's own article by ID
+  // (the active one when none is named), read through that workspace's own
+  // YouTrack connection and credential — never the global article, a title
+  // search, or another workspace's connection.
+  ipcMain.handle(IPC.getMasterPlan, async (_e, workspaceId?: unknown): Promise<MasterPlanState> => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
+    if (workspaceStorageMode() === 'legacy') {
+      const token = await loadYtToken(cfg);
+      return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
+    }
+    // Only the active workspace's plan, resolved here in the main process: a
+    // caller-supplied ID for any other workspace is refused before YouTrack
+    // is contacted, and a switch during the read discards it
+    // (services/masterPlan.ts, getActiveWorkspaceMasterPlan).
+    const startGeneration = activeWorkspaceGeneration();
+    const activeId = (await activeWorkspaceContext()).workspaceId;
+    return getActiveWorkspaceMasterPlan({
+      requestedWorkspaceId: workspaceId,
+      activeId,
+      startGeneration,
+      currentGeneration: activeWorkspaceGeneration,
+      loadDoc: perWorkspaceDocument,
+      connect: (doc) => resolveWorkspaceYouTrackConnection(doc, cfg, credentialSourceIO, IS_E2E),
+      fetchArticle: (url, token, id) => youtrack.getArticleById(url, token, id),
+    });
   });
 
   ipcMain.handle(IPC.openExternalUrl, async (_e, url: string): Promise<void> => {
@@ -933,6 +982,16 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:jiraSearchDelay', (_e, ms: number) => fakeJiraForE2E.setSearchDelayForTests(ms));
     // Which credential reference each fake Claude call used (VERM-47).
     ipcMain.handle('e2e:claudeCalls', () => fakeClaudeForE2E.getCallsForTests());
+    // The fake YouTrack (VERM-48): stand-up project queries, a stand-up hold,
+    // and master-plan articles by readable ID (content, or a refusal status).
+    ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
+    ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
+    ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());
+    ipcMain.handle('e2e:articleDelay', (_e, ms: number) => fakeYouTrackForE2E.setArticleDelayForTests(ms));
+    ipcMain.handle('e2e:standupDelay', (_e, ms: number) => fakeYouTrackForE2E.setStandupDelayForTests(ms));
+    ipcMain.handle('e2e:setArticle', (_e, articleId: string, value: { content: string } | { status: number }) =>
+      fakeYouTrackForE2E.setArticleForTests(articleId, value),
+    );
   }
 
   // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
@@ -1258,56 +1317,27 @@ export function registerIpc(): void {
     async (_e, args: StandupGenerateArgs): Promise<StandupGenerateResult> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        const ai = await beginAi(args.workspaceId);
-        if (!ai.ok) return { ok: false, error: ai.error };
-
-        const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
-        const wsConfig = await readWorkspaceConfig();
-
-        let projectShortNames: string[];
-        if (args.scope === 'active-workspace' && wsConfig) {
-          const activeWs = await localActiveWorkspace(wsConfig);
-          const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
-          projectShortNames = allProjects
-            .filter((p) => projectIds.has(p.id))
-            .map((p) => p.shortName);
-        } else if (args.scope === 'custom' && args.customWorkspaceIds?.length && wsConfig) {
-          const allowedIds = args.customWorkspaceIds;
-          const projectIds = new Set(
-            wsConfig.workspaces
-              .filter((w) => allowedIds.includes(w.id))
-              .flatMap((w) => w.folders.flatMap((f) => f.projectIds)),
-          );
-          projectShortNames = allProjects
-            .filter((p) => projectIds.has(p.id))
-            .map((p) => p.shortName);
-        } else {
-          // all-workspace → all projects
-          projectShortNames = allProjects.map((p) => p.shortName);
-        }
-
         const windowHours =
           args.window === '24h' ? 24
           : args.window === '48h' ? 48
           : args.window === '7d' ? 168
           : (args.customWindowHours ?? 48);
-        const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
-
-        const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForStandup(
-          projectShortNames,
-          cutoffMs,
-        );
-
-        const taskCount =
-          issues.done.length + issues.inProgress.length + issues.blocked.length;
-
-        if (taskCount === 0) return { ok: true, markdown: '', taskCount: 0 };
-
-        const sent = await ai.send((key) => claude.generateStandupReport(key, issues, cfg.modelForStandup));
-        if (!sent.ok) return { ok: false, error: sent.error };
-        return { ok: true, markdown: sent.value, taskCount };
+        // The active workspace only (VERM-48, services/workspaceStandup.ts):
+        // one workspace identity for the Anthropic key, the projects and the
+        // YouTrack connection. Any scope a caller sends is ignored.
+        return await generateWorkspaceStandup({
+          storage: workspaceStorageMode(),
+          beginAi: () => beginAi(args.workspaceId),
+          loadWorkspace: standupWorkspace,
+          connectWorkspace: async (id) => resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(id), cfg, credentialSourceIO, IS_E2E),
+          legacyConnection: async () => {
+            const token = await loadYtToken(cfg);
+            return cfg.youtrackUrl && token ? { ok: true, url: cfg.youtrackUrl, token } : { ok: false, error: 'YouTrack not configured.' };
+          },
+          tracker: (url, token) => youtrackTracker(url, token),
+          generate: (key, issues) => claude.generateStandupReport(key, issues, cfg.modelForStandup),
+          cutoffMs: Date.now() - windowHours * 60 * 60 * 1000,
+        });
       } catch (e) {
         const err = e as { message?: string };
         return { ok: false, error: err.message ?? 'Stand-up generation failed.' };

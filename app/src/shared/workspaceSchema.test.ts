@@ -515,7 +515,8 @@ describe('round trips', () => {
 describe('creating versus updating a workspace document', () => {
   function storedArticle(): string {
     // An article written by a newer Vermilian, carrying fields this one does not know.
-    return JSON.stringify({ ...jiraDoc(), statusMapping: { DEMO: { Done: 'done' } }, masterPlan: 'plan-a' });
+    // (masterPlan was the example here until VERM-48 made it a known field.)
+    return JSON.stringify({ ...jiraDoc(), statusMapping: { DEMO: { Done: 'done' } }, futurePlanner: 'plan-a' });
   }
 
   it('regression: read-modify-write of an existing article keeps fields this version does not know', () => {
@@ -526,7 +527,7 @@ describe('creating versus updating a workspace document', () => {
     const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
     expect(out.name).toBe('Workspace B (renamed)');
     expect(out.statusMapping).toEqual({ DEMO: { Done: 'done' } });
-    expect(out.masterPlan).toBe('plan-a');
+    expect(out.futurePlanner).toBe('plan-a');
   });
 
   it('cannot update without the source handle that parse returned', () => {

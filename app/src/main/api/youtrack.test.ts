@@ -657,7 +657,7 @@ describe('findMasterPlanArticle', () => {
     await findMasterPlanArticle(URL, TOKEN);
     const [calledUrl] = lastCall();
     expect(calledUrl).toBe(
-      'https://yt.example.com/api/admin/projects/VERM/articles?fields=id,summary,content,updated&$top=100&$skip=0',
+      'https://yt.example.com/api/admin/projects/VERM/articles?fields=id,idReadable,summary,content,updated&$top=100&$skip=0',
     );
   });
 

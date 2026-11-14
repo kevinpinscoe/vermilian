@@ -3,6 +3,8 @@
 // state is process-local, so each app launch (each test) starts from the same
 // deterministic fixtures and mutations never leave the process.
 
+import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
+import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import type {
@@ -298,7 +300,7 @@ export async function postWorklog(
 }
 
 export async function getIssuesForStandup(
-  _url: string, _token: string, projectShortNames: string[], _cutoffMs: number,
+  _url: string, token: string, projectShortNames: string[], _cutoffMs: number,
 ): Promise<StandupIssues> {
   // Set VERMILIAN_E2E_DAILY_REVIEW_ERROR=1 to simulate this fetch failing —
   // used by Daily Review's (VERM-9) e2e error-state coverage. Shared with
@@ -307,6 +309,13 @@ export async function getIssuesForStandup(
   if (process.env.VERMILIAN_E2E_DAILY_REVIEW_ERROR === '1') {
     throw { status: 500, message: 'Simulated Daily Review fetch failure' };
   }
+  // e2e observation (VERM-48): which projects each stand-up asked for, and
+  // an optional hold to put a stand-up "in flight" while its issues load.
+  standupQueries.push([...projectShortNames]);
+  // Which credential reference the read used, from the fictional e2e token;
+  // 'legacy' for the Settings token's stand-in. Never the token itself.
+  standupCredentialRefs.push(refFromE2eFakeYouTrackToken(token) ?? 'legacy');
+  if (standupDelayMs > 0) await new Promise((r) => setTimeout(r, standupDelayMs));
   if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
   // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has data.
   return {
@@ -320,6 +329,22 @@ export async function getIssuesForStandup(
       { idReadable: 'TST2-2', summary: 'Waiting on a vendor response', status: 'BLOCKED', priority: 'Major', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
     ],
   };
+}
+
+const standupQueries: string[][] = [];
+const standupCredentialRefs: string[] = [];
+
+export function getStandupCredentialRefsForTests(): string[] {
+  return [...standupCredentialRefs];
+}
+let standupDelayMs = 0;
+
+export function getStandupQueriesForTests(): string[][] {
+  return standupQueries.map((q) => [...q]);
+}
+
+export function setStandupDelayForTests(ms: number): void {
+  standupDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
 }
 
 // ─── _vermilian-config Article (in-memory) ──────────────────────────────────────
@@ -448,6 +473,8 @@ export async function listMigrationSourceArticles(_url: string, _token: string):
   const articles = [
     ...(article ? [{ ...article, summary: '_vermilian-config' }] : []),
     ...(jiraArticle ? [{ ...jiraArticle, summary: '_vermilian-jira-overlay' }] : []),
+    // The global master plan, as the same env vars seed it (VERM-48).
+    ...globalMasterPlanArticles().map((a) => ({ ...a, summary: '_vermilian-master-plan' })),
   ];
   return { ok: true, articles };
 }
@@ -490,4 +517,54 @@ export async function findMasterPlanArticle(
     };
   }
   return { status: 'none' };
+}
+
+// ─── Master-plan articles by readable ID (VERM-48) ──────────────────────────────
+// The global plan the env vars above seed has readable ID VERM-A-90 (and
+// VERM-A-91 for its duplicate). A spec adds more with setArticleForTests, or
+// makes one refuse with an HTTP status to model a missing or unreadable one.
+
+export const FAKE_GLOBAL_MASTER_PLAN_ID = 'VERM-A-90';
+
+function globalMasterPlanArticles(): Array<{ id: string; idReadable: string; content: string; updated: number }> {
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_ERROR) return [];
+  const content = process.env.VERMILIAN_E2E_MASTER_PLAN_CONTENT ?? '## Outcome\n- Active epics: TEST-3\n';
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_DUPLICATE) {
+    return [
+      { id: 'e2e-master-plan-1', idReadable: FAKE_GLOBAL_MASTER_PLAN_ID, content, updated: 1 },
+      { id: 'e2e-master-plan-2', idReadable: 'VERM-A-91', content, updated: 1 },
+    ];
+  }
+  if (process.env.VERMILIAN_E2E_MASTER_PLAN_CONTENT) {
+    return [{ id: 'e2e-master-plan', idReadable: FAKE_GLOBAL_MASTER_PLAN_ID, content, updated: 1 }];
+  }
+  return [];
+}
+
+const articlesById = new Map<string, { content: string; updated: number } | { status: number }>();
+
+export function setArticleForTests(articleId: string, value: { content: string } | { status: number }): void {
+  articlesById.set(articleId, 'status' in value ? { status: value.status } : { content: value.content, updated: Date.now() });
+}
+
+const articleFetches: Array<{ articleId: string; credentialRef: string }> = [];
+let articleDelayMs = 0;
+
+export function getArticleFetchesForTests() {
+  return articleFetches.map((f) => ({ ...f }));
+}
+
+export function setArticleDelayForTests(ms: number): void {
+  articleDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+}
+
+export async function getArticleById(_url: string, token: string, articleId: string): Promise<ArticleFetch> {
+  articleFetches.push({ articleId, credentialRef: refFromE2eFakeYouTrackToken(token) ?? 'legacy' });
+  if (articleDelayMs > 0) await new Promise((r) => setTimeout(r, articleDelayMs));
+  if (!token) return { ok: false, status: 401 };
+  const set = articlesById.get(articleId);
+  if (set) return 'status' in set ? { ok: false, status: set.status } : { ok: true, article: { id: `e2e-${articleId}`, ...set } };
+  const global = globalMasterPlanArticles().find((a) => a.idReadable === articleId);
+  if (global) return { ok: true, article: { id: global.id, content: global.content, updated: global.updated } };
+  return { ok: false, status: 404 };
 }

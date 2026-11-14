@@ -67,6 +67,16 @@ export interface WorkspaceAiConfig {
   credentialRef: CredentialRef | null;
 }
 
+export interface WorkspaceMasterPlanConfig {
+  /** A readable YouTrack article ID such as `VERM-A-12`; null = None. */
+  articleId: string | null;
+}
+
+/** A readable YouTrack article ID: project key, `-A-`, a number (VERM-48). */
+export function isMasterPlanArticleId(v: unknown): v is string {
+  return typeof v === 'string' && v.length <= 64 && /^[A-Z][A-Z0-9_]*-A-[1-9]\d*$/.test(v);
+}
+
 export interface WorkspaceDocument {
   schema: typeof WORKSPACE_SCHEMA_VERSION;
   workspaceId: string;
@@ -85,6 +95,10 @@ export interface WorkspaceDocument {
   // due-date field choice, keyed by project key (VERM-31). A project with
   // no entry uses Jira's status categories and the system due date.
   jiraProjects?: JiraProjectSettingsMap;
+  // YouTrack workspaces only, optional: the workspace's own master-plan
+  // article by its readable ID (VERM-48, decision C5). Absent or null is
+  // None: the Priority Desk then has no master plan for this workspace.
+  masterPlan?: WorkspaceMasterPlanConfig;
 }
 
 export type WorkspaceValidationCode = 'invalid' | 'duplicate' | 'secret' | 'unsupported-schema' | 'malformed';
@@ -433,6 +447,18 @@ function validateBoards(c: Collector, boards: unknown) {
   }
 }
 
+function validateMasterPlan(c: Collector, masterPlan: unknown, backendKind: unknown) {
+  if (masterPlan === undefined) return;
+  if (!c.object(masterPlan, 'masterPlan')) return;
+  const id = (masterPlan as Record<string, unknown>).articleId;
+  if (id === null) return;
+  if (!isMasterPlanArticleId(id)) {
+    c.add('masterPlan.articleId', 'masterPlan.articleId must be a YouTrack article ID such as VERM-A-12, or null.');
+  } else if (backendKind !== 'youtrack') {
+    c.add('masterPlan', 'A master plan is for YouTrack workspaces only.');
+  }
+}
+
 function validateJiraProjects(c: Collector, jiraProjects: unknown, backendKind: unknown) {
   if (jiraProjects === undefined) return;
   if (!c.object(jiraProjects, 'jiraProjects')) return;
@@ -503,6 +529,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateBoards(c, input.boards);
   validateDismissals(c, input.dismissals, input.workspaceId);
   validateJiraProjects(c, input.jiraProjects, isPlainObject(input.backend) ? input.backend.kind : undefined);
+  validateMasterPlan(c, input.masterPlan, isPlainObject(input.backend) ? input.backend.kind : undefined);
   return [...c.errors, ...secrets];
 }
 
@@ -558,6 +585,7 @@ const DOCUMENT_SHAPE = struct({
   },
   dismissals: { t: 'record', of: struct({ workspace: LEAF, issueId: LEAF, dismissedWeekOf: LEAF }) },
   jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
+  masterPlan: struct({ articleId: LEAF }),
 });
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));

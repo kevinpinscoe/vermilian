@@ -23,8 +23,8 @@ class FakeYouTrack implements WorkspaceMigrationClient {
   private seq = 0;
   private clock = 1_000;
 
-  put(summary: string, content: string): WorkspaceArticleRecord {
-    const a = { id: `art-${++this.seq}`, summary, content, updated: ++this.clock };
+  put(summary: string, content: string, idReadable?: string): WorkspaceArticleRecord {
+    const a = { id: `art-${++this.seq}`, ...(idReadable ? { idReadable } : {}), summary, content, updated: ++this.clock };
     this.articles.set(a.id, a);
     return a;
   }
@@ -41,7 +41,10 @@ class FakeYouTrack implements WorkspaceMigrationClient {
 
   async listSources() {
     if (this.failSources) return { ok: false as const, reason: 'fetch-error' as const };
-    return { ok: true as const, articles: this.all((a) => a.summary === CONFIG_ARTICLE_TITLE || a.summary === JIRA_PROFILE_ARTICLE_TITLE) };
+    return {
+      ok: true as const,
+      articles: this.all((a) => a.summary === CONFIG_ARTICLE_TITLE || a.summary === JIRA_PROFILE_ARTICLE_TITLE || a.summary === MASTER_PLAN_TITLE),
+    };
   }
 
   async list() {
@@ -82,6 +85,8 @@ class FakeYouTrack implements WorkspaceMigrationClient {
 // ─── Fixtures (fictional values only) ────────────────────────────────────────
 
 const SERVER = 'https://youtrack.example.com';
+const MASTER_PLAN_TITLE = '_vermilian-master-plan';
+const PLAN_CONTENT = '## Outcome\n- Active epics: TEST-3\n';
 const W1 = 'workspace-1700000000001';
 const W2 = 'workspace-1700000000002';
 const W3 = 'workspace-1700000000003';
@@ -489,5 +494,53 @@ describe('sources that stop migration', () => {
   it('the source listing fails', async () => {
     yt.failSources = true;
     await expectStopped('discovery-error');
+  });
+});
+
+// ─── The global master plan (VERM-48) ─────────────────────────────────────────
+
+describe('migration and the global master plan', () => {
+  it('gives every migrated YouTrack workspace the global plan by its stable ID, and the Jira workspace None', async () => {
+    seed(legacyConfig(), { version: 1, profile: PROFILE });
+    yt.put(MASTER_PLAN_TITLE, PLAN_CONTENT, 'VERM-A-12');
+    const r = report(await planWorkspaceMigration(yt, SERVER, { jiraWorkspaceName: 'Workspace J' }));
+    expect(r.masterPlanArticleId).toBe('VERM-A-12');
+    for (const i of r.items.filter((x) => x.backend === 'youtrack')) expect(i.document!.masterPlan).toEqual({ articleId: 'VERM-A-12' });
+    expect(r.items.find((x) => x.backend === 'jira')!.document!.masterPlan).toEqual({ articleId: null });
+  });
+
+  it('assigns None to every workspace when there is no global plan', async () => {
+    const r = report(await planWorkspaceMigration(yt, SERVER));
+    expect(r.masterPlanArticleId).toBeNull();
+    for (const i of r.items) expect(i.document!.masterPlan).toEqual({ articleId: null });
+  });
+
+  it('neither duplicates nor modifies the plan article to assign it', async () => {
+    const plan = yt.put(MASTER_PLAN_TITLE, PLAN_CONTENT, 'VERM-A-12');
+    const before = { ...plan };
+    const r = report(await applyWorkspaceMigration(yt, SERVER));
+    expect(r.complete).toBe(true);
+    expect(yt.articles.get(plan.id)).toEqual(before);
+    expect([...yt.articles.values()].filter((a) => a.summary === MASTER_PLAN_TITLE)).toHaveLength(1);
+    expect(yt.updates).toEqual([]);
+    expect(yt.workspaceDoc(W1).masterPlan).toEqual({ articleId: 'VERM-A-12' });
+  });
+
+  it('stops, writing nothing, when the global plan is ambiguous', async () => {
+    yt.put(MASTER_PLAN_TITLE, PLAN_CONTENT, 'VERM-A-12');
+    yt.put(MASTER_PLAN_TITLE, PLAN_CONTENT, 'VERM-A-13');
+    for (const run of [planWorkspaceMigration, applyWorkspaceMigration]) {
+      const r = await run(yt, SERVER);
+      expect(r).toMatchObject({ ok: false, reason: 'master-plan-ambiguous' });
+      if (!r.ok) expect(r.message).toMatch(/VERM-A-12.*VERM-A-13/);
+    }
+    expect(yt.creates).toBe(0);
+  });
+
+  it('stops, writing nothing, when the global plan has no readable ID', async () => {
+    yt.put(MASTER_PLAN_TITLE, PLAN_CONTENT);
+    const r = await applyWorkspaceMigration(yt, SERVER);
+    expect(r).toMatchObject({ ok: false, reason: 'master-plan-unidentified' });
+    expect(yt.creates).toBe(0);
   });
 });

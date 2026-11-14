@@ -21,6 +21,8 @@ import { generateWorkspaceId } from '../../../shared/workspaceSchema';
 import { buildWorkspaceDocument, nextWorkspaceOrder, type NewWorkspaceBackend } from '../../../shared/workspaceSetup';
 import { parseAiCredentialRefInput } from '../../../shared/workspaceAi';
 import { WorkspaceAiCredentialModal } from './WorkspaceAiCredentialModal';
+import { WorkspaceMasterPlanModal } from './WorkspaceMasterPlanModal';
+import { MASTER_PLAN_QUERY_KEY } from '../priority-desk/masterPlanApi';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
 import { AddProjectsModal } from './AddProjectsModal';
 import styles from './WorkspaceNav.module.css';
@@ -860,6 +862,8 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
   const [showManage, setShowManage] = useState(false);
   // The workspace whose AI credential reference is being edited (VERM-47).
   const [aiCredentialFor, setAiCredentialFor] = useState<string | null>(null);
+  // The workspace whose master-plan reference is being edited (VERM-48).
+  const [masterPlanFor, setMasterPlanFor] = useState<string | null>(null);
   const [showAddProjects, setShowAddProjects] = useState(false);
 
   // ── On fresh install: auto-create default workspace config ──────────────────
@@ -1366,6 +1370,17 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
           onActiveWorkspaceChanged={(id) => { void onForceSwitchWorkspace(id); }}
           storage={storage}
           onEditAiCredential={(id) => { setShowManage(false); setAiCredentialFor(id); }}
+          onEditMasterPlan={(id) => { setShowManage(false); setMasterPlanFor(id); }}
+        />
+      )}
+      {masterPlanFor && (
+        <WorkspaceMasterPlanModal
+          workspaceId={masterPlanFor}
+          onClose={() => setMasterPlanFor(null)}
+          onSaved={() => {
+            void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: MASTER_PLAN_QUERY_KEY });
+          }}
         />
       )}
       {aiCredentialFor && (

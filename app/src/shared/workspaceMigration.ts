@@ -23,6 +23,7 @@
 //
 // Pure TypeScript: no Electron, no React.
 
+import { isMasterPlanArticleId } from './workspaceSchema';
 import { ARTICLE_CONFIG_VERSION, type BoardConfig, type Dismissals } from './boardConfig';
 import { normaliseJiraProfile, type JiraProfile } from './jiraProfile';
 import {
@@ -36,6 +37,7 @@ import {
 
 export const CONFIG_ARTICLE_TITLE = '_vermilian-config';
 export const JIRA_PROFILE_ARTICLE_TITLE = '_vermilian-jira-overlay';
+export const MASTER_PLAN_ARTICLE_TITLE = '_vermilian-master-plan';
 
 export const MIGRATED_YOUTRACK_CREDENTIAL_REF = 'youtrack-1';
 export const MIGRATED_ANTHROPIC_CREDENTIAL_REF = 'anthropic-1';
@@ -107,6 +109,9 @@ export interface WorkspaceMigrationReport {
   // In _vermilian-config but belonging to no migrated workspace: left there.
   notMigrated: { boards: string[]; dismissals: string[] };
   configArticleId: string;
+  // The global master plan's readable ID, given to every migrated YouTrack
+  // workspace; null when there is none (VERM-48).
+  masterPlanArticleId: string | null;
 }
 
 export interface WorkspaceMigrationFailure {
@@ -118,7 +123,11 @@ export interface WorkspaceMigrationFailure {
     | 'source-missing'
     | 'source-ambiguous'
     | 'source-invalid'
-    | 'source-unsupported';
+    | 'source-unsupported'
+    // VERM-48: the global master plan cannot be identified unambiguously, so
+    // no workspace is given one and nothing is migrated.
+    | 'master-plan-ambiguous'
+    | 'master-plan-unidentified';
   message: string;
   articleIds?: string[];
 }
@@ -266,6 +275,9 @@ export function buildMigrationTargets(
   jira: JiraProfileSource,
   serverUrl: string,
   options: WorkspaceMigrationOptions,
+  // The global master plan's readable ID, for every migrated YouTrack
+  // workspace; the Jira workspace always gets None (VERM-48).
+  masterPlanArticleId: string | null = null,
 ): MigrationTargets {
   const targets: MigrationTarget[] = [];
   const migratedIds = new Set<string>();
@@ -302,6 +314,7 @@ export function buildMigrationTargets(
       order: src.order,
       backend: { kind: 'youtrack', serverUrl, credentialRef: MIGRATED_YOUTRACK_CREDENTIAL_REF },
       ai: { credentialRef: MIGRATED_ANTHROPIC_CREDENTIAL_REF },
+      masterPlan: { articleId: masterPlanArticleId },
       folders: src.folders,
       boards,
       dismissals,
@@ -331,6 +344,7 @@ export function buildMigrationTargets(
       order: orders.length ? Math.max(...orders) + 1 : 0,
       backend: { kind: 'jira', ...jira.profile, credentialRef: MIGRATED_JIRA_CREDENTIAL_REF },
       ai: { credentialRef: null },
+      masterPlan: { articleId: null },
       folders: [],
       boards: {},
       dismissals: {},
@@ -354,4 +368,36 @@ export function buildMigrationTargets(
 export function documentDifferences(a: WorkspaceDocument, b: WorkspaceDocument, eq: (x: unknown, y: unknown) => boolean): string[] {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof WorkspaceDocument>;
   return [...keys].filter((k) => !eq(a[k], b[k])).sort();
+}
+
+/**
+ * The global master plan's readable ID, from the source listing: null when
+ * there is none, or a failure when it cannot be identified unambiguously —
+ * several articles carry the title, or the one that does has no readable ID.
+ * Never a guess (VERM-48).
+ */
+export function globalMasterPlanArticleId(
+  articles: ReadonlyArray<{ id: string; idReadable?: string; summary: string }>,
+): { ok: true; articleId: string | null } | WorkspaceMigrationFailure {
+  const plans = articles.filter((a) => a.summary === MASTER_PLAN_ARTICLE_TITLE);
+  if (plans.length === 0) return { ok: true, articleId: null };
+  if (plans.length > 1) {
+    const articleIds = plans.map((a) => a.idReadable ?? a.id).sort();
+    return {
+      ok: false,
+      reason: 'master-plan-ambiguous',
+      articleIds,
+      message: `There are ${plans.length} ${MASTER_PLAN_ARTICLE_TITLE} articles (${articleIds.join(', ')}); Vermilian will not guess which one each workspace should use. Nothing was migrated.`,
+    };
+  }
+  const id = plans[0].idReadable;
+  if (!id || !isMasterPlanArticleId(id)) {
+    return {
+      ok: false,
+      reason: 'master-plan-unidentified',
+      articleIds: [plans[0].id],
+      message: `The ${MASTER_PLAN_ARTICLE_TITLE} article (${plans[0].id}) has no readable article ID to assign. Nothing was migrated.`,
+    };
+  }
+  return { ok: true, articleId: id };
 }

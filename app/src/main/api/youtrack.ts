@@ -159,6 +159,7 @@ interface RawIssue {
   links?: RawIssueLink[];
 }
 
+import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueSearchQuery } from '../../shared/search';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
@@ -689,7 +690,7 @@ export async function getIssuesForStandup(
 
 const CONFIG_ARTICLE_SUMMARY = CONFIG_ARTICLE_TITLE;
 const MASTER_PLAN_ARTICLE_SUMMARY = '_vermilian-master-plan';
-const ARTICLE_FIELDS = 'id,summary,content,updated';
+const ARTICLE_FIELDS = 'id,idReadable,summary,content,updated';
 // This YouTrack instance requires every Article to belong to a project.
 // VERM (id 0-33) is a dedicated project created to own these articles — both
 // _vermilian-config (application-managed JSON) and _vermilian-master-plan
@@ -698,6 +699,7 @@ const VERMILIAN_ARTICLE_PROJECT_SHORT_NAME = 'VERM';
 
 interface RawArticle {
   id: string;
+  idReadable?: string; // e.g. VERM-A-12 (VERM-48)
   summary: string;
   content: string;
   updated: number;
@@ -912,7 +914,7 @@ export async function findMasterPlanArticle(
 // logic that uses these lives in main/services/workspaceArticles.ts. ---
 
 export type WorkspaceArticleListing =
-  | { ok: true; articles: Array<{ id: string; summary: string; content: string; updated: number }> }
+  | { ok: true; articles: Array<{ id: string; idReadable?: string; summary: string; content: string; updated: number }> }
   | { ok: false; reason: 'fetch-error' | 'incomplete' };
 
 export async function listWorkspaceArticles(url: string, token: string): Promise<WorkspaceArticleListing> {
@@ -935,8 +937,10 @@ export async function listMigrationSourceArticles(url: string, token: string): P
   return {
     ok: true,
     articles: result.articles
-      .filter((a) => a.summary === CONFIG_ARTICLE_SUMMARY || a.summary === JIRA_ARTICLE_SUMMARY)
-      .map((a) => ({ id: a.id, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
+      // The master-plan article too, so migration can give each YouTrack
+      // workspace its stable ID (VERM-48).
+      .filter((a) => a.summary === CONFIG_ARTICLE_SUMMARY || a.summary === JIRA_ARTICLE_SUMMARY || a.summary === MASTER_PLAN_ARTICLE_SUMMARY)
+      .map((a) => ({ id: a.id, idReadable: a.idReadable, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
   };
 }
 
@@ -963,5 +967,19 @@ export async function createWorkspaceArticle(
     };
   } catch {
     return null;
+  }
+}
+
+// --- A workspace's own master-plan article, by readable ID (VERM-48) ---
+// Read through the workspace's own connection. A refusal keeps its HTTP
+// status, so a missing article and an unreadable one are told apart.
+
+export async function getArticleById(url: string, token: string, articleId: string): Promise<ArticleFetch> {
+  try {
+    const r = await request<RawArticle>(url, token, `/api/articles/${encodeURIComponent(articleId)}?fields=${ARTICLE_FIELDS}`);
+    return { ok: true, article: { id: r.id, content: r.content ?? '', updated: r.updated ?? 0 } };
+  } catch (e) {
+    const status = (e as { status?: unknown } | null)?.status;
+    return typeof status === 'number' ? { ok: false, status } : { ok: false };
   }
 }

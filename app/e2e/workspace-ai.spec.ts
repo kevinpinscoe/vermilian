@@ -71,7 +71,7 @@ async function runAll(workspaceId: string) {
       outcome,
       workspaceId: id,
     });
-    const standup = await window.vermilian.standupGenerate({ scope: 'all-workspace', window: '7d', workspaceId: id });
+    const standup = await window.vermilian.standupGenerate({ window: '7d', workspaceId: id });
     return { create, rec, standup };
   }, { id: workspaceId, outcome: OUTCOME });
 }
@@ -168,7 +168,7 @@ test.describe('per-workspace storage (e2e gate)', () => {
         outcome: { name: 'Ship it', activeEpics: [], successMeasure: null, targetWindow: null, risks: null },
         workspaceId: id,
       }),
-    'stand-up generation': (id: string) => window.vermilian.standupGenerate({ scope: 'all-workspace', window: '7d', workspaceId: id }),
+    'stand-up generation': (id: string) => window.vermilian.standupGenerate({ window: '7d', workspaceId: id }),
   } as const;
 
   for (const [label, op] of Object.entries(OPS)) {

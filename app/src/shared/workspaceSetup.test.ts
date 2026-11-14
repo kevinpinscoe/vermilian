@@ -92,6 +92,13 @@ describe('buildWorkspaceDocument — the AI credential (VERM-47)', () => {
   });
 });
 
+describe('buildWorkspaceDocument — the master plan (VERM-48)', () => {
+  it('starts every new workspace with None, YouTrack and Jira alike', () => {
+    expect(built(YT).masterPlan).toEqual({ articleId: null });
+    expect(built(JIRA).masterPlan).toEqual({ articleId: null });
+  });
+});
+
 describe('withJiraProjects — choosing a Jira workspace\'s projects', () => {
   it('adds chosen projects to the first folder', () => {
     const doc = withJiraProjects(built(JIRA), ['DEMO', 'OPS']);

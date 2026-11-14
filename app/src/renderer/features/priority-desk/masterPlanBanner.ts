@@ -40,6 +40,32 @@ export function masterPlanBannerCopy(state: MasterPlanState): MasterPlanBannerCo
         title: "Couldn't confirm the Master Plan article",
         text: `Master Plan article discovery could not be completed against YouTrack. ${STILL_WORKS}`,
       };
+    // A workspace's own master plan (VERM-48).
+    case 'reference-not-found':
+      return {
+        title: 'Master Plan article not found',
+        text: `This workspace's master plan is ${state.articleId}, but YouTrack has no such article. Change or clear it in Manage workspaces. ${STILL_WORKS}`,
+      };
+    case 'reference-inaccessible':
+      return {
+        title: "Can't read the Master Plan article",
+        text: `This workspace's credential is not allowed to read ${state.articleId}. ${STILL_WORKS}`,
+      };
+    case 'reference-error':
+      return {
+        title: "Couldn't load the Master Plan article",
+        text: state.articleId
+          ? `Reading ${state.articleId} through this workspace's YouTrack connection failed. ${STILL_WORKS}`
+          : `This workspace's master-plan reference is not a valid article ID. ${STILL_WORKS}`,
+      };
+    // A refused or superseded read: nothing to warn about, and nothing shown.
+    case 'workspace-not-active':
+      return null;
+    case 'reference-unsupported':
+      return {
+        title: 'No Master Plan for Jira workspaces',
+        text: `A Jira workspace has no YouTrack connection to read a master plan through. ${STILL_WORKS}`,
+      };
     case 'loaded': {
       if (state.parseStatus === 'valid' && state.diagnostics.length === 0) return null;
       const detail = state.diagnostics.map((d) => d.message).join(' ');
