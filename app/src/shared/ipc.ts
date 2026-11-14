@@ -61,6 +61,9 @@ export const IPC = {
   getWorkspaceConfig: 'workspace:getConfig',
   saveWorkspaceConfig: 'workspace:saveConfig',
   forceResyncWorkspaceConfig: 'workspace:forceResync',
+  // The per-machine active workspace (VERM-46, shared/activeWorkspace.ts).
+  getActiveWorkspace: 'workspace:getActive',
+  setActiveWorkspace: 'workspace:setActive',
   // Per-workspace configuration articles (VERM-43, shared/workspaceArticle.ts).
   // The renderer sends documents and edits as plain data; reading the article
   // and writing it happen in one main-process operation.
@@ -478,7 +481,12 @@ export interface VermilianAPI {
   getProjects(): Promise<YouTrackProject[]>;
   getWorkspaceConfig(): Promise<VermilianConfig | null>;
   openExternalUrl(url: string): Promise<void>;
-  saveWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean }>;
+  saveWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean; error?: string }>;
+  // The per-machine active workspace (VERM-46). Stored locally, never in the
+  // shared _vermilian-config article. The context carries the backend kind,
+  // its non-secret address and credential reference — never a credential.
+  getActiveWorkspace(): Promise<import('./activeWorkspace').ActiveWorkspaceContext>;
+  setActiveWorkspace(workspaceId: string): Promise<import('./activeWorkspace').SetActiveWorkspaceResult>;
   // Discards the local and in-memory workspace-config cache and re-fetches the
   // _vermilian-config Article from scratch, pruning any stale project ids in
   // the process. Manual recovery path for a corrupted shared Article.
