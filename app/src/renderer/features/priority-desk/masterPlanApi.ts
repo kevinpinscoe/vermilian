@@ -23,6 +23,9 @@ export function useMasterPlan() {
     queryKey: masterPlanQueryKey(workspaceId ?? ''),
     queryFn: () => window.vermilian.getMasterPlan(workspaceId),
     enabled: workspaceId !== undefined,
-    staleTime: 60_000,
+    // A refused or superseded read (the workspace was not active when the
+    // main process checked) is never treated as fresh: it is re-read as soon
+    // as this workspace's desk is shown again.
+    staleTime: (q) => (q.state.data?.kind === 'workspace-not-active' ? 0 : 60_000),
   });
 }

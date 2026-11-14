@@ -1,5 +1,7 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
-import { standupProjectShortNames, type StandupWorkspace } from '../shared/standup';
+import type { StandupWorkspace } from '../shared/standup';
+import { generateWorkspaceStandup } from './services/workspaceStandup';
+import { resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
 import {
   IPC,
   type CredentialStatus,
@@ -81,8 +83,7 @@ import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
-import { getMasterPlanState, getWorkspaceMasterPlanState } from './services/masterPlan';
-import { masterPlanArticleIdOf } from '../shared/workspaceMasterPlan';
+import { getActiveWorkspaceMasterPlan, getMasterPlanState } from './services/masterPlan';
 import type { MasterPlanState } from '../shared/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
@@ -779,19 +780,20 @@ export function registerIpc(): void {
       const token = await loadYtToken(cfg);
       return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
     }
-    const id = typeof workspaceId === 'string' && workspaceId ? workspaceId : (await activeWorkspaceContext()).workspaceId;
-    const doc = await perWorkspaceDocument(id);
-    if (!doc) return { kind: 'none' };
-    const articleId = masterPlanArticleIdOf(doc);
-    if (doc.backend.kind !== 'youtrack') return articleId ? { kind: 'reference-unsupported' } : { kind: 'none' };
-    const backend = doc.backend;
-    return getWorkspaceMasterPlanState(articleId, async (aid) => {
-      const r = await resolveWorkspaceCredential({ workspaceId: doc.workspaceId, credentialRef: backend.credentialRef }, cfg, credentialSourceIO);
-      let token: string;
-      if (r.ok) token = r.value;
-      else if (IS_E2E && e2eFakeJiraTokenAllowed(r)) token = 'e2e-youtrack-token'; // e2e: nothing configured
-      else return { ok: false }; // reference-error; the resolver's details stay here
-      return youtrack.getArticleById(backend.serverUrl, token, aid);
+    // Only the active workspace's plan, resolved here in the main process: a
+    // caller-supplied ID for any other workspace is refused before YouTrack
+    // is contacted, and a switch during the read discards it
+    // (services/masterPlan.ts, getActiveWorkspaceMasterPlan).
+    const startGeneration = activeWorkspaceGeneration();
+    const activeId = (await activeWorkspaceContext()).workspaceId;
+    return getActiveWorkspaceMasterPlan({
+      requestedWorkspaceId: workspaceId,
+      activeId,
+      startGeneration,
+      currentGeneration: activeWorkspaceGeneration,
+      loadDoc: perWorkspaceDocument,
+      connect: (doc) => resolveWorkspaceYouTrackConnection(doc, cfg, credentialSourceIO, IS_E2E),
+      fetchArticle: (url, token, id) => youtrack.getArticleById(url, token, id),
     });
   });
 
@@ -983,6 +985,9 @@ export function registerIpc(): void {
     // The fake YouTrack (VERM-48): stand-up project queries, a stand-up hold,
     // and master-plan articles by readable ID (content, or a refusal status).
     ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
+    ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
+    ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());
+    ipcMain.handle('e2e:articleDelay', (_e, ms: number) => fakeYouTrackForE2E.setArticleDelayForTests(ms));
     ipcMain.handle('e2e:standupDelay', (_e, ms: number) => fakeYouTrackForE2E.setStandupDelayForTests(ms));
     ipcMain.handle('e2e:setArticle', (_e, articleId: string, value: { content: string } | { status: number }) =>
       fakeYouTrackForE2E.setArticleForTests(articleId, value),
@@ -1312,42 +1317,27 @@ export function registerIpc(): void {
     async (_e, args: StandupGenerateArgs): Promise<StandupGenerateResult> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        const ai = await beginAi(args.workspaceId);
-        if (!ai.ok) return { ok: false, error: ai.error };
-
-        // The active workspace only (VERM-48): the projects come from the
-        // same workspace the credential was resolved for. Any scope a caller
-        // sends is ignored, and a switch while projects or issues load is
-        // caught by send() before Anthropic is contacted.
-        const workspace = await standupWorkspace(ai.workspaceId);
-        const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
-        const projects = standupProjectShortNames(workspace, cfg.youtrackUrl, allProjects);
-        if (!projects.ok) return { ok: false, error: projects.error };
-        const projectShortNames = projects.shortNames;
-        if (projectShortNames.length === 0) return { ok: true, markdown: '', taskCount: 0 };
-
         const windowHours =
           args.window === '24h' ? 24
           : args.window === '48h' ? 48
           : args.window === '7d' ? 168
           : (args.customWindowHours ?? 48);
-        const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
-
-        const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForStandup(
-          projectShortNames,
-          cutoffMs,
-        );
-
-        const taskCount =
-          issues.done.length + issues.inProgress.length + issues.blocked.length;
-
-        if (taskCount === 0) return { ok: true, markdown: '', taskCount: 0 };
-
-        const sent = await ai.send((key) => claude.generateStandupReport(key, issues, cfg.modelForStandup));
-        if (!sent.ok) return { ok: false, error: sent.error };
-        return { ok: true, markdown: sent.value, taskCount };
+        // The active workspace only (VERM-48, services/workspaceStandup.ts):
+        // one workspace identity for the Anthropic key, the projects and the
+        // YouTrack connection. Any scope a caller sends is ignored.
+        return await generateWorkspaceStandup({
+          storage: workspaceStorageMode(),
+          beginAi: () => beginAi(args.workspaceId),
+          loadWorkspace: standupWorkspace,
+          connectWorkspace: async (id) => resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(id), cfg, credentialSourceIO, IS_E2E),
+          legacyConnection: async () => {
+            const token = await loadYtToken(cfg);
+            return cfg.youtrackUrl && token ? { ok: true, url: cfg.youtrackUrl, token } : { ok: false, error: 'YouTrack not configured.' };
+          },
+          tracker: (url, token) => youtrackTracker(url, token),
+          generate: (key, issues) => claude.generateStandupReport(key, issues, cfg.modelForStandup),
+          cutoffMs: Date.now() - windowHours * 60 * 60 * 1000,
+        });
       } catch (e) {
         const err = e as { message?: string };
         return { ok: false, error: err.message ?? 'Stand-up generation failed.' };

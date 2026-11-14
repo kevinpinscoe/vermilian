@@ -17,23 +17,16 @@ import type { WorkspaceFolder } from './workspace';
 export const JIRA_STANDUP_UNSUPPORTED_MESSAGE =
   'Stand-ups are not available for Jira workspaces yet: Phase 1 supports them for YouTrack workspaces only.';
 
-export const STANDUP_OTHER_SERVER_MESSAGE =
-  'Stand-ups for a workspace on a different YouTrack server will be available once per-workspace connections are activated.';
-
 export type StandupAvailability = { available: true; reason: null } | { available: false; reason: string };
 
-/** Whether this workspace's backend can have a stand-up at all. */
-export function standupAvailability(backend: ActiveBackendContext | null, configuredServerUrl: string): StandupAvailability {
+/**
+ * Whether this workspace's backend can have a stand-up at all. A YouTrack
+ * workspace reads through its own connection (its server and credential
+ * reference under per-workspace storage), so its server does not matter.
+ */
+export function standupAvailability(backend: ActiveBackendContext | null): StandupAvailability {
   if (backend?.kind === 'jira') return { available: false, reason: JIRA_STANDUP_UNSUPPORTED_MESSAGE };
-  if (backend?.kind === 'youtrack' && !sameServer(backend.serverUrl, configuredServerUrl)) {
-    return { available: false, reason: STANDUP_OTHER_SERVER_MESSAGE };
-  }
   return { available: true, reason: null };
-}
-
-function sameServer(a: string, b: string): boolean {
-  const norm = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
-  return norm(a) !== '' && norm(a) === norm(b);
 }
 
 export interface StandupWorkspace {
@@ -51,11 +44,10 @@ export type StandupProjects = { ok: true; shortNames: string[] } | { ok: false; 
  */
 export function standupProjectShortNames(
   workspace: StandupWorkspace | null,
-  configuredServerUrl: string,
   allProjects: ReadonlyArray<{ id: string; shortName: string }>,
 ): StandupProjects {
   if (!workspace) return { ok: false, error: 'There is no active workspace to report on.' };
-  const avail = standupAvailability(workspace.backend, configuredServerUrl);
+  const avail = standupAvailability(workspace.backend);
   if (!avail.available) return { ok: false, error: avail.reason };
   const ids = new Set(workspace.folders.flatMap((f) => f.projectIds));
   return { ok: true, shortNames: allProjects.filter((p) => ids.has(p.id)).map((p) => p.shortName) };

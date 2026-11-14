@@ -239,6 +239,9 @@ export type MasterPlanState =
   | { kind: 'reference-inaccessible'; articleId: string } // 401/403 with the workspace's credential
   | { kind: 'reference-error'; articleId: string } // malformed reference, credential failure or request failure
   | { kind: 'reference-unsupported' } // a Jira workspace: it has no YouTrack connection to read one through
+  // The request named a workspace that is not (or is no longer) the active
+  // one, so nothing was read or returned. Not a problem with any article.
+  | { kind: 'workspace-not-active' }
   | {
       kind: 'loaded';
       articleId: string;
@@ -271,6 +274,8 @@ export function masterPlanDiagnosticSignature(state: MasterPlanState): string | 
       return `${state.kind}:${state.articleId}`;
     case 'reference-unsupported':
       return state.kind;
+    case 'workspace-not-active':
+      return null;
     case 'loaded': {
       if (state.parseStatus === 'valid' && state.diagnostics.length === 0) return null;
       const diagKey = state.diagnostics

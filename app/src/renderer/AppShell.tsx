@@ -229,7 +229,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const hasClaudeKey = workspaceAi.available;
   const aiUnavailableReason = workspaceAi.reason;
   // Stand-ups: the active workspace only, and none for Jira in Phase 1 (VERM-48).
-  const standup = standupAvailability(activeContext.data?.backend ?? null, config.data?.youtrackUrl ?? '');
+  const standup = standupAvailability(activeContext.data?.backend ?? null);
   const dailyNotesFolder = config.data?.dailyNotesFolder ?? '';
   const pomodoro = config.data?.pomodoro ?? { work: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 4 };
   const soundEnabled = config.data?.soundOnBlockEnd ?? true;

@@ -3,6 +3,7 @@
 // state is process-local, so each app launch (each test) starts from the same
 // deterministic fixtures and mutations never leave the process.
 
+import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
@@ -299,7 +300,7 @@ export async function postWorklog(
 }
 
 export async function getIssuesForStandup(
-  _url: string, _token: string, projectShortNames: string[], _cutoffMs: number,
+  _url: string, token: string, projectShortNames: string[], _cutoffMs: number,
 ): Promise<StandupIssues> {
   // Set VERMILIAN_E2E_DAILY_REVIEW_ERROR=1 to simulate this fetch failing —
   // used by Daily Review's (VERM-9) e2e error-state coverage. Shared with
@@ -311,6 +312,9 @@ export async function getIssuesForStandup(
   // e2e observation (VERM-48): which projects each stand-up asked for, and
   // an optional hold to put a stand-up "in flight" while its issues load.
   standupQueries.push([...projectShortNames]);
+  // Which credential reference the read used, from the fictional e2e token;
+  // 'legacy' for the Settings token's stand-in. Never the token itself.
+  standupCredentialRefs.push(refFromE2eFakeYouTrackToken(token) ?? 'legacy');
   if (standupDelayMs > 0) await new Promise((r) => setTimeout(r, standupDelayMs));
   if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
   // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has data.
@@ -328,6 +332,11 @@ export async function getIssuesForStandup(
 }
 
 const standupQueries: string[][] = [];
+const standupCredentialRefs: string[] = [];
+
+export function getStandupCredentialRefsForTests(): string[] {
+  return [...standupCredentialRefs];
+}
 let standupDelayMs = 0;
 
 export function getStandupQueriesForTests(): string[][] {
@@ -538,7 +547,20 @@ export function setArticleForTests(articleId: string, value: { content: string }
   articlesById.set(articleId, 'status' in value ? { status: value.status } : { content: value.content, updated: Date.now() });
 }
 
+const articleFetches: Array<{ articleId: string; credentialRef: string }> = [];
+let articleDelayMs = 0;
+
+export function getArticleFetchesForTests() {
+  return articleFetches.map((f) => ({ ...f }));
+}
+
+export function setArticleDelayForTests(ms: number): void {
+  articleDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+}
+
 export async function getArticleById(_url: string, token: string, articleId: string): Promise<ArticleFetch> {
+  articleFetches.push({ articleId, credentialRef: refFromE2eFakeYouTrackToken(token) ?? 'legacy' });
+  if (articleDelayMs > 0) await new Promise((r) => setTimeout(r, articleDelayMs));
   if (!token) return { ok: false, status: 401 };
   const set = articlesById.get(articleId);
   if (set) return 'status' in set ? { ok: false, status: set.status } : { ok: true, article: { id: `e2e-${articleId}`, ...set } };

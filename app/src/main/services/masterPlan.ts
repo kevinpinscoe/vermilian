@@ -14,7 +14,9 @@
 import { youtrack as yt } from '../api/client';
 import { parseMasterPlan } from '../../shared/masterPlan';
 import type { MasterPlanState } from '../../shared/masterPlan';
-import { isMasterPlanArticleId } from '../../shared/workspaceSchema';
+import { isMasterPlanArticleId, type WorkspaceDocument } from '../../shared/workspaceSchema';
+import { masterPlanArticleIdOf } from '../../shared/workspaceMasterPlan';
+import type { WorkspaceYouTrackConnection } from './workspaceYouTrack';
 
 export async function getMasterPlanState(url: string, token: string): Promise<MasterPlanState> {
   if (!url || !token) return { kind: 'none' };
@@ -81,4 +83,48 @@ export async function getWorkspaceMasterPlanState(
     diagnostics: parsed.diagnostics,
     parseStatus: parsed.status,
   };
+}
+
+// ─── Only the active workspace's plan (VERM-48 correction) ──────────────────
+
+export interface ActiveMasterPlanDeps {
+  /** The workspace the renderer asked for; ignored when absent. */
+  requestedWorkspaceId: unknown;
+  /** The active workspace on this machine, resolved in the main process. */
+  activeId: string;
+  /** The active-workspace switch counter, read before anything else. */
+  startGeneration: number;
+  currentGeneration(): number;
+  loadDoc(workspaceId: string): Promise<WorkspaceDocument | null>;
+  connect(doc: WorkspaceDocument): Promise<WorkspaceYouTrackConnection>;
+  fetchArticle(url: string, token: string, articleId: string): Promise<ArticleFetch>;
+}
+
+/**
+ * The master plan for the active workspace, under per-workspace storage.
+ * A request naming any other workspace is refused before anything is read
+ * ('workspace-not-active'), so a caller-supplied ID can never reach another
+ * workspace's plan or credential. A switch at any point — before the article
+ * is read (YouTrack is then not contacted) or while it is read (the answer is
+ * discarded) — turns the result into 'workspace-not-active' too, never the
+ * previous workspace's plan.
+ */
+export async function getActiveWorkspaceMasterPlan(d: ActiveMasterPlanDeps): Promise<MasterPlanState> {
+  const asked = d.requestedWorkspaceId;
+  if (typeof asked === 'string' && asked !== '' && asked !== d.activeId) return { kind: 'workspace-not-active' };
+  const switched = () => d.currentGeneration() !== d.startGeneration;
+
+  const doc = await d.loadDoc(d.activeId);
+  if (switched()) return { kind: 'workspace-not-active' };
+  if (!doc) return { kind: 'none' };
+  const articleId = masterPlanArticleIdOf(doc);
+  if (doc.backend.kind !== 'youtrack') return articleId ? { kind: 'reference-unsupported' } : { kind: 'none' };
+
+  const state = await getWorkspaceMasterPlanState(articleId, async (id) => {
+    const conn = await d.connect(doc);
+    if (!conn.ok) return { ok: false }; // reference-error; the resolver's details stay in main
+    if (switched()) return { ok: false }; // superseded below; YouTrack is not contacted
+    return d.fetchArticle(conn.url, conn.token, id);
+  });
+  return switched() ? { kind: 'workspace-not-active' } : state;
 }

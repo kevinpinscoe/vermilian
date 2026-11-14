@@ -58,6 +58,9 @@ export function masterPlanBannerCopy(state: MasterPlanState): MasterPlanBannerCo
           ? `Reading ${state.articleId} through this workspace's YouTrack connection failed. ${STILL_WORKS}`
           : `This workspace's master-plan reference is not a valid article ID. ${STILL_WORKS}`,
       };
+    // A refused or superseded read: nothing to warn about, and nothing shown.
+    case 'workspace-not-active':
+      return null;
     case 'reference-unsupported':
       return {
         title: 'No Master Plan for Jira workspaces',

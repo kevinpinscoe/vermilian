@@ -615,6 +615,9 @@ export interface VermilianAPI {
   debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;
   // e2e-only (VERM-48): see main/api/fakeYouTrack.ts.
   debugGetStandupQueries?(): Promise<string[][]>;
+  debugGetStandupCredentialRefs?(): Promise<string[]>;
+  debugGetArticleFetches?(): Promise<Array<{ articleId: string; credentialRef: string }>>;
+  debugSetArticleDelay?(ms: number): Promise<void>;
   debugSetStandupDelay?(ms: number): Promise<void>;
   debugSetArticle?(articleId: string, value: { content: string } | { status: number }): Promise<void>;
 }

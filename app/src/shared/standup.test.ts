@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   JIRA_STANDUP_UNSUPPORTED_MESSAGE,
-  STANDUP_OTHER_SERVER_MESSAGE,
   standupAvailability,
   standupProjectShortNames,
   type StandupWorkspace,
@@ -22,39 +21,42 @@ const ws = (id: string, projectIds: string[][], backend: StandupWorkspace['backe
 
 describe('standupProjectShortNames', () => {
   it("covers exactly the workspace's own projects, across its folders", () => {
-    expect(standupProjectShortNames(ws('a', [['0-1'], ['0-3']]), YT, ALL)).toEqual({ ok: true, shortNames: ['HOME', 'SIDE'] });
+    expect(standupProjectShortNames(ws('a', [['0-1'], ['0-3']]), ALL)).toEqual({ ok: true, shortNames: ['HOME', 'SIDE'] });
   });
 
   it("two workspaces each get only their own projects — never the other's", () => {
-    expect(standupProjectShortNames(ws('a', [['0-1']]), YT, ALL)).toEqual({ ok: true, shortNames: ['HOME'] });
-    expect(standupProjectShortNames(ws('b', [['0-2']]), YT, ALL)).toEqual({ ok: true, shortNames: ['WORK'] });
+    expect(standupProjectShortNames(ws('a', [['0-1']]), ALL)).toEqual({ ok: true, shortNames: ['HOME'] });
+    expect(standupProjectShortNames(ws('b', [['0-2']]), ALL)).toEqual({ ok: true, shortNames: ['WORK'] });
   });
 
   it('a workspace with no projects covers none, never all of them', () => {
-    expect(standupProjectShortNames(ws('a', []), YT, ALL)).toEqual({ ok: true, shortNames: [] });
+    expect(standupProjectShortNames(ws('a', []), ALL)).toEqual({ ok: true, shortNames: [] });
   });
 
   it('a legacy workspace (no backend recorded) is the configured server', () => {
-    expect(standupProjectShortNames(ws('a', [['0-2']], null), YT, ALL)).toEqual({ ok: true, shortNames: ['WORK'] });
+    expect(standupProjectShortNames(ws('a', [['0-2']], null), ALL)).toEqual({ ok: true, shortNames: ['WORK'] });
   });
 
-  it('refuses a Jira workspace, a workspace on another server, and no workspace at all', () => {
-    expect(standupProjectShortNames(ws('j', [['DEMO']], { kind: 'jira', siteUrl: 'https://example.atlassian.net', credentialRef: 'jira-1' }), YT, ALL))
+  it('refuses a Jira workspace and no workspace at all', () => {
+    expect(standupProjectShortNames(ws('j', [['DEMO']], { kind: 'jira', siteUrl: 'https://example.atlassian.net', credentialRef: 'jira-1' }), ALL))
       .toEqual({ ok: false, error: JIRA_STANDUP_UNSUPPORTED_MESSAGE });
-    expect(standupProjectShortNames(ws('o', [['0-1']], { kind: 'youtrack', serverUrl: 'https://other.example.com', credentialRef: 'youtrack-2' }), YT, ALL))
-      .toEqual({ ok: false, error: STANDUP_OTHER_SERVER_MESSAGE });
-    expect(standupProjectShortNames(null, YT, ALL).ok).toBe(false);
+    expect(standupProjectShortNames(null, ALL).ok).toBe(false);
+  });
+
+  it('a YouTrack workspace on another server is fine: it reads through its own connection', () => {
+    expect(standupProjectShortNames(ws('o', [['0-1']], { kind: 'youtrack', serverUrl: 'https://other.example.com', credentialRef: 'youtrack-2' }), ALL))
+      .toEqual({ ok: true, shortNames: ['HOME'] });
   });
 });
 
 describe('standupAvailability', () => {
   it('is available for a YouTrack workspace on the configured server, and for legacy', () => {
-    expect(standupAvailability({ kind: 'youtrack', serverUrl: `${YT}/`, credentialRef: null }, YT).available).toBe(true);
-    expect(standupAvailability(null, YT).available).toBe(true);
+    expect(standupAvailability({ kind: 'youtrack', serverUrl: `${YT}/`, credentialRef: null }).available).toBe(true);
+    expect(standupAvailability(null).available).toBe(true);
   });
 
   it('is unavailable, with the Phase 1 reason, for a Jira workspace', () => {
-    expect(standupAvailability({ kind: 'jira', siteUrl: 'https://example.atlassian.net', credentialRef: 'jira-1' }, YT)).toEqual({
+    expect(standupAvailability({ kind: 'jira', siteUrl: 'https://example.atlassian.net', credentialRef: 'jira-1' })).toEqual({
       available: false,
       reason: JIRA_STANDUP_UNSUPPORTED_MESSAGE,
     });

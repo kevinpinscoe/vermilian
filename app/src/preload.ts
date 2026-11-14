@@ -136,6 +136,9 @@ const api: VermilianAPI = {
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),
   debugGetClaudeCalls: () => ipcRenderer.invoke('e2e:claudeCalls'),
   debugGetStandupQueries: () => ipcRenderer.invoke('e2e:standupQueries'),
+  debugGetStandupCredentialRefs: () => ipcRenderer.invoke('e2e:standupCredentialRefs'),
+  debugGetArticleFetches: () => ipcRenderer.invoke('e2e:articleFetches'),
+  debugSetArticleDelay: (ms: number) => ipcRenderer.invoke('e2e:articleDelay', ms),
   debugSetStandupDelay: (ms: number) => ipcRenderer.invoke('e2e:standupDelay', ms),
   debugSetArticle: (articleId: string, value: unknown) => ipcRenderer.invoke('e2e:setArticle', articleId, value),
 };
