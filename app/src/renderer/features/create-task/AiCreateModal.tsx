@@ -5,6 +5,7 @@ import { useToastStore } from '../../stores/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { TaskForm, validateForm } from './TaskForm';
 import type { FormState } from './TaskForm';
+import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './AiCreateModal.module.css';
 
 interface AiCreateModalProps {
@@ -51,6 +52,7 @@ function buildFormFromFields(
 }
 
 export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateModalProps) {
+  const ai = useWorkspaceAi();
   const queryClient = useQueryClient();
   const showToast = useToastStore((s) => s.show);
 
@@ -91,12 +93,16 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     setClarification(null);
     setInputError(null);
 
+    const askedFrom = ai.workspaceId;
     const result = await window.vermilian.aiCreateTask({
       description: description.trim(),
       projects: projects.map((p) => ({ id: p.id, name: p.name })),
+      workspaceId: askedFrom,
     });
 
     setGenerating(false);
+    // Asked from a workspace the user has since left: drop the answer (VERM-47).
+    if (!ai.isStillActive(askedFrom)) return;
 
     if (!result.ok || !result.fields) {
       setInputError(result.error ?? 'An unexpected error occurred.');

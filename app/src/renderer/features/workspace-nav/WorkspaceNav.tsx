@@ -19,6 +19,8 @@ import { useConfig } from '../settings/api';
 import type { WorkspaceStorageMode } from '../../../shared/activeWorkspace';
 import { generateWorkspaceId } from '../../../shared/workspaceSchema';
 import { buildWorkspaceDocument, nextWorkspaceOrder, type NewWorkspaceBackend } from '../../../shared/workspaceSetup';
+import { parseAiCredentialRefInput } from '../../../shared/workspaceAi';
+import { WorkspaceAiCredentialModal } from './WorkspaceAiCredentialModal';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
 import { AddProjectsModal } from './AddProjectsModal';
 import styles from './WorkspaceNav.module.css';
@@ -552,6 +554,8 @@ function AddFolderRow({ onAdd }: { onAdd: (name: string) => void }) {
 export interface NewWorkspaceRequest {
   name: string;
   backend: NewWorkspaceBackend;
+  /** Anthropic credential reference for AI; None (null) unless chosen (VERM-47). */
+  aiCredentialRef: string | null;
 }
 
 interface WorkspaceSwitcherProps {
@@ -582,6 +586,7 @@ function WorkspaceSwitcher({
   const [siteUrl, setSiteUrl] = useState('');
   const [email, setEmail] = useState('');
   const [credentialRef, setCredentialRef] = useState('');
+  const [aiCredentialRef, setAiCredentialRef] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const newNameRef = useRef<HTMLInputElement>(null);
@@ -592,7 +597,7 @@ function WorkspaceSwitcher({
   useEffect(() => {
     if (!open) {
       setCreating(false); setNewName(''); setBackend(null); setError(null);
-      setServerUrl(''); setSiteUrl(''); setEmail(''); setCredentialRef('');
+      setServerUrl(''); setSiteUrl(''); setEmail(''); setCredentialRef(''); setAiCredentialRef('');
     }
   }, [open]);
 
@@ -625,7 +630,10 @@ function WorkspaceSwitcher({
   async function handleCreate() {
     if (!ready || submitting || backend === null) return;
     const ref = credentialRef.trim() || null;
+    const ai = parseAiCredentialRefInput(aiCredentialRef);
+    if (!ai.ok) { setError(ai.message); return; }
     const req: NewWorkspaceRequest = {
+      aiCredentialRef: ai.credentialRef,
       name: newName.trim(),
       backend:
         backend === 'youtrack'
@@ -773,6 +781,20 @@ function WorkspaceSwitcher({
                   className={styles.switcherCreateInput}
                 />
               )}
+              {perWorkspace && backend !== null && (
+                <input
+                  value={aiCredentialRef}
+                  onChange={(e) => setAiCredentialRef(e.target.value)}
+                  onKeyDown={onKey}
+                  placeholder="AI credential reference (optional)"
+                  aria-label="Anthropic credential reference"
+                  title="The Anthropic credential this workspace's AI features use, e.g. anthropic-1. Leave empty for None: AI stays off until one is chosen."
+                  data-testid="new-workspace-ai-credential-ref"
+                  className={styles.switcherCreateInput}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              )}
               {error && (
                 <div className={styles.switcherCreateError} role="alert" data-testid="new-workspace-error">
                   {error}
@@ -836,6 +858,8 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
   const [flyoutOpen, setFlyoutOpen] = useState(false);
   const contentCollapsed = railCollapsed && !flyoutOpen;
   const [showManage, setShowManage] = useState(false);
+  // The workspace whose AI credential reference is being edited (VERM-47).
+  const [aiCredentialFor, setAiCredentialFor] = useState<string | null>(null);
   const [showAddProjects, setShowAddProjects] = useState(false);
 
   // ── On fresh install: auto-create default workspace config ──────────────────
@@ -1046,6 +1070,7 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
       name: req.name,
       order: nextWorkspaceOrder(existing),
       backend: req.backend,
+      aiCredentialRef: req.aiCredentialRef,
     });
     if (!built.ok) return built.errors.map((e) => e.message).join(' ');
     const saved = await window.vermilian.createWorkspaceArticle(built.document);
@@ -1339,6 +1364,18 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
           onClose={() => setShowManage(false)}
           onSave={(updated) => saveConfig.mutate(updated)}
           onActiveWorkspaceChanged={(id) => { void onForceSwitchWorkspace(id); }}
+          storage={storage}
+          onEditAiCredential={(id) => { setShowManage(false); setAiCredentialFor(id); }}
+        />
+      )}
+      {aiCredentialFor && (
+        <WorkspaceAiCredentialModal
+          workspaceId={aiCredentialFor}
+          onClose={() => setAiCredentialFor(null)}
+          onSaved={() => {
+            void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+          }}
         />
       )}
     </nav>

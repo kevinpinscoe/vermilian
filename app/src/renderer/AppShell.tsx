@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useWorkspaceAi } from './features/workspace-nav/useWorkspaceAi';
 import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
 import { Sun, Settings, CheckList } from '@vibe/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -216,18 +217,17 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const recoveryAttempted = useRef(false);
 
   // Queries
-  const credStatus = useQuery({
-    queryKey: ['credentialStatus'],
-    queryFn: () => window.vermilian.credentialStatus(),
-    staleTime: 60_000,
-  });
   const config = useQuery({
     queryKey: ['appConfig'],
     queryFn: () => window.vermilian.getConfig(),
     staleTime: 60_000,
   });
 
-  const hasClaudeKey = credStatus.data?.hasClaudeKey ?? false;
+  // AI follows the active workspace's own credential (VERM-47): under legacy
+  // storage that is still the Settings key, so nothing changes before VERM-53.
+  const workspaceAi = useWorkspaceAi();
+  const hasClaudeKey = workspaceAi.available;
+  const aiUnavailableReason = workspaceAi.reason;
   const dailyNotesFolder = config.data?.dailyNotesFolder ?? '';
   const pomodoro = config.data?.pomodoro ?? { work: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 4 };
   const soundEnabled = config.data?.soundOnBlockEnd ?? true;
@@ -512,7 +512,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           content={
             hasClaudeKey
               ? 'Daily stand-up report'
-              : 'Configure a Claude API key in Settings to generate stand-up reports.'
+              : (aiUnavailableReason ?? 'Checking whether AI is available for this workspace…')
           }
         >
           <Button
@@ -611,6 +611,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               onAiCreate={() => setShowAiCreate(true)}
               onStartTimer={handleStartTimer}
               hasClaudeKey={hasClaudeKey}
+              aiUnavailableReason={aiUnavailableReason}
               onCrossBoardDrop={(issue, targetProjectId, targetProjectName) => {
                 if (targetProjectId === activeProjectId) return;
                 setCrossBoardDrop({ issue, targetProjectId, targetProjectName });
@@ -626,6 +627,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               onAiCreate={() => setShowAiCreate(true)}
               onStartTimer={handleStartTimer}
               hasClaudeKey={hasClaudeKey}
+              aiUnavailableReason={aiUnavailableReason}
             />
           ) : (
             <div className={styles.placeholder}>

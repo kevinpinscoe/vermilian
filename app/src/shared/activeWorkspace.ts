@@ -16,7 +16,8 @@
 // Pure TypeScript: no Electron, no React.
 
 import type { Workspace } from './workspace';
-import type { WorkspaceDocument } from './workspaceSchema';
+import type { CredentialRef, WorkspaceDocument } from './workspaceSchema';
+import { aiAvailability, type AiAvailability } from './workspaceAi';
 
 export type WorkspaceStorageMode = 'legacy' | 'per-workspace';
 
@@ -34,6 +35,9 @@ export interface ActiveWorkspaceContext {
   // configured one does not (per-workspace credential loading is VERM-53).
   boardAvailable: boolean;
   boardUnavailableReason: string | null;
+  // Whether this workspace's AI features can run here, and why not (VERM-47,
+  // shared/workspaceAi.ts). Names a reference at most, never a value.
+  ai: AiAvailability;
 }
 
 export type SetActiveWorkspaceResult =
@@ -46,6 +50,8 @@ export interface WorkspaceChoice {
   name: string;
   order: number;
   backend: ActiveBackendContext;
+  /** The Anthropic credential reference its AI features use (aiCredentialRefOf). */
+  aiCredentialRef: CredentialRef | null;
 }
 
 /**
@@ -111,6 +117,8 @@ export function buildActiveContext(
   choices: readonly WorkspaceChoice[],
   id: string,
   configuredServerUrl: string,
+  /** Whether the chosen workspace's AI reference has a source on this machine. */
+  aiConfigured = false,
 ): ActiveWorkspaceContext {
   const ws = choices.find((c) => c.id === id) ?? null;
   const backend = ws?.backend ?? null;
@@ -122,5 +130,6 @@ export function buildActiveContext(
     backend,
     boardAvailable: board.available,
     boardUnavailableReason: board.reason,
+    ai: aiAvailability(ws?.aiCredentialRef ?? null, aiConfigured),
   };
 }

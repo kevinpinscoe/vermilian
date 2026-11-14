@@ -14,6 +14,7 @@
 // only — see api/youtrack.ts), and Choose next gains the active-Epic filter
 // VERM-6 left unpopulated. AI recommendation and Daily Review remain later
 // delivery steps.
+import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import React, { useState } from 'react';
 import { Heading, Text, Button, AttentionBox } from '@vibe/core';
 import { Play } from '@vibe/icons';
@@ -32,7 +33,6 @@ import {
   type FocusRankHolder,
 } from '../project-board/focus';
 import { useProjects } from '../workspace-nav/api';
-import { useCredentialStatus } from '../settings/api';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useChooseNextCandidates, type Candidate } from './candidates';
 import { currentWeekMonday, useDismissIssue } from './dismissals';
@@ -411,7 +411,6 @@ function ChooseNext({
 
 function AskForRecommendation({ candidates }: { candidates: Candidate[] }) {
   const { data: masterPlan } = useMasterPlan();
-  const { data: credStatus } = useCredentialStatus();
   const outcomes = masterPlan?.kind === 'loaded' ? masterPlan.outcomes : [];
 
   const [selectedOutcomeName, setSelectedOutcomeName] = useState<string | null>(null);
@@ -421,13 +420,15 @@ function AskForRecommendation({ candidates }: { candidates: Candidate[] }) {
   const getRecommendation = useGetRecommendation();
 
   const selectedOutcome = outcomes.find((o) => o.name === selectedOutcomeName) ?? null;
-  const hasClaudeKey = credStatus?.hasClaudeKey ?? false;
+  // The active workspace's own AI credential (VERM-47), not the Settings key.
+  const ai = useWorkspaceAi();
+  const hasClaudeKey = ai.available;
   const disabled =
     !selectedOutcome || candidates.length === 0 || !hasClaudeKey || getRecommendation.isPending;
 
   function disabledReason(): string | undefined {
     if (candidates.length === 0) return 'No eligible candidates to evaluate.';
-    if (!hasClaudeKey) return 'Configure a Claude API key in Settings to use this.';
+    if (!hasClaudeKey) return ai.reason ?? 'Checking whether AI is available for this workspace…';
     if (!selectedOutcome) return 'Select a Master Plan outcome first.';
     return undefined;
   }
@@ -439,7 +440,10 @@ function AskForRecommendation({ candidates }: { candidates: Candidate[] }) {
     const candidateContext = buildCandidateContext(candidates, outcomes, selectedOutcome);
     const issueIds = candidates.map((c) => c.issue.id);
     try {
-      const res = await getRecommendation.mutateAsync({ issueIds, candidateContext, outcome: selectedOutcome });
+      const askedFrom = ai.workspaceId;
+      const res = await getRecommendation.mutateAsync({ issueIds, candidateContext, outcome: selectedOutcome, workspaceId: askedFrom });
+      // Asked from a workspace the user has since left: drop the answer (VERM-47).
+      if (!ai.isStillActive(askedFrom)) return;
       if (!res.ok || !res.result) {
         setRequestError(res.error ?? 'Recommendation request failed.');
         return;

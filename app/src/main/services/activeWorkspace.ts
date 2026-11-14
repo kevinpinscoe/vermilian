@@ -25,7 +25,20 @@ export async function readStoredActiveWorkspaceId(): Promise<string> {
   }
 }
 
+// Bumped synchronously, before any await, every time the active workspace is
+// written, so an AI operation can tell that a switch happened while it was
+// resolving a credential or loading issues (VERM-47, services/workspaceAiKey.ts).
+// Every write counts, even one naming the same workspace: refusing an AI
+// request is always safe; sending it for the wrong workspace is not.
+let activeGeneration = 0;
+
+/** How many times the active workspace has been written since start-up. */
+export function activeWorkspaceGeneration(): number {
+  return activeGeneration;
+}
+
 export async function writeStoredActiveWorkspaceId(id: string): Promise<void> {
+  activeGeneration += 1;
   const file = filePath();
   const tmp = `${file}.tmp`;
   await fs.writeFile(tmp, JSON.stringify({ activeWorkspaceId: id }, null, 2), 'utf8');

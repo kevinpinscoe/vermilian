@@ -338,6 +338,9 @@ export interface GetRecommendationArgs {
   // The single selected Master Plan outcome's fields — reused verbatim from
   // shared/masterPlan.ts's Outcome, never a re-shaped copy.
   outcome: Outcome;
+  // The workspace the request was made from; refused if it is no longer the
+  // active one (VERM-47). Names the workspace, never a credential.
+  workspaceId?: string;
 }
 
 export interface GetRecommendationResult {
@@ -401,6 +404,9 @@ export interface CreateIssueResult {
 export interface AiCreateTaskArgs {
   description: string;
   projects: { id: string; name: string }[];
+  // The workspace the request was made from; refused if it is no longer the
+  // active one (VERM-47). Names the workspace, never a credential.
+  workspaceId?: string;
 }
 
 export interface AiCreateTaskFields {
@@ -427,6 +433,9 @@ export interface StandupGenerateArgs {
   window: import('./config').StandupWindow;
   customWindowHours?: number;
   customWorkspaceIds?: string[];
+  // The workspace the request was made from; refused if it is no longer the
+  // active one (VERM-47). Names the workspace, never a credential.
+  workspaceId?: string;
 }
 
 export interface StandupGenerateResult {
@@ -600,6 +609,8 @@ export interface VermilianAPI {
   debugJiraChange?(change: unknown): Promise<boolean>;
   debugGetJiraCalls?(): Promise<Array<{ fn: string; projectKey?: string; key?: string; jql?: string; at: number }>>;
   debugSetJiraSearchDelay?(ms: number): Promise<void>;
+  // e2e-only (VERM-47): the credential reference each fake Claude call used.
+  debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;
 }
 
 declare global {

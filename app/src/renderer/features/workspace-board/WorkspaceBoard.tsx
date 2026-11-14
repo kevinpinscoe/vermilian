@@ -177,11 +177,13 @@ interface WorkspaceBoardProps {
   onAiCreate: () => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   hasClaudeKey: boolean;
+  // Why AI is off for the active workspace (VERM-47); shown as the tooltip.
+  aiUnavailableReason?: string | null;
 }
 
 export function WorkspaceBoard({
   workspaceName, projectShortNames, youtrackLogin,
-  onSelectIssue, onNewTask, onAiCreate, onStartTimer, hasClaudeKey,
+  onSelectIssue, onNewTask, onAiCreate, onStartTimer, hasClaudeKey, aiUnavailableReason,
 }: WorkspaceBoardProps) {
   const patchMutation = usePatchIssueOnBoard(null);
   const [filter, setFilter] = useState<WsFilter>(EMPTY_FILTER);
@@ -275,7 +277,7 @@ export function WorkspaceBoard({
       {/* Toolbar */}
       <div className={pbStyles.toolbar}>
         <Button size="small" onClick={onNewTask}>New task</Button>
-        <Tooltip content={hasClaudeKey ? 'AI create task' : 'Configure a Claude API key in Settings to use AI task creation.'}>
+        <Tooltip content={hasClaudeKey ? 'AI create task' : (aiUnavailableReason ?? 'Checking whether AI is available for this workspace…')}>
           <Button size="small" kind="secondary" onClick={onAiCreate} disabled={!hasClaudeKey} leftIcon={Wand}>
             AI create
           </Button>
