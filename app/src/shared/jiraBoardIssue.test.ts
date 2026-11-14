@@ -86,6 +86,41 @@ describe('mapJiraIssue — status category', () => {
   });
 });
 
+describe('mapJiraIssue — the project status mapping (VERM-31)', () => {
+  const statusRoles = { Impeded: 'blocked', "Closed - won't fix": 'done', 'Deployed to staging': 'inProgress' } as const;
+
+  it('sets statusRole from the category when the project has no mapping', () => {
+    expect(mapJiraIssue(jira({ status: { name: 'In Review', statusCategory: { key: 'indeterminate' } } })).statusRole).toBe('inProgress');
+    expect(mapJiraIssue(jira({ status: { name: 'Backlog', statusCategory: { key: 'new' } } })).statusRole).toBe('todo');
+    expect(mapJiraIssue(jira({})).statusRole).toBeNull();
+  });
+
+  it('sets statusRole from the mapping and keeps the workflow name for display', () => {
+    const b = mapJiraIssue(jira({ status: { name: 'Impeded', statusCategory: { key: 'indeterminate' } } }), { statusRoles });
+    expect(b.statusRole).toBe('blocked');
+    expect(b.fields.status).toBe('Impeded');
+    expect(b.resolved).toBeNull();
+  });
+
+  it('resolves a status the mapping marks done, outside the Done category', () => {
+    const b = mapJiraIssue(
+      jira({ status: { name: "Closed - won't fix", statusCategory: { key: 'indeterminate' } }, updated: '2026-11-10T09:00:00.000+0000' }),
+      { statusRoles },
+    );
+    expect(b.statusRole).toBe('done');
+    expect(b.resolved).toBe(Date.parse('2026-11-10T09:00:00.000Z'));
+  });
+
+  it('leaves unresolved a Done-category status the mapping keeps open', () => {
+    const b = mapJiraIssue(
+      jira({ status: { name: 'Deployed to staging', statusCategory: { key: 'done' } }, resolutiondate: '2026-11-09T15:30:00.000+0000' }),
+      { statusRoles },
+    );
+    expect(b.statusRole).toBe('inProgress');
+    expect(b.resolved).toBeNull();
+  });
+});
+
 describe('mapJiraIssue — priority', () => {
   it('uses the scheme value name as-is', () => {
     expect(mapJiraIssue(jira({ priority: { name: 'Highest', id: '1' } })).fields.priority).toBe('Highest');

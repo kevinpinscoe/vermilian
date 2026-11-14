@@ -66,7 +66,15 @@ export interface BoardIssue {
   // field server-side (main/api/youtrack.ts). An Epic is a container, never
   // itself a Choose-next candidate (VERM-7 review finding, 2026-09-16).
   isEpic: boolean;
+  // What the status means, independent of its name. Set for Jira issues,
+  // whose status names are per-project workflow names (VERM-31,
+  // shared/jiraProjectSettings.ts); absent for YouTrack, whose shared status
+  // vocabulary the board reads by name.
+  statusRole?: StatusRole | null;
 }
+
+/** What a status means to Vermilian, whatever the workflow calls it. */
+export type StatusRole = 'todo' | 'inProgress' | 'waiting' | 'blocked' | 'deferred' | 'done';
 
 export interface IssueDetailProject {
   id: string;

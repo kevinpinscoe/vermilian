@@ -204,3 +204,37 @@ describe('mergeWorkspaceEdit — no base (create found an existing article)', ()
     expect(c.map((x) => x.path)).toEqual(['name']);
   });
 });
+
+describe('mergeWorkspaceEdit — jiraProjects (VERM-31)', () => {
+  const jira = (jiraProjects?: WorkspaceDocument['jiraProjects']) =>
+    doc({
+      backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
+      folders: [{ id: 'folder-1', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO', 'OPS'] }],
+      boards: {},
+      ...(jiraProjects ? { jiraProjects } : {}),
+    });
+
+  it('keeps both sides when each maps a different status of one project', () => {
+    const base = jira({ DEMO: { statusRoles: {} } });
+    const edited = jira({ DEMO: { statusRoles: { Impeded: 'blocked' } } });
+    const remote = jira({ DEMO: { statusRoles: { 'On hold': 'deferred' } } });
+    expect(merged(base, edited, remote).jiraProjects).toEqual({ DEMO: { statusRoles: { 'On hold': 'deferred', Impeded: 'blocked' } } });
+  });
+
+  it("keeps both sides when each sets a different project's due-date field, from no settings at all", () => {
+    const base = jira();
+    const edited = jira({ DEMO: { dueDateField: 'customfield_10042' } });
+    const remote = jira({ OPS: { dueDateField: 'duedate' } });
+    expect(merged(base, edited, remote).jiraProjects).toEqual({ OPS: { dueDateField: 'duedate' }, DEMO: { dueDateField: 'customfield_10042' } });
+  });
+
+  it('reports a conflict when both sides map the same status differently', () => {
+    const base = jira({ DEMO: { statusRoles: {} } });
+    const c = conflicts(
+      base,
+      jira({ DEMO: { statusRoles: { Impeded: 'blocked' } } }),
+      jira({ DEMO: { statusRoles: { Impeded: 'waiting' } } }),
+    );
+    expect(c.map((x) => x.path)).toEqual(['jiraProjects["DEMO"].statusRoles["Impeded"]']);
+  });
+});

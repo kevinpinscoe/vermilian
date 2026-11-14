@@ -6,13 +6,15 @@
 //   id / idReadable  the Jira issue id and key (local IDs, not namespaced —
 //                    a provider only ever sees its own backend's issues)
 //   status           the Jira status name, as the project's workflow names it
-//   resolved         set when the status category is Done: resolutiondate,
-//                    else updated; null otherwise
+//   statusRole       what that status means: the project's status mapping,
+//                    else the status category (VERM-31, jiraProjectSettings)
+//   resolved         set when the role is done: resolutiondate, else
+//                    updated; null otherwise
 //   priority         the Jira priority name; null when the project's scheme
 //                    has no priority field or it is hidden
-//   dueDate          the chosen due-date field (system `duedate` unless the
-//                    project uses a custom one — the per-project choice is
-//                    VERM-31), as epoch ms at 12:00 UTC on that calendar day
+//   dueDate          the project's chosen due-date field (system `duedate`
+//                    unless it uses a custom one, VERM-31), as epoch ms at
+//                    12:00 UTC on that calendar day
 //   parentEpic       the `parent` when it is an Epic; the legacy Epic Link
 //                    field as a fallback when one is configured
 //   isEpic           the issue's own type is an Epic
@@ -26,15 +28,12 @@
 
 import { FIELD_KEYS, type BoardIssueFields, type FieldKey } from './fields';
 import type { BoardIssue, IssueDetail, ParentEpic } from './workspace';
+import { JIRA_SYSTEM_DUE_DATE_FIELD, jiraStatusRole, type JiraProjectSettings, type JiraStatusValue } from './jiraProjectSettings';
 
-export const JIRA_SYSTEM_DUE_DATE_FIELD = 'duedate';
+export { JIRA_SYSTEM_DUE_DATE_FIELD };
 
-export interface JiraMappingOptions {
-  /** The field holding the due date: `duedate` or a custom field id. */
-  dueDateField?: string;
-  /** The legacy Epic Link custom field id, read only when there is no Epic parent. */
-  epicLinkField?: string | null;
-}
+/** How one project's issues are mapped: its JiraProjectSettings. */
+export type JiraMappingOptions = JiraProjectSettings;
 
 /** Base fields every board query requests. */
 export const JIRA_BOARD_BASE_FIELDS = [
@@ -144,8 +143,9 @@ const RESOLVED_TIME_UNKNOWN = 1;
 
 export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {}): BoardIssue {
   const f = (issue.fields ?? {}) as Record<string, unknown>;
-  const status = f.status as { name?: unknown; statusCategory?: { key?: unknown } } | null | undefined;
-  const done = status?.statusCategory?.key === 'done';
+  const status = f.status as JiraStatusValue | null | undefined;
+  const statusRole = jiraStatusRole(status, options.statusRoles);
+  const done = statusRole === 'done';
 
   const fields = emptyFields();
   fields.status = named(status);
@@ -160,12 +160,18 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
     fields,
     parentEpic: parentEpicOf(f, options),
     isEpic: isEpicType(f.issuetype as JiraIssueType | null | undefined),
+    statusRole,
   };
+}
+
+/** The project key an issue key belongs to: `OPS_2-7` → `OPS_2`. */
+export function jiraProjectKeyOf(issueKey: string): string {
+  return issueKey.replace(/-\d+$/, '');
 }
 
 export function mapJiraIssueDetail(issue: JiraIssue, options: JiraMappingOptions = {}): IssueDetail {
   const project = (issue.fields?.project ?? null) as { id?: unknown; key?: unknown; name?: unknown } | null;
-  const key = str(project?.key) ?? issue.key.replace(/-\d+$/, '');
+  const key = str(project?.key) ?? jiraProjectKeyOf(issue.key);
   return {
     ...mapJiraIssue(issue, options),
     project: { id: str(project?.id) ?? '', name: str(project?.name) ?? key, shortName: key },
