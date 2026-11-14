@@ -134,6 +134,7 @@ const api: VermilianAPI = {
   debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),
+  debugGetClaudeCalls: () => ipcRenderer.invoke('e2e:claudeCalls'),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

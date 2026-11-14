@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, Workspace } from '../../../shared/workspace';
 import { setWorkspaceProjects } from '../../../shared/workspace';
+import type { WorkspaceStorageMode } from '../../../shared/activeWorkspace';
 import styles from './ManageWorkspacesModal.module.css';
 
 // Sentinel destination: leave the projects in no workspace at all. They keep
@@ -59,10 +60,14 @@ interface ManageWorkspacesModalProps {
   // Called when the currently-active workspace is deleted, with the new active id,
   // so the rail can switch away from the now-gone workspace.
   onActiveWorkspaceChanged: (id: string) => void;
+  // Per-workspace storage only: each workspace chooses its own AI credential
+  // reference (VERM-47). Legacy storage uses the Settings key for all.
+  storage?: WorkspaceStorageMode;
+  onEditAiCredential?: (workspaceId: string) => void;
 }
 
 export function ManageWorkspacesModal({
-  config, onClose, onSave, onActiveWorkspaceChanged,
+  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential,
 }: ManageWorkspacesModalProps) {
   const sorted = config.workspaces.slice().sort((a, b) => a.order - b.order);
 
@@ -175,6 +180,16 @@ export function ManageWorkspacesModal({
                 )}
 
                 <span className={styles.count}>{count} {count === 1 ? 'project' : 'projects'}</span>
+
+                {storage === 'per-workspace' && onEditAiCredential && (
+                  <button
+                    type="button"
+                    data-testid="workspace-ai-btn"
+                    className={styles.deleteBtn}
+                    title="Choose the Anthropic credential this workspace's AI features use"
+                    onClick={() => onEditAiCredential(ws.id)}
+                  >AI credential…</button>
+                )}
 
                 <button
                   type="button"

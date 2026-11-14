@@ -74,6 +74,24 @@ describe('buildWorkspaceDocument — the chosen backend, nothing defaulted', () 
   });
 });
 
+describe('buildWorkspaceDocument — the AI credential (VERM-47)', () => {
+  it('defaults to None for both backends, never anthropic-1', () => {
+    expect(built(YT).ai).toEqual({ credentialRef: null });
+    expect(built(JIRA).ai).toEqual({ credentialRef: null });
+    expect(built({ ...YT, aiCredentialRef: null }).ai.credentialRef).toBeNull();
+  });
+
+  it('takes the reference chosen in the form, for either backend', () => {
+    expect(built({ ...YT, aiCredentialRef: 'anthropic-home' }).ai.credentialRef).toBe('anthropic-home');
+    expect(built({ ...JIRA, aiCredentialRef: 'anthropic-work' }).ai.credentialRef).toBe('anthropic-work');
+  });
+
+  it('refuses a malformed one as a validation error', () => {
+    const r = buildWorkspaceDocument({ ...YT, aiCredentialRef: 'Not OK' });
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe('withJiraProjects — choosing a Jira workspace\'s projects', () => {
   it('adds chosen projects to the first folder', () => {
     const doc = withJiraProjects(built(JIRA), ['DEMO', 'OPS']);

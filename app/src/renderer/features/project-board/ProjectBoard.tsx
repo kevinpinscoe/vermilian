@@ -1032,12 +1032,14 @@ interface ProjectBoardProps {
   onAiCreate: () => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   hasClaudeKey: boolean;
+  // Why AI is off for the active workspace (VERM-47); shown as the tooltip.
+  aiUnavailableReason?: string | null;
   onCrossBoardDrop?: (issue: BoardIssue, targetProjectId: string, targetProjectName: string) => void;
 }
 
 export function ProjectBoard({
   projectId, projectName, projectShortName, onSelectIssue, onNewTask, onAiCreate,
-  onStartTimer, hasClaudeKey, onCrossBoardDrop,
+  onStartTimer, hasClaudeKey, aiUnavailableReason, onCrossBoardDrop,
 }: ProjectBoardProps) {
   const [showColumns, setShowColumns] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -1229,7 +1231,7 @@ export function ProjectBoard({
       {/* Toolbar */}
       <div className={styles.toolbar}>
         <button type="button" data-testid="new-task-btn" className={styles.newTaskBtn} onClick={onNewTask}>New task</button>
-        <Tooltip content={hasClaudeKey ? 'AI create task' : 'Configure a Claude API key in Settings to use AI task creation.'}>
+        <Tooltip content={hasClaudeKey ? 'AI create task' : (aiUnavailableReason ?? 'Checking whether AI is available for this workspace…')}>
           <Button data-testid="ai-create-btn" size="small" kind="secondary" onClick={onAiCreate} disabled={!hasClaudeKey} leftIcon={Wand}>
             AI create
           </Button>

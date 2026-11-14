@@ -21,6 +21,7 @@ import { TimerPomodoroSection } from './sections/TimerPomodoroSection';
 import { DailyNotesSection } from './sections/DailyNotesSection';
 import { AppearanceSection } from './sections/AppearanceSection';
 import { AdvancedSection } from './sections/AdvancedSection';
+import { ACTIVE_WORKSPACE_QUERY_KEY } from '../workspace-nav/api';
 import styles from './SettingsView.module.css';
 
 interface Props {
@@ -234,6 +235,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
       await qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
+      // The active workspace's AI availability depends on the keys just saved (VERM-47).
+      await qc.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
       setSaving(false);
 
       if (saveFailed) {

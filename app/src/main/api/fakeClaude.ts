@@ -16,17 +16,41 @@ import type { Outcome } from '../../shared/masterPlan';
 import type { RecommendationIssue, StandupIssues, StandupTask } from './youtrack';
 import { matchProjectByName } from './aiExtract';
 import { formatDuration } from './standupPrompt';
+import { refFromE2eFakeAnthropicKey } from '../../shared/workspaceAi';
 
-export async function testKey(_key: string, _model: string): Promise<TestClaudeResult> {
+// ── e2e observation (VERM-47) ────────────────────────────────────────────────
+// Which credential reference each call came with, so a spec can check that
+// every AI operation used its own workspace's reference. Only the reference
+// is kept — read from the fictional e2e key — never a key. 'legacy' is the
+// Settings key's e2e stand-in; 'other' anything else.
+
+export interface FakeClaudeCall {
+  fn: 'testKey' | 'extractTaskFields' | 'generateStandupReport' | 'getRecommendation';
+  credentialRef: string;
+}
+
+const calls: FakeClaudeCall[] = [];
+
+function record(fn: FakeClaudeCall['fn'], key: string): void {
+  calls.push({ fn, credentialRef: refFromE2eFakeAnthropicKey(key) ?? (key === 'e2e-claude-key' ? 'legacy' : 'other') });
+}
+
+export function getCallsForTests(): FakeClaudeCall[] {
+  return calls.map((c) => ({ ...c }));
+}
+
+export async function testKey(key: string, _model: string): Promise<TestClaudeResult> {
+  record('testKey', key);
   return { ok: true };
 }
 
 export async function extractTaskFields(
-  _key: string,
+  key: string,
   description: string,
   projects: { id: string; name: string }[],
   _model: string,
 ): Promise<AiCreateTaskResult> {
+  record('extractTaskFields', key);
   const trimmed = description.trim();
 
   const blank: AiCreateTaskFields = {
@@ -61,10 +85,11 @@ export async function extractTaskFields(
 }
 
 export async function generateStandupReport(
-  _key: string,
+  key: string,
   issues: StandupIssues,
   _model: string,
 ): Promise<string> {
+  record('generateStandupReport', key);
   // Build markdown directly from the issues, matching the format the real model
   // is prompted to produce (## heading + "- ID — summary (duration today)").
   const section = (title: string, tasks: StandupTask[]): string => {
@@ -88,12 +113,13 @@ export async function generateStandupReport(
 // clarification-only path instead of a ranked result.
 
 export async function getRecommendation(
-  _key: string,
+  key: string,
   issues: RecommendationIssue[],
   _candidateContext: RecommendationCandidateContext[],
   outcome: Outcome,
   _model: string,
 ): Promise<RecommendationResult> {
+  record('getRecommendation', key);
   if (process.env.VERMILIAN_E2E_RECOMMENDATION_CLARIFICATION === '1') {
     return {
       kind: 'clarification',

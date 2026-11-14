@@ -3,6 +3,7 @@ import { Modal, ModalContent, ModalHeader, Button, Text, Loader, Tooltip } from 
 import type { StandupScope, StandupWindow } from '../../../shared/config';
 import type { Workspace } from '../../../shared/workspace';
 import { useToastStore } from '../../stores/toast';
+import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './StandupModal.module.css';
 
 // Minimal markdown-to-HTML renderer for Claude's structured stand-up output.
@@ -72,6 +73,7 @@ export function StandupModal({
   onScopeChange,
   onWindowChange,
 }: StandupModalProps) {
+  const ai = useWorkspaceAi();
   const showToast = useToastStore((s) => s.show);
 
   const [scope, setScope] = useState<StandupScope>(initialScope);
@@ -110,12 +112,16 @@ export function StandupModal({
     setNoTasks(false);
     setStep('loading');
 
+    const askedFrom = ai.workspaceId;
     const result = await window.vermilian.standupGenerate({
       scope,
       window: window_,
       customWindowHours: window_ === 'custom' ? customWindowHours : undefined,
       customWorkspaceIds: scope === 'custom' ? customWorkspaceIds : undefined,
+      workspaceId: askedFrom,
     });
+    // Asked from a workspace the user has since left: drop the answer (VERM-47).
+    if (!ai.isStillActive(askedFrom)) return;
 
     if (!result.ok) {
       setGenError(result.error ?? 'Stand-up generation failed.');
@@ -138,12 +144,16 @@ export function StandupModal({
     setGenError(null);
     setNoTasks(false);
 
+    const askedFrom = ai.workspaceId;
     const result = await window.vermilian.standupGenerate({
       scope,
       window: window_,
       customWindowHours: window_ === 'custom' ? customWindowHours : undefined,
       customWorkspaceIds: scope === 'custom' ? customWorkspaceIds : undefined,
+      workspaceId: askedFrom,
     });
+    // Asked from a workspace the user has since left: drop the answer (VERM-47).
+    if (!ai.isStillActive(askedFrom)) return;
 
     setRegenerating(false);
 

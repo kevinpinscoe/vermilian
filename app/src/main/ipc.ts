@@ -69,6 +69,7 @@ import {
   type ActiveWorkspaceContext,
   type SetActiveWorkspaceResult,
   type WorkspaceChoice,
+  type WorkspaceStorageMode,
 } from '../shared/activeWorkspace';
 import { MIGRATED_YOUTRACK_CREDENTIAL_REF } from '../shared/workspaceMigration';
 import { youtrack } from './api/client';
@@ -84,6 +85,8 @@ import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
 import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
+import { aiCredentialRefOf, e2eFakeAnthropicKeyAllowed } from '../shared/workspaceAi';
+import { resolveWorkspaceAiKey, type WorkspaceAiKey } from './services/workspaceAiKey';
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
@@ -98,7 +101,7 @@ import {
   isLegacyCredentialRef,
   type CredentialRefStatus,
 } from '../shared/credentialRefs';
-import { isCredentialRef, workspaceProjectIds } from '../shared/workspaceSchema';
+import { isCredentialRef, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
@@ -112,6 +115,7 @@ import type { WorkspaceDocument } from '../shared/workspaceSchema';
 import { jira } from './api/jiraClient';
 import { FAKE_JIRA_BAD_TOKEN } from './api/fakeJira';
 import * as fakeJiraForE2E from './api/fakeJira';
+import * as fakeClaudeForE2E from './api/fakeClaude';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import { toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
@@ -453,10 +457,10 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.aiCreateTask,
     async (_e, args: AiCreateTaskArgs): Promise<AiCreateTaskResult> => {
+      const ai = await resolveAiKey(args.workspaceId);
+      if (!ai.ok) return { ok: false, error: ai.error };
       const cfg = await readConfig();
-      const key = await loadClaudeKey(cfg);
-      if (!key) return { ok: false, error: 'No Claude API key configured.' };
-      return claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate);
+      return claude.extractTaskFields(ai.key, args.description, args.projects, cfg.modelForCreate);
     },
   );
 
@@ -529,7 +533,13 @@ export function registerIpc(): void {
         ? listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []))
         : [];
       return {
-        choices: docs.map((d) => ({ id: d.workspaceId, name: d.name, order: d.order, backend: backendContextOf(d) })),
+        choices: docs.map((d) => ({
+          id: d.workspaceId,
+          name: d.name,
+          order: d.order,
+          backend: backendContextOf(d),
+          aiCredentialRef: aiCredentialRefOf('per-workspace', d),
+        })),
         legacyHint: articleConfig.getWorkspaceConfig()?.activeWorkspaceId ?? '',
         configuredServerUrl: cfg.youtrackUrl,
       };
@@ -541,6 +551,7 @@ export function registerIpc(): void {
         name: w.name,
         order: w.order,
         backend: { kind: 'youtrack', serverUrl: cfg.youtrackUrl, credentialRef: MIGRATED_YOUTRACK_CREDENTIAL_REF },
+        aiCredentialRef: aiCredentialRefOf('legacy', null),
       })),
       legacyHint: legacy?.activeWorkspaceId ?? '',
       configuredServerUrl: cfg.youtrackUrl,
@@ -550,7 +561,47 @@ export function registerIpc(): void {
   async function activeWorkspaceContext(): Promise<ActiveWorkspaceContext> {
     const { choices, legacyHint, configuredServerUrl } = await workspaceChoices();
     const id = resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint);
-    return buildActiveContext(workspaceStorageMode(), choices, id, configuredServerUrl);
+    return contextFor(choices, id, configuredServerUrl);
+  }
+
+  // ─── The active workspace's Anthropic credential (VERM-47) ─────────────────
+  // shared/workspaceAi.ts has the rules. Resolution happens here, in the main
+  // process; only the reference and availability ever reach the renderer.
+
+  // Whether the reference has a source on this machine — without running or
+  // reading it. Legacy storage keeps the Settings key's own check, unchanged.
+  async function aiConfigured(storage: WorkspaceStorageMode, ref: CredentialRef | null): Promise<boolean> {
+    if (ref === null) return false;
+    const cfg = await readConfig();
+    if (storage === 'legacy') {
+      if (IS_E2E) return true;
+      return hasSecretWithSources(FILES.claudeKey, cfg.claudeKeyCommand, cfg.claudeKeyFile);
+    }
+    const status = await credentialRefStatus(ref, cfg, credentialSourceIO);
+    if (status.selected !== null) return true;
+    return IS_E2E && e2eFakeAnthropicKeyAllowed(ref, 'no-source');
+  }
+
+  async function contextFor(choices: WorkspaceChoice[], id: string, configuredServerUrl: string): Promise<ActiveWorkspaceContext> {
+    const storage = workspaceStorageMode();
+    const ref = choices.find((c) => c.id === id)?.aiCredentialRef ?? null;
+    return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref));
+  }
+
+  // The key for one AI operation, from the active workspace only
+  // (services/workspaceAiKey.ts).
+  async function resolveAiKey(requestedWorkspaceId: unknown): Promise<WorkspaceAiKey> {
+    const { choices, legacyHint } = await workspaceChoices();
+    return resolveWorkspaceAiKey({
+      storage: workspaceStorageMode(),
+      activeId: resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint),
+      choices,
+      requestedWorkspaceId,
+      cfg: await readConfig(),
+      io: credentialSourceIO,
+      loadLegacyKey: loadClaudeKey,
+      e2e: IS_E2E,
+    });
   }
 
   ipcMain.handle(IPC.getWorkspaceConfig, async (): Promise<VermilianConfig | null> => {
@@ -595,7 +646,7 @@ export function registerIpc(): void {
       await writeStoredActiveWorkspaceId(workspaceId);
       return {
         ok: true,
-        context: buildActiveContext(workspaceStorageMode(), choices, workspaceId, configuredServerUrl),
+        context: await contextFor(choices, workspaceId, configuredServerUrl),
       };
     },
   );
@@ -788,13 +839,13 @@ export function registerIpc(): void {
         if (!args.issueIds.length) return { ok: false, error: 'No candidates to evaluate.' };
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
-        const claudeKey = await loadClaudeKey(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        if (!claudeKey) return { ok: false, error: 'No Claude API key configured.' };
+        const ai = await resolveAiKey(args.workspaceId);
+        if (!ai.ok) return { ok: false, error: ai.error };
 
         const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForRecommendation(args.issueIds);
         const result = await claude.getRecommendation(
-          claudeKey,
+          ai.key,
           issues,
           args.candidateContext,
           args.outcome,
@@ -877,6 +928,8 @@ export function registerIpc(): void {
     );
     ipcMain.handle('e2e:jiraCalls', () => fakeJiraForE2E.getCallsForTests());
     ipcMain.handle('e2e:jiraSearchDelay', (_e, ms: number) => fakeJiraForE2E.setSearchDelayForTests(ms));
+    // Which credential reference each fake Claude call used (VERM-47).
+    ipcMain.handle('e2e:claudeCalls', () => fakeClaudeForE2E.getCallsForTests());
   }
 
   // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
@@ -1203,9 +1256,9 @@ export function registerIpc(): void {
       try {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
-        const claudeKey = await loadClaudeKey(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        if (!claudeKey) return { ok: false, error: 'No Claude API key configured.' };
+        const ai = await resolveAiKey(args.workspaceId);
+        if (!ai.ok) return { ok: false, error: ai.error };
 
         const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
         const wsConfig = await readWorkspaceConfig();
@@ -1250,7 +1303,7 @@ export function registerIpc(): void {
         if (taskCount === 0) return { ok: true, markdown: '', taskCount: 0 };
 
         const markdown = await claude.generateStandupReport(
-          claudeKey,
+          ai.key,
           issues,
           cfg.modelForStandup,
         );

@@ -8,6 +8,7 @@ import {
   type WorkspaceChoice,
 } from './activeWorkspace';
 import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from './workspaceSchema';
+import { AI_NOT_SELECTED_MESSAGE } from './workspaceAi';
 
 // Fictional values only (ADR-0011 §10).
 const YT = 'https://youtrack.example.com';
@@ -18,6 +19,7 @@ function choice(id: string, order: number, backend?: WorkspaceChoice['backend'])
     name: `Workspace ${id}`,
     order,
     backend: backend ?? { kind: 'youtrack', serverUrl: YT, credentialRef: 'youtrack-1' },
+    aiCredentialRef: null,
   };
 }
 
@@ -94,7 +96,17 @@ describe('buildActiveContext', () => {
       backend: jira,
       boardAvailable: true,
       boardUnavailableReason: null,
+      ai: { state: 'not-selected', credentialRef: null, message: AI_NOT_SELECTED_MESSAGE },
     });
+  });
+
+  it("reports the chosen workspace's AI availability, by reference only (VERM-47)", () => {
+    const withRef = { ...choice('ws-b', 1), aiCredentialRef: 'anthropic-work' };
+    const choices = [choice('ws-a', 0), withRef];
+    expect(buildActiveContext('per-workspace', choices, 'ws-b', YT, true).ai).toEqual({ state: 'available', credentialRef: 'anthropic-work', message: null });
+    expect(buildActiveContext('per-workspace', choices, 'ws-b', YT, false).ai.state).toBe('unavailable');
+    // Switching to the other workspace switches the availability with it.
+    expect(buildActiveContext('per-workspace', choices, 'ws-a', YT, true).ai.state).toBe('not-selected');
   });
 
   it('is empty for an unknown id', () => {

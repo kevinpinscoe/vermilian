@@ -97,6 +97,8 @@ export interface GetRecommendationVars {
   issueIds: string[];
   candidateContext: RecommendationCandidateContext[];
   outcome: Outcome;
+  /** The workspace asked from (VERM-47). */
+  workspaceId?: string;
 }
 
 export function useGetRecommendation() {
