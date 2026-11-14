@@ -30,6 +30,7 @@ function stubClient(overrides: Partial<Record<keyof typeof JiraClient, unknown>>
     searchJql: vi.fn(async () => [ISSUE]),
     getIssue: vi.fn(async () => ISSUE),
     projectIssuesJql,
+    getIssueComments: vi.fn(async () => []),
     getEditMeta: vi.fn(async () => ({
       fields: { priority: { name: 'Priority', allowedValues: ['Critical', 'Highest', 'High', 'None'].map((name, i) => ({ id: String(i), name })) } },
     })),
@@ -203,5 +204,29 @@ describe('createJiraProvider — priority values from editmeta (VERM-30)', () =>
       message: expect.stringMatching(/Invalid Jira project key/),
     });
     expect(client.searchJql).not.toHaveBeenCalled();
+  });
+});
+
+describe('createJiraProvider — description and comments (VERM-32)', () => {
+  const adf = (text: string) => ({ type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+
+  it('fetches the description and comments and returns them as Markdown', async () => {
+    const client = stubClient({
+      getIssue: vi.fn(async () => ({ id: '10001', key: 'DEMO-1', fields: { description: adf('Rotate **all** keys') } })),
+      getIssueComments: vi.fn(async () => [{ id: '1', author: { displayName: 'Example User' }, body: adf('done'), created: '2026-11-10T09:00:00.000+0000' }]),
+    });
+    const content = await createJiraProvider(client, CONN).getIssueContent('DEMO-1');
+    expect(client.getIssue).toHaveBeenCalledWith(...AUTH, 'DEMO-1', ['description']);
+    expect(client.getIssueComments).toHaveBeenCalledWith(...AUTH, 'DEMO-1');
+    expect(content.description).toBe('Rotate \\*\\*all\\*\\* keys');
+    expect(content.comments).toEqual([
+      { id: '1', author: 'Example User', created: Date.parse('2026-11-10T09:00:00.000Z'), updated: null, markdown: 'done' },
+    ]);
+  });
+
+  it('propagates a failure from either request', async () => {
+    const err = { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
+    const client = stubClient({ getIssueComments: vi.fn(async () => Promise.reject(err)) });
+    await expect(createJiraProvider(client, CONN).getIssueContent('DEMO-1')).rejects.toBe(err);
   });
 });

@@ -238,6 +238,53 @@ export async function getEditMeta(base: string, email: string, token: string, ke
   return jiraRequest<JiraEditMeta>(base, email, token, `/rest/api/3/issue/${key}/editmeta`);
 }
 
+/** One comment as GET /issue/{key}/comment returns it; the body is ADF. */
+export interface JiraComment {
+  id: string;
+  author?: { displayName?: string } | null;
+  body?: unknown;
+  created?: string;
+  updated?: string;
+}
+
+interface CommentPageResponse {
+  comments?: JiraComment[];
+  startAt?: number;
+  maxResults?: number;
+  total?: number;
+}
+
+export const COMMENT_PAGE_SIZE = 100;
+// A runaway guard: 10 pages is 1,000 comments.
+export const COMMENT_MAX_PAGES = 10;
+
+// GET /rest/api/3/issue/{key}/comment, oldest first, paged by startAt until
+// total is reached. The key is validated first. Throws JiraError.
+export async function getIssueComments(
+  base: string,
+  email: string,
+  token: string,
+  key: string,
+  maxPages = COMMENT_MAX_PAGES,
+): Promise<JiraComment[]> {
+  if (!isValidLocalId('jira', key)) throw invalid(`Invalid Jira issue key: ${JSON.stringify(key)}`);
+  const comments: JiraComment[] = [];
+  let startAt = 0;
+  for (let page = 0; page < maxPages; page++) {
+    const res = await jiraRequest<CommentPageResponse>(
+      base,
+      email,
+      token,
+      `/rest/api/3/issue/${key}/comment?startAt=${startAt}&maxResults=${COMMENT_PAGE_SIZE}&orderBy=created`,
+    );
+    const got = res.comments ?? [];
+    comments.push(...got);
+    startAt += got.length;
+    if (got.length === 0 || typeof res.total !== 'number' || startAt >= res.total) break;
+  }
+  return comments;
+}
+
 export interface JiraProject {
   id: string;
   key: string;

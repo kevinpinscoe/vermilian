@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getEditMeta,
   getIssue,
+  getIssueComments,
+  COMMENT_PAGE_SIZE,
   isValidProjectKey,
   listProjects,
   projectIssuesJql,
@@ -228,6 +230,53 @@ describe('getEditMeta', () => {
 
   it('refuses a malformed key before any request', async () => {
     await expect(getEditMeta(BASE, EMAIL, TOKEN, 'DEMO-1/../x')).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid Jira issue key/),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// GET /rest/api/3/issue/{key}/comment (VERM-32) — startAt paging with total.
+const comment = (id: string, text: string) => ({
+  self: `${BASE}/rest/api/3/issue/10101/comment/${id}`,
+  id,
+  author: { accountId: 'a-1', displayName: 'Example User', active: true },
+  body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
+  created: '2026-11-10T09:00:00.000+0000',
+  updated: '2026-11-10T09:00:00.000+0000',
+  jsdPublic: true,
+});
+
+describe('getIssueComments', () => {
+  it('pages by startAt until total, oldest first', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(200, { startAt: 0, maxResults: 2, total: 3, comments: [comment('1', 'a'), comment('2', 'b')] }))
+      .mockResolvedValueOnce(json(200, { startAt: 2, maxResults: 2, total: 3, comments: [comment('3', 'c')] }));
+    const got = await getIssueComments(BASE, EMAIL, TOKEN, 'DEMO-1');
+    expect(got.map((c) => c.id)).toEqual(['1', '2', '3']);
+    const urls = fetchMock.mock.calls.map((c) => c[0] as string);
+    expect(urls).toEqual([
+      `${BASE}/rest/api/3/issue/DEMO-1/comment?startAt=0&maxResults=${COMMENT_PAGE_SIZE}&orderBy=created`,
+      `${BASE}/rest/api/3/issue/DEMO-1/comment?startAt=2&maxResults=${COMMENT_PAGE_SIZE}&orderBy=created`,
+    ]);
+  });
+
+  it('stops on an empty page or a missing total', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { comments: [comment('1', 'a')] }));
+    await expect(getIssueComments(BASE, EMAIL, TOKEN, 'DEMO-1')).resolves.toHaveLength(1);
+    fetchMock.mockResolvedValueOnce(json(200, { startAt: 0, total: 5, comments: [] }));
+    await expect(getIssueComments(BASE, EMAIL, TOKEN, 'DEMO-1')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('honours the page guard', async () => {
+    fetchMock.mockImplementation(async () => json(200, { startAt: 0, total: 1000, comments: [comment('1', 'a')] }));
+    await getIssueComments(BASE, EMAIL, TOKEN, 'DEMO-1', 2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a malformed key before any request', async () => {
+    await expect(getIssueComments(BASE, EMAIL, TOKEN, 'DEMO-1?x=1')).rejects.toMatchObject({
       message: expect.stringMatching(/Invalid Jira issue key/),
     });
     expect(fetchMock).not.toHaveBeenCalled();

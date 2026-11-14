@@ -4,7 +4,7 @@
 // routes reject, so a spec can exercise the failure path.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
-import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
+import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
 import { isValidLocalId } from '../../shared/tracker';
 import type { JiraSearchIssue } from '../../shared/jiraIssue';
 
@@ -17,6 +17,8 @@ export {
   SEARCH_MAX_PAGES,
   PROJECT_PAGE_SIZE,
   PROJECT_MAX_PAGES,
+  COMMENT_PAGE_SIZE,
+  COMMENT_MAX_PAGES,
   isValidProjectKey,
   projectIssuesJql,
 } from './jira';
@@ -27,6 +29,7 @@ export type {
   JiraProbeResult,
   JiraProject,
   JiraEditMeta,
+  JiraComment,
   ProjectSearchOptions,
 } from './jira';
 
@@ -180,4 +183,28 @@ export async function getEditMeta(_base: string, _email: string, token: string, 
   const fields: NonNullable<JiraEditMeta['fields']> = { summary: { name: 'Summary' } };
   if (scheme) fields.priority = { name: 'Priority', allowedValues: scheme.map((name, i) => ({ id: String(i + 1), name })) };
   return { fields };
+}
+
+// ── Comments (VERM-32) ───────────────────────────────────────────────────────
+
+export const FAKE_JIRA_COMMENTS: Record<string, JiraComment[]> = {
+  'DEMO-1': [
+    {
+      id: '30001',
+      author: { displayName: 'E2E Jira User' },
+      created: '2026-11-10T09:00:00.000+0000',
+      body: {
+        type: 'doc',
+        version: 1,
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Rotated in ' }, { type: 'text', text: 'staging', marks: [{ type: 'code' }] }] }],
+      },
+    },
+  ],
+};
+
+export async function getIssueComments(_base: string, _email: string, token: string, key: string, _maxPages?: number): Promise<JiraComment[]> {
+  rejectBadToken(token);
+  if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
+  if (!FAKE_JIRA_ISSUES.some((i) => i.key === key)) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
+  return (FAKE_JIRA_COMMENTS[key] ?? []).map((c) => ({ ...c }));
 }

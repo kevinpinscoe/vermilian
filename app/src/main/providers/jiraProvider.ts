@@ -24,6 +24,7 @@ import {
 } from '../../shared/jiraBoardIssue';
 import type { JiraProjectSettings, JiraProjectSettingsMap } from '../../shared/jiraProjectSettings';
 import { jiraPriorityOrder } from '../../shared/priority';
+import { mapJiraIssueContent, type JiraIssueContent } from '../../shared/jiraContent';
 
 // How many of a project's open issues to try for editmeta before giving up.
 // Normally the first answers; a later one helps only when the user cannot
@@ -39,6 +40,8 @@ export interface JiraConnection {
 
 export interface JiraProvider extends TrackerProvider {
   readonly kind: 'jira';
+  /** The issue's description and comments as Markdown, read-only (VERM-32). */
+  getIssueContent(key: string): Promise<JiraIssueContent>;
 }
 
 export function createJiraProvider(
@@ -115,6 +118,15 @@ export function createJiraProvider(
         pending.catch(() => priorityCache.delete(projectKey));
       }
       return pending.then((values) => [...values]);
+    },
+
+    async getIssueContent(key) {
+      const [issue, comments] = await Promise.all([
+        client.getIssue(base, email, token, key, ['description']),
+        client.getIssueComments(base, email, token, key),
+      ]);
+      const fields = (issue.fields ?? {}) as Record<string, unknown>;
+      return mapJiraIssueContent(fields.description, comments);
     },
 
     async getIssueDetail(key) {
