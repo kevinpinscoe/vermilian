@@ -158,4 +158,67 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     expect(after.backend.kind).toBe('jira');
     expect(after.folders.flatMap((f) => f.projectIds)).toEqual(['DEMO']);
   });
+
+  test('a Jira workspace renders its issues read-only; cards cannot be dragged', async () => {
+    const r = await page.evaluate((d) => window.vermilian.createWorkspaceArticle(d), {
+      ...SEED,
+      workspaceId: 'ws-e2ejr2',
+      name: 'Jira board',
+      order: 1,
+      backend: { kind: 'jira' as const, siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
+      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO', 'OPS'] }],
+    });
+    expect(r.ok).toBe(true);
+    await page.reload();
+    await switcher(page).click();
+    await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Jira board' }).click();
+
+    const board = tid(page, 'jira-workspace-board');
+    await expect(board).toBeVisible();
+    await expect(tid(page, 'jira-board-read-only')).toHaveText('Jira · read-only');
+    await expect(tid(page, 'jira-card')).toHaveCount(3);
+    await expect(tid(page, 'jira-issue-count')).toHaveText('3 issues');
+
+    // Columns follow what each status means: To Do, then the in-progress ones.
+    const columns = tid(page, 'jira-column');
+    await expect(columns).toHaveCount(3);
+    await expect(columns.nth(0)).toHaveAttribute('data-status', 'To Do');
+    await expect(columns.nth(0)).toHaveAttribute('data-role', 'todo');
+    await expect(columns.nth(0).locator('[data-testid="jira-card"]')).toHaveAttribute('data-issue-key', 'DEMO-102');
+    const inProgress = page.locator('[data-testid="jira-column"][data-status="In Progress"]');
+    await expect(inProgress.locator('[data-testid="jira-card"]')).toContainText('Rotate the staging database credentials');
+    await expect(inProgress.locator('[data-testid="jira-card-priority"]')).toHaveText('High');
+    await expect(page.locator('[data-testid="jira-column"][data-status="Waiting"] [data-testid="jira-card"]')).toHaveAttribute('data-issue-key', 'OPS-7');
+
+    // Drag is disabled: every card is non-draggable, and a drag attempt moves nothing.
+    const cards = tid(page, 'jira-card');
+    for (let i = 0; i < 3; i++) await expect(cards.nth(i)).toHaveAttribute('draggable', 'false');
+    const todoCard = page.locator('[data-issue-key="DEMO-102"]');
+    await todoCard.dragTo(inProgress);
+    await expect(columns.nth(0).locator('[data-issue-key="DEMO-102"]')).toHaveCount(1);
+    await expect(inProgress.locator('[data-issue-key="DEMO-102"]')).toHaveCount(0);
+
+    // The YouTrack board, its timer and its editing controls are not shown.
+    await expect(page.locator('[data-testid="workspace-board"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="row-start-timer"]')).toHaveCount(0);
+  });
+
+  test("the board reads only the workspace's own Jira projects", async () => {
+    const r = await page.evaluate((d) => window.vermilian.createWorkspaceArticle(d), {
+      ...SEED,
+      workspaceId: 'ws-e2ejr3',
+      name: 'Demo only',
+      order: 1,
+      backend: { kind: 'jira' as const, siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
+      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+    });
+    expect(r.ok).toBe(true);
+    const own = await page.evaluate(() => window.vermilian.getWorkspaceJiraIssues({ workspaceId: 'ws-e2ejr3', projectKey: 'DEMO' }));
+    expect(own.ok && own.issues.map((i) => i.idReadable).sort()).toEqual(['DEMO-101', 'DEMO-102']);
+    expect(own.ok && own.priorities).toEqual(['Highest', 'High', 'Medium', 'Low', 'Lowest', 'None']);
+    const other = await page.evaluate(() => window.vermilian.getWorkspaceJiraIssues({ workspaceId: 'ws-e2ejr3', projectKey: 'OPS' }));
+    expect(other.ok).toBe(false);
+    const yt = await page.evaluate(() => window.vermilian.getWorkspaceJiraIssues({ workspaceId: 'ws-e2eyt1', projectKey: 'DEMO' }));
+    expect(yt.ok).toBe(false);
+  });
 });

@@ -26,6 +26,7 @@ import {
   WORKSPACE_CONFIG_QUERY_KEY,
 } from './features/workspace-nav/api';
 import { JiraProjectsModal } from './features/workspace-nav/JiraProjectsModal';
+import { JiraWorkspaceBoard } from './features/jira-board/JiraWorkspaceBoard';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
 import { connectionErrorMessage } from './features/settings/errors';
 import type { StandupScope, StandupWindow } from '../shared/config';
@@ -564,23 +565,18 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         />
 
         <main className={styles.content}>
-          {activeContext.data && !activeContext.data.boardAvailable ? (
+          {activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' ? (
+            <JiraWorkspaceBoard
+              workspaceId={activeContext.data.workspaceId}
+              workspaceName={activeContext.data.workspaceName}
+              projectKeys={activeJiraProjectKeys}
+              onChooseProjects={() => setShowJiraProjects(true)}
+            />
+          ) : activeContext.data && !activeContext.data.boardAvailable ? (
             <div className={styles.placeholder} data-testid="workspace-board-unavailable">
               <Text type="text1" style={{ color: 'var(--secondary-text-color, #444444)' }}>
                 {activeContext.data.boardUnavailableReason}
               </Text>
-              {activeContext.data.storage === 'per-workspace' && activeContext.data.backend?.kind === 'jira' && (
-                <>
-                  <Text type="text2" data-testid="jira-workspace-projects" style={{ color: 'var(--secondary-text-color, #444444)' }}>
-                    {activeJiraProjectKeys.length
-                      ? `Jira projects: ${activeJiraProjectKeys.join(', ')}`
-                      : 'No Jira projects chosen yet.'}
-                  </Text>
-                  <Button kind="secondary" size="small" data-testid="choose-jira-projects-btn" onClick={() => setShowJiraProjects(true)}>
-                    Choose Jira projects…
-                  </Button>
-                </>
-              )}
             </div>
           ) : priorityDeskActive ? (
             <PriorityDesk
@@ -689,6 +685,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onSaved={() => {
             void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
             void queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issues'] });
           }}
         />
       )}

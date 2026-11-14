@@ -29,9 +29,9 @@ export interface ActiveWorkspaceContext {
   workspaceId: string; // '' when there are no workspaces yet
   workspaceName: string;
   backend: ActiveBackendContext | null;
-  // Whether this build can show the workspace's board. False for a Jira
-  // backend (VERM-27/28/29 not done) and for a YouTrack backend on a server
-  // other than the configured one (per-workspace credential loading is VERM-53).
+  // Whether this build can show the workspace's board. A Jira workspace has a
+  // read-only board (VERM-34); a YouTrack backend on a server other than the
+  // configured one does not (per-workspace credential loading is VERM-53).
   boardAvailable: boolean;
   boardUnavailableReason: string | null;
 }
@@ -94,12 +94,8 @@ export function boardAvailability(
   configuredServerUrl: string,
 ): { available: boolean; reason: string | null } {
   if (!backend) return { available: true, reason: null };
-  if (backend.kind === 'jira') {
-    return {
-      available: false,
-      reason: 'Jira boards are not available in this version yet. The workspace is selected, but its issues cannot be shown.',
-    };
-  }
+  // Read-only, through the workspace's own Jira connection (VERM-34).
+  if (backend.kind === 'jira') return { available: true, reason: null };
   if (!sameServer(backend.serverUrl, configuredServerUrl)) {
     return {
       available: false,
