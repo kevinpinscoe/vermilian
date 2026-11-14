@@ -151,7 +151,7 @@ export interface GetWorkspaceJiraIssuesArgs {
 export type GetWorkspaceJiraIssuesResult =
   // priorities: the project's values, most urgent first ([] when unknown).
   | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[] }
-  | { ok: false; message: string };
+  | import('./jiraConnection').WorkspaceJiraFailure;
 
 export interface GetWorkspaceJiraIssueDetailArgs {
   workspaceId: string;
@@ -165,11 +165,11 @@ export type GetWorkspaceJiraIssueDetailResult =
       // Description and comments as Markdown, escaped; render without raw HTML.
       content: import('./jiraContent').JiraIssueContent;
     }
-  | { ok: false; message: string };
+  | import('./jiraConnection').WorkspaceJiraFailure;
 
 export type ListWorkspaceJiraProjectsResult =
   | { ok: true; projects: Array<{ id: string; name: string; shortName: string }> }
-  | { ok: false; message: string };
+  | import('./jiraConnection').WorkspaceJiraFailure;
 
 export type WorkspaceCredentialCheck =
   | { ok: true; credentialRef: string; source: CredentialSourceKind }

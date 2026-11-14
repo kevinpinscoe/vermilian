@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
 import type { BoardIssue } from '../../../shared/workspace';
 import { formatDate } from '../project-board/KanbanView';
 import { jiraBoardColumns } from './jiraBoard';
+import { needsJiraReconnect, type WorkspaceJiraFailure } from '../../../shared/jiraConnection';
+import { JiraReconnect } from './JiraReconnect';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraWorkspaceBoardProps {
@@ -14,6 +16,7 @@ interface JiraWorkspaceBoardProps {
   selectedIssueKey?: string | null;
   // Opens the read-only detail panel (VERM-35).
   onSelectIssue: (issueKey: string) => void;
+  onOpenSettings: () => void;
 }
 
 export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
@@ -32,6 +35,7 @@ export function JiraWorkspaceBoard({
   onChooseProjects,
   selectedIssueKey = null,
   onSelectIssue,
+  onOpenSettings,
 }: JiraWorkspaceBoardProps) {
   const [showDone, setShowDone] = useState(false);
 
@@ -42,6 +46,15 @@ export function JiraWorkspaceBoard({
       staleTime: 60 * 1000,
     })),
   });
+
+  const queryClient = useQueryClient();
+  // A rejected token or unresolvable credential fails every project alike, so
+  // one such failure puts the whole board in the reconnect state (VERM-40).
+  const reconnect = results.map((r) => r.data).find((d): d is WorkspaceJiraFailure => needsJiraReconnect(d)) ?? null;
+  const retry = () => {
+    void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issues', workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issue-detail', workspaceId] });
+  };
 
   const loading = results.some((r) => r.isLoading);
   const failures = results.flatMap((r, i) => (r.data && !r.data.ok ? [`${projectKeys[i]}: ${r.data.message}`] : r.error ? [`${projectKeys[i]}: ${(r.error as Error).message}`] : []));
@@ -78,7 +91,9 @@ export function JiraWorkspaceBoard({
         </Button>
       </div>
 
-      {projectKeys.length === 0 ? (
+      {reconnect ? (
+        <JiraReconnect workspaceName={workspaceName} failure={reconnect} onRetry={retry} onOpenSettings={onOpenSettings} />
+      ) : projectKeys.length === 0 ? (
         <div className={styles.empty} data-testid="jira-workspace-projects">
           <Text type="text1">No Jira projects chosen yet.</Text>
         </div>

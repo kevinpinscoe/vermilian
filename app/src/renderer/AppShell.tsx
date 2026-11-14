@@ -588,6 +588,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               onChooseProjects={() => setShowJiraProjects(true)}
               selectedIssueKey={openJiraIssueKey}
               onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}
+              onOpenSettings={onOpenSettings}
             />
           ) : activeContext.data && !activeContext.data.boardAvailable ? (
             <div className={styles.placeholder} data-testid="workspace-board-unavailable">

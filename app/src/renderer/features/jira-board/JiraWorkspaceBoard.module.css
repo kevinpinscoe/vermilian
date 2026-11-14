@@ -144,3 +144,37 @@
 .due {
   white-space: nowrap;
 }
+
+/* Reconnect state (VERM-40) */
+.reconnect {
+  margin: 16px;
+  padding: 16px;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--warning-color, #fdab3d);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+}
+
+.reconnectDetail {
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+  overflow-wrap: anywhere;
+}
+
+.reconnectForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reconnectInput {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--layout-border-color, #e0e0e0);
+  border-radius: 4px;
+  font: inherit;
+}

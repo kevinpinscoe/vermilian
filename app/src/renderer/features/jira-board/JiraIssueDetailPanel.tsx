@@ -5,6 +5,7 @@ import { CloseSmall } from '@vibe/icons';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { commentTimeLabel, jiraDetailRows } from './jiraDetail';
+import { needsJiraReconnect } from '../../../shared/jiraConnection';
 import styles from './JiraIssueDetailPanel.module.css';
 
 interface JiraIssueDetailPanelProps {
@@ -90,7 +91,12 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
 
       {failure && (
         <div className={styles.errorWrap}>
-          <AttentionBox data-testid="jira-detail-error" type="negative" title="Couldn't load this Jira issue" text={failure} />
+          <AttentionBox
+            data-testid="jira-detail-error"
+            type="negative"
+            title={needsJiraReconnect(result) ? 'Reconnect Jira to see this issue' : "Couldn't load this Jira issue"}
+            text={failure}
+          />
         </div>
       )}
 
