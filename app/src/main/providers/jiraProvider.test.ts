@@ -27,6 +27,7 @@ function stubClient(overrides: Partial<Record<keyof typeof JiraClient, unknown>>
     getMyself: vi.fn(async () => ({ accountId: 'a-1', displayName: 'Example User', emailAddress: '' })),
     listProjects: vi.fn(async () => [{ id: '10000', key: 'DEMO', name: 'Demo' }]),
     searchProjectIssues: vi.fn(async () => [ISSUE]),
+    searchProjectRecentlyUpdated: vi.fn(async () => [ISSUE]),
     searchJql: vi.fn(async () => [ISSUE]),
     getIssue: vi.fn(async () => ISSUE),
     projectIssuesJql,
@@ -68,6 +69,20 @@ describe('createJiraProvider', () => {
     expect(issues[0]).toMatchObject({ idReadable: 'DEMO-1', summary: 'Rotate credentials', statusRole: 'inProgress' });
     expect(issues[0].fields.status).toBe('In Progress');
     expect(issues[0].fields.dueDate).toBe(Date.UTC(2026, 10, 20, 12));
+  });
+
+  it('reads recently updated issues through the bounded search, mapped with the project settings (VERM-39)', async () => {
+    const moved = { id: '10002', key: 'OPS-9', fields: { status: { name: 'Impeded', statusCategory: { key: 'indeterminate' } }, updated: '2026-11-14T12:00:00.000+0000' } };
+    const client = stubClient({ searchProjectRecentlyUpdated: vi.fn(async () => [ISSUE, moved]) });
+    const settings = { DEMO: { dueDateField: 'customfield_10042' }, OPS: { statusRoles: { Impeded: 'blocked' as const } } };
+    const issues = await createJiraProvider(client, CONN, settings).getRecentlyUpdatedIssues('DEMO');
+    expect(client.searchProjectRecentlyUpdated).toHaveBeenCalledWith(...AUTH, 'DEMO', {
+      windowMinutes: 5,
+      fields: jiraBoardFields(settings.DEMO),
+    });
+    // An issue that moved away since takes its new project's settings.
+    expect(issues.map((i) => [i.idReadable, i.statusRole])).toEqual([['DEMO-1', 'inProgress'], ['OPS-9', 'blocked']]);
+    expect(issues[1].updated).toBe(Date.parse('2026-11-14T12:00:00.000Z'));
   });
 
   it("applies the board project's own settings: due-date field and status mapping", async () => {

@@ -12,6 +12,8 @@ import {
   listProjects,
   projectIssuesJql,
   searchProjectIssues,
+  searchProjectRecentlyUpdated,
+  projectRecentlyUpdatedJql,
   PROJECT_PAGE_SIZE,
 } from './jira';
 import { JIRA_LIST_FIELDS } from '../../shared/jiraIssue';
@@ -152,6 +154,41 @@ describe('searchProjectIssues', () => {
     await expect(searchProjectIssues(BASE, EMAIL, TOKEN, 'DEMO" OR project = "X')).rejects.toMatchObject({
       message: expect.stringMatching(/Invalid Jira project key/),
     });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('searchProjectRecentlyUpdated (VERM-39)', () => {
+  it("asks for the project's issues updated in the last five minutes, resolved ones included", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, SEARCH_PAGE_2));
+    const issues = await searchProjectRecentlyUpdated(BASE, EMAIL, TOKEN, 'DEMO', { fields: ['summary', 'updated'] });
+    expect(issues).toHaveLength(1);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/rest/api/3/search/jql`);
+    // search/jql is a read sent as POST; nothing else is ever sent.
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      jql: 'project = "DEMO" AND updated >= -5m ORDER BY updated DESC',
+      fields: ['summary', 'updated'],
+      maxResults: 100,
+    });
+  });
+
+  it('takes another window in whole minutes', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, SEARCH_PAGE_2));
+    await searchProjectRecentlyUpdated(BASE, EMAIL, TOKEN, 'DEMO', { windowMinutes: 12 });
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).jql).toBe(
+      'project = "DEMO" AND updated >= -12m ORDER BY updated DESC',
+    );
+  });
+
+  it('refuses a key or window that could alter the JQL, before any request', async () => {
+    await expect(searchProjectRecentlyUpdated(BASE, EMAIL, TOKEN, 'DEMO" OR x = "y')).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid Jira project key/),
+    });
+    for (const bad of [0, -5, 1.5, NaN, Infinity, 100_000]) {
+      expect(() => projectRecentlyUpdatedJql('DEMO', bad)).toThrow(/Invalid poll window/);
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@
 import type { JiraProfile } from '../../shared/jiraProfile';
 import { JIRA_LIST_FIELDS, type JiraSearchIssue } from '../../shared/jiraIssue';
 import { isValidLocalId } from '../../shared/tracker';
+import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
 import { jiraRequest, type JiraError } from './jiraHttp';
 
 export const JIRA_GATEWAY = 'https://api.atlassian.com';
@@ -359,5 +360,44 @@ export async function searchProjectIssues(
   options: ProjectSearchOptions = {},
 ): Promise<JiraSearchIssue[]> {
   const jql = projectIssuesJql(projectKey, options.includeResolved);
+  return searchJql(base, email, token, jql, options.fields ?? JIRA_LIST_FIELDS, options.maxPages);
+}
+
+// --- Recently updated issues (VERM-39) ---
+// The incremental poll that keeps a Jira board fresh: a token cannot register
+// webhooks, so the board asks for what changed lately (shared/jiraPoll.ts).
+
+// A runaway guard on the window: a day is far beyond any poll gap, which
+// falls back to a full read long before that (needsFullRefresh).
+const POLL_WINDOW_MAX_MINUTES = 24 * 60;
+
+// JQL for one project's issues updated in the last `windowMinutes`, resolved
+// ones included — so an issue that moved to Done is seen and leaves an open
+// board. Jira evaluates the relative date against its own clock. Throws on
+// an invalid key or window, so nothing unchecked is spliced into JQL.
+export function projectRecentlyUpdatedJql(projectKey: string, windowMinutes = JIRA_POLL_WINDOW_MINUTES): string {
+  if (!isValidProjectKey(projectKey)) throw invalid(`Invalid Jira project key: ${JSON.stringify(projectKey)}`);
+  if (!Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > POLL_WINDOW_MAX_MINUTES) {
+    throw invalid(`Invalid poll window: ${String(windowMinutes)} minutes`);
+  }
+  return `project = "${projectKey}" AND updated >= -${windowMinutes}m ORDER BY updated DESC`;
+}
+
+export interface RecentlyUpdatedOptions {
+  windowMinutes?: number;
+  fields?: readonly string[];
+  maxPages?: number;
+}
+
+// One project's recently updated issues through search/jql. Read-only.
+// Throws JiraError.
+export async function searchProjectRecentlyUpdated(
+  base: string,
+  email: string,
+  token: string,
+  projectKey: string,
+  options: RecentlyUpdatedOptions = {},
+): Promise<JiraSearchIssue[]> {
+  const jql = projectRecentlyUpdatedJql(projectKey, options.windowMinutes);
   return searchJql(base, email, token, jql, options.fields ?? JIRA_LIST_FIELDS, options.maxPages);
 }

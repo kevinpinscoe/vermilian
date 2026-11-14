@@ -90,6 +90,7 @@ import type {
   CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
   GetWorkspaceJiraIssuesResult,
+  GetWorkspaceJiraRecentlyUpdatedResult,
   ListWorkspaceJiraProjectsResult,
 } from '../shared/ipc';
 import {
@@ -110,6 +111,7 @@ import type {
 import type { WorkspaceDocument } from '../shared/workspaceSchema';
 import { jira } from './api/jiraClient';
 import { FAKE_JIRA_BAD_TOKEN } from './api/fakeJira';
+import * as fakeJiraForE2E from './api/fakeJira';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
 import { toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
@@ -867,6 +869,14 @@ export function registerIpc(): void {
       fakeYouTrackForE2E.writeWorkspaceArticleForTests(articleId, content),
     );
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
+    // The fake Jira (VERM-39): change its issues as an edit in Jira would,
+    // read which calls were made, and hold searches back to test a poll in
+    // flight.
+    ipcMain.handle('e2e:jiraChange', (_e, change: fakeJiraForE2E.FakeJiraChange): boolean =>
+      fakeJiraForE2E.applyChangeForTests(change),
+    );
+    ipcMain.handle('e2e:jiraCalls', () => fakeJiraForE2E.getCallsForTests());
+    ipcMain.handle('e2e:jiraSearchDelay', (_e, ms: number) => fakeJiraForE2E.setSearchDelayForTests(ms));
   }
 
   // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
@@ -1046,6 +1056,26 @@ export function registerIpc(): void {
         return { ok: true, issues, priorities };
       } catch (e) {
         return jiraFailure(a.workspaceId, p.doc, e, `The issues of ${projectKey} could not be loaded.`);
+      }
+    },
+  );
+
+  // The board's incremental poll (VERM-39): read-only, and limited to the
+  // workspace's own projects exactly as the full read above is.
+  ipcMain.handle(
+    IPC.getWorkspaceJiraRecentlyUpdated,
+    async (_e, args: unknown): Promise<GetWorkspaceJiraRecentlyUpdatedResult> => {
+      const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+      const projectKey = typeof a.projectKey === 'string' ? a.projectKey : '';
+      const p = await workspaceJiraProvider(a.workspaceId);
+      if (!p.ok) return p;
+      if (!workspaceProjectIds(p.doc).includes(projectKey)) {
+        return refused(`${projectKey || 'That project'} is not one of this workspace's Jira projects.`, p.doc);
+      }
+      try {
+        return { ok: true, issues: await p.provider.getRecentlyUpdatedIssues(projectKey) };
+      } catch (e) {
+        return jiraFailure(a.workspaceId, p.doc, e, `The recent changes in ${projectKey} could not be loaded.`);
       }
     },
   );

@@ -4,7 +4,8 @@
 // routes reject, so a spec can exercise the failure path.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
-import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
+import { isValidProjectKey, projectRecentlyUpdatedJql, siteApiBase, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions, type RecentlyUpdatedOptions } from './jira';
+import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
 import { isValidLocalId } from '../../shared/tracker';
 import type { JiraSearchIssue } from '../../shared/jiraIssue';
 
@@ -21,6 +22,7 @@ export {
   COMMENT_MAX_PAGES,
   isValidProjectKey,
   projectIssuesJql,
+  projectRecentlyUpdatedJql,
 } from './jira';
 export type {
   JiraError,
@@ -31,6 +33,7 @@ export type {
   JiraEditMeta,
   JiraComment,
   ProjectSearchOptions,
+  RecentlyUpdatedOptions,
 } from './jira';
 
 export const FAKE_JIRA_CLOUD_ID = 'e2e00000-0000-4000-8000-000000000000';
@@ -42,16 +45,43 @@ const ACCOUNT: JiraAccount = {
   emailAddress: 'e2e@example.com',
 };
 
+// ── e2e observation (VERM-39) ────────────────────────────────────────────────
+// Every call into this fake is logged, so a spec can see how often the board
+// polled, which reads it made, and that it made nothing but reads. A search
+// can be held back for a while to put a poll "in flight".
+
+export interface FakeJiraCall {
+  fn: string;
+  projectKey?: string;
+  key?: string;
+  jql?: string;
+  at: number;
+}
+
+const calls: FakeJiraCall[] = [];
+let searchDelayMs = 0;
+
+function logCall(fn: string, detail: Omit<FakeJiraCall, 'fn' | 'at'> = {}): void {
+  calls.push({ fn, ...detail, at: Date.now() });
+}
+
+async function searchDelay(): Promise<void> {
+  if (searchDelayMs > 0) await new Promise((r) => setTimeout(r, searchDelayMs));
+}
+
 export async function detectCloudId(_siteUrl: string): Promise<string | null> {
+  logCall('detectCloudId');
   return FAKE_JIRA_CLOUD_ID;
 }
 
 export async function getMyself(_base: string, _email: string, token: string): Promise<JiraAccount> {
+  logCall('getMyself');
   if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
   return { ...ACCOUNT };
 }
 
 export async function probeJiraToken(profile: JiraProfile, token: string): Promise<JiraProbeResult> {
+  logCall('probeJiraToken');
   const cloudId = profile.cloudId || FAKE_JIRA_CLOUD_ID;
   if (token === FAKE_JIRA_BAD_TOKEN) {
     return {
@@ -108,6 +138,7 @@ export async function searchJql(
   _fields: readonly string[],
   _maxPages?: number,
 ): Promise<JiraSearchIssue[]> {
+  logCall('searchJql', { jql: _jql });
   if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
   return FAKE_JIRA_ISSUES.map((i) => ({ ...i, fields: { ...i.fields } }));
 }
@@ -128,6 +159,7 @@ function rejectBadToken(token: string): void {
 }
 
 export async function jiraApiBase(profile: JiraProfile, token: string): Promise<string> {
+  logCall('jiraApiBase');
   const probe = await probeJiraToken(profile, token);
   if (!probe.ok) throw { status: probe.status, message: probe.message };
   return siteApiBase(profile.siteUrl);
@@ -140,6 +172,7 @@ export async function getIssue(
   key: string,
   _fields?: readonly string[],
 ): Promise<JiraSearchIssue> {
+  logCall('getIssue', { key });
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
@@ -184,6 +217,7 @@ export const FAKE_JIRA_DETAIL_FIELDS: Record<string, Record<string, unknown>> = 
 };
 
 export async function listProjects(_base: string, _email: string, token: string, _maxPages?: number): Promise<JiraProject[]> {
+  logCall('listProjects');
   rejectBadToken(token);
   return FAKE_JIRA_PROJECTS.map((p) => ({ ...p }));
 }
@@ -195,8 +229,10 @@ export async function searchProjectIssues(
   projectKey: string,
   options: ProjectSearchOptions = {},
 ): Promise<JiraSearchIssue[]> {
+  logCall('searchProjectIssues', { projectKey, jql: isValidProjectKey(projectKey) ? projectIssuesJqlFor(projectKey, options.includeResolved) : undefined });
   rejectBadToken(token);
   if (!isValidProjectKey(projectKey)) throw { message: `Invalid Jira project key: ${JSON.stringify(projectKey)}` };
+  await searchDelay();
   return FAKE_JIRA_ISSUES.filter(
     (i) =>
       i.key.startsWith(`${projectKey}-`) &&
@@ -212,6 +248,7 @@ export const FAKE_JIRA_PRIORITY_SCHEMES: Record<string, string[]> = {
 };
 
 export async function getEditMeta(_base: string, _email: string, token: string, key: string): Promise<JiraEditMeta> {
+  logCall('getEditMeta');
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   if (!FAKE_JIRA_ISSUES.some((i) => i.key === key)) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
@@ -246,8 +283,88 @@ export const FAKE_JIRA_COMMENTS: Record<string, JiraComment[]> = {
 };
 
 export async function getIssueComments(_base: string, _email: string, token: string, key: string, _maxPages?: number): Promise<JiraComment[]> {
+  logCall('getIssueComments');
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   if (!FAKE_JIRA_ISSUES.some((i) => i.key === key)) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
   return (FAKE_JIRA_COMMENTS[key] ?? []).map((c) => ({ ...c }));
+}
+
+// ── Recently updated issues (VERM-39) ────────────────────────────────────────
+// The same bounded window the real client asks Jira for, evaluated against
+// this process's clock: an issue counts when its `updated` is within the last
+// windowMinutes. Resolved issues are included, as the real JQL includes them.
+
+function projectIssuesJqlFor(projectKey: string, includeResolved?: boolean): string {
+  return `project = "${projectKey}"${includeResolved ? '' : ' AND statusCategory != Done'} ORDER BY updated DESC`;
+}
+
+export async function searchProjectRecentlyUpdated(
+  _base: string,
+  _email: string,
+  token: string,
+  projectKey: string,
+  options: RecentlyUpdatedOptions = {},
+): Promise<JiraSearchIssue[]> {
+  const windowMinutes = options.windowMinutes ?? JIRA_POLL_WINDOW_MINUTES;
+  // Validates the key and window exactly as the real client does.
+  const jql = projectRecentlyUpdatedJql(projectKey, windowMinutes);
+  logCall('searchProjectRecentlyUpdated', { projectKey, jql });
+  rejectBadToken(token);
+  await searchDelay();
+  const since = Date.now() - windowMinutes * 60_000;
+  return FAKE_JIRA_ISSUES.filter((i) => {
+    const at = Date.parse(String(i.fields?.updated ?? ''));
+    return i.key.startsWith(`${projectKey}-`) && !Number.isNaN(at) && at >= since;
+  }).map((i) => ({ ...i, fields: { ...i.fields } }));
+}
+
+// ── Test hooks (VERMILIAN_E2E only; registered in main/ipc.ts) ───────────────
+// Change the fake's issues as someone editing them in Jira would. Every
+// change stamps `updated` with this process's current time.
+
+export type FakeJiraChange =
+  | { op: 'edit'; key: string; summary?: string; status?: { name: string; category: 'new' | 'indeterminate' | 'done' } }
+  | { op: 'create'; id: string; key: string; summary: string }
+  | { op: 'delete'; key: string }
+  | { op: 'move'; key: string; toKey: string; touch?: boolean };
+
+function stampNow(): string {
+  return new Date().toISOString();
+}
+
+export function applyChangeForTests(change: FakeJiraChange): boolean {
+  if (change.op === 'create') {
+    if (FAKE_JIRA_ISSUES.some((i) => i.key === change.key || i.id === change.id)) return false;
+    FAKE_JIRA_ISSUES.push({
+      id: change.id,
+      key: change.key,
+      fields: { summary: change.summary, status: { name: 'To Do', statusCategory: { key: 'new' } }, priority: { name: 'Medium' }, updated: stampNow() },
+    });
+    return true;
+  }
+  const at = FAKE_JIRA_ISSUES.findIndex((i) => i.key === change.key);
+  if (at < 0) return false;
+  const issue = FAKE_JIRA_ISSUES[at];
+  if (change.op === 'delete') {
+    FAKE_JIRA_ISSUES.splice(at, 1);
+  } else if (change.op === 'move') {
+    // Jira gives a moved issue a new key and keeps its id. A move it does not
+    // touch leaves `updated` alone, so only a full read can notice it.
+    FAKE_JIRA_ISSUES[at] = { ...issue, key: change.toKey, fields: { ...issue.fields, ...(change.touch ? { updated: stampNow() } : {}) } };
+  } else {
+    const fields = { ...issue.fields, updated: stampNow() };
+    if (change.summary !== undefined) fields.summary = change.summary;
+    if (change.status) fields.status = { name: change.status.name, statusCategory: { key: change.status.category } };
+    FAKE_JIRA_ISSUES[at] = { ...issue, fields };
+  }
+  return true;
+}
+
+export function getCallsForTests(): FakeJiraCall[] {
+  return calls.map((c) => ({ ...c }));
+}
+
+export function setSearchDelayForTests(ms: number): void {
+  searchDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
 }

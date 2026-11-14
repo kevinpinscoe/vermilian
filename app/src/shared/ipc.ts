@@ -89,6 +89,7 @@ export const IPC = {
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
   // One of a Jira workspace's projects, read-only, for its board (VERM-34).
   getWorkspaceJiraIssues: 'workspaceJira:getIssues',
+  getWorkspaceJiraRecentlyUpdated: 'workspaceJira:getRecentlyUpdated',
   // One Jira issue's fields, description and comments, read-only (VERM-35).
   getWorkspaceJiraIssueDetail: 'workspaceJira:getIssueDetail',
   getIssues: 'youtrack:getIssues',
@@ -153,6 +154,17 @@ export interface GetWorkspaceJiraIssuesArgs {
 export type GetWorkspaceJiraIssuesResult =
   // priorities: the project's values, most urgent first ([] when unknown).
   | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[] }
+  | import('./jiraConnection').WorkspaceJiraFailure;
+
+/** One project's recently updated issues — the board's incremental poll (VERM-39). */
+export interface GetWorkspaceJiraRecentlyUpdatedArgs {
+  workspaceId: string;
+  projectKey: string;
+}
+
+export type GetWorkspaceJiraRecentlyUpdatedResult =
+  // Resolved issues included: the renderer drops them when Show done is off.
+  | { ok: true; issues: import('./workspace').BoardIssue[] }
   | import('./jiraConnection').WorkspaceJiraFailure;
 
 export interface GetWorkspaceJiraIssueDetailArgs {
@@ -579,10 +591,15 @@ export interface VermilianAPI {
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
   // A Jira workspace project's issues and priority order, read-only (VERM-34).
   getWorkspaceJiraIssues(args: GetWorkspaceJiraIssuesArgs): Promise<GetWorkspaceJiraIssuesResult>;
+  getWorkspaceJiraRecentlyUpdated(args: GetWorkspaceJiraRecentlyUpdatedArgs): Promise<GetWorkspaceJiraRecentlyUpdatedResult>;
   // One of those issues in full, read-only, for its detail panel (VERM-35).
   getWorkspaceJiraIssueDetail(args: GetWorkspaceJiraIssueDetailArgs): Promise<GetWorkspaceJiraIssueDetailResult>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
+  // e2e-only hooks on the fake Jira (VERM-39): see main/api/fakeJira.ts.
+  debugJiraChange?(change: unknown): Promise<boolean>;
+  debugGetJiraCalls?(): Promise<Array<{ fn: string; projectKey?: string; key?: string; jql?: string; at: number }>>;
+  debugSetJiraSearchDelay?(ms: number): Promise<void>;
 }
 
 declare global {

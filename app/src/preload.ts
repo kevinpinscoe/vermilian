@@ -27,6 +27,7 @@ import {
   type GetRecommendationArgs,
   type PostRecommendationAuditArgs,
   type GetWorkspaceJiraIssuesArgs,
+  type GetWorkspaceJiraRecentlyUpdatedArgs,
   type GetWorkspaceJiraIssueDetailArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
@@ -125,9 +126,14 @@ const api: VermilianAPI = {
   getCredentialRefStatus: (credentialRef: string) => ipcRenderer.invoke(IPC.getCredentialRefStatus, credentialRef),
   listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
   getWorkspaceJiraIssues: (args: GetWorkspaceJiraIssuesArgs) => ipcRenderer.invoke(IPC.getWorkspaceJiraIssues, args),
+  getWorkspaceJiraRecentlyUpdated: (args: GetWorkspaceJiraRecentlyUpdatedArgs) =>
+    ipcRenderer.invoke(IPC.getWorkspaceJiraRecentlyUpdated, args),
   getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
     ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
+  debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
+  debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
+  debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

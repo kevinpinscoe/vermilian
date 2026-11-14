@@ -25,6 +25,8 @@ import {
 import type { JiraProjectSettings, JiraProjectSettingsMap } from '../../shared/jiraProjectSettings';
 import { jiraPriorityOrder } from '../../shared/priority';
 import { mapJiraIssueContent, type JiraIssueContent } from '../../shared/jiraContent';
+import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
+import type { BoardIssue } from '../../shared/workspace';
 
 // How many of a project's open issues to try for editmeta before giving up.
 // Normally the first answers; a later one helps only when the user cannot
@@ -42,6 +44,11 @@ export interface JiraProvider extends TrackerProvider {
   readonly kind: 'jira';
   /** The issue's description and comments as Markdown, read-only (VERM-32). */
   getIssueContent(key: string): Promise<JiraIssueContent>;
+  /**
+   * One project's issues updated in the last JIRA_POLL_WINDOW_MINUTES,
+   * resolved ones included — the board's incremental poll (VERM-39).
+   */
+  getRecentlyUpdatedIssues(projectKey: string): Promise<BoardIssue[]>;
 }
 
 export function createJiraProvider(
@@ -91,6 +98,14 @@ export function createJiraProvider(
       });
       // A board's issues belong to its project, except one moved away since
       // the search ran; those take their new project's settings.
+      return issues.map(mapIssue);
+    },
+
+    async getRecentlyUpdatedIssues(projectKey) {
+      const issues = await client.searchProjectRecentlyUpdated(base, email, token, projectKey, {
+        windowMinutes: JIRA_POLL_WINDOW_MINUTES,
+        fields: jiraBoardFields(settingsFor(projectKey)),
+      });
       return issues.map(mapIssue);
     },
 
