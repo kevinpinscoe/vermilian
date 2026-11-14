@@ -429,10 +429,10 @@ export interface AiCreateTaskResult {
 }
 
 export interface StandupGenerateArgs {
-  scope: import('./config').StandupScope;
   window: import('./config').StandupWindow;
   customWindowHours?: number;
-  customWorkspaceIds?: string[];
+  // Stand-ups cover the active workspace only (VERM-48). Any scope or
+  // workspace list a caller still sends is ignored by the main process.
   // The workspace the request was made from; refused if it is no longer the
   // active one (VERM-47). Names the workspace, never a credential.
   workspaceId?: string;
@@ -556,7 +556,9 @@ export interface VermilianAPI {
   // Re-fetches and re-parses on every call — no persistent cache on either
   // side of this boundary. Refresh cadence is the renderer's own React
   // Query staleTime.
-  getMasterPlan(): Promise<MasterPlanState>;
+  // VERM-48: under per-workspace storage, the named workspace's own plan
+  // (the active one when omitted); legacy storage ignores it.
+  getMasterPlan(workspaceId?: string): Promise<MasterPlanState>;
   // Issue CRUD
   getIssueDetail(issueId: string): Promise<import('./workspace').IssueDetail>;
   patchIssue(args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }>;
@@ -611,6 +613,10 @@ export interface VermilianAPI {
   debugSetJiraSearchDelay?(ms: number): Promise<void>;
   // e2e-only (VERM-47): the credential reference each fake Claude call used.
   debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;
+  // e2e-only (VERM-48): see main/api/fakeYouTrack.ts.
+  debugGetStandupQueries?(): Promise<string[][]>;
+  debugSetStandupDelay?(ms: number): Promise<void>;
+  debugSetArticle?(articleId: string, value: { content: string } | { status: number }): Promise<void>;
 }
 
 declare global {

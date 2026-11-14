@@ -64,10 +64,12 @@ interface ManageWorkspacesModalProps {
   // reference (VERM-47). Legacy storage uses the Settings key for all.
   storage?: WorkspaceStorageMode;
   onEditAiCredential?: (workspaceId: string) => void;
+  // Per-workspace storage only: each workspace's own master plan (VERM-48).
+  onEditMasterPlan?: (workspaceId: string) => void;
 }
 
 export function ManageWorkspacesModal({
-  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential,
+  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential, onEditMasterPlan,
 }: ManageWorkspacesModalProps) {
   const sorted = config.workspaces.slice().sort((a, b) => a.order - b.order);
 
@@ -189,6 +191,16 @@ export function ManageWorkspacesModal({
                     title="Choose the Anthropic credential this workspace's AI features use"
                     onClick={() => onEditAiCredential(ws.id)}
                   >AI credential…</button>
+                )}
+
+                {storage === 'per-workspace' && onEditMasterPlan && (
+                  <button
+                    type="button"
+                    data-testid="workspace-master-plan-btn"
+                    className={styles.deleteBtn}
+                    title="Choose the YouTrack article this workspace's Priority Desk uses as its master plan"
+                    onClick={() => onEditMasterPlan(ws.id)}
+                  >Master plan…</button>
                 )}
 
                 <button

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { standupAvailability } from '../shared/standup';
 import { useWorkspaceAi } from './features/workspace-nav/useWorkspaceAi';
 import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
 import { Sun, Settings, CheckList } from '@vibe/icons';
@@ -32,7 +33,7 @@ import { JiraIssueDetailPanel } from './features/jira-board/JiraIssueDetailPanel
 import { jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
 import { connectionErrorMessage } from './features/settings/errors';
-import type { StandupScope, StandupWindow } from '../shared/config';
+import type { StandupWindow } from '../shared/config';
 import type { BoardIssue } from '../shared/workspace';
 import styles from './AppShell.module.css';
 
@@ -211,7 +212,6 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
     targetProjectName: string;
   } | null>(null);
   const [crossBoardMoving, setCrossBoardMoving] = useState(false);
-  const [standupScope, setStandupScope] = useState<StandupScope>('all-workspace');
   const [standupWindow, setStandupWindow] = useState<StandupWindow>('48h');
 
   const recoveryAttempted = useRef(false);
@@ -228,13 +228,14 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const workspaceAi = useWorkspaceAi();
   const hasClaudeKey = workspaceAi.available;
   const aiUnavailableReason = workspaceAi.reason;
+  // Stand-ups: the active workspace only, and none for Jira in Phase 1 (VERM-48).
+  const standup = standupAvailability(activeContext.data?.backend ?? null, config.data?.youtrackUrl ?? '');
   const dailyNotesFolder = config.data?.dailyNotesFolder ?? '';
   const pomodoro = config.data?.pomodoro ?? { work: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 4 };
   const soundEnabled = config.data?.soundOnBlockEnd ?? true;
   const defaultWorklogType = config.data?.defaultWorklogType ?? 'Development';
 
   const activeProject = projects.data?.find((p) => p.id === activeProjectId) ?? null;
-  const workspaces = workspaceConfig.data?.workspaces ?? [];
 
   // Compute project short names for the "All tasks" workspace board
   const activeWorkspace = workspaceConfig.data?.workspaces.find(
@@ -251,7 +252,6 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   // ─── Initialise from persisted config ──────────────────────────────────────
   useEffect(() => {
     if (config.data) {
-      setStandupScope(config.data.standupScope);
       setStandupWindow(config.data.standupWindow);
     }
   }, [config.data]);
@@ -424,10 +424,6 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   }
 
   // ─── Standup config persist ─────────────────────────────────────────────────
-  async function handleScopeChange(scope: StandupScope) {
-    setStandupScope(scope);
-    await window.vermilian.saveConfig({ standupScope: scope });
-  }
   async function handleWindowChange(win: StandupWindow) {
     setStandupWindow(win);
     await window.vermilian.saveConfig({ standupWindow: win });
@@ -510,9 +506,11 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         </Tooltip>
         <Tooltip
           content={
-            hasClaudeKey
-              ? 'Daily stand-up report'
-              : (aiUnavailableReason ?? 'Checking whether AI is available for this workspace…')
+            !standup.available
+              ? standup.reason
+              : hasClaudeKey
+                ? 'Daily stand-up report'
+                : (aiUnavailableReason ?? 'Checking whether AI is available for this workspace…')
           }
         >
           <Button
@@ -521,7 +519,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
             kind="tertiary"
             leftIcon={Sun}
             onClick={() => setShowStandup(true)}
-            disabled={!hasClaudeKey}
+            disabled={!hasClaudeKey || !standup.available}
           >
             Stand-up
           </Button>
@@ -686,13 +684,10 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
       )}
       {showStandup && (
         <StandupModal
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
+          workspaceName={activeContext.data?.workspaceName ?? ''}
           dailyNotesFolder={dailyNotesFolder}
-          initialScope={standupScope}
           initialWindow={standupWindow}
           onClose={() => setShowStandup(false)}
-          onScopeChange={handleScopeChange}
           onWindowChange={handleWindowChange}
         />
       )}

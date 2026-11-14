@@ -17,6 +17,7 @@
 import {
   CONFIG_ARTICLE_TITLE,
   JIRA_PROFILE_ARTICLE_TITLE,
+  globalMasterPlanArticleId,
   buildMigrationTargets,
   documentDifferences,
   jiraProfileAllowsCompletion,
@@ -108,6 +109,8 @@ async function plan(
   }
   const parsed = parseLegacyConfig(configs[0].content);
   if (!parsed.ok) return { ok: false, reason: parsed.reason, message: parsed.message };
+  const masterPlan = globalMasterPlanArticleId(sources.articles);
+  if (!masterPlan.ok) return masterPlan;
 
   let jira: JiraProfileSource = { kind: 'none' };
   let jiraProfile: JiraProfileMigration = { status: 'none' };
@@ -130,7 +133,7 @@ async function plan(
   }
   const existing = new Map(listed.workspaces.map((e) => [e.workspaceId, e]));
 
-  const { targets, notMigrated } = buildMigrationTargets(parsed.config, jira, serverUrl, options);
+  const { targets, notMigrated } = buildMigrationTargets(parsed.config, jira, serverUrl, options, masterPlan.articleId);
   const items = targets.map((t) => {
     if (t.kind === 'invalid') return t.item;
     const d = t.document;
@@ -173,6 +176,7 @@ async function plan(
     ...finish(items, jiraProfile),
     notMigrated,
     configArticleId: configs[0].id,
+    masterPlanArticleId: masterPlan.articleId,
   };
 }
 

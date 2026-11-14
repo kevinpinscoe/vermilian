@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, ModalContent, ModalHeader, Button, Text, Loader, Tooltip } from '@vibe/core';
-import type { StandupScope, StandupWindow } from '../../../shared/config';
-import type { Workspace } from '../../../shared/workspace';
+import type { StandupWindow } from '../../../shared/config';
 import { useToastStore } from '../../stores/toast';
 import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './StandupModal.module.css';
@@ -51,35 +50,28 @@ function isoTime(d: Date): string {
 }
 
 interface StandupModalProps {
-  workspaces: Workspace[];
-  activeWorkspaceId: string | null;
+  /** The active workspace — the only one a stand-up covers (VERM-48). */
+  workspaceName: string;
   dailyNotesFolder: string;
-  initialScope: StandupScope;
   initialWindow: StandupWindow;
   onClose: () => void;
-  onScopeChange: (scope: StandupScope) => void;
   onWindowChange: (window: StandupWindow) => void;
 }
 
 type Step = 'config' | 'loading' | 'report';
 
 export function StandupModal({
-  workspaces,
-  activeWorkspaceId,
+  workspaceName,
   dailyNotesFolder,
-  initialScope,
   initialWindow,
   onClose,
-  onScopeChange,
   onWindowChange,
 }: StandupModalProps) {
   const ai = useWorkspaceAi();
   const showToast = useToastStore((s) => s.show);
 
-  const [scope, setScope] = useState<StandupScope>(initialScope);
   const [window_, setWindow] = useState<StandupWindow>(initialWindow);
   const [customWindowHours, setCustomWindowHours] = useState(48);
-  const [customWorkspaceIds, setCustomWorkspaceIds] = useState<string[]>([]);
 
   const [step, setStep] = useState<Step>('config');
   const [markdown, setMarkdown] = useState('');
@@ -91,20 +83,9 @@ export function StandupModal({
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  function handleScopeChange(s: StandupScope) {
-    setScope(s);
-    onScopeChange(s);
-  }
-
   function handleWindowChange(w: StandupWindow) {
     setWindow(w);
     onWindowChange(w);
-  }
-
-  function toggleCustomWorkspace(id: string) {
-    setCustomWorkspaceIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
   }
 
   async function generate() {
@@ -114,10 +95,8 @@ export function StandupModal({
 
     const askedFrom = ai.workspaceId;
     const result = await window.vermilian.standupGenerate({
-      scope,
       window: window_,
       customWindowHours: window_ === 'custom' ? customWindowHours : undefined,
-      customWorkspaceIds: scope === 'custom' ? customWorkspaceIds : undefined,
       workspaceId: askedFrom,
     });
     // Asked from a workspace the user has since left: drop the answer (VERM-47).
@@ -146,10 +125,8 @@ export function StandupModal({
 
     const askedFrom = ai.workspaceId;
     const result = await window.vermilian.standupGenerate({
-      scope,
       window: window_,
       customWindowHours: window_ === 'custom' ? customWindowHours : undefined,
-      customWorkspaceIds: scope === 'custom' ? customWorkspaceIds : undefined,
       workspaceId: askedFrom,
     });
     // Asked from a workspace the user has since left: drop the answer (VERM-47).
@@ -211,52 +188,19 @@ export function StandupModal({
             {noTasks && (
               <div className={styles.banner} data-kind="info">
                 <Text type="text2">
-                  No recent activity to report. Try expanding the scope or window, or check that
+                  No recent activity to report in this workspace. Try a longer window, or check that
                   tasks are up to date in YouTrack.
                 </Text>
               </div>
             )}
 
-            {/* Scope */}
-            <fieldset className={styles.fieldset}>
-              <legend className={styles.legend}>Scope</legend>
-              {(
-                [
-                  ['all-workspace', 'All workspaces'],
-                  ['active-workspace', 'Active workspace'],
-                  ['custom', 'Custom workspaces…'],
-                ] as [StandupScope, string][]
-              ).map(([val, label]) => (
-                <label key={val} className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="standup-scope"
-                    value={val}
-                    checked={scope === val}
-                    onChange={() => handleScopeChange(val)}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-
-              {scope === 'custom' && workspaces.length > 0 && (
-                <div className={styles.workspaceChecklist}>
-                  {workspaces.map((ws) => (
-                    <label key={ws.id} className={styles.checkLabel}>
-                      <input
-                        type="checkbox"
-                        checked={customWorkspaceIds.includes(ws.id)}
-                        onChange={() => toggleCustomWorkspace(ws.id)}
-                      />
-                      <span>{ws.name}</span>
-                      {ws.id === activeWorkspaceId && (
-                        <span className={styles.activeBadge}>active</span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </fieldset>
+            {/* Covers the active workspace only (VERM-48). */}
+            <div className={styles.fieldset} data-testid="standup-workspace">
+              <span className={styles.legend}>Workspace</span>
+              <Text type="text2">
+                This stand-up covers <strong>{workspaceName || 'the current workspace'}</strong> only.
+              </Text>
+            </div>
 
             {/* Window */}
             <fieldset className={styles.fieldset}>

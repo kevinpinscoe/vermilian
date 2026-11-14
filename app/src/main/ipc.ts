@@ -1,4 +1,5 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
+import { standupProjectShortNames, type StandupWorkspace } from '../shared/standup';
 import {
   IPC,
   type CredentialStatus,
@@ -80,7 +81,9 @@ import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
 import * as checkpoint from './services/timerCheckpoint';
 import * as articleConfig from './services/articleConfig';
-import { getMasterPlanState } from './services/masterPlan';
+import { getMasterPlanState, getWorkspaceMasterPlanState } from './services/masterPlan';
+import { masterPlanArticleIdOf } from '../shared/workspaceMasterPlan';
+import type { MasterPlanState } from '../shared/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
@@ -560,6 +563,28 @@ export function registerIpc(): void {
     };
   }
 
+  // A workspace's stand-up inputs — its backend and folders — from whichever
+  // store the activation gate selects; null when it does not exist (VERM-48).
+  async function standupWorkspace(workspaceId: string): Promise<StandupWorkspace | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      return doc ? { id: doc.workspaceId, backend: backendContextOf(doc), folders: doc.folders } : null;
+    }
+    const legacy = await loadLegacyWorkspaceConfig();
+    const ws = legacy?.workspaces.find((w) => w.id === workspaceId);
+    return ws ? { id: ws.id, backend: null, folders: ws.folders } : null;
+  }
+
+  // One per-workspace document by ID, or null.
+  async function perWorkspaceDocument(workspaceId: string): Promise<WorkspaceDocument | null> {
+    if (!workspaceId) return null;
+    const client = await workspaceArticleClient();
+    const listed = client ? await workspaceArticles.listWorkspaceArticles(client) : null;
+    if (!listed?.ok) return null;
+    const entry = listed.workspaces.find((e) => e.workspaceId === workspaceId);
+    return entry?.status === 'ok' ? entry.document : null;
+  }
+
   async function activeWorkspaceContext(): Promise<ActiveWorkspaceContext> {
     const { choices, legacyHint, configuredServerUrl } = await workspaceChoices();
     const id = resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint);
@@ -742,10 +767,32 @@ export function registerIpc(): void {
 
   // Re-fetches and re-parses _vermilian-master-plan on every call — see
   // services/masterPlan.ts for why there is no persistent cache here.
-  ipcMain.handle(IPC.getMasterPlan, async () => {
+  //
+  // Legacy storage: the one global article, found by title, as before VERM-53.
+  // Per-workspace storage (VERM-48): the named workspace's own article by ID
+  // (the active one when none is named), read through that workspace's own
+  // YouTrack connection and credential — never the global article, a title
+  // search, or another workspace's connection.
+  ipcMain.handle(IPC.getMasterPlan, async (_e, workspaceId?: unknown): Promise<MasterPlanState> => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
+    if (workspaceStorageMode() === 'legacy') {
+      const token = await loadYtToken(cfg);
+      return getMasterPlanState(cfg.youtrackUrl ?? '', token ?? '');
+    }
+    const id = typeof workspaceId === 'string' && workspaceId ? workspaceId : (await activeWorkspaceContext()).workspaceId;
+    const doc = await perWorkspaceDocument(id);
+    if (!doc) return { kind: 'none' };
+    const articleId = masterPlanArticleIdOf(doc);
+    if (doc.backend.kind !== 'youtrack') return articleId ? { kind: 'reference-unsupported' } : { kind: 'none' };
+    const backend = doc.backend;
+    return getWorkspaceMasterPlanState(articleId, async (aid) => {
+      const r = await resolveWorkspaceCredential({ workspaceId: doc.workspaceId, credentialRef: backend.credentialRef }, cfg, credentialSourceIO);
+      let token: string;
+      if (r.ok) token = r.value;
+      else if (IS_E2E && e2eFakeJiraTokenAllowed(r)) token = 'e2e-youtrack-token'; // e2e: nothing configured
+      else return { ok: false }; // reference-error; the resolver's details stay here
+      return youtrack.getArticleById(backend.serverUrl, token, aid);
+    });
   });
 
   ipcMain.handle(IPC.openExternalUrl, async (_e, url: string): Promise<void> => {
@@ -933,6 +980,13 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:jiraSearchDelay', (_e, ms: number) => fakeJiraForE2E.setSearchDelayForTests(ms));
     // Which credential reference each fake Claude call used (VERM-47).
     ipcMain.handle('e2e:claudeCalls', () => fakeClaudeForE2E.getCallsForTests());
+    // The fake YouTrack (VERM-48): stand-up project queries, a stand-up hold,
+    // and master-plan articles by readable ID (content, or a refusal status).
+    ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
+    ipcMain.handle('e2e:standupDelay', (_e, ms: number) => fakeYouTrackForE2E.setStandupDelayForTests(ms));
+    ipcMain.handle('e2e:setArticle', (_e, articleId: string, value: { content: string } | { status: number }) =>
+      fakeYouTrackForE2E.setArticleForTests(articleId, value),
+    );
   }
 
   // ─── Per-workspace configuration articles (VERM-43) ─────────────────────────
@@ -1263,30 +1317,16 @@ export function registerIpc(): void {
         const ai = await beginAi(args.workspaceId);
         if (!ai.ok) return { ok: false, error: ai.error };
 
+        // The active workspace only (VERM-48): the projects come from the
+        // same workspace the credential was resolved for. Any scope a caller
+        // sends is ignored, and a switch while projects or issues load is
+        // caught by send() before Anthropic is contacted.
+        const workspace = await standupWorkspace(ai.workspaceId);
         const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
-        const wsConfig = await readWorkspaceConfig();
-
-        let projectShortNames: string[];
-        if (args.scope === 'active-workspace' && wsConfig) {
-          const activeWs = await localActiveWorkspace(wsConfig);
-          const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
-          projectShortNames = allProjects
-            .filter((p) => projectIds.has(p.id))
-            .map((p) => p.shortName);
-        } else if (args.scope === 'custom' && args.customWorkspaceIds?.length && wsConfig) {
-          const allowedIds = args.customWorkspaceIds;
-          const projectIds = new Set(
-            wsConfig.workspaces
-              .filter((w) => allowedIds.includes(w.id))
-              .flatMap((w) => w.folders.flatMap((f) => f.projectIds)),
-          );
-          projectShortNames = allProjects
-            .filter((p) => projectIds.has(p.id))
-            .map((p) => p.shortName);
-        } else {
-          // all-workspace → all projects
-          projectShortNames = allProjects.map((p) => p.shortName);
-        }
+        const projects = standupProjectShortNames(workspace, cfg.youtrackUrl, allProjects);
+        if (!projects.ok) return { ok: false, error: projects.error };
+        const projectShortNames = projects.shortNames;
+        if (projectShortNames.length === 0) return { ok: true, markdown: '', taskCount: 0 };
 
         const windowHours =
           args.window === '24h' ? 24

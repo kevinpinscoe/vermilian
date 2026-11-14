@@ -14,6 +14,7 @@
 import { youtrack as yt } from '../api/client';
 import { parseMasterPlan } from '../../shared/masterPlan';
 import type { MasterPlanState } from '../../shared/masterPlan';
+import { isMasterPlanArticleId } from '../../shared/workspaceSchema';
 
 export async function getMasterPlanState(url: string, token: string): Promise<MasterPlanState> {
   if (!url || !token) return { kind: 'none' };
@@ -43,4 +44,41 @@ export async function getMasterPlanState(url: string, token: string): Promise<Ma
     default:
       return { kind: 'none' };
   }
+}
+
+// ─── A workspace's own master plan, by article ID (VERM-48) ──────────────────
+
+/** One article read by ID; `status` is the HTTP status of a refusal, when known. */
+export type ArticleFetch =
+  | { ok: true; article: { id: string; content: string; updated: number } }
+  | { ok: false; status?: number };
+
+/**
+ * The master plan a per-workspace-storage workspace names. `fetchArticle`
+ * reads through that workspace's own YouTrack connection and credential.
+ * null is None: nothing is fetched. Exactly the referenced article is read;
+ * a missing or unreadable one is reported as such, and never replaced by the
+ * global `_vermilian-master-plan` article or a title search.
+ */
+export async function getWorkspaceMasterPlanState(
+  articleId: string | null,
+  fetchArticle: (articleId: string) => Promise<ArticleFetch>,
+): Promise<MasterPlanState> {
+  if (articleId === null) return { kind: 'none' };
+  if (!isMasterPlanArticleId(articleId)) return { kind: 'reference-error', articleId: '' };
+  const r = await fetchArticle(articleId);
+  if (!r.ok) {
+    if (r.status === 404) return { kind: 'reference-not-found', articleId };
+    if (r.status === 401 || r.status === 403) return { kind: 'reference-inaccessible', articleId };
+    return { kind: 'reference-error', articleId };
+  }
+  const parsed = parseMasterPlan(r.article.content);
+  return {
+    kind: 'loaded',
+    articleId,
+    updated: r.article.updated,
+    outcomes: parsed.outcomes,
+    diagnostics: parsed.diagnostics,
+    parseStatus: parsed.status,
+  };
 }

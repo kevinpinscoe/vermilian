@@ -76,6 +76,8 @@ export function buildWorkspaceDocument(input: NewWorkspaceInput): BuildWorkspace
     // None unless the form chose one: a new workspace is never given
     // anthropic-1 (VERM-47, proposal R5.4 G3).
     ai: { credentialRef: input.aiCredentialRef ?? null },
+    // None: a new workspace has no master plan until one is chosen (VERM-48).
+    masterPlan: { articleId: null },
     folders: [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, order: 0, parentId: null, projectIds: [] }],
     boards: {},
     dismissals: {},

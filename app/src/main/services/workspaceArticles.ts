@@ -52,6 +52,7 @@ import {
 
 export interface WorkspaceArticleRecord {
   id: string;
+  idReadable?: string; // e.g. VERM-A-12; used for the master plan (VERM-48)
   summary: string;
   content: string;
   updated: number;

@@ -70,7 +70,11 @@ export interface WorkspaceAiOperationRequest extends WorkspaceAiKeyRequest {
 
 export type WorkspaceAiSend = <T>(request: (key: string) => Promise<T>) => Promise<{ ok: true; value: T } | { ok: false; error: string }>;
 
-export type WorkspaceAiOperation = { ok: true; send: WorkspaceAiSend } | { ok: false; error: string };
+export type WorkspaceAiOperation =
+  // workspaceId: the workspace the operation belongs to — whatever data the
+  // request carries must come from this workspace and no other (VERM-48).
+  | { ok: true; workspaceId: string; send: WorkspaceAiSend }
+  | { ok: false; error: string };
 
 /**
  * Begins one AI operation for the active workspace. On success, `send` makes
@@ -88,5 +92,5 @@ export async function beginWorkspaceAiOperation(req: WorkspaceAiOperationRequest
     if (req.currentGeneration() !== req.startGeneration) return { ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE };
     return { ok: true, value: await request(key) };
   };
-  return { ok: true, send };
+  return { ok: true, workspaceId: req.activeId, send };
 }

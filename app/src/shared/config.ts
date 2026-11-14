@@ -21,7 +21,6 @@ export interface CredentialSourceConfig {
   file: string;
 }
 
-export type StandupScope = 'all-workspace' | 'active-workspace' | 'custom';
 export type StandupWindow = '24h' | '48h' | '7d' | 'custom';
 
 export interface AppConfig {
@@ -72,7 +71,9 @@ export interface AppConfig {
   defaultWorklogType: string;
   dailyNotesFolder: string;
   theme: ThemeSetting;
-  standupScope: StandupScope;
+  // standupScope was withdrawn in VERM-48: stand-ups cover the active
+  // workspace only. An older app-config.json may still carry it; it is
+  // read with the rest of the file and ignored.
   standupWindow: StandupWindow;
 }
 
@@ -96,6 +97,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   defaultWorklogType: 'Development',
   dailyNotesFolder: '',
   theme: 'light',
-  standupScope: 'all-workspace',
   standupWindow: '48h',
 };

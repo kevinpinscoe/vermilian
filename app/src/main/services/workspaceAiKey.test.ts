@@ -280,3 +280,11 @@ describe('beginWorkspaceAiOperation — revalidated immediately before Anthropic
     expect(JSON.stringify(op)).not.toContain('fictional-slow-key-444'); // the handle carries no visible key
   });
 });
+
+describe('beginWorkspaceAiOperation — the workspace it belongs to (VERM-48)', () => {
+  it("names the active workspace the credential was resolved for, so its data can come from that workspace alone", async () => {
+    const { req } = request({ activeId: 'ws-work', requestedWorkspaceId: 'ws-work' });
+    const op = await beginWorkspaceAiOperation({ ...req, startGeneration: 0, currentGeneration: () => 0 });
+    expect(op).toMatchObject({ ok: true, workspaceId: 'ws-work' });
+  });
+});

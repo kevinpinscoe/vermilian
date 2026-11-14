@@ -232,6 +232,13 @@ export type MasterPlanState =
   // 'discovery-error' so a bounded search is never read as proof of
   // absence or uniqueness.
   | { kind: 'discovery-incomplete' }
+  // Per-workspace storage (VERM-48): the workspace names its own article by
+  // readable ID. Each failure is its own state, never collapsed into 'none'
+  // and never answered by a title search or the global article instead.
+  | { kind: 'reference-not-found'; articleId: string } // no such article
+  | { kind: 'reference-inaccessible'; articleId: string } // 401/403 with the workspace's credential
+  | { kind: 'reference-error'; articleId: string } // malformed reference, credential failure or request failure
+  | { kind: 'reference-unsupported' } // a Jira workspace: it has no YouTrack connection to read one through
   | {
       kind: 'loaded';
       articleId: string;
@@ -258,6 +265,12 @@ export function masterPlanDiagnosticSignature(state: MasterPlanState): string | 
       return 'discovery-error';
     case 'discovery-incomplete':
       return 'discovery-incomplete';
+    case 'reference-not-found':
+    case 'reference-inaccessible':
+    case 'reference-error':
+      return `${state.kind}:${state.articleId}`;
+    case 'reference-unsupported':
+      return state.kind;
     case 'loaded': {
       if (state.parseStatus === 'valid' && state.diagnostics.length === 0) return null;
       const diagKey = state.diagnostics

@@ -92,7 +92,7 @@ const api: VermilianAPI = {
   forceResyncWorkspaceConfig: () => ipcRenderer.invoke(IPC.forceResyncWorkspaceConfig),
   getIssues: (args: GetIssuesArgs) => ipcRenderer.invoke(IPC.getIssues, args),
   searchIssues: (args: SearchIssuesArgs) => ipcRenderer.invoke(IPC.searchIssues, args),
-  getMasterPlan: () => ipcRenderer.invoke(IPC.getMasterPlan),
+  getMasterPlan: (workspaceId?: string) => ipcRenderer.invoke(IPC.getMasterPlan, workspaceId),
   openExternalUrl: (url: string) => ipcRenderer.invoke(IPC.openExternalUrl, url),
   getIssueDetail: (issueId: string) => ipcRenderer.invoke(IPC.getIssueDetail, issueId),
   patchIssue: (args: PatchIssueArgs) => ipcRenderer.invoke(IPC.patchIssue, args),
@@ -135,6 +135,9 @@ const api: VermilianAPI = {
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),
   debugGetClaudeCalls: () => ipcRenderer.invoke('e2e:claudeCalls'),
+  debugGetStandupQueries: () => ipcRenderer.invoke('e2e:standupQueries'),
+  debugSetStandupDelay: (ms: number) => ipcRenderer.invoke('e2e:standupDelay', ms),
+  debugSetArticle: (articleId: string, value: unknown) => ipcRenderer.invoke('e2e:setArticle', articleId, value),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

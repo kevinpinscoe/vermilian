@@ -1,18 +1,28 @@
-// React Query wrapper for the _vermilian-master-plan Knowledge Base article
-// (ADR-0008). Deliberately the same refresh lifecycle Priority Desk's own
-// issue queries already use (candidates.ts: `staleTime: 60_000`) rather than
-// a bespoke cache — the main process re-fetches and re-parses on every call
-// (see main/services/masterPlan.ts), so this staleTime is what actually
-// governs how often a hand-edit in YouTrack shows up here.
+// React Query wrapper for the master plan (ADR-0008). Deliberately the same
+// refresh lifecycle Priority Desk's own issue queries already use
+// (candidates.ts: `staleTime: 60_000`) rather than a bespoke cache — the main
+// process re-fetches and re-parses on every call (see
+// main/services/masterPlan.ts), so this staleTime is what actually governs
+// how often a hand-edit in YouTrack shows up here.
+//
+// Keyed by the active workspace (VERM-48): each workspace may have its own
+// plan or none, so switching workspaces switches the query, and an answer
+// that arrives for a workspace the user has left lands in that workspace's
+// entry, never on the new one's desk.
 import { useQuery } from '@tanstack/react-query';
 import type { MasterPlanState } from '../../../shared/masterPlan';
+import { useActiveWorkspace } from '../workspace-nav/api';
 
-export const MASTER_PLAN_QUERY_KEY = ['youtrack', 'master-plan'];
+export const MASTER_PLAN_QUERY_KEY = ['youtrack', 'master-plan'] as const;
+
+export const masterPlanQueryKey = (workspaceId: string) => [...MASTER_PLAN_QUERY_KEY, workspaceId] as const;
 
 export function useMasterPlan() {
+  const workspaceId = useActiveWorkspace().data?.workspaceId;
   return useQuery<MasterPlanState>({
-    queryKey: MASTER_PLAN_QUERY_KEY,
-    queryFn: () => window.vermilian.getMasterPlan(),
+    queryKey: masterPlanQueryKey(workspaceId ?? ''),
+    queryFn: () => window.vermilian.getMasterPlan(workspaceId),
+    enabled: workspaceId !== undefined,
     staleTime: 60_000,
   });
 }
