@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AttentionBox, IconButton, Loader, Text } from '@vibe/core';
 import { CloseSmall } from '@vibe/icons';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { commentTimeLabel, jiraDetailRows } from './jiraDetail';
 import { needsJiraReconnect } from '../../../shared/jiraConnection';
+import { applyJiraDirectRead, boardIssueOf } from './jiraBoardSync';
 import styles from './JiraIssueDetailPanel.module.css';
 
 interface JiraIssueDetailPanelProps {
@@ -54,9 +55,18 @@ function JiraMarkdown({ text, testId }: { text: string; testId: string }) {
  * writes to Jira.
  */
 export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIssueDetailPanelProps) {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: workspaceJiraIssueDetailQueryKey(workspaceId, issueKey),
-    queryFn: () => window.vermilian.getWorkspaceJiraIssueDetail({ workspaceId, issueKey }),
+    queryFn: async ({ signal }) => {
+      const res = await window.vermilian.getWorkspaceJiraIssueDetail({ workspaceId, issueKey });
+      // A direct read is the issue itself, not the search index, so it also
+      // freshens the board's card; an older poll result cannot undo it, nor
+      // a full read whose index lags it, for a bounded grace period
+      // (VERM-39, shared/jiraPoll.ts). Never applied once abandoned.
+      if (res.ok && !signal.aborted) applyJiraDirectRead(queryClient, workspaceId, boardIssueOf(res.issue));
+      return res;
+    },
     staleTime: 60 * 1000,
   });
 

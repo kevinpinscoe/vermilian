@@ -6,6 +6,14 @@ import { formatDate } from '../project-board/KanbanView';
 import { jiraBoardColumns } from './jiraBoard';
 import { needsJiraReconnect, type WorkspaceJiraFailure } from '../../../shared/jiraConnection';
 import { JiraReconnect } from './JiraReconnect';
+import { JIRA_FULL_REFRESH_MS, JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
+import {
+  fetchFullJiraIssues,
+  pollJiraProject,
+  workspaceJiraIssuesPrefix,
+  workspaceJiraIssuesQueryKey,
+  workspaceJiraPollQueryKey,
+} from './jiraBoardSync';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraWorkspaceBoardProps {
@@ -19,8 +27,7 @@ interface JiraWorkspaceBoardProps {
   onOpenSettings: () => void;
 }
 
-export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
-  ['workspace', 'jira-issues', workspaceId, projectKey, includeResolved] as const;
+export { workspaceJiraIssuesQueryKey } from './jiraBoardSync';
 
 /**
  * A Jira workspace's board, read-only (VERM-34). Issues come from Jira through
@@ -39,20 +46,44 @@ export function JiraWorkspaceBoard({
 }: JiraWorkspaceBoardProps) {
   const [showDone, setShowDone] = useState(false);
 
+  const queryClient = useQueryClient();
+  // The issue lists: the full, authoritative read of each project, refreshed
+  // every JIRA_FULL_REFRESH_MS so deleted and moved-away issues eventually
+  // disappear (VERM-39, shared/jiraPoll.ts).
   const results = useQueries({
     queries: projectKeys.map((projectKey) => ({
       queryKey: workspaceJiraIssuesQueryKey(workspaceId, projectKey, showDone),
-      queryFn: () => window.vermilian.getWorkspaceJiraIssues({ workspaceId, projectKey, includeResolved: showDone }),
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchFullJiraIssues(queryClient, workspaceId, projectKey, showDone, signal),
       staleTime: 60 * 1000,
+      refetchInterval: JIRA_FULL_REFRESH_MS,
+      refetchIntervalInBackground: false,
     })),
   });
 
-  const queryClient = useQueryClient();
+  // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
+  // visible, once a project's list has loaded. It merges what changed into
+  // the lists above and stores nothing of its own.
+  useQueries({
+    queries: projectKeys.map((projectKey, i) => ({
+      queryKey: workspaceJiraPollQueryKey(workspaceId, projectKey, showDone),
+      queryFn: ({ signal }: { signal: AbortSignal }) => pollJiraProject(queryClient, workspaceId, projectKey, showDone, signal),
+      enabled: results[i]?.data?.ok === true,
+      staleTime: JIRA_POLL_INTERVAL_MS,
+      refetchInterval: JIRA_POLL_INTERVAL_MS,
+      refetchIntervalInBackground: false,
+      // Catch up as soon as a hidden window is shown again — a full read if
+      // it was hidden past the lookback — instead of at the next tick. Only
+      // this query: the app's default stays off.
+      refetchOnWindowFocus: true,
+      retry: false,
+    })),
+  });
+
   // A rejected token or unresolvable credential fails every project alike, so
   // one such failure puts the whole board in the reconnect state (VERM-40).
   const reconnect = results.map((r) => r.data).find((d): d is WorkspaceJiraFailure => needsJiraReconnect(d)) ?? null;
   const retry = () => {
-    void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issues', workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: workspaceJiraIssuesPrefix(workspaceId) });
     void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issue-detail', workspaceId] });
   };
 
@@ -61,10 +92,17 @@ export function JiraWorkspaceBoard({
 
   const { issues, priorities } = useMemo(() => {
     const all: BoardIssue[] = [];
+    const seen = new Set<string>();
     const prio: Record<string, string[]> = {};
     results.forEach((r, i) => {
       if (r.data?.ok) {
-        all.push(...r.data.issues);
+        // One card per issue, even mid-move between two of the projects.
+        for (const issue of r.data.issues) {
+          if (!seen.has(issue.id)) {
+            seen.add(issue.id);
+            all.push(issue);
+          }
+        }
         prio[projectKeys[i]] = r.data.priorities;
       }
     });

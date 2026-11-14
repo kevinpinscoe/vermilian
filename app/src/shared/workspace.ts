@@ -71,6 +71,11 @@ export interface BoardIssue {
   // shared/jiraProjectSettings.ts); absent for YouTrack, whose shared status
   // vocabulary the board reads by name.
   statusRole?: StatusRole | null;
+  // When the issue was last updated, epoch ms. Set for Jira issues (from
+  // Jira's `updated`; null when Jira gave none or an unparseable one), so a
+  // poll can tell which of two copies is newer (VERM-39, shared/jiraPoll.ts);
+  // absent for YouTrack.
+  updated?: number | null;
 }
 
 /** What a status means to Vermilian, whatever the workflow calls it. */

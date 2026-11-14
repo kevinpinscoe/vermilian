@@ -18,6 +18,8 @@
 //   parentEpic       the `parent` when it is an Epic; the legacy Epic Link
 //                    field as a fallback when one is configured
 //   isEpic           the issue's own type is an Epic
+//   updated          Jira's `updated` as epoch ms; null when absent or
+//                    unparseable (VERM-39 — never invented)
 //
 // Every other BoardIssueFields entry is a YouTrack-only field (Category,
 // Ticket, Focus, …) and is null: such fields do not exist in Jira (proposal
@@ -161,6 +163,7 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
     parentEpic: parentEpicOf(f, options),
     isEpic: isEpicType(f.issuetype as JiraIssueType | null | undefined),
     statusRole,
+    updated: timestampMs(f.updated),
   };
 }
 

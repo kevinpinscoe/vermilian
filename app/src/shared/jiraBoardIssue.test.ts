@@ -50,6 +50,18 @@ describe('mapJiraIssue — identity and summary', () => {
   });
 });
 
+describe('mapJiraIssue — last updated (VERM-39)', () => {
+  it("carries Jira's updated as epoch ms", () => {
+    expect(mapJiraIssue(jira({ updated: '2026-11-10T09:00:00.000+0000' })).updated).toBe(Date.parse('2026-11-10T09:00:00.000Z'));
+  });
+
+  it('is null, never invented, when updated is absent or unparseable', () => {
+    expect(mapJiraIssue(jira({})).updated).toBeNull();
+    expect(mapJiraIssue(jira({ updated: 'not a date' })).updated).toBeNull();
+    expect(mapJiraIssue(jira({ updated: 42 })).updated).toBeNull();
+  });
+});
+
 describe('mapJiraIssue — status category', () => {
   it('keeps the workflow status name and leaves an open issue unresolved', () => {
     for (const key of ['new', 'indeterminate']) {
