@@ -1,0 +1,111 @@
+/* JiraIssueDetailPanel — read-only, slides in from the right like TaskDetailPanel */
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(380px, 38%, 600px);
+  background: var(--surface-main-background-color, #fff);
+  border-left: 1px solid var(--border-color, #e0e0e0);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10;
+  animation: slideIn 0.18s ease-out;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.headerLeft { display: flex; flex-direction: column; gap: 2px; }
+.idRow { display: flex; align-items: center; gap: 8px; }
+
+.issueKey {
+  font-weight: 700;
+  color: var(--primary-color, #0073ea);
+}
+
+.readOnly {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  color: var(--secondary-text-color, #444);
+}
+
+.projectName { font-size: 12px; color: var(--secondary-text-color, #444); }
+
+.loaderWrap { display: flex; justify-content: center; padding: 32px; }
+.errorWrap { padding: 16px; }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary { overflow-wrap: anywhere; }
+
+.fields { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.fieldRow { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: baseline; }
+.fieldLabel { font-size: 12px; color: var(--secondary-text-color, #444); }
+.fieldValue { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.sectionTitle { margin: 0; font-size: 13px; font-weight: 600; }
+.count { font-weight: 400; color: var(--secondary-text-color, #444); }
+.empty { margin: 0; font-size: 13px; color: var(--secondary-text-color, #444); }
+
+.comment {
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  padding-top: 8px;
+}
+
+.commentMeta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; margin-bottom: 4px; }
+.commentAuthor { font-weight: 600; }
+.commentTime { color: var(--secondary-text-color, #444); }
+
+.markdown {
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown pre, .markdown table { margin: 0 0 8px; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: 12px 0 6px; font-size: 15px; }
+.markdown ul, .markdown ol { padding-left: 20px; }
+.markdown blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--border-color, #e0e0e0);
+  color: var(--secondary-text-color, #444);
+}
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--allgrey-background-color, rgba(0, 0, 0, 0.05));
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.markdown pre { overflow-x: auto; padding: 8px; background: var(--allgrey-background-color, rgba(0, 0, 0, 0.05)); border-radius: 4px; }
+.markdown pre code { padding: 0; background: none; }
+.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+.markdown th, .markdown td { border: 1px solid var(--border-color, #e0e0e0); padding: 4px 6px; text-align: left; }
+.markdown a { color: var(--primary-color, #0073ea); }

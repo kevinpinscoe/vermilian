@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
 import { Sun, Settings, CheckList } from '@vibe/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,6 +27,8 @@ import {
 } from './features/workspace-nav/api';
 import { JiraProjectsModal } from './features/workspace-nav/JiraProjectsModal';
 import { JiraWorkspaceBoard } from './features/jira-board/JiraWorkspaceBoard';
+import { JiraIssueDetailPanel } from './features/jira-board/JiraIssueDetailPanel';
+import { jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
 import { connectionErrorMessage } from './features/settings/errors';
 import type { StandupScope, StandupWindow } from '../shared/config';
@@ -184,6 +186,19 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const [showDailyReview, setShowDailyReview] = useState(false);
   const [showJiraList, setShowJiraList] = useState(false);
   const [showJiraProjects, setShowJiraProjects] = useState(false);
+  // The Jira issue whose read-only detail panel is open (VERM-35). It shows
+  // only while its workspace is the active Jira board and its project is still
+  // one of that workspace's, so a switch or a project change closes it.
+  const [selectedJiraIssue, setSelectedJiraIssue] = useState<{ workspaceId: string; issueKey: string } | null>(null);
+  const openJiraIssueKey =
+    selectedJiraIssue &&
+    activeContext.data?.backend?.kind === 'jira' &&
+    activeContext.data.storage === 'per-workspace' &&
+    activeContext.data.workspaceId === selectedJiraIssue.workspaceId &&
+    activeJiraProjectKeys.includes(jiraProjectKeyOf(selectedJiraIssue.issueKey))
+      ? selectedJiraIssue.issueKey
+      : null;
+  const closeJiraIssue = useCallback(() => setSelectedJiraIssue(null), []);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
   const [switchStopping, setSwitchStopping] = useState(false);
@@ -571,6 +586,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               workspaceName={activeContext.data.workspaceName}
               projectKeys={activeJiraProjectKeys}
               onChooseProjects={() => setShowJiraProjects(true)}
+              selectedIssueKey={openJiraIssueKey}
+              onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}
             />
           ) : activeContext.data && !activeContext.data.boardAvailable ? (
             <div className={styles.placeholder} data-testid="workspace-board-unavailable">
@@ -615,6 +632,15 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
                 Select a project from the left rail to get started.
               </Text>
             </div>
+          )}
+
+          {openJiraIssueKey && selectedJiraIssue && (
+            <JiraIssueDetailPanel
+              key={`${selectedJiraIssue.workspaceId}:${openJiraIssueKey}`}
+              workspaceId={selectedJiraIssue.workspaceId}
+              issueKey={openJiraIssueKey}
+              onClose={closeJiraIssue}
+            />
           )}
 
           {selectedIssueId && (

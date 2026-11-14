@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isJiraIssueKey,
   jiraBoardFields,
   jiraDateToEpochMs,
   jiraDetailFields,
@@ -236,5 +237,17 @@ describe('jqlTextClause', () => {
     expect(jqlTextClause('a" OR project = "X')).toBe('text ~ "a\\" OR project = \\"X"');
     expect(jqlTextClause('back\\slash')).toBe('text ~ "back\\\\slash"');
     expect(jqlTextClause('two\nlines')).toBe('text ~ "two lines"');
+  });
+});
+
+describe('isJiraIssueKey', () => {
+  it('accepts a project key, a hyphen and a positive number', () => {
+    for (const k of ['DEMO-1', 'OPS_2-7', 'A1-1234']) expect(isJiraIssueKey(k)).toBe(true);
+  });
+  it('refuses anything else', () => {
+    for (const k of ['', 'DEMO', 'demo-1', 'DEMO-0', 'DEMO-01', '1DEMO-1', 'DEMO-1 ', 'DEMO-1/../x', 'DE MO-1', 7, null, undefined]) {
+      expect(isJiraIssueKey(k)).toBe(false);
+    }
+    expect(isJiraIssueKey(`${'A'.repeat(260)}-1`)).toBe(false);
   });
 });

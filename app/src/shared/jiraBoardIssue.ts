@@ -164,6 +164,14 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
   };
 }
 
+/**
+ * Whether a string is a Jira issue key: a project key (an uppercase letter,
+ * then uppercase letters, digits or underscores), a hyphen and a number.
+ */
+export function isJiraIssueKey(key: unknown): key is string {
+  return typeof key === 'string' && key.length <= 255 && /^[A-Z][A-Z0-9_]*-[1-9]\d*$/.test(key);
+}
+
 /** The project key an issue key belongs to: `OPS_2-7` → `OPS_2`. */
 export function jiraProjectKeyOf(issueKey: string): string {
   return issueKey.replace(/-\d+$/, '');

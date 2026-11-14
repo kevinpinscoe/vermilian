@@ -27,6 +27,7 @@ import {
   type GetRecommendationArgs,
   type PostRecommendationAuditArgs,
   type GetWorkspaceJiraIssuesArgs,
+  type GetWorkspaceJiraIssueDetailArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
 import type { JiraProfile } from './shared/jiraProfile';
@@ -123,6 +124,8 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.checkWorkspaceCredential, workspaceId, credentialRef),
   listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
   getWorkspaceJiraIssues: (args: GetWorkspaceJiraIssuesArgs) => ipcRenderer.invoke(IPC.getWorkspaceJiraIssues, args),
+  getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
+    ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
 };
 
