@@ -11,6 +11,8 @@
 //
 // Pure TypeScript: no Electron, no React. Safe in either process and in tests.
 
+import type { BoardIssue, IssueDetail } from './workspace';
+
 export const TRACKER_KINDS = ['youtrack', 'jira'] as const;
 
 export type TrackerKind = (typeof TRACKER_KINDS)[number];
@@ -95,4 +97,54 @@ export function parseIssueId(id: unknown): DecodedIssueId {
 
 export function trackerKindOf(id: NamespacedIssueId): TrackerKind {
   return parseIssueId(id).kind;
+}
+
+// ── Tracker providers (VERM-27, ADR-0011) ─────────────────────────────────────
+//
+// A provider is one backend connection — a tracker client bound to its server
+// URL and credential — behind a backend-neutral surface. Main-process code asks
+// a provider for projects and issues instead of calling a client directly, so a
+// second backend (Jira, VERM-28) can stand behind the same calls.
+//
+// Issue IDs passed to and returned by a provider are the backend's own local
+// IDs (`DEMO-12`, `2-45`), never namespaced: a provider only ever sees its own
+// backend's issues. Namespacing applies to identifiers stored outside a
+// backend, above.
+
+/** A project as every backend can describe it. */
+export interface TrackerProject {
+  id: string;
+  name: string;
+  shortName: string;
+}
+
+/** Read operations every backend provides. */
+export interface TrackerProvider {
+  readonly kind: TrackerKind;
+  /** Display name of the account the credential authenticates as. */
+  getCurrentUser(): Promise<string>;
+  getProjects(): Promise<TrackerProject[]>;
+  getIssues(projectShortName: string, includeResolved?: boolean): Promise<BoardIssue[]>;
+  searchIssues(projectShortNames: string[], query: string): Promise<BoardIssue[]>;
+  getIssueDetail(issueId: string): Promise<IssueDetail>;
+}
+
+/**
+ * Write operations, for backends Vermilian may change. A read-only backend
+ * (Jira in Phase 1) implements TrackerProvider alone, so a write can only be
+ * reached through isWritableTracker().
+ */
+export interface WritableTrackerProvider extends TrackerProvider {
+  patchIssue(issueId: string, field: string, value: string | number | null): Promise<void>;
+  postComment(issueId: string, text: string): Promise<void>;
+  moveIssue(issueId: string, targetProjectId: string): Promise<void>;
+  deleteIssue(issueId: string): Promise<void>;
+  postWorklog(issueId: string, minutes: number, worklogType: string): Promise<void>;
+}
+
+const WRITE_METHODS = ['patchIssue', 'postComment', 'moveIssue', 'deleteIssue', 'postWorklog'] as const;
+
+export function isWritableTracker(p: TrackerProvider): p is WritableTrackerProvider {
+  const candidate = p as Partial<Record<(typeof WRITE_METHODS)[number], unknown>>;
+  return WRITE_METHODS.every((m) => typeof candidate[m] === 'function');
 }
