@@ -5,9 +5,11 @@ import {
   encodeIssueId,
   isNamespacedIssueId,
   isTrackerKind,
+  isWritableTracker,
   parseIssueId,
   trackerKindOf,
   type TrackerKind,
+  type TrackerProvider,
 } from './tracker';
 
 describe('TrackerKind', () => {
@@ -119,5 +121,33 @@ describe('parseIssueId', () => {
 
   it('throws on a malformed ID', () => {
     expect(() => parseIssueId('DEMO-5')).toThrow(/Malformed namespaced issue ID/);
+  });
+});
+
+describe('isWritableTracker', () => {
+  const reader: TrackerProvider = {
+    kind: 'jira',
+    getCurrentUser: async () => 'User',
+    getProjects: async () => [],
+    getIssues: async () => [],
+    searchIssues: async () => [],
+    getIssueDetail: async () => {
+      throw new Error('not used');
+    },
+  };
+  const noop = async () => undefined;
+
+  it('is false for a read-only provider', () => {
+    expect(isWritableTracker(reader)).toBe(false);
+  });
+
+  it('is false when any write operation is missing', () => {
+    const partial = { ...reader, patchIssue: noop, postComment: noop, moveIssue: noop, deleteIssue: noop };
+    expect(isWritableTracker(partial)).toBe(false);
+  });
+
+  it('is true when every write operation is present', () => {
+    const full = { ...reader, patchIssue: noop, postComment: noop, moveIssue: noop, deleteIssue: noop, postWorklog: noop };
+    expect(isWritableTracker(full)).toBe(true);
   });
 });

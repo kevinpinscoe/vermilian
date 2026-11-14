@@ -72,6 +72,7 @@ import {
 } from '../shared/activeWorkspace';
 import { MIGRATED_YOUTRACK_CREDENTIAL_REF } from '../shared/workspaceMigration';
 import { youtrack } from './api/client';
+import { createYouTrackProvider, type YouTrackProvider } from './providers/youtrackProvider';
 import { IS_E2E } from './e2e';
 import { claude } from './api/claudeClient';
 import * as standupService from './services/standup';
@@ -133,6 +134,13 @@ export function sendQuitRequested(): void {
   BrowserWindow.getAllWindows()[0]?.webContents.send('timer:quit-requested');
 }
 
+// Every YouTrack tracker call goes through the TrackerProvider binding
+// (VERM-27): the client is unchanged, and `youtrack` is still the e2e fake
+// under VERMILIAN_E2E.
+function youtrackTracker(url: string, token: string): YouTrackProvider {
+  return createYouTrackProvider(youtrack, url, token);
+}
+
 // Helpers — load credentials via the three-source chain (command → file → safeStorage).
 async function loadYtToken(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-token';
@@ -161,13 +169,13 @@ const youtrackRunwayStore = createYouTrackRunwayStore({
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    return (await youtrack.getIssueDetail(cfg.youtrackUrl, token, issueId)).fields;
+    return (await youtrackTracker(cfg.youtrackUrl, token).getIssueDetail(issueId)).fields;
   },
   async patch(issueId, field, value) {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    await youtrack.patchIssue(cfg.youtrackUrl, token, issueId, field, value);
+    await youtrackTracker(cfg.youtrackUrl, token).patchIssue(issueId, field, value);
   },
 });
 
@@ -205,7 +213,7 @@ function runwayFailure(e: unknown): { ok: false; error: string; code?: string } 
 // configurable") — so this is its own small helper rather than exposing
 // standupGenerate's three-way scope switch for one branch of it.
 async function activeWorkspaceProjectShortNames(url: string, token: string): Promise<string[]> {
-  const allProjects = await youtrack.getProjects(url, token);
+  const allProjects = await youtrackTracker(url, token).getProjects();
   const wsConfig = await readWorkspaceConfig();
   const activeWs = await localActiveWorkspace(wsConfig);
   const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
@@ -296,7 +304,7 @@ export function registerIpc(): void {
             cfg.youtrackTokenFile,
           ));
         if (!token) return { ok: false, message: 'No API token found (check command, file, or paste a token).' };
-        const displayName = await youtrack.getCurrentUser(args.url, token);
+        const displayName = await youtrackTracker(args.url, token).getCurrentUser();
         return { ok: true, displayName };
       } catch (e) {
         const err = e as { status?: number; message?: string };
@@ -323,7 +331,7 @@ export function registerIpc(): void {
           cfg.youtrackTokenFile,
         ));
       if (!url || !token) return ['Development'];
-      return youtrack.getWorklogTypes(url, token);
+      return youtrackTracker(url, token).getWorklogTypes();
     },
   );
 
@@ -456,7 +464,7 @@ export function registerIpc(): void {
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
     try {
-      return await youtrack.getProjects(cfg.youtrackUrl, token);
+      return await youtrackTracker(cfg.youtrackUrl, token).getProjects();
     } catch (e) {
       // youtrack.ts throws a plain { status, message } object. Electron
       // stringifies a non-Error thrown across IPC, so the renderer would see
@@ -597,7 +605,7 @@ export function registerIpc(): void {
       let toSave = config;
       if (cfg.youtrackUrl && token) {
         try {
-          const projects = await youtrack.getProjects(cfg.youtrackUrl, token);
+          const projects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
           toSave = pruneStaleProjectIds(config, new Set(projects.map((p) => p.id)));
         } catch {
           /* offline or request failed — save as-is */
@@ -625,7 +633,7 @@ export function registerIpc(): void {
         let wsConfig = await articleConfig.forceReload(cfg.youtrackUrl, token);
         if (wsConfig) {
           try {
-            const projects = await youtrack.getProjects(cfg.youtrackUrl, token);
+            const projects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
             const pruned = pruneStaleProjectIds(wsConfig, new Set(projects.map((p) => p.id)));
             if (JSON.stringify(pruned) !== JSON.stringify(wsConfig)) {
               articleConfig.updateWorkspaceConfig(pruned);
@@ -652,14 +660,14 @@ export function registerIpc(): void {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
-    return youtrack.getIssues(cfg.youtrackUrl, token, args.projectShortName, args.includeResolved);
+    return youtrackTracker(cfg.youtrackUrl, token).getIssues(args.projectShortName, args.includeResolved);
   });
 
   ipcMain.handle(IPC.searchIssues, async (_e, args: SearchIssuesArgs) => {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return [];
-    return youtrack.searchIssues(cfg.youtrackUrl, token, args.projectShortNames, args.query);
+    return youtrackTracker(cfg.youtrackUrl, token).searchIssues(args.projectShortNames, args.query);
   });
 
   // Re-fetches and re-parses _vermilian-master-plan on every call — see
@@ -685,7 +693,7 @@ export function registerIpc(): void {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    return youtrack.getIssueDetail(cfg.youtrackUrl, token, issueId);
+    return youtrackTracker(cfg.youtrackUrl, token).getIssueDetail(issueId);
   });
 
   ipcMain.handle(
@@ -695,7 +703,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrack.patchIssue(cfg.youtrackUrl, token, args.issueId, args.field, args.value);
+        await youtrackTracker(cfg.youtrackUrl, token).patchIssue(args.issueId, args.field, args.value);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -711,7 +719,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        const result = await youtrack.createIssue(cfg.youtrackUrl, token, args);
+        const result = await youtrackTracker(cfg.youtrackUrl, token).createIssue(args);
         return { ok: true, id: result.id, idReadable: result.idReadable };
       } catch (e) {
         const err = e as { message?: string };
@@ -727,7 +735,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrack.deleteIssue(cfg.youtrackUrl, token, issueId);
+        await youtrackTracker(cfg.youtrackUrl, token).deleteIssue(issueId);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -743,7 +751,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrack.moveIssue(cfg.youtrackUrl, token, args.issueId, args.targetProjectId);
+        await youtrackTracker(cfg.youtrackUrl, token).moveIssue(args.issueId, args.targetProjectId);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -771,7 +779,7 @@ export function registerIpc(): void {
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
         if (!claudeKey) return { ok: false, error: 'No Claude API key configured.' };
 
-        const issues = await youtrack.getIssuesForRecommendation(cfg.youtrackUrl, token, args.issueIds);
+        const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForRecommendation(args.issueIds);
         const result = await claude.getRecommendation(
           claudeKey,
           issues,
@@ -799,7 +807,7 @@ export function registerIpc(): void {
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
         const topIssueId = args.result.ranked[0].issueId;
-        await youtrack.postComment(cfg.youtrackUrl, token, topIssueId, comment);
+        await youtrackTracker(cfg.youtrackUrl, token).postComment(topIssueId, comment);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -822,7 +830,7 @@ export function registerIpc(): void {
 
       const projectShortNames = await activeWorkspaceProjectShortNames(cfg.youtrackUrl, token);
       const cutoffMs = Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000;
-      const { done } = await youtrack.getIssuesForStandup(cfg.youtrackUrl, token, projectShortNames, cutoffMs);
+      const { done } = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForStandup(projectShortNames, cutoffMs);
 
       return {
         ok: true,
@@ -997,7 +1005,7 @@ export function registerIpc(): void {
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
         if (!claudeKey) return { ok: false, error: 'No Claude API key configured.' };
 
-        const allProjects = await youtrack.getProjects(cfg.youtrackUrl, token);
+        const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
         const wsConfig = await readWorkspaceConfig();
 
         let projectShortNames: string[];
@@ -1029,9 +1037,7 @@ export function registerIpc(): void {
           : (args.customWindowHours ?? 48);
         const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
 
-        const issues = await youtrack.getIssuesForStandup(
-          cfg.youtrackUrl,
-          token,
+        const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForStandup(
           projectShortNames,
           cutoffMs,
         );
@@ -1079,7 +1085,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        await youtrack.postWorklog(cfg.youtrackUrl, token, args.issueId, args.minutes, args.worklogType);
+        await youtrackTracker(cfg.youtrackUrl, token).postWorklog(args.issueId, args.minutes, args.worklogType);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
