@@ -4,7 +4,8 @@
 // routes reject, so a spec can exercise the failure path.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
-import type { JiraAccount, JiraProbeResult } from './jira';
+import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
+import { isValidLocalId } from '../../shared/tracker';
 import type { JiraSearchIssue } from '../../shared/jiraIssue';
 
 export {
@@ -14,8 +15,19 @@ export {
   MY_OPEN_ISSUES_JQL,
   SEARCH_PAGE_SIZE,
   SEARCH_MAX_PAGES,
+  PROJECT_PAGE_SIZE,
+  PROJECT_MAX_PAGES,
+  isValidProjectKey,
+  projectIssuesJql,
 } from './jira';
-export type { JiraError, JiraTokenKind, JiraAccount, JiraProbeResult } from './jira';
+export type {
+  JiraError,
+  JiraTokenKind,
+  JiraAccount,
+  JiraProbeResult,
+  JiraProject,
+  ProjectSearchOptions,
+} from './jira';
 
 export const FAKE_JIRA_CLOUD_ID = 'e2e00000-0000-4000-8000-000000000000';
 export const FAKE_JIRA_BAD_TOKEN = 'e2e-bad-jira-token';
@@ -98,4 +110,56 @@ export async function searchJql(
 
 export async function searchMyOpenIssues(_profile: JiraProfile, token: string): Promise<JiraSearchIssue[]> {
   return searchJql('', '', token, '', []);
+}
+
+// ── Read client (VERM-28) ────────────────────────────────────────────────────
+
+export const FAKE_JIRA_PROJECTS: JiraProject[] = [
+  { id: '10000', key: 'DEMO', name: 'Demo' },
+  { id: '10010', key: 'OPS', name: 'Operations' },
+];
+
+function rejectBadToken(token: string): void {
+  if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
+}
+
+export async function jiraApiBase(profile: JiraProfile, token: string): Promise<string> {
+  const probe = await probeJiraToken(profile, token);
+  if (!probe.ok) throw { status: probe.status, message: probe.message };
+  return siteApiBase(profile.siteUrl);
+}
+
+export async function getIssue(
+  _base: string,
+  _email: string,
+  token: string,
+  key: string,
+  _fields?: readonly string[],
+): Promise<JiraSearchIssue> {
+  rejectBadToken(token);
+  if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
+  const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
+  if (!issue) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
+  return { ...issue, fields: { ...issue.fields } };
+}
+
+export async function listProjects(_base: string, _email: string, token: string, _maxPages?: number): Promise<JiraProject[]> {
+  rejectBadToken(token);
+  return FAKE_JIRA_PROJECTS.map((p) => ({ ...p }));
+}
+
+export async function searchProjectIssues(
+  _base: string,
+  _email: string,
+  token: string,
+  projectKey: string,
+  options: ProjectSearchOptions = {},
+): Promise<JiraSearchIssue[]> {
+  rejectBadToken(token);
+  if (!isValidProjectKey(projectKey)) throw { message: `Invalid Jira project key: ${JSON.stringify(projectKey)}` };
+  return FAKE_JIRA_ISSUES.filter(
+    (i) =>
+      i.key.startsWith(`${projectKey}-`) &&
+      (options.includeResolved || i.fields?.status?.statusCategory?.key !== 'done'),
+  ).map((i) => ({ ...i, fields: { ...i.fields } }));
 }
