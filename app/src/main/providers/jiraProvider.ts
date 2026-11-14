@@ -2,7 +2,8 @@
 //
 // Binds the Jira read client (api/jira.ts, VERM-28) to one connection — the
 // API base the token works through, the account email and the token — and
-// maps every issue through mapJiraIssue. It implements TrackerProvider alone,
+// maps every issue through mapJiraIssue with its own project's settings
+// (status mapping, due-date field — VERM-31). It implements TrackerProvider alone,
 // never WritableTrackerProvider: nothing in Phase 1 writes to Jira, and
 // isWritableTracker() is false for it.
 //
@@ -14,11 +15,12 @@ import type { TrackerProject, TrackerProvider } from '../../shared/tracker';
 import {
   jiraBoardFields,
   jiraDetailFields,
+  jiraProjectKeyOf,
   jqlTextClause,
   mapJiraIssue,
   mapJiraIssueDetail,
-  type JiraMappingOptions,
 } from '../../shared/jiraBoardIssue';
+import type { JiraProjectSettings, JiraProjectSettingsMap } from '../../shared/jiraProjectSettings';
 
 export interface JiraConnection {
   /** The site URL or gateway base the token works through (jiraApiBase). */
@@ -34,10 +36,12 @@ export interface JiraProvider extends TrackerProvider {
 export function createJiraProvider(
   client: typeof JiraClient,
   conn: JiraConnection,
-  options: JiraMappingOptions = {},
+  projectSettings: JiraProjectSettingsMap = {},
 ): JiraProvider {
   const { base, email, token } = conn;
-  const fields = jiraBoardFields(options);
+  const settingsFor = (projectKey: string): JiraProjectSettings =>
+    Object.prototype.hasOwnProperty.call(projectSettings, projectKey) ? projectSettings[projectKey] : {};
+  const mapIssue = (issue: Parameters<typeof mapJiraIssue>[0]) => mapJiraIssue(issue, settingsFor(jiraProjectKeyOf(issue.key)));
 
   return {
     kind: 'jira',
@@ -52,8 +56,14 @@ export function createJiraProvider(
     },
 
     async getIssues(projectKey, includeResolved) {
-      const issues = await client.searchProjectIssues(base, email, token, projectKey, { includeResolved, fields });
-      return issues.map((i) => mapJiraIssue(i, options));
+      const options = settingsFor(projectKey);
+      const issues = await client.searchProjectIssues(base, email, token, projectKey, {
+        includeResolved,
+        fields: jiraBoardFields(options),
+      });
+      // A board's issues belong to its project, except one moved away since
+      // the search ran; those take their new project's settings.
+      return issues.map(mapIssue);
     },
 
     async searchIssues(projectKeys, query) {
@@ -63,13 +73,16 @@ export function createJiraProvider(
       }
       const projects = `project in (${projectKeys.map((k) => `"${k}"`).join(', ')})`;
       const text = query.trim() ? ` AND ${jqlTextClause(query.trim())}` : '';
+      // Every searched project's fields, so each issue maps with its own.
+      const fields = [...new Set(projectKeys.flatMap((k) => jiraBoardFields(settingsFor(k))))];
       const issues = await client.searchJql(base, email, token, `${projects}${text} ORDER BY updated DESC`, fields);
-      return issues.map((i) => mapJiraIssue(i, options));
+      return issues.map(mapIssue);
     },
 
     async getIssueDetail(key) {
+      const options = settingsFor(jiraProjectKeyOf(key));
       const issue = await client.getIssue(base, email, token, key, jiraDetailFields(options));
-      return mapJiraIssueDetail(issue, options);
+      return mapJiraIssueDetail(issue, settingsFor(jiraProjectKeyOf(issue.key ?? key)));
     },
   };
 }

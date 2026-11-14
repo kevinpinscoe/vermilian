@@ -36,6 +36,7 @@ import {
   type Dismissals,
 } from './boardConfig';
 import { normaliseSiteUrl, type JiraProfile } from './jiraProfile';
+import { jiraProjectSettingsProblems, type JiraProjectSettingsMap } from './jiraProjectSettings';
 import { isTrackerKind } from './tracker';
 import type { WorkspaceFolder } from './workspace';
 
@@ -80,6 +81,10 @@ export interface WorkspaceDocument {
   folders: WorkspaceFolder[];
   boards: Record<string, BoardConfig>; // keyed by boardId (project ID or key)
   dismissals: Dismissals; // keyed by dismissalKey(workspaceId, issueId)
+  // Jira workspaces only, optional: each project's status mapping and
+  // due-date field choice, keyed by project key (VERM-31). A project with
+  // no entry uses Jira's status categories and the system due date.
+  jiraProjects?: JiraProjectSettingsMap;
 }
 
 export type WorkspaceValidationCode = 'invalid' | 'duplicate' | 'secret' | 'unsupported-schema' | 'malformed';
@@ -428,6 +433,23 @@ function validateBoards(c: Collector, boards: unknown) {
   }
 }
 
+function validateJiraProjects(c: Collector, jiraProjects: unknown, backendKind: unknown) {
+  if (jiraProjects === undefined) return;
+  if (!c.object(jiraProjects, 'jiraProjects')) return;
+  if (backendKind !== 'jira' && Object.keys(jiraProjects).length > 0) {
+    c.add('jiraProjects', 'jiraProjects is for Jira workspaces only.');
+    return;
+  }
+  for (const [key, settings] of Object.entries(jiraProjects)) {
+    const p = recordPath('jiraProjects', key);
+    if (!JIRA_PROJECT_KEY_RE.test(key)) c.add(p, `${p} must be keyed by a Jira project key, e.g. DEMO.`);
+    for (const problem of jiraProjectSettingsProblems(settings)) {
+      const at = problem.path ? `${p}.${problem.path}` : p;
+      c.add(at, `${at}: ${problem.message}`);
+    }
+  }
+}
+
 function isIsoDate(s: unknown): boolean {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const d = new Date(`${s}T00:00:00Z`);
@@ -480,6 +502,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateFolders(c, input.folders, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateBoards(c, input.boards);
   validateDismissals(c, input.dismissals, input.workspaceId);
+  validateJiraProjects(c, input.jiraProjects, isPlainObject(input.backend) ? input.backend.kind : undefined);
   return [...c.errors, ...secrets];
 }
 
@@ -534,6 +557,7 @@ const DOCUMENT_SHAPE = struct({
     }),
   },
   dismissals: { t: 'record', of: struct({ workspace: LEAF, issueId: LEAF, dismissedWeekOf: LEAF }) },
+  jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
 });
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));

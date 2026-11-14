@@ -616,3 +616,53 @@ describe('schema version', () => {
     expect(JSON.parse(serialiseNewWorkspaceDocument(jiraDoc())).schema).toBe(1);
   });
 });
+
+describe('jiraProjects — per-project status mapping and due-date field (VERM-31)', () => {
+  const settings = {
+    DEMO: { statusRoles: { Impeded: 'blocked', 'On hold': 'deferred' }, dueDateField: 'customfield_10042' },
+    OPS_2: { epicLinkField: 'customfield_10014' },
+  } as const;
+
+  it('is optional: a Jira document without it is valid and round-trips without it', () => {
+    const doc = jiraDoc();
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    expect(parsed.ok && 'jiraProjects' in parsed.document).toBe(false);
+  });
+
+  it('accepts valid settings on a Jira workspace and round-trips them', () => {
+    const doc = jiraDoc({ jiraProjects: structuredClone(settings) as never });
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    expect(parsed.ok && parsed.document.jiraProjects).toEqual(settings);
+  });
+
+  it('rejects settings on a YouTrack workspace', () => {
+    const errors = validateWorkspaceDocument(youtrackDoc({ jiraProjects: { DEMO: { dueDateField: 'duedate' } } }));
+    expect(paths(errors)).toEqual(['jiraProjects']);
+    expect(validateWorkspaceDocument(youtrackDoc({ jiraProjects: {} }))).toEqual([]);
+  });
+
+  it('rejects a bad project key, role or field id, at its path', () => {
+    const errors = validateWorkspaceDocument(
+      jiraDoc({
+        jiraProjects: {
+          demo: {},
+          DEMO: { statusRoles: { Impeded: 'stuck' }, dueDateField: 'Due Date', epicLinkField: 'duedate' },
+        } as never,
+      }),
+    );
+    expect(paths(errors).sort()).toEqual(
+      ['jiraProjects["demo"]', 'jiraProjects["DEMO"].statusRoles["Impeded"]', 'jiraProjects["DEMO"].dueDateField', 'jiraProjects["DEMO"].epicLinkField'].sort(),
+    );
+  });
+
+  it('keeps unknown fields inside a project entry on read-modify-write', () => {
+    const raw = JSON.stringify({ ...jiraDoc(), jiraProjects: { DEMO: { dueDateField: 'duedate', flaggedField: 'customfield_1' } } });
+    const parsed = parseWorkspaceDocument(raw);
+    if (!parsed.ok) throw new Error('parse failed');
+    const edited = { ...parsed.document, jiraProjects: { DEMO: { dueDateField: 'customfield_10042' } } };
+    const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
+    expect(out.jiraProjects.DEMO).toEqual({ dueDateField: 'customfield_10042', flaggedField: 'customfield_1' });
+  });
+});

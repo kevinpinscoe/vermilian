@@ -124,6 +124,9 @@ function documentShape(
     folders: { t: 'keyed', key: 'id', of: FOLDER_SHAPE },
     boards: { t: 'record', of: BOARD_SHAPE },
     dismissals: { t: 'record', of: LEAF },
+    // Per status and per field, so two machines mapping different statuses
+    // of one project both keep their change.
+    jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
   });
 }
 

@@ -55,14 +55,47 @@ describe('createJiraProvider', () => {
 
   it('maps a project board through the mapper, requesting the board fields', async () => {
     const client = stubClient();
-    const opts = { dueDateField: 'customfield_10042' };
-    const issues = await createJiraProvider(client, CONN, opts).getIssues('DEMO', true);
+    const issues = await createJiraProvider(client, CONN).getIssues('DEMO', true);
     expect(client.searchProjectIssues).toHaveBeenCalledWith(...AUTH, 'DEMO', {
       includeResolved: true,
-      fields: jiraBoardFields(opts),
+      fields: jiraBoardFields(),
     });
-    expect(issues[0]).toMatchObject({ idReadable: 'DEMO-1', summary: 'Rotate credentials' });
+    expect(issues[0]).toMatchObject({ idReadable: 'DEMO-1', summary: 'Rotate credentials', statusRole: 'inProgress' });
     expect(issues[0].fields.status).toBe('In Progress');
+    expect(issues[0].fields.dueDate).toBe(Date.UTC(2026, 10, 20, 12));
+  });
+
+  it("applies the board project's own settings: due-date field and status mapping", async () => {
+    const issue = { ...ISSUE, fields: { ...ISSUE.fields, customfield_10042: '2026-12-01' } };
+    const client = stubClient({ searchProjectIssues: vi.fn(async () => [issue]) });
+    const settings = { DEMO: { dueDateField: 'customfield_10042', statusRoles: { 'In Progress': 'blocked' as const } } };
+    const [b] = await createJiraProvider(client, CONN, settings).getIssues('DEMO', false);
+    expect(client.searchProjectIssues).toHaveBeenCalledWith(...AUTH, 'DEMO', {
+      includeResolved: false,
+      fields: jiraBoardFields(settings.DEMO),
+    });
+    expect(b.fields.dueDate).toBe(Date.UTC(2026, 11, 1, 12));
+    expect(b.statusRole).toBe('blocked');
+  });
+
+  it("does not apply one project's settings to another project", async () => {
+    const client = stubClient();
+    const [b] = await createJiraProvider(client, CONN, { OPS: { dueDateField: 'customfield_10042' } }).getIssues('DEMO', false);
+    expect(b.fields.dueDate).toBe(Date.UTC(2026, 10, 20, 12));
+  });
+
+  it('search requests every project\'s fields and maps each issue with its own project\'s settings', async () => {
+    const ops = { id: '20001', key: 'OPS-4', fields: { status: { name: 'Impeded', statusCategory: { key: 'indeterminate' } }, customfield_10050: '2026-12-24' } };
+    const client = stubClient({ searchJql: vi.fn(async () => [ISSUE, ops]) });
+    const settings = { OPS: { dueDateField: 'customfield_10050', statusRoles: { Impeded: 'blocked' as const } } };
+    const [demo, opsIssue] = await createJiraProvider(client, CONN, settings).searchIssues(['DEMO', 'OPS'], '');
+    const fields = vi.mocked(client.searchJql).mock.calls[0][4] as string[];
+    expect(fields).toEqual(expect.arrayContaining(['duedate', 'customfield_10050']));
+    expect(new Set(fields).size).toBe(fields.length);
+    expect(demo).toMatchObject({ statusRole: 'inProgress' });
+    expect(demo.fields.dueDate).toBe(Date.UTC(2026, 10, 20, 12));
+    expect(opsIssue).toMatchObject({ statusRole: 'blocked' });
+    expect(opsIssue.fields.dueDate).toBe(Date.UTC(2026, 11, 24, 12));
   });
 
   it('searches across projects with escaped free text', async () => {
@@ -98,6 +131,15 @@ describe('createJiraProvider', () => {
     expect(client.getIssue).toHaveBeenCalledWith(...AUTH, 'DEMO-1', jiraDetailFields());
     expect(d.project).toEqual({ id: '10000', name: 'Demo', shortName: 'DEMO' });
     expect(d.fields.dueDate).toBe(Date.UTC(2026, 10, 20, 12));
+  });
+
+  it("issue detail requests and maps with the issue's project settings", async () => {
+    const issue = { ...ISSUE, fields: { ...ISSUE.fields, customfield_10042: '2026-12-01' } };
+    const client = stubClient({ getIssue: vi.fn(async () => issue) });
+    const settings = { DEMO: { dueDateField: 'customfield_10042' } };
+    const d = await createJiraProvider(client, CONN, settings).getIssueDetail('DEMO-1');
+    expect(client.getIssue).toHaveBeenCalledWith(...AUTH, 'DEMO-1', jiraDetailFields(settings.DEMO));
+    expect(d.fields.dueDate).toBe(Date.UTC(2026, 11, 1, 12));
   });
 
   it('propagates client errors unchanged', async () => {
