@@ -31,6 +31,7 @@ async function createWorkspace(page: Page, name: string) {
   await switcher(page).click();
   await page.locator('[data-testid="new-workspace-btn"]').click();
   await page.locator('[data-testid="new-workspace-input"]').fill(name);
+  await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
   await page.locator('[data-testid="new-workspace-submit"]').click();
   await expect(switcher(page)).toContainText(name);
 }

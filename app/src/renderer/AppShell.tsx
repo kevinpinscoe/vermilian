@@ -23,7 +23,9 @@ import {
   useWorkspaceConfig,
   useActiveWorkspace,
   ACTIVE_WORKSPACE_QUERY_KEY,
+  WORKSPACE_CONFIG_QUERY_KEY,
 } from './features/workspace-nav/api';
+import { JiraProjectsModal } from './features/workspace-nav/JiraProjectsModal';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
 import { connectionErrorMessage } from './features/settings/errors';
 import type { StandupScope, StandupWindow } from '../shared/config';
@@ -160,6 +162,13 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const projects = useProjects();
   const workspaceConfig = useWorkspaceConfig();
   const activeContext = useActiveWorkspace();
+  // The active Jira workspace's chosen project keys, in folder order (VERM-33).
+  const activeJiraProjectKeys =
+    workspaceConfig.data?.workspaces
+      .find((w) => w.id === activeContext.data?.workspaceId)
+      ?.folders.slice()
+      .sort((a, b) => a.order - b.order)
+      .flatMap((f) => f.projectIds) ?? [];
   const setActiveWorkspaceInStore = useWorkspaceStore((s) => s.setActiveWorkspace);
 
   const timer = useTimerStore((s) => s.timer);
@@ -173,6 +182,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const [showStandup, setShowStandup] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
   const [showJiraList, setShowJiraList] = useState(false);
+  const [showJiraProjects, setShowJiraProjects] = useState(false);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
   const [switchStopping, setSwitchStopping] = useState(false);
@@ -559,6 +569,18 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               <Text type="text1" style={{ color: 'var(--secondary-text-color, #444444)' }}>
                 {activeContext.data.boardUnavailableReason}
               </Text>
+              {activeContext.data.storage === 'per-workspace' && activeContext.data.backend?.kind === 'jira' && (
+                <>
+                  <Text type="text2" data-testid="jira-workspace-projects" style={{ color: 'var(--secondary-text-color, #444444)' }}>
+                    {activeJiraProjectKeys.length
+                      ? `Jira projects: ${activeJiraProjectKeys.join(', ')}`
+                      : 'No Jira projects chosen yet.'}
+                  </Text>
+                  <Button kind="secondary" size="small" data-testid="choose-jira-projects-btn" onClick={() => setShowJiraProjects(true)}>
+                    Choose Jira projects…
+                  </Button>
+                </>
+              )}
             </div>
           ) : priorityDeskActive ? (
             <PriorityDesk
@@ -658,6 +680,17 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
 
       {showJiraList && (
         <JiraListModal onClose={() => setShowJiraList(false)} onOpenSettings={onOpenSettings} />
+      )}
+
+      {showJiraProjects && activeContext.data?.workspaceId && (
+        <JiraProjectsModal
+          workspaceId={activeContext.data.workspaceId}
+          onClose={() => setShowJiraProjects(false)}
+          onSaved={() => {
+            void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+          }}
+        />
       )}
 
       {/* Workspace switch with a running timer (VERM-46) */}

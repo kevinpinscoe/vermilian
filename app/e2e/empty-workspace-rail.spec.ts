@@ -28,6 +28,7 @@ test.describe('Empty workspace keeps the rail usable', () => {
     await page.locator('[data-testid="workspace-switcher"]').click();
     await page.locator('[data-testid="new-workspace-btn"]').click();
     await page.locator('[data-testid="new-workspace-input"]').fill('Kevin');
+    await page.locator('[data-testid="new-workspace-backend-youtrack"]').click();
     await page.locator('[data-testid="new-workspace-submit"]').click();
     await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('Kevin');
 

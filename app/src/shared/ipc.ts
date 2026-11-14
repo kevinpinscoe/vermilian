@@ -83,6 +83,8 @@ export const IPC = {
   saveCredentialRefSecret: 'credentialRefs:saveSecret',
   clearCredentialRefSecret: 'credentialRefs:clearSecret',
   checkWorkspaceCredential: 'credentialRefs:check',
+  // A Jira workspace's selectable projects, read with its own credential (VERM-33).
+  listWorkspaceJiraProjects: 'workspaceJira:listProjects',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -136,6 +138,10 @@ export type CredentialRefWriteResult =
     };
 
 /** Whether a workspace's credential resolves on this host — never the value (VERM-45). */
+export type ListWorkspaceJiraProjectsResult =
+  | { ok: true; projects: Array<{ id: string; name: string; shortName: string }> }
+  | { ok: false; message: string };
+
 export type WorkspaceCredentialCheck =
   | { ok: true; credentialRef: string; source: CredentialSourceKind }
   | ({ ok: false } & CredentialFailure);
@@ -534,6 +540,9 @@ export interface VermilianAPI {
   saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;
   clearCredentialRefSecret(credentialRef: string): Promise<CredentialRefWriteResult>;
   checkWorkspaceCredential(workspaceId: string, credentialRef: string | null): Promise<WorkspaceCredentialCheck>;
+  // The Jira projects a Jira workspace can choose from, listed through its own
+  // connection and credential reference. Read-only; nothing is written to Jira.
+  listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
 }

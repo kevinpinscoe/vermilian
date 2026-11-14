@@ -14,7 +14,11 @@ import type { VermilianConfig, Workspace, WorkspaceFolder, YouTrackProject, Boar
 import { makeInitialConfig, allAssignedProjectIds } from '../../../shared/workspace';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useBoardDragStore } from '../../stores/boardDrag';
-import { useProjects, useWorkspaceConfig, useSaveWorkspaceConfig, useActiveWorkspace } from './api';
+import { useProjects, useWorkspaceConfig, useSaveWorkspaceConfig, useActiveWorkspace, WORKSPACE_CONFIG_QUERY_KEY, ACTIVE_WORKSPACE_QUERY_KEY } from './api';
+import { useConfig } from '../settings/api';
+import type { WorkspaceStorageMode } from '../../../shared/activeWorkspace';
+import { generateWorkspaceId } from '../../../shared/workspaceSchema';
+import { buildWorkspaceDocument, nextWorkspaceOrder, type NewWorkspaceBackend } from '../../../shared/workspaceSetup';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
 import { AddProjectsModal } from './AddProjectsModal';
 import styles from './WorkspaceNav.module.css';
@@ -545,25 +549,51 @@ function AddFolderRow({ onAdd }: { onAdd: (name: string) => void }) {
 
 // ─── Workspace switcher dropdown ──────────────────────────────────────────────
 
+export interface NewWorkspaceRequest {
+  name: string;
+  backend: NewWorkspaceBackend;
+}
+
 interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
   activeId: string;
   onSwitch: (id: string) => void;
-  onNewWorkspace: (name: string) => void;
+  /** Resolves to an error message to show, or null once the workspace exists. */
+  onNewWorkspace: (req: NewWorkspaceRequest) => Promise<string | null>;
   onManage: () => void;
   collapsed: boolean;
+  // Which store new workspaces go to. Only per-workspace storage can hold a
+  // Jira workspace or a YouTrack workspace on another server (ADR-0011).
+  storage: WorkspaceStorageMode;
+  defaultYouTrackUrl: string;
 }
 
-function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onNewWorkspace, onManage, collapsed }: WorkspaceSwitcherProps) {
+type BackendChoice = 'youtrack' | 'jira' | null;
+
+function WorkspaceSwitcher({
+  workspaces, activeId, onSwitch, onNewWorkspace, onManage, collapsed, storage, defaultYouTrackUrl,
+}: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  // No default backend: the user picks one before Create is enabled (VERM-33).
+  const [backend, setBackend] = useState<BackendChoice>(null);
+  const [serverUrl, setServerUrl] = useState('');
+  const [siteUrl, setSiteUrl] = useState('');
+  const [email, setEmail] = useState('');
+  const [credentialRef, setCredentialRef] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const newNameRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0];
+  const perWorkspace = storage === 'per-workspace';
 
   useEffect(() => {
-    if (!open) { setCreating(false); setNewName(''); }
+    if (!open) {
+      setCreating(false); setNewName(''); setBackend(null); setError(null);
+      setServerUrl(''); setSiteUrl(''); setEmail(''); setCredentialRef('');
+    }
   }, [open]);
 
   useEffect(() => {
@@ -579,11 +609,40 @@ function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onNewWorkspace, onM
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  function handleCreate() {
-    if (!newName.trim()) return;
-    onNewWorkspace(newName.trim());
-    setOpen(false);
+  function chooseBackend(kind: 'youtrack' | 'jira') {
+    setBackend(kind);
+    setError(null);
+    if (kind === 'youtrack' && !serverUrl) setServerUrl(defaultYouTrackUrl);
+    setCredentialRef((r) => (r === '' || r === 'youtrack-1' || r === 'jira-1' ? `${kind}-1` : r));
   }
+
+  const ready =
+    !!newName.trim() &&
+    backend !== null &&
+    (!perWorkspace ||
+      (backend === 'youtrack' ? !!serverUrl.trim() : !!siteUrl.trim() && !!email.trim()));
+
+  async function handleCreate() {
+    if (!ready || submitting || backend === null) return;
+    const ref = credentialRef.trim() || null;
+    const req: NewWorkspaceRequest = {
+      name: newName.trim(),
+      backend:
+        backend === 'youtrack'
+          ? { kind: 'youtrack', serverUrl: perWorkspace ? serverUrl : defaultYouTrackUrl, credentialRef: ref }
+          : { kind: 'jira', siteUrl, email, credentialRef: ref },
+    };
+    setSubmitting(true);
+    const problem = await onNewWorkspace(req);
+    setSubmitting(false);
+    if (problem) setError(problem);
+    else setOpen(false);
+  }
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') void handleCreate();
+    if (e.key === 'Escape') setCreating(false);
+  };
 
   return (
     <div ref={ref} className={styles.switcher}>
@@ -634,25 +693,97 @@ function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onNewWorkspace, onM
               + New workspace
             </button>
           ) : (
-            <div className={styles.switcherCreateForm}>
+            <div className={styles.switcherCreateForm} data-testid="new-workspace-form">
               <input
                 ref={newNameRef}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreate();
-                  if (e.key === 'Escape') setCreating(false);
-                }}
+                onKeyDown={onKey}
                 placeholder="Workspace name"
                 data-testid="new-workspace-input"
                 className={styles.switcherCreateInput}
               />
+              <div className={styles.switcherBackendChoice} role="radiogroup" aria-label="Backend">
+                <span className={styles.switcherFieldLabel}>Backend</span>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={backend === 'youtrack'}
+                  data-testid="new-workspace-backend-youtrack"
+                  className={`${styles.switcherBackendBtn} ${backend === 'youtrack' ? styles.switcherBackendBtnActive : ''}`}
+                  onClick={() => chooseBackend('youtrack')}
+                >
+                  YouTrack
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={backend === 'jira'}
+                  data-testid="new-workspace-backend-jira"
+                  className={`${styles.switcherBackendBtn} ${backend === 'jira' ? styles.switcherBackendBtnActive : ''}`}
+                  onClick={() => chooseBackend('jira')}
+                  disabled={!perWorkspace}
+                  title={perWorkspace ? undefined : 'Jira workspaces need per-workspace storage, which is not activated on this machine yet.'}
+                >
+                  Jira
+                </button>
+              </div>
+              {perWorkspace && backend === 'youtrack' && (
+                <input
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  onKeyDown={onKey}
+                  placeholder="YouTrack server URL"
+                  aria-label="YouTrack server URL"
+                  data-testid="new-workspace-server-url"
+                  className={styles.switcherCreateInput}
+                />
+              )}
+              {perWorkspace && backend === 'jira' && (
+                <>
+                  <input
+                    value={siteUrl}
+                    onChange={(e) => setSiteUrl(e.target.value)}
+                    onKeyDown={onKey}
+                    placeholder="https://your-site.atlassian.net"
+                    aria-label="Jira site URL"
+                    data-testid="new-workspace-site-url"
+                    className={styles.switcherCreateInput}
+                  />
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={onKey}
+                    placeholder="Atlassian account email"
+                    aria-label="Atlassian account email"
+                    data-testid="new-workspace-email"
+                    className={styles.switcherCreateInput}
+                  />
+                </>
+              )}
+              {perWorkspace && backend !== null && (
+                <input
+                  value={credentialRef}
+                  onChange={(e) => setCredentialRef(e.target.value)}
+                  onKeyDown={onKey}
+                  placeholder="Credential reference, e.g. jira-1"
+                  aria-label="Credential reference"
+                  title="The name of the credential this workspace uses on each machine. Set its value in Settings → Credentials."
+                  data-testid="new-workspace-credential-ref"
+                  className={styles.switcherCreateInput}
+                />
+              )}
+              {error && (
+                <div className={styles.switcherCreateError} role="alert" data-testid="new-workspace-error">
+                  {error}
+                </div>
+              )}
               <button
                 type="button"
                 data-testid="new-workspace-submit"
                 className={styles.switcherCreateSubmit}
-                onClick={handleCreate}
-                disabled={!newName.trim()}
+                onClick={() => void handleCreate()}
+                disabled={!ready || submitting}
               >
                 Create
               </button>
@@ -680,6 +811,9 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
   const workspaceConfig = useWorkspaceConfig();
   const activeContext = useActiveWorkspace();
   const saveConfig = useSaveWorkspaceConfig();
+  const appConfig = useConfig();
+  const queryClient = useQueryClient();
+  const storage: WorkspaceStorageMode = activeContext.data?.storage ?? 'legacy';
 
   const {
     activeWorkspaceId,
@@ -875,11 +1009,15 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
     }
   }
 
-  function handleNewWorkspace(name: string) {
+  async function handleNewWorkspace(req: NewWorkspaceRequest): Promise<string | null> {
+    if (storage === 'per-workspace') return createPerWorkspace(req);
+    // Legacy storage: every workspace is on the one configured YouTrack
+    // server, so YouTrack is the only backend the form offers here.
+    if (req.backend.kind !== 'youtrack') return 'Jira workspaces need per-workspace storage, which is not activated yet.';
     const id = `workspace-${Date.now()}`;
     const newWorkspace: Workspace = {
       id,
-      name,
+      name: req.name,
       order: (config?.workspaces.length ?? 0),
       folders: [],
     };
@@ -894,6 +1032,28 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
       activeWorkspaceId: id,
     };
     void saveConfig.mutateAsync(updated).then(() => onRequestSwitchWorkspace(id)).catch(() => undefined);
+    return null;
+  }
+
+  // Per-workspace storage: the new workspace is its own article, carrying the
+  // backend the user chose (VERM-33).
+  async function createPerWorkspace(req: NewWorkspaceRequest): Promise<string | null> {
+    const listed = await window.vermilian.listWorkspaceArticles();
+    if (!listed.ok) return listed.message;
+    const existing = listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []));
+    const built = buildWorkspaceDocument({
+      workspaceId: generateWorkspaceId(),
+      name: req.name,
+      order: nextWorkspaceOrder(existing),
+      backend: req.backend,
+    });
+    if (!built.ok) return built.errors.map((e) => e.message).join(' ');
+    const saved = await window.vermilian.createWorkspaceArticle(built.document);
+    if (!saved.ok) return saved.message;
+    await queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+    await queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+    onRequestSwitchWorkspace(built.document.workspaceId);
+    return null;
   }
 
   return (
@@ -923,6 +1083,8 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
           onNewWorkspace={handleNewWorkspace}
           onManage={() => setShowManage(true)}
           collapsed={contentCollapsed}
+          storage={storage}
+          defaultYouTrackUrl={appConfig.data?.youtrackUrl ?? ''}
         />
       )}
 

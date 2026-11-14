@@ -355,7 +355,47 @@
 .switcherCreateForm {
   padding: 6px 8px;
   display: flex;
+  flex-direction: column;
   gap: 6px;
+}
+
+.switcherBackendChoice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.switcherFieldLabel {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  margin-right: 2px;
+}
+
+.switcherBackendBtn {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.switcherBackendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switcherBackendBtnActive {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, #cce5ff);
+  font-weight: 600;
+}
+
+.switcherCreateError {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
 }
 
 .switcherCreateInput {
@@ -371,6 +411,7 @@
 }
 
 .switcherCreateSubmit {
+  align-self: flex-end;
   padding: 5px 10px;
   background: var(--primary-color, #0073ea);
   color: #fff;
