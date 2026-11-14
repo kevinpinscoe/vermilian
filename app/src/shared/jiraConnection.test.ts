@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CredentialRefStatus } from './credentialRefs';
-import { isJiraUnauthorized, jiraReconnectAdvice, needsJiraReconnect } from './jiraConnection';
+import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, jiraReconnectAdvice, needsJiraReconnect } from './jiraConnection';
 
 const status = (over: Partial<CredentialRefStatus> = {}): CredentialRefStatus =>
   ({ credentialRef: 'jira-1', legacy: false, commandConfigured: false, fileConfigured: false, blobPresent: false, selected: null, ...over }) as CredentialRefStatus;
@@ -26,25 +26,55 @@ describe('needsJiraReconnect', () => {
   });
 });
 
+const ready = (over: Partial<CredentialRefStatus> = {}) => ({ state: 'ready' as const, status: status(over) });
+
+describe('e2eFakeJiraTokenAllowed', () => {
+  it('allows the fake token only when nothing is configured', () => {
+    expect(e2eFakeJiraTokenAllowed({ reason: 'no-source' })).toBe(true);
+    for (const reason of ['command-failed', 'file-unreadable', 'blob-unreadable', 'empty', 'invalid', 'not-selected', 'invalid-reference'] as const) {
+      expect(e2eFakeJiraTokenAllowed({ reason })).toBe(false);
+    }
+  });
+});
+
 describe('jiraReconnectAdvice', () => {
-  it('offers token entry only when no command or file source outranks a stored token', () => {
-    expect(jiraReconnectAdvice(status(), 'jira-1').canEnterToken).toBe(true);
-    expect(jiraReconnectAdvice(status({ blobPresent: true, selected: 'safeStorage' }), 'jira-1').canEnterToken).toBe(true);
-    expect(jiraReconnectAdvice(null, 'jira-1').canEnterToken).toBe(true);
-    const cmd = jiraReconnectAdvice(status({ commandConfigured: true, blobPresent: true }), 'jira-1');
-    expect(cmd.canEnterToken).toBe(false);
+  it('offers nothing while the status is loading', () => {
+    const a = jiraReconnectAdvice({ state: 'loading' }, 'jira-2');
+    expect(a).toMatchObject({ canEnterToken: false, statusUnavailable: false });
+    expect(a.text).toMatch(/Checking/);
+  });
+
+  it('a failed status read offers checking again, never token entry', () => {
+    const a = jiraReconnectAdvice({ state: 'error', message: 'Config unreadable.' }, 'jira-2');
+    expect(a).toMatchObject({ canEnterToken: false, statusUnavailable: true });
+    expect(a.text).toContain('Config unreadable.');
+  });
+
+  it("a status for another reference does not establish this one's", () => {
+    expect(jiraReconnectAdvice(ready({ credentialRef: 'jira-3' as CredentialRefStatus['credentialRef'] }), 'jira-2')).toMatchObject({
+      canEnterToken: false,
+      statusUnavailable: true,
+    });
+  });
+
+  it('offers token entry for a confirmed non-legacy reference with no command or file source', () => {
+    const fresh = jiraReconnectAdvice(ready({ credentialRef: 'jira-2' as CredentialRefStatus['credentialRef'] }), 'jira-2');
+    expect(fresh).toMatchObject({ canEnterToken: true, statusUnavailable: false });
+    expect(fresh.text).toContain('"jira-2"');
+    expect(jiraReconnectAdvice(ready({ blobPresent: true, selected: 'safeStorage' }), 'jira-1').canEnterToken).toBe(true);
+  });
+
+  it('a command or file source is updated where it is, not typed in', () => {
+    const cmd = jiraReconnectAdvice(ready({ commandConfigured: true, blobPresent: true }), 'jira-1');
+    expect(cmd).toMatchObject({ canEnterToken: false, statusUnavailable: false });
     expect(cmd.text).toMatch(/command/);
-    const file = jiraReconnectAdvice(status({ fileConfigured: true }), 'jira-1');
+    const file = jiraReconnectAdvice(ready({ fileConfigured: true }), 'jira-1');
     expect(file.canEnterToken).toBe(false);
     expect(file.text).toMatch(/file/);
   });
 
-  it('sends a legacy or missing reference elsewhere', () => {
-    expect(jiraReconnectAdvice(status({ legacy: true }), 'jira-1')).toMatchObject({ canEnterToken: false, text: expect.stringContaining('Settings') });
-    expect(jiraReconnectAdvice(null, null)).toMatchObject({ canEnterToken: false });
-  });
-
-  it('names the reference, never a value', () => {
-    expect(jiraReconnectAdvice(status(), 'jira-2').text).toContain('"jira-2"');
+  it('sends the legacy reference to Settings, and a missing reference to the workspace', () => {
+    expect(jiraReconnectAdvice(ready({ legacy: true }), 'jira-1')).toMatchObject({ canEnterToken: false, text: expect.stringContaining('Settings') });
+    expect(jiraReconnectAdvice({ state: 'loading' }, null)).toMatchObject({ canEnterToken: false });
   });
 });

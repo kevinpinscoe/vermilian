@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Heading, Text } from '@vibe/core';
 import type { CredentialRefWriteResult } from '../../../shared/ipc';
-import { jiraReconnectAdvice, type WorkspaceJiraFailure } from '../../../shared/jiraConnection';
+import { jiraReconnectAdvice, type CredentialStatusLookup, type WorkspaceJiraFailure } from '../../../shared/jiraConnection';
 import styles from './JiraWorkspaceBoard.module.css';
 
-export const CREDENTIAL_REFS_QUERY_KEY = ['credential-refs'] as const;
+export const credentialRefStatusQueryKey = (credentialRef: string) => ['credential-ref-status', credentialRef] as const;
 
 const WRITE_FAILURES: Record<Exclude<CredentialRefWriteResult, { ok: true }>['reason'], string> = {
   'invalid-reference': 'The credential reference is not valid.',
@@ -31,9 +31,21 @@ interface JiraReconnectProps {
  */
 export function JiraReconnect({ workspaceName, failure, onRetry, onOpenSettings }: JiraReconnectProps) {
   const { credentialRef } = failure;
-  const refs = useQuery({ queryKey: CREDENTIAL_REFS_QUERY_KEY, queryFn: () => window.vermilian.listCredentialRefs() });
-  const status = refs.data?.find((r) => r.credentialRef === credentialRef) ?? null;
-  const advice = jiraReconnectAdvice(status, credentialRef);
+  // The reference's configuration decides what is offered; until it is known,
+  // no token entry (it might read from a command, a file or Settings).
+  const statusQuery = useQuery({
+    queryKey: credentialRefStatusQueryKey(credentialRef ?? ''),
+    queryFn: () => window.vermilian.getCredentialRefStatus(credentialRef ?? ''),
+    enabled: !!credentialRef,
+    retry: false,
+  });
+  const lookup: CredentialStatusLookup = statusQuery.isPending
+    ? { state: 'loading' }
+    : statusQuery.data?.ok
+      ? { state: 'ready', status: statusQuery.data.status }
+      : { state: 'error', message: statusQuery.data && !statusQuery.data.ok ? statusQuery.data.message : 'The status could not be read.' };
+  const status = lookup.state === 'ready' ? lookup.status : null;
+  const advice = jiraReconnectAdvice(lookup, credentialRef);
   const [token, setToken] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -46,7 +58,7 @@ export function JiraReconnect({ workspaceName, failure, onRetry, onOpenSettings 
       const r = await window.vermilian.saveCredentialRefSecret(credentialRef, token);
       if (r.ok) {
         setToken('');
-        void refs.refetch();
+        void statusQuery.refetch();
         onRetry();
       } else {
         setSaveError(WRITE_FAILURES[r.reason]);
@@ -75,7 +87,7 @@ export function JiraReconnect({ workspaceName, failure, onRetry, onOpenSettings 
           Credential reference: <code data-testid="jira-reconnect-ref">{credentialRef}</code>
         </Text>
       )}
-      <Text type="text2" data-testid="jira-reconnect-advice">{advice.text}</Text>
+      <Text type="text2" data-testid="jira-reconnect-advice" data-status={lookup.state}>{advice.text}</Text>
       {advice.canEnterToken && (
         <form
           className={styles.reconnectForm}
@@ -102,7 +114,12 @@ export function JiraReconnect({ workspaceName, failure, onRetry, onOpenSettings 
       )}
       {saveError && <div className={styles.error} role="alert" data-testid="jira-reconnect-save-error">{saveError}</div>}
       <div className={styles.reconnectForm}>
-        {status?.legacy && (
+        {advice.statusUnavailable && (
+          <Button kind="secondary" size="small" onClick={() => void statusQuery.refetch()} data-testid="jira-reconnect-status-retry">
+            Check again
+          </Button>
+        )}
+        {status?.legacy && status.credentialRef === credentialRef && (
           <Button size="small" onClick={onOpenSettings} data-testid="jira-reconnect-open-settings">Open Settings</Button>
         )}
         <Button kind="secondary" size="small" onClick={onRetry} data-testid="jira-reconnect-retry">Try again</Button>

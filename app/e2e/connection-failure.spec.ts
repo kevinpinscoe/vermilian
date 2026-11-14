@@ -106,6 +106,7 @@ const LEGACY_JIRA_WS: WorkspaceDocument = {
 test.describe('Revoked Jira token — per-workspace storage (e2e gate)', () => {
   let app: ElectronApplication;
   let page: Page;
+  let userDataDir: string;
   const switcher = () => page.locator('[data-testid="workspace-switcher"]');
   const choose = async (name: string) => {
     await switcher().click();
@@ -114,7 +115,8 @@ test.describe('Revoked Jira token — per-workspace storage (e2e gate)', () => {
   };
 
   test.beforeEach(async () => {
-    app = await launchAppWithUserDataDir(freshUserDataDir(), {
+    userDataDir = freshUserDataDir();
+    app = await launchAppWithUserDataDir(userDataDir, {
       VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace',
       VERMILIAN_E2E_JIRA_401: '1',
     });
@@ -137,7 +139,9 @@ test.describe('Revoked Jira token — per-workspace storage (e2e gate)', () => {
     await expect(reconnect).toHaveAttribute('data-reason', 'unauthorized');
     await expect(reconnect).toContainText('Jira rejected this workspace’s token');
     await expect(page.locator('[data-testid="jira-reconnect-ref"]')).toHaveText('jira-2');
-    // No source is configured for jira-2, so a new token can be entered here.
+    // jira-2's status is established (nothing configured), so a new token can
+    // be entered here.
+    await expect(page.locator('[data-testid="jira-reconnect-advice"]')).toHaveAttribute('data-status', 'ready');
     await expect(page.locator('[data-testid="jira-reconnect-token"]')).toBeVisible();
     await expect(page.locator('[data-testid="jira-reconnect-save"]')).toBeDisabled();
     // The board's columns and the bare error line are replaced, not shown beside it.
@@ -181,16 +185,51 @@ test.describe('Revoked Jira token — per-workspace storage (e2e gate)', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('a token whose reference reads from a file cannot be typed in; the advice says where it comes from', async () => {
+  // A configured source that fails stops resolution, under e2e as on a real
+  // host: a credential failure, never the fake token (fail-closed).
+  test('an unreadable file source is a credential failure; the advice says to fix the file', async () => {
     const set = await page.evaluate(() => window.vermilian.setCredentialRefSources('jira-2', { command: '', file: '/nonexistent/verm-e2e-jira-token' }));
     expect(set.ok).toBe(true);
     await choose('Jira work');
     const reconnect = page.locator('[data-testid="jira-reconnect"]');
-    // The file does not exist, so the credential does not resolve: in e2e the
-    // fake's rejected token stands in, and Jira refuses it.
-    await expect(reconnect).toBeVisible();
+    await expect(reconnect).toHaveAttribute('data-reason', 'credential');
+    await expect(reconnect).toContainText('not available here');
     await expect(page.locator('[data-testid="jira-reconnect-advice"]')).toContainText('reads its token from a file');
     await expect(page.locator('[data-testid="jira-reconnect-token"]')).toHaveCount(0);
+    const issues = await page.evaluate(() => window.vermilian.getWorkspaceJiraIssues({ workspaceId: 'ws-e2ejr1', projectKey: 'DEMO' }));
+    expect(issues).toMatchObject({ ok: false, reason: 'credential', credentialRef: 'jira-2' });
+  });
+
+  test('a failing command source is a credential failure, not a fake-token fallback', async () => {
+    const set = await page.evaluate(() => window.vermilian.setCredentialRefSources('jira-2', { command: 'false', file: '' }));
+    expect(set.ok).toBe(true);
+    await choose('Jira work');
+    await expect(page.locator('[data-testid="jira-reconnect"]')).toHaveAttribute('data-reason', 'credential');
+    await expect(page.locator('[data-testid="jira-reconnect-advice"]')).toContainText('reads its token from a command');
+    await expect(page.locator('[data-testid="jira-reconnect-token"]')).toHaveCount(0);
+  });
+
+  test('a stored token that cannot be decrypted is a credential failure', async () => {
+    // A stored blob that is not a valid encrypted credential.
+    fs.mkdirSync(path.join(userDataDir, 'credentials'), { recursive: true });
+    fs.writeFileSync(path.join(userDataDir, 'credentials', 'ref-jira-2.bin'), 'not-an-encrypted-credential');
+    await choose('Jira work');
+    await expect(page.locator('[data-testid="jira-reconnect"]')).toHaveAttribute('data-reason', 'credential');
+    const issues = await page.evaluate(() => window.vermilian.getWorkspaceJiraIssues({ workspaceId: 'ws-e2ejr1', projectKey: 'DEMO' }));
+    expect(issues).toMatchObject({ ok: false, reason: 'credential' });
+    if (!issues.ok) expect(issues.message).not.toContain('not-an-encrypted-credential');
+  });
+
+  test('the status IPC reports configuration only, and refuses a malformed reference', async () => {
+    const fresh = await page.evaluate(() => window.vermilian.getCredentialRefStatus('jira-2'));
+    expect(fresh).toEqual({
+      ok: true,
+      status: { credentialRef: 'jira-2', legacy: false, commandConfigured: false, fileConfigured: false, blobPresent: false, selected: null },
+    });
+    const legacy = await page.evaluate(() => window.vermilian.getCredentialRefStatus('jira-1'));
+    expect(legacy).toMatchObject({ ok: true, status: { legacy: true } });
+    const bad = await page.evaluate(() => window.vermilian.getCredentialRefStatus('../etc'));
+    expect(bad.ok).toBe(false);
   });
 
   test('saving a typed token either reconnects or says why it could not be stored', async () => {

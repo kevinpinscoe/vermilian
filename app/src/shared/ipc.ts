@@ -83,6 +83,8 @@ export const IPC = {
   saveCredentialRefSecret: 'credentialRefs:saveSecret',
   clearCredentialRefSecret: 'credentialRefs:clearSecret',
   checkWorkspaceCredential: 'credentialRefs:check',
+  // One reference's configuration (never a value), for the Jira reconnect state (VERM-40).
+  getCredentialRefStatus: 'credentialRefs:status',
   // A Jira workspace's selectable projects, read with its own credential (VERM-33).
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
   // One of a Jira workspace's projects, read-only, for its board (VERM-34).
@@ -170,6 +172,8 @@ export type GetWorkspaceJiraIssueDetailResult =
 export type ListWorkspaceJiraProjectsResult =
   | { ok: true; projects: Array<{ id: string; name: string; shortName: string }> }
   | import('./jiraConnection').WorkspaceJiraFailure;
+
+export type CredentialRefStatusResult = { ok: true; status: CredentialRefStatus } | { ok: false; message: string };
 
 export type WorkspaceCredentialCheck =
   | { ok: true; credentialRef: string; source: CredentialSourceKind }
@@ -569,6 +573,7 @@ export interface VermilianAPI {
   saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;
   clearCredentialRefSecret(credentialRef: string): Promise<CredentialRefWriteResult>;
   checkWorkspaceCredential(workspaceId: string, credentialRef: string | null): Promise<WorkspaceCredentialCheck>;
+  getCredentialRefStatus(credentialRef: string): Promise<CredentialRefStatusResult>;
   // The Jira projects a Jira workspace can choose from, listed through its own
   // connection and credential reference. Read-only; nothing is written to Jira.
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;

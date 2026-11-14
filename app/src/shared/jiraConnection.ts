@@ -5,7 +5,7 @@
 //
 // Pure TypeScript: no Electron, no React.
 
-import type { CredentialRefStatus } from './credentialRefs';
+import type { CredentialFailureReason, CredentialRefStatus } from './credentialRefs';
 
 export type WorkspaceJiraFailureReason =
   | 'unauthorized' // Jira rejected the token: revoked, expired, or not this account's
@@ -30,32 +30,60 @@ export function needsJiraReconnect(result: { ok: boolean; reason?: unknown } | n
   return !!result && result.ok === false && (result.reason === 'unauthorized' || result.reason === 'credential');
 }
 
+/**
+ * Whether the e2e harness may stand in its fake token after resolution
+ * failed. Only when nothing at all is configured for the reference: a
+ * configured command, file or stored token that fails stops resolution on a
+ * real host, and must stop it under e2e too.
+ */
+export function e2eFakeJiraTokenAllowed(failure: { reason: CredentialFailureReason }): boolean {
+  return failure.reason === 'no-source';
+}
+
+/** What is known about the reference's configuration on this host. */
+export type CredentialStatusLookup =
+  | { state: 'loading' }
+  | { state: 'error'; message: string }
+  | { state: 'ready'; status: CredentialRefStatus };
+
 export interface ReconnectAdvice {
-  /** A token typed here would be the one resolution uses: no command or file source outranks it. */
+  /**
+   * A token typed here would be the one resolution uses. True only once the
+   * reference's status is known and shows it is not legacy and has neither a
+   * command nor a file source to outrank a stored token.
+   */
   canEnterToken: boolean;
+  /** The status could not be read; offer to check again. */
+  statusUnavailable: boolean;
   text: string;
 }
 
 /**
  * What the user can do for this reference on this host. Resolution order is
- * command, then file, then the stored (encrypted) token, so a token typed
- * into the app only takes effect when neither of the first two is set.
+ * command, then file, then the stored (encrypted) token. Until the
+ * reference's configuration is established, nothing is offered beyond trying
+ * again: an unknown reference might read from a command, a file or Settings.
  */
-export function jiraReconnectAdvice(status: CredentialRefStatus | null, credentialRef: string | null): ReconnectAdvice {
-  if (!credentialRef) {
-    return { canEnterToken: false, text: 'This workspace names no credential reference. Edit the workspace to choose one.' };
+export function jiraReconnectAdvice(lookup: CredentialStatusLookup, credentialRef: string | null): ReconnectAdvice {
+  const advice = (text: string, canEnterToken = false, statusUnavailable = false): ReconnectAdvice => ({ canEnterToken, statusUnavailable, text });
+  if (!credentialRef) return advice('This workspace names no credential reference. Edit the workspace to choose one.');
+  if (lookup.state === 'loading') return advice(`Checking how "${credentialRef}" reads its token on this host…`);
+  if (lookup.state === 'error') {
+    return advice(`Could not check how "${credentialRef}" reads its token on this host: ${lookup.message}`, false, true);
   }
-  if (status?.legacy) {
-    return { canEnterToken: false, text: `"${credentialRef}" is the Jira token from Settings. Replace it there, then try again.` };
+  const { status } = lookup;
+  if (status.credentialRef !== credentialRef) {
+    return advice(`Could not check how "${credentialRef}" reads its token on this host.`, false, true);
   }
-  if (status?.commandConfigured) {
-    return { canEnterToken: false, text: `"${credentialRef}" reads its token from a command on this host. Update what that command returns, then try again.` };
+  if (status.legacy) return advice(`"${credentialRef}" is the Jira token from Settings. Replace it there, then try again.`);
+  if (status.commandConfigured) {
+    return advice(`"${credentialRef}" reads its token from a command on this host. Update what that command returns, then try again.`);
   }
-  if (status?.fileConfigured) {
-    return { canEnterToken: false, text: `"${credentialRef}" reads its token from a file on this host. Put the new token in that file, then try again.` };
+  if (status.fileConfigured) {
+    return advice(`"${credentialRef}" reads its token from a file on this host. Put the new token in that file, then try again.`);
   }
-  return {
-    canEnterToken: true,
-    text: `Create a new Jira API token for this account and enter it here; it is stored encrypted on this host as "${credentialRef}".`,
-  };
+  return advice(
+    `Create a new Jira API token for this account and enter it here; it is stored encrypted on this host as "${credentialRef}".`,
+    true,
+  );
 }

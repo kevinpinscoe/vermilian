@@ -87,6 +87,7 @@ import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredenti
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
+  CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
   GetWorkspaceJiraIssuesResult,
   ListWorkspaceJiraProjectsResult,
@@ -98,7 +99,7 @@ import {
 } from '../shared/credentialRefs';
 import { isCredentialRef, workspaceProjectIds } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
-import { isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
+import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
@@ -976,9 +977,10 @@ export function registerIpc(): void {
       let token: string;
       if (r.ok) {
         token = r.value;
-      } else if (IS_E2E) {
-        // e2e: a configured source wins, as on a real host; otherwise the
-        // fake's token, or its rejected one to simulate a revoked token
+      } else if (IS_E2E && e2eFakeJiraTokenAllowed(r)) {
+        // e2e: resolution runs as on a real host, and a configured source
+        // that fails stops it. Only a reference with nothing configured gets
+        // the fake's token, or its rejected one to simulate a revoked token
         // (VERMILIAN_E2E_JIRA_401, VERM-40).
         token = process.env.VERMILIAN_E2E_JIRA_401 === '1' ? FAKE_JIRA_BAD_TOKEN : 'e2e-jira-token';
       } else {
@@ -1144,6 +1146,15 @@ export function registerIpc(): void {
   );
 
   ipcMain.handle(IPC.clearCredentialRefSecret, (_e, ref: unknown) => clearCredentialRefSecret(String(ref)));
+
+  ipcMain.handle(IPC.getCredentialRefStatus, async (_e, ref: unknown): Promise<CredentialRefStatusResult> => {
+    if (!isCredentialRef(ref)) return { ok: false, message: 'That is not a valid credential reference.' };
+    try {
+      return { ok: true, status: await credentialRefStatus(ref, await readConfig(), credentialSourceIO) };
+    } catch {
+      return { ok: false, message: 'The credential configuration could not be read.' };
+    }
+  });
 
   ipcMain.handle(
     IPC.checkWorkspaceCredential,

@@ -122,6 +122,7 @@ const api: VermilianAPI = {
   clearCredentialRefSecret: (credentialRef: string) => ipcRenderer.invoke(IPC.clearCredentialRefSecret, credentialRef),
   checkWorkspaceCredential: (workspaceId: string, credentialRef: string | null) =>
     ipcRenderer.invoke(IPC.checkWorkspaceCredential, workspaceId, credentialRef),
+  getCredentialRefStatus: (credentialRef: string) => ipcRenderer.invoke(IPC.getCredentialRefStatus, credentialRef),
   listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
   getWorkspaceJiraIssues: (args: GetWorkspaceJiraIssuesArgs) => ipcRenderer.invoke(IPC.getWorkspaceJiraIssues, args),
   getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
