@@ -163,6 +163,30 @@ test('after sleep longer than the lookback, the next poll is a full read', async
   await expect.poll(() => count('searchProjectRecentlyUpdated', 'DEMO')).toBeGreaterThan(polls);
 });
 
+test("a card just read directly survives a full read whose search index lags, for the grace period only", async () => {
+  // Edited in Jira, but the search index has not caught up: only a read by key sees it.
+  await change({ op: 'edit', key: 'DEMO-101', summary: 'Read directly, not yet indexed' });
+  await change({ op: 'unindex', key: 'DEMO-101' });
+  await card(page, 'DEMO-101').click();
+  await expect(tid(page, 'jira-detail-summary')).toHaveText('Read directly, not yet indexed');
+  await expect(card(page, 'DEMO-101')).toContainText('Read directly, not yet indexed');
+
+  // A full read four-odd minutes later (a sync gap) omits it; the card stays.
+  const fullReads = await count('searchProjectIssues', 'DEMO');
+  await page.clock.fastForward(4 * MINUTE + 10_000);
+  await expect.poll(() => count('searchProjectIssues', 'DEMO')).toBeGreaterThan(fullReads);
+  await expect(card(page, 'DEMO-101')).toBeVisible();
+  await expect(card(page, 'DEMO-102')).toBeVisible();
+
+  // Past the five-minute grace period, the next full read still omits it: gone.
+  const later = await count('searchProjectIssues', 'DEMO');
+  await page.clock.fastForward(4 * MINUTE + 10_000);
+  await expect.poll(() => count('searchProjectIssues', 'DEMO')).toBeGreaterThan(later);
+  await expect(card(page, 'DEMO-101')).toHaveCount(0);
+  await expect(card(page, 'DEMO-102')).toBeVisible();
+  await expectReadOnly();
+});
+
 test('switching workspaces during a poll: the late answer never reaches the new board, and the old poll stops', async () => {
   await change({ op: 'create', id: '10160', key: 'DEMO-160', summary: 'Created while the poll was in flight' });
   await page.evaluate(() => window.vermilian.debugSetJiraSearchDelay!(2500));

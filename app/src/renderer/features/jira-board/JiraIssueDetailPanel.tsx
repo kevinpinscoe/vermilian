@@ -6,7 +6,7 @@ import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { commentTimeLabel, jiraDetailRows } from './jiraDetail';
 import { needsJiraReconnect } from '../../../shared/jiraConnection';
-import { applyJiraUpdates, boardIssueOf } from './jiraBoardSync';
+import { applyJiraDirectRead, boardIssueOf } from './jiraBoardSync';
 import styles from './JiraIssueDetailPanel.module.css';
 
 interface JiraIssueDetailPanelProps {
@@ -61,9 +61,10 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
     queryFn: async ({ signal }) => {
       const res = await window.vermilian.getWorkspaceJiraIssueDetail({ workspaceId, issueKey });
       // A direct read is the issue itself, not the search index, so it also
-      // freshens the board's card; an older poll result cannot undo it
+      // freshens the board's card; an older poll result cannot undo it, nor
+      // a full read whose index lags it, for a bounded grace period
       // (VERM-39, shared/jiraPoll.ts). Never applied once abandoned.
-      if (res.ok && !signal.aborted) applyJiraUpdates(queryClient, workspaceId, [boardIssueOf(res.issue)]);
+      if (res.ok && !signal.aborted) applyJiraDirectRead(queryClient, workspaceId, boardIssueOf(res.issue));
       return res;
     },
     staleTime: 60 * 1000,

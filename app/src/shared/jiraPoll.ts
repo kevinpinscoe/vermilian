@@ -21,7 +21,10 @@
 //
 // Neither read ever lets an older copy of an issue replace a newer one: the
 // detail panel reads an issue directly by key, which Jira answers from the
-// issue itself, while search answers from an index that can lag it.
+// issue itself, while search answers from an index that can lag it. For the
+// same reason a full read does not remove an issue read directly within
+// JIRA_DIRECT_READ_GRACE_MS just because the search omits it; after that,
+// it is removed like any other.
 //
 // Pure TypeScript: no Electron, no React.
 
@@ -35,6 +38,16 @@ export const JIRA_POLL_WINDOW_MINUTES = 5;
 export const JIRA_POLL_WINDOW_MS = JIRA_POLL_WINDOW_MINUTES * 60_000;
 /** How often the full, authoritative read runs even when polling is healthy. */
 export const JIRA_FULL_REFRESH_MS = 10 * 60_000;
+/**
+ * How long an issue read directly (the detail panel) survives full reads
+ * that do not list it. Jira's search index can trail the issue itself, so a
+ * full read just after a direct read may not list an issue that exists yet.
+ * Jira normally catches up within seconds; five minutes bounds the wait
+ * while staying shorter than the full-refresh cadence, so a card for an
+ * issue that is really gone outlives its last direct read by at most one
+ * full-refresh cycle past the grace period.
+ */
+export const JIRA_DIRECT_READ_GRACE_MS = 5 * 60_000;
 /**
  * The longest gap since the last successful sync *started* that an
  * incremental poll may still bridge. One poll interval short of the window,
@@ -128,11 +141,19 @@ export function mergeRecentlyUpdated(
  * mergeRecentlyUpdated, a newer cached copy (from a direct read) is kept over
  * an older copy from the search, and dropped if that newer copy is out of
  * scope. The order is the full result's.
+ *
+ * One exception to "disappears": a cached issue in `protectedIds` — read
+ * directly within JIRA_DIRECT_READ_GRACE_MS, which the caller tracks — is
+ * kept, after the listed issues, when the full result omits it, because the
+ * search index may simply not have caught up yet. It is kept only while its
+ * cached copy is still in scope: a direct read that showed it resolved or
+ * moved away has already taken it out of this list.
  */
 export function reconcileFullRefresh(
   current: readonly BoardIssue[] | undefined,
   full: readonly BoardIssue[],
   scope: JiraMergeScope,
+  protectedIds: ReadonlySet<string> = new Set(),
 ): BoardIssue[] {
   const byId = new Map((current ?? []).map((i) => [i.id, i]));
   const out: BoardIssue[] = [];
@@ -142,6 +163,9 @@ export function reconcileFullRefresh(
     seen.add(issue.id);
     const keep = winner(issue, byId.get(issue.id));
     if (inScope(keep, scope)) out.push(keep);
+  }
+  for (const cached of current ?? []) {
+    if (!seen.has(cached.id) && protectedIds.has(cached.id) && inScope(cached, scope)) out.push(cached);
   }
   return out;
 }

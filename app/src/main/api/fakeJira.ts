@@ -60,6 +60,8 @@ export interface FakeJiraCall {
 
 const calls: FakeJiraCall[] = [];
 let searchDelayMs = 0;
+// Issue ids no search lists (simulated index lag); getIssue still finds them.
+const unindexed = new Set<string>();
 
 function logCall(fn: string, detail: Omit<FakeJiraCall, 'fn' | 'at'> = {}): void {
   calls.push({ fn, ...detail, at: Date.now() });
@@ -235,6 +237,7 @@ export async function searchProjectIssues(
   await searchDelay();
   return FAKE_JIRA_ISSUES.filter(
     (i) =>
+      !unindexed.has(i.id) &&
       i.key.startsWith(`${projectKey}-`) &&
       (options.includeResolved || i.fields?.status?.statusCategory?.key !== 'done'),
   ).map((i) => ({ ...i, fields: { ...i.fields } }));
@@ -315,7 +318,7 @@ export async function searchProjectRecentlyUpdated(
   const since = Date.now() - windowMinutes * 60_000;
   return FAKE_JIRA_ISSUES.filter((i) => {
     const at = Date.parse(String(i.fields?.updated ?? ''));
-    return i.key.startsWith(`${projectKey}-`) && !Number.isNaN(at) && at >= since;
+    return !unindexed.has(i.id) && i.key.startsWith(`${projectKey}-`) && !Number.isNaN(at) && at >= since;
   }).map((i) => ({ ...i, fields: { ...i.fields } }));
 }
 
@@ -327,7 +330,9 @@ export type FakeJiraChange =
   | { op: 'edit'; key: string; summary?: string; status?: { name: string; category: 'new' | 'indeterminate' | 'done' } }
   | { op: 'create'; id: string; key: string; summary: string }
   | { op: 'delete'; key: string }
-  | { op: 'move'; key: string; toKey: string; touch?: boolean };
+  | { op: 'move'; key: string; toKey: string; touch?: boolean }
+  // Search-index lag: the issue stays readable by key but no search lists it.
+  | { op: 'unindex'; key: string };
 
 function stampNow(): string {
   return new Date().toISOString();
@@ -346,7 +351,9 @@ export function applyChangeForTests(change: FakeJiraChange): boolean {
   const at = FAKE_JIRA_ISSUES.findIndex((i) => i.key === change.key);
   if (at < 0) return false;
   const issue = FAKE_JIRA_ISSUES[at];
-  if (change.op === 'delete') {
+  if (change.op === 'unindex') {
+    unindexed.add(issue.id);
+  } else if (change.op === 'delete') {
     FAKE_JIRA_ISSUES.splice(at, 1);
   } else if (change.op === 'move') {
     // Jira gives a moved issue a new key and keeps its id. A move it does not

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BoardIssue } from './workspace';
 import { FIELD_KEYS, type BoardIssueFields } from './fields';
 import {
+  JIRA_DIRECT_READ_GRACE_MS,
   JIRA_FULL_REFRESH_MS,
   JIRA_POLL_GAP_LIMIT_MS,
   JIRA_POLL_INTERVAL_MS,
@@ -50,6 +51,11 @@ describe('poll constants', () => {
     expect(JIRA_POLL_WINDOW_MINUTES).toBe(5);
     expect(JIRA_POLL_WINDOW_MS).toBe(5 * 60_000);
     expect(JIRA_FULL_REFRESH_MS).toBe(10 * 60_000);
+  });
+
+  it('protects a directly read issue from search-index lag for five minutes', () => {
+    expect(JIRA_DIRECT_READ_GRACE_MS).toBe(5 * 60_000);
+    expect(JIRA_DIRECT_READ_GRACE_MS).toBeLessThan(JIRA_FULL_REFRESH_MS);
   });
 
   it('leaves one poll interval of margin inside the lookback window', () => {
@@ -197,6 +203,40 @@ describe('reconcileFullRefresh', () => {
   it('drops a newer direct copy that is resolved when Show done is off', () => {
     const direct = done(issue('1', 'DEMO-1'), T0 + 60_000);
     expect(reconcileFullRefresh([direct], [issue('1', 'DEMO-1')], DEMO)).toEqual([]);
+  });
+
+  describe('issues protected by a recent direct read (search-index lag)', () => {
+    it('keeps a protected issue the full result omits, after the listed ones', () => {
+      const cur = [issue('1', 'DEMO-1'), issue('7', 'DEMO-7', { summary: 'just read directly' })];
+      const out = reconcileFullRefresh(cur, [issue('1', 'DEMO-1')], DEMO, new Set(['7']));
+      expect(ids(out)).toEqual(['DEMO-1', 'DEMO-7']);
+      expect(out[1]).toBe(cur[1]);
+    });
+
+    it('still removes an omitted issue that is not protected', () => {
+      const cur = [issue('1', 'DEMO-1'), issue('2', 'DEMO-2'), issue('7', 'DEMO-7')];
+      expect(ids(reconcileFullRefresh(cur, [issue('1', 'DEMO-1')], DEMO, new Set(['7'])))).toEqual(['DEMO-1', 'DEMO-7']);
+    });
+
+    it('does not keep a protected issue whose cached copy is resolved (Show done off) or in another project', () => {
+      const cur = [done(issue('7', 'DEMO-7')), issue('8', 'OPS-8')];
+      expect(reconcileFullRefresh(cur, [], DEMO, new Set(['7', '8']))).toEqual([]);
+    });
+
+    it('a protected issue the full result does list reconciles normally, newest copy winning', () => {
+      const direct = issue('7', 'DEMO-7', { summary: 'direct', updated: T0 + 60_000 });
+      const out = reconcileFullRefresh([direct], [issue('7', 'DEMO-7', { summary: 'search', updated: T0 })], DEMO, new Set(['7']));
+      expect(out).toEqual([direct]);
+      const newer = issue('7', 'DEMO-7', { summary: 'search, newer', updated: T0 + 120_000 });
+      expect(reconcileFullRefresh([direct], [newer], DEMO, new Set(['7']))[0].summary).toBe('search, newer');
+    });
+
+    it('protects nothing that is not already cached, and never alters a timestamp', () => {
+      const cur = [issue('7', 'DEMO-7', { updated: null })];
+      const out = reconcileFullRefresh(cur, [], DEMO, new Set(['7', '9']));
+      expect(ids(out)).toEqual(['DEMO-7']);
+      expect(out[0].updated).toBeNull();
+    });
   });
 
   it('with no earlier data is the full result, in scope', () => {

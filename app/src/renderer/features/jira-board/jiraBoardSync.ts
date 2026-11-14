@@ -22,7 +22,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { BoardIssue, IssueDetail } from '../../../shared/workspace';
 import type { GetWorkspaceJiraIssuesResult } from '../../../shared/ipc';
 import { needsJiraReconnect } from '../../../shared/jiraConnection';
-import { mergeRecentlyUpdated, needsFullRefresh, reconcileFullRefresh, type JiraMergeScope } from '../../../shared/jiraPoll';
+import {
+  JIRA_DIRECT_READ_GRACE_MS,
+  mergeRecentlyUpdated,
+  needsFullRefresh,
+  reconcileFullRefresh,
+  type JiraMergeScope,
+} from '../../../shared/jiraPoll';
 
 export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
   ['workspace', 'jira-issues', workspaceId, projectKey, includeResolved] as const;
@@ -51,9 +57,24 @@ function syncState(key: readonly unknown[]): SyncState {
   return s;
 }
 
+// Issues read directly by the detail panel, per workspace: issue id → when
+// the protection from search-index lag ends (JIRA_DIRECT_READ_GRACE_MS). Only
+// this file's own clock is involved; Jira's `updated` is never touched.
+const directReads = new Map<string, Map<string, number>>();
+
+/** The workspace's issue ids still within their grace period; expired ones are forgotten. */
+function protectedIssueIds(workspaceId: string, now: number): Set<string> {
+  const reads = directReads.get(workspaceId);
+  if (!reads) return new Set();
+  for (const [id, until] of reads) if (until <= now) reads.delete(id);
+  if (reads.size === 0) directReads.delete(workspaceId);
+  return new Set(reads.keys());
+}
+
 /** For unit tests only. */
 export function resetJiraSyncStateForTests(): void {
   syncStates.clear();
+  directReads.clear();
 }
 
 function markSynced(s: SyncState, startedAt: number): void {
@@ -79,7 +100,11 @@ export async function fetchFullJiraIssues(
   const res = await window.vermilian.getWorkspaceJiraIssues({ workspaceId, projectKey, includeResolved });
   if (!res.ok) return res;
   const prev = queryClient.getQueryData<GetWorkspaceJiraIssuesResult>(key);
-  const issues = reconcileFullRefresh(prev?.ok ? prev.issues : undefined, res.issues, { projectKey, includeResolved });
+  const protectedIds = protectedIssueIds(workspaceId, Date.now());
+  const issues = reconcileFullRefresh(prev?.ok ? prev.issues : undefined, res.issues, { projectKey, includeResolved }, protectedIds);
+  // An issue the search lists has been indexed: it needs no more protection.
+  const reads = directReads.get(workspaceId);
+  if (reads) for (const i of res.issues) reads.delete(i.id);
   if (!signal?.aborted) markSynced(s, startedAt);
   return { ...res, issues };
 }
@@ -104,6 +129,22 @@ export function applyJiraUpdates(queryClient: QueryClient, workspaceId: string, 
 }
 
 type JiraIssuesOk = Extract<GetWorkspaceJiraIssuesResult, { ok: true }>;
+
+/**
+ * An issue the detail panel read directly from Jira: merged into the board
+ * like any update, and protected for JIRA_DIRECT_READ_GRACE_MS from full
+ * reads whose search index has not caught up with it yet. A read showing it
+ * resolved or moved away still removes the card at once (mergeRecentlyUpdated).
+ */
+export function applyJiraDirectRead(queryClient: QueryClient, workspaceId: string, issue: BoardIssue): void {
+  let reads = directReads.get(workspaceId);
+  if (!reads) {
+    reads = new Map();
+    directReads.set(workspaceId, reads);
+  }
+  reads.set(issue.id, Date.now() + JIRA_DIRECT_READ_GRACE_MS);
+  applyJiraUpdates(queryClient, workspaceId, [issue]);
+}
 
 export type JiraPollOutcome = 'merged' | 'full-refresh' | 'skipped';
 

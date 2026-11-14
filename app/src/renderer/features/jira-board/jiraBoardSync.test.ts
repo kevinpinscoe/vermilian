@@ -7,8 +7,9 @@ import { QueryClient } from '@tanstack/react-query';
 import type { BoardIssue, IssueDetail } from '../../../shared/workspace';
 import type { GetWorkspaceJiraIssuesResult, GetWorkspaceJiraRecentlyUpdatedResult } from '../../../shared/ipc';
 import { FIELD_KEYS, type BoardIssueFields } from '../../../shared/fields';
-import { JIRA_POLL_GAP_LIMIT_MS, JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
+import { JIRA_DIRECT_READ_GRACE_MS, JIRA_POLL_GAP_LIMIT_MS, JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import {
+  applyJiraDirectRead,
   applyJiraUpdates,
   boardIssueOf,
   fetchFullJiraIssues,
@@ -238,6 +239,82 @@ describe('the detail panel feeding the board', () => {
     await pollJiraProject(qc, 'ws-a', 'DEMO', false);
     const d = qc.getQueryData<GetWorkspaceJiraIssuesResult>(KEY_A);
     expect(d?.ok && d.issues[0].summary).toBe('From Jira itself');
+  });
+});
+
+describe('search-index lag after a direct read', () => {
+  const fullRead = async (issues: BoardIssue[], key: readonly unknown[] = KEY_A) => {
+    api.getWorkspaceJiraIssues.mockResolvedValueOnce({ ok: true, issues, priorities: [] });
+    await qc.refetchQueries({ queryKey: key, exact: true });
+  };
+  const fresh = issue('7', 'DEMO-7', { summary: 'Created a moment ago', updated: T0 + 1000 });
+
+  it('a direct read adds the card, and a full read that omits it (index lag) keeps it', async () => {
+    await load('ws-a', 'DEMO', [issue('1', 'DEMO-1')]);
+    applyJiraDirectRead(qc, 'ws-a', fresh);
+    expect(list(KEY_A)).toEqual(['DEMO-7', 'DEMO-1']);
+
+    vi.setSystemTime(T0 + 10_000);
+    await fullRead([issue('1', 'DEMO-1')]);
+    expect(list(KEY_A)).toEqual(['DEMO-1', 'DEMO-7']);
+  });
+
+  it('a direct read updates an existing card, and the older search copy cannot overwrite it', async () => {
+    await load('ws-a', 'DEMO', [issue('7', 'DEMO-7', { summary: 'old', updated: T0 })]);
+    applyJiraDirectRead(qc, 'ws-a', { ...fresh, updated: T0 + 60_000 });
+    await fullRead([issue('7', 'DEMO-7', { summary: 'old', updated: T0 })]);
+    const d = qc.getQueryData<GetWorkspaceJiraIssuesResult>(KEY_A);
+    expect(d?.ok && d.issues[0].summary).toBe('Created a moment ago');
+  });
+
+  it('keeps it throughout the grace period, then a full read still omitting it removes it', async () => {
+    await load('ws-a', 'DEMO', []);
+    applyJiraDirectRead(qc, 'ws-a', fresh);
+    vi.setSystemTime(T0 + JIRA_DIRECT_READ_GRACE_MS - 1);
+    await fullRead([]);
+    expect(list(KEY_A)).toEqual(['DEMO-7']);
+
+    vi.setSystemTime(T0 + JIRA_DIRECT_READ_GRACE_MS + 1);
+    await fullRead([]);
+    expect(list(KEY_A)).toEqual([]);
+  });
+
+  it('once a full read lists it, it reconciles normally and the protection ends', async () => {
+    await load('ws-a', 'DEMO', []);
+    applyJiraDirectRead(qc, 'ws-a', fresh);
+    await fullRead([{ ...fresh, summary: 'Indexed now', updated: T0 + 2000 }]);
+    const d = qc.getQueryData<GetWorkspaceJiraIssuesResult>(KEY_A);
+    expect(d?.ok && d.issues.map((i) => i.summary)).toEqual(['Indexed now']);
+    // Deleted afterwards: gone at the next full read, grace period or not.
+    await fullRead([]);
+    expect(list(KEY_A)).toEqual([]);
+  });
+
+  it('removes deleted and moved issues that have no direct-read protection at once', async () => {
+    await load('ws-a', 'DEMO', [issue('1', 'DEMO-1'), issue('2', 'DEMO-2'), issue('3', 'DEMO-3')]);
+    applyJiraDirectRead(qc, 'ws-a', issue('3', 'DEMO-3', { updated: T0 + 1 }));
+    await fullRead([]);
+    expect(list(KEY_A)).toEqual(['DEMO-3']);
+  });
+
+  it('a direct read that shows the issue resolved or moved away takes effect immediately', async () => {
+    await load('ws-a', 'DEMO', [issue('7', 'DEMO-7'), issue('8', 'DEMO-8')]);
+    applyJiraDirectRead(qc, 'ws-a', issue('7', 'DEMO-7', { resolved: T0 + 1, statusRole: 'done', updated: T0 + 1 }));
+    applyJiraDirectRead(qc, 'ws-a', issue('8', 'ELSEWHERE-8', { updated: T0 + 1 }));
+    expect(list(KEY_A)).toEqual([]);
+    // Nor does the protection bring either back.
+    await fullRead([]);
+    expect(list(KEY_A)).toEqual([]);
+  });
+
+  it("protection is per workspace: one workspace's direct read never keeps another's card", async () => {
+    await load('ws-a', 'DEMO', [issue('7', 'DEMO-7')]);
+    await load('ws-b', 'DEMO', [issue('7', 'DEMO-7')]);
+    applyJiraDirectRead(qc, 'ws-a', fresh);
+    await fullRead([], KEY_B);
+    expect(list(KEY_B)).toEqual([]);
+    await fullRead([], KEY_A);
+    expect(list(KEY_A)).toEqual(['DEMO-7']);
   });
 });
 
