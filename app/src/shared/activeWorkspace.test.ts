@@ -70,13 +70,12 @@ describe('boardAvailability', () => {
     expect(r.reason).toMatch(/different YouTrack server/);
   });
 
-  it('withholds a Jira board: live Jira boards are not claimed', () => {
+  it('offers a Jira board, read-only through its own connection (VERM-34)', () => {
     const r = boardAvailability(
       { kind: 'jira', siteUrl: 'https://example.atlassian.net', credentialRef: 'jira-1' },
       YT,
     );
-    expect(r.available).toBe(false);
-    expect(r.reason).toMatch(/Jira boards are not available/);
+    expect(r).toEqual({ available: true, reason: null });
   });
 
   it('treats no backend (no workspaces yet) as available', () => {
@@ -93,8 +92,8 @@ describe('buildActiveContext', () => {
       workspaceId: 'ws-j',
       workspaceName: 'Workspace ws-j',
       backend: jira,
-      boardAvailable: false,
-      boardUnavailableReason: expect.stringMatching(/Jira/),
+      boardAvailable: true,
+      boardUnavailableReason: null,
     });
   });
 

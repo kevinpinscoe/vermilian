@@ -84,15 +84,15 @@ import * as workspaceArticles from './services/workspaceArticles';
 import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
 import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
-import { createJiraProvider } from './providers/jiraProvider';
+import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
-import type { ListWorkspaceJiraProjectsResult } from '../shared/ipc';
+import type { GetWorkspaceJiraIssuesResult, ListWorkspaceJiraProjectsResult } from '../shared/ipc';
 import {
   LEGACY_CREDENTIAL_REFS,
   isLegacyCredentialRef,
   type CredentialRefStatus,
 } from '../shared/credentialRefs';
-import { isCredentialRef } from '../shared/workspaceSchema';
+import { isCredentialRef, workspaceProjectIds } from '../shared/workspaceSchema';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
 import type {
   ListWorkspaceArticlesResult,
@@ -931,36 +931,96 @@ export function registerIpc(): void {
     },
   );
 
-  ipcMain.handle(
-    IPC.listWorkspaceJiraProjects,
-    async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraProjectsResult> => {
-      const client = await workspaceArticleClient();
-      if (!client) return { ok: false, message: NOT_CONFIGURED_WS.message };
-      if (typeof workspaceId !== 'string' || workspaceId === '') return { ok: false, message: 'No workspace ID was given.' };
-      const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
-      if (!read.ok) return { ok: false, message: read.message };
-      if (read.entry.status !== 'ok') return { ok: false, message: read.entry.message };
-      const doc = read.entry.document;
-      if (doc.backend.kind !== 'jira') return { ok: false, message: `"${doc.name}" is not a Jira workspace.` };
-      const { siteUrl, email, cloudId, credentialRef } = doc.backend;
+  // ─── Jira workspaces (VERM-33, VERM-34) ──────────────────────────────────────
+  // One read-only Jira provider per workspace, bound to the workspace's own
+  // connection, credential reference and per-project settings. It is kept
+  // while those stay the same, so the credential is resolved and the token
+  // probed once rather than on every board refresh, and dropped on any
+  // failure so a revoked token or changed source is picked up on the next
+  // call. The token never leaves the main process.
+  const jiraProviders = new Map<string, { key: string; provider: Promise<JiraProvider> }>();
 
-      // The workspace's own credential reference, resolved here in the main
-      // process; the value never crosses IPC.
+  async function workspaceJiraProvider(
+    workspaceId: unknown,
+  ): Promise<{ ok: true; provider: JiraProvider; doc: WorkspaceDocument } | { ok: false; message: string }> {
+    const client = await workspaceArticleClient();
+    if (!client) return { ok: false, message: NOT_CONFIGURED_WS.message };
+    if (typeof workspaceId !== 'string' || workspaceId === '') return { ok: false, message: 'No workspace ID was given.' };
+    const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
+    if (!read.ok) return { ok: false, message: read.message };
+    if (read.entry.status !== 'ok') return { ok: false, message: read.entry.message };
+    const doc = read.entry.document;
+    if (doc.backend.kind !== 'jira') return { ok: false, message: `"${doc.name}" is not a Jira workspace.` };
+    const { siteUrl, email, cloudId, credentialRef } = doc.backend;
+    const key = JSON.stringify([siteUrl, email, cloudId, credentialRef, doc.jiraProjects ?? {}]);
+
+    const cached = jiraProviders.get(workspaceId);
+    if (cached?.key === key) {
+      try {
+        return { ok: true, provider: await cached.provider, doc };
+      } catch {
+        jiraProviders.delete(workspaceId);
+      }
+    }
+    const provider = (async () => {
       let token: string;
       if (IS_E2E) {
         token = 'e2e-jira-token';
       } else {
         const r = await resolveWorkspaceCredential({ workspaceId, credentialRef }, await readConfig(), credentialSourceIO);
-        if (!r.ok) return { ok: false, message: r.message };
+        if (!r.ok) throw { message: r.message };
         token = r.value;
       }
+      const base = await jira.jiraApiBase({ siteUrl, email, cloudId }, token);
+      return createJiraProvider(jira, { base, email, token }, doc.jiraProjects ?? {});
+    })();
+    jiraProviders.set(workspaceId, { key, provider });
+    try {
+      return { ok: true, provider: await provider, doc };
+    } catch (e) {
+      jiraProviders.delete(workspaceId);
+      return { ok: false, message: (e as { message?: string }).message ?? 'Jira could not be reached.' };
+    }
+  }
+
+  function jiraFailure(workspaceId: unknown, e: unknown, fallback: string): { ok: false; message: string } {
+    if (typeof workspaceId === 'string') jiraProviders.delete(workspaceId);
+    return { ok: false, message: (e as { message?: string }).message ?? fallback };
+  }
+
+  ipcMain.handle(
+    IPC.listWorkspaceJiraProjects,
+    async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraProjectsResult> => {
+      const p = await workspaceJiraProvider(workspaceId);
+      if (!p.ok) return p;
       try {
-        const base = await jira.jiraApiBase({ siteUrl, email, cloudId }, token);
-        const projects = await createJiraProvider(jira, { base, email, token }).getProjects();
-        return { ok: true, projects };
+        return { ok: true, projects: await p.provider.getProjects() };
       } catch (e) {
-        const err = e as { message?: string };
-        return { ok: false, message: err.message ?? 'The Jira projects could not be listed.' };
+        return jiraFailure(workspaceId, e, 'The Jira projects could not be listed.');
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.getWorkspaceJiraIssues,
+    async (_e, args: unknown): Promise<GetWorkspaceJiraIssuesResult> => {
+      const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+      const projectKey = typeof a.projectKey === 'string' ? a.projectKey : '';
+      const p = await workspaceJiraProvider(a.workspaceId);
+      if (!p.ok) return p;
+      // Only the workspace's own projects: a renderer cannot read any project
+      // the user can browse just by naming it.
+      if (!workspaceProjectIds(p.doc).includes(projectKey)) {
+        return { ok: false, message: `${projectKey || 'That project'} is not one of this workspace's Jira projects.` };
+      }
+      try {
+        const [issues, priorities] = await Promise.all([
+          p.provider.getIssues(projectKey, a.includeResolved === true),
+          p.provider.getPriorityValues(projectKey).catch(() => [] as string[]),
+        ]);
+        return { ok: true, issues, priorities };
+      } catch (e) {
+        return jiraFailure(a.workspaceId, e, `The issues of ${projectKey} could not be loaded.`);
       }
     },
   );

@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import type { BoardIssue, StatusRole } from '../../../shared/workspace';
+import { FIELD_KEYS } from '../../../shared/fields';
+import { jiraBoardColumns } from './jiraBoard';
+
+// Fictional values only.
+function issue(key: string, status: string | null, role: StatusRole | null, priority: string | null = null, dueDate: number | null = null): BoardIssue {
+  const fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, null])) as BoardIssue['fields'];
+  fields.status = status;
+  fields.priority = priority;
+  fields.dueDate = dueDate;
+  return { id: key, idReadable: key, summary: key, resolved: role === 'done' ? 1 : null, fields, parentEpic: null, isEpic: false, statusRole: role };
+}
+
+describe('jiraBoardColumns', () => {
+  it('orders columns by what the status means, then by name', () => {
+    const cols = jiraBoardColumns([
+      issue('DEMO-1', 'Done', 'done'),
+      issue('DEMO-2', 'In Review', 'inProgress'),
+      issue('DEMO-3', 'Impeded', 'blocked'),
+      issue('DEMO-4', 'Backlog', 'todo'),
+      issue('DEMO-5', 'Building', 'inProgress'),
+      issue('DEMO-6', 'On hold', 'deferred'),
+      issue('DEMO-7', 'Awaiting vendor', 'waiting'),
+    ]);
+    expect(cols.map((c) => c.status)).toEqual(['Backlog', 'Building', 'In Review', 'Awaiting vendor', 'Impeded', 'On hold', 'Done']);
+  });
+
+  it('merges one status name across projects into one column', () => {
+    const cols = jiraBoardColumns([issue('DEMO-1', 'To Do', 'todo'), issue('OPS-1', 'To Do', 'todo')]);
+    expect(cols).toHaveLength(1);
+    expect(cols[0].issues.map((i) => i.idReadable)).toEqual(['DEMO-1', 'OPS-1']);
+  });
+
+  it('puts statuses with no known meaning, and hidden statuses, last', () => {
+    const cols = jiraBoardColumns([issue('DEMO-1', null, null), issue('DEMO-2', 'Done', 'done'), issue('DEMO-3', 'Custom', null)]);
+    expect(cols.map((c) => c.status)).toEqual(['Done', '(No status)', 'Custom']);
+  });
+
+  it("sorts each column by its issues' own project priority order, then due date, then key", () => {
+    const priorities = { DEMO: ['Critical', 'Highest', 'High', 'Low'], OPS: ['P1', 'P2'] };
+    const cols = jiraBoardColumns(
+      [
+        issue('DEMO-10', 'To Do', 'todo', 'Low'),
+        issue('DEMO-2', 'To Do', 'todo', 'Critical', 200),
+        issue('DEMO-3', 'To Do', 'todo', 'Critical', 100),
+        issue('OPS-1', 'To Do', 'todo', 'P2'),
+        issue('DEMO-9', 'To Do', 'todo', null),
+        issue('DEMO-11', 'To Do', 'todo', 'High'),
+      ],
+      priorities,
+    );
+    expect(cols[0].issues.map((i) => i.idReadable)).toEqual(['DEMO-3', 'DEMO-2', 'OPS-1', 'DEMO-11', 'DEMO-10', 'DEMO-9']);
+  });
+
+  it('with no priorities or due dates, sorts by key in numeric order', () => {
+    const cols = jiraBoardColumns([issue('DEMO-2', 'To Do', 'todo'), issue('DEMO-10', 'To Do', 'todo'), issue('DEMO-1', 'To Do', 'todo')]);
+    expect(cols[0].issues.map((i) => i.idReadable)).toEqual(['DEMO-1', 'DEMO-2', 'DEMO-10']);
+  });
+});

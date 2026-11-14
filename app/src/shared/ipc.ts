@@ -85,6 +85,8 @@ export const IPC = {
   checkWorkspaceCredential: 'credentialRefs:check',
   // A Jira workspace's selectable projects, read with its own credential (VERM-33).
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
+  // One of a Jira workspace's projects, read-only, for its board (VERM-34).
+  getWorkspaceJiraIssues: 'workspaceJira:getIssues',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -138,6 +140,17 @@ export type CredentialRefWriteResult =
     };
 
 /** Whether a workspace's credential resolves on this host — never the value (VERM-45). */
+export interface GetWorkspaceJiraIssuesArgs {
+  workspaceId: string;
+  projectKey: string;
+  includeResolved?: boolean;
+}
+
+export type GetWorkspaceJiraIssuesResult =
+  // priorities: the project's values, most urgent first ([] when unknown).
+  | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[] }
+  | { ok: false; message: string };
+
 export type ListWorkspaceJiraProjectsResult =
   | { ok: true; projects: Array<{ id: string; name: string; shortName: string }> }
   | { ok: false; message: string };
@@ -543,6 +556,8 @@ export interface VermilianAPI {
   // The Jira projects a Jira workspace can choose from, listed through its own
   // connection and credential reference. Read-only; nothing is written to Jira.
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
+  // A Jira workspace project's issues and priority order, read-only (VERM-34).
+  getWorkspaceJiraIssues(args: GetWorkspaceJiraIssuesArgs): Promise<GetWorkspaceJiraIssuesResult>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
 }

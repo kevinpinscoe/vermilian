@@ -11,7 +11,7 @@
  * Per-workspace storage (VERMILIAN_E2E_WORKSPACE_STORAGE=per-workspace, an
  * e2e-only stand-in for the activation gate VERM-53 will own): switching
  * changes the backend context — a YouTrack workspace shows its board, a Jira
- * workspace says plainly that its board is not available yet.
+ * workspace shows its read-only Jira board.
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -206,9 +206,9 @@ test.describe('Workspace switching — per-workspace storage (e2e gate)', () => 
     await chooseWorkspace(page, 'Workspace B');
     await expect(backend).toHaveText('Jira · example.atlassian.net');
     await expect(backend).toHaveAttribute('data-backend-kind', 'jira');
-    await expect(page.locator('[data-testid="workspace-board-unavailable"]')).toContainText(
-      'Jira boards are not available',
-    );
+    // A Jira workspace shows its own read-only board (VERM-34), not the YouTrack one.
+    await expect(page.locator('[data-testid="jira-workspace-board"]')).toBeVisible();
+    await expect(page.locator('[data-testid="jira-card"]').first()).toBeVisible();
     await expect(page.locator('[data-testid="workspace-board"]')).toHaveCount(0);
 
     await chooseWorkspace(page, 'Workspace A');
