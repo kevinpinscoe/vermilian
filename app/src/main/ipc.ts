@@ -59,6 +59,7 @@ import { readWorkspaceConfig, writeWorkspaceConfig } from './services/workspaceC
 import {
   readStoredActiveWorkspaceId,
   writeStoredActiveWorkspaceId,
+  activeWorkspaceGeneration,
   workspaceStorageMode,
 } from './services/activeWorkspace';
 import {
@@ -86,7 +87,7 @@ import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from
 import * as workspaceMigration from './services/workspaceMigration';
 import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
 import { aiCredentialRefOf, e2eFakeAnthropicKeyAllowed } from '../shared/workspaceAi';
-import { resolveWorkspaceAiKey, type WorkspaceAiKey } from './services/workspaceAiKey';
+import { beginWorkspaceAiOperation, type WorkspaceAiOperation } from './services/workspaceAiKey';
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
 import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
@@ -457,10 +458,11 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.aiCreateTask,
     async (_e, args: AiCreateTaskArgs): Promise<AiCreateTaskResult> => {
-      const ai = await resolveAiKey(args.workspaceId);
+      const ai = await beginAi(args.workspaceId);
       if (!ai.ok) return { ok: false, error: ai.error };
       const cfg = await readConfig();
-      return claude.extractTaskFields(ai.key, args.description, args.projects, cfg.modelForCreate);
+      const sent = await ai.send((key) => claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate));
+      return sent.ok ? sent.value : { ok: false, error: sent.error };
     },
   );
 
@@ -588,11 +590,15 @@ export function registerIpc(): void {
     return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref));
   }
 
-  // The key for one AI operation, from the active workspace only
-  // (services/workspaceAiKey.ts).
-  async function resolveAiKey(requestedWorkspaceId: unknown): Promise<WorkspaceAiKey> {
+  // One AI operation for the active workspace only (services/workspaceAiKey.ts).
+  // The switch counter is read first, before anything else is decided; the
+  // returned send() checks it again immediately before calling Anthropic.
+  async function beginAi(requestedWorkspaceId: unknown): Promise<WorkspaceAiOperation> {
+    const startGeneration = activeWorkspaceGeneration();
     const { choices, legacyHint } = await workspaceChoices();
-    return resolveWorkspaceAiKey({
+    return beginWorkspaceAiOperation({
+      startGeneration,
+      currentGeneration: activeWorkspaceGeneration,
       storage: workspaceStorageMode(),
       activeId: resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint),
       choices,
@@ -840,18 +846,15 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        const ai = await resolveAiKey(args.workspaceId);
+        const ai = await beginAi(args.workspaceId);
         if (!ai.ok) return { ok: false, error: ai.error };
 
         const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForRecommendation(args.issueIds);
-        const result = await claude.getRecommendation(
-          ai.key,
-          issues,
-          args.candidateContext,
-          args.outcome,
-          cfg.modelForRecommendation,
+        const sent = await ai.send((key) =>
+          claude.getRecommendation(key, issues, args.candidateContext, args.outcome, cfg.modelForRecommendation),
         );
-        return { ok: true, result };
+        if (!sent.ok) return { ok: false, error: sent.error };
+        return { ok: true, result: sent.value };
       } catch (e) {
         const err = e as { message?: string };
         return { ok: false, error: err.message ?? 'Recommendation request failed.' };
@@ -1257,7 +1260,7 @@ export function registerIpc(): void {
         const cfg = await readConfig();
         const token = await loadYtToken(cfg);
         if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        const ai = await resolveAiKey(args.workspaceId);
+        const ai = await beginAi(args.workspaceId);
         if (!ai.ok) return { ok: false, error: ai.error };
 
         const allProjects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
@@ -1302,12 +1305,9 @@ export function registerIpc(): void {
 
         if (taskCount === 0) return { ok: true, markdown: '', taskCount: 0 };
 
-        const markdown = await claude.generateStandupReport(
-          ai.key,
-          issues,
-          cfg.modelForStandup,
-        );
-        return { ok: true, markdown, taskCount };
+        const sent = await ai.send((key) => claude.generateStandupReport(key, issues, cfg.modelForStandup));
+        if (!sent.ok) return { ok: false, error: sent.error };
+        return { ok: true, markdown: sent.value, taskCount };
       } catch (e) {
         const err = e as { message?: string };
         return { ok: false, error: err.message ?? 'Stand-up generation failed.' };

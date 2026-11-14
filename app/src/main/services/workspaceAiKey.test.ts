@@ -6,6 +6,7 @@ import type { CredentialSourceIO } from './credentialResolver';
 import {
   AI_LEGACY_NO_KEY_MESSAGE,
   AI_WORKSPACE_CHANGED_MESSAGE,
+  beginWorkspaceAiOperation,
   resolveWorkspaceAiKey,
   type WorkspaceAiKeyRequest,
 } from './workspaceAiKey';
@@ -154,5 +155,128 @@ describe('resolveWorkspaceAiKey — legacy storage (before VERM-53)', () => {
     const { req, loadLegacyKey } = request({ storage: 'legacy', activeId: 'ws-work', requestedWorkspaceId: 'ws-home' });
     await expect(resolveWorkspaceAiKey(req)).resolves.toEqual({ ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE });
     expect(loadLegacyKey).not.toHaveBeenCalled();
+  });
+});
+
+// ─── The final check immediately before Anthropic is contacted ──────────────
+// A controlled fixture: a credential source that resolves only when the test
+// lets it, and a switch counter the test bumps, as setActiveWorkspace does.
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+function slowWorkspace() {
+  let generation = 0;
+  const gate = deferred<void>();
+  const host = io({ files: { '/fictional/slow.key': 'fictional-slow-key-444' } });
+  const slowIo: CredentialSourceIO = {
+    ...host.fake,
+    async readFile(f) {
+      await gate.promise; // credential resolution held here
+      return host.fake.readFile(f);
+    },
+  };
+  const choices = [choice('ws-a', 'anthropic-slow'), choice('ws-b', 'anthropic-home')];
+  const cfg: AppConfig = { ...CFG, credentialSources: { ...CFG.credentialSources, 'anthropic-slow': { command: '', file: '/fictional/slow.key' } } };
+  const base = request({ activeId: 'ws-a', choices, cfg, io: slowIo, requestedWorkspaceId: 'ws-a' }, host).req;
+  return {
+    begin: (over: Partial<WorkspaceAiKeyRequest> = {}) =>
+      beginWorkspaceAiOperation({ ...base, ...over, startGeneration: generation, currentGeneration: () => generation }),
+    switchWorkspace: () => { generation += 1; },
+    release: () => gate.resolve(),
+    calls: host.calls,
+  };
+}
+
+const OPERATIONS = ['extractTaskFields', 'getRecommendation', 'generateStandupReport'] as const;
+
+describe('beginWorkspaceAiOperation — revalidated immediately before Anthropic', () => {
+  it.each(OPERATIONS)('%s: a switch while the credential is still resolving refuses before any request', async () => {
+    const w = slowWorkspace();
+    const pending = w.begin();      // 1. workspace A begins resolving its credential
+    await Promise.resolve();        // 2. resolution is held at the slow source
+    w.switchWorkspace();            // 3. the user switches to workspace B
+    w.release();                    // 4. A's credential finishes resolving
+    const op = await pending;
+    expect(op.ok).toBe(true);
+    const anthropic = vi.fn(async (_key: string) => 'reply');
+    const sent = op.ok ? await op.send(anthropic) : null;
+    expect(sent).toEqual({ ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE }); // 5. refused
+    expect(anthropic).not.toHaveBeenCalled();
+  });
+
+  it('a switch after resolution but before sending (e.g. while issues load) also refuses', async () => {
+    const w = slowWorkspace();
+    w.release();
+    const op = await w.begin();
+    w.switchWorkspace();
+    const anthropic = vi.fn(async (_key: string) => 'reply');
+    expect(op.ok && (await op.send(anthropic))).toEqual({ ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE });
+    expect(anthropic).not.toHaveBeenCalled();
+  });
+
+  it('without a switch the request is sent once, with the workspace\'s own key', async () => {
+    const w = slowWorkspace();
+    w.release();
+    const op = await w.begin();
+    const anthropic = vi.fn(async (key: string) => `reply for ${key.length}`);
+    expect(op.ok && (await op.send(anthropic))).toEqual({ ok: true, value: 'reply for 22' });
+    expect(anthropic).toHaveBeenCalledTimes(1);
+    expect(anthropic).toHaveBeenCalledWith('fictional-slow-key-444');
+  });
+
+  it("a switch never substitutes the new workspace's credential, and nothing is retried", async () => {
+    const w = slowWorkspace();
+    const pending = w.begin();
+    await Promise.resolve();
+    w.switchWorkspace();
+    w.release();
+    const op = await pending;
+    const anthropic = vi.fn(async (_key: string) => 'reply');
+    if (op.ok) await op.send(anthropic);
+    expect(anthropic).not.toHaveBeenCalled();
+    // Only workspace A's own source was ever read; B's command never ran.
+    expect(w.calls).toEqual(['file:/fictional/slow.key']);
+  });
+
+  it('none selected and a failing configured source still fail before any send is possible', async () => {
+    const w = slowWorkspace();
+    w.release();
+    const none = await w.begin({ activeId: 'ws-none', choices: CHOICES, requestedWorkspaceId: 'ws-none' });
+    expect(none).toEqual({ ok: false, error: AI_NOT_SELECTED_MESSAGE });
+    const broken = await w.begin({
+      activeId: 'ws-broken',
+      choices: [choice('ws-broken', 'anthropic-broken')],
+      requestedWorkspaceId: 'ws-broken',
+      io: io({ commands: { 'show broken': 'fail' } }).fake,
+    });
+    expect(broken.ok).toBe(false);
+    if (!broken.ok) expect(broken.error).toMatch(/^AI is unavailable: .*anthropic-broken/);
+  });
+
+  it('legacy storage: the Settings key is sent when nothing switched, and refused when something did', async () => {
+    const w = slowWorkspace();
+    const ok = await w.begin({ storage: 'legacy' });
+    expect(ok.ok && (await ok.send(async (key) => key === KEY_SETTINGS))).toEqual({ ok: true, value: true });
+    const op = await w.begin({ storage: 'legacy' });
+    w.switchWorkspace();
+    const anthropic = vi.fn(async (_key: string) => 'reply');
+    expect(op.ok && (await op.send(anthropic))).toEqual({ ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE });
+    expect(anthropic).not.toHaveBeenCalled();
+  });
+
+  it('no credential value appears in any refusal', async () => {
+    const w = slowWorkspace();
+    const pending = w.begin();
+    await Promise.resolve();
+    w.switchWorkspace();
+    w.release();
+    const op = await pending;
+    const refusal = op.ok ? await op.send(async () => 'x') : op;
+    expect(JSON.stringify(refusal)).not.toMatch(/fictional-|\/fictional\//);
+    expect(JSON.stringify(op)).not.toContain('fictional-slow-key-444'); // the handle carries no visible key
   });
 });

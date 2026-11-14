@@ -49,3 +49,44 @@ export async function resolveWorkspaceAiKey(req: WorkspaceAiKeyRequest): Promise
   if (req.e2e && e2eFakeAnthropicKeyAllowed(ref, r.reason)) return { ok: true, key: e2eFakeAnthropicKey(ref) };
   return { ok: false, error: `AI is unavailable: ${r.message}` };
 }
+
+// ─── One AI operation, revalidated immediately before Anthropic ──────────────
+// Resolving a credential is asynchronous — a command may run, a file or an
+// encrypted blob be read — and so is loading the issues a recommendation or
+// stand-up is about. The user can switch workspaces during either. So the
+// active workspace is checked twice: when the operation begins
+// (resolveWorkspaceAiKey), and again by send(), synchronously, in the same
+// tick that hands the key to the Anthropic request. The second check uses a
+// counter that every active-workspace change bumps synchronously
+// (services/activeWorkspace.ts), so there is no await between it and the
+// request, and a switch away and back still counts as a switch.
+
+export interface WorkspaceAiOperationRequest extends WorkspaceAiKeyRequest {
+  /** The switch counter, read before anything about the operation was decided. */
+  startGeneration: number;
+  /** The switch counter now. */
+  currentGeneration: () => number;
+}
+
+export type WorkspaceAiSend = <T>(request: (key: string) => Promise<T>) => Promise<{ ok: true; value: T } | { ok: false; error: string }>;
+
+export type WorkspaceAiOperation = { ok: true; send: WorkspaceAiSend } | { ok: false; error: string };
+
+/**
+ * Begins one AI operation for the active workspace. On success, `send` makes
+ * the single Anthropic request with the workspace's key — or, if the active
+ * workspace has changed since the operation began, refuses without calling
+ * it. Nothing is retried, and no other workspace's credential is used. The
+ * key stays inside the returned closure.
+ */
+export async function beginWorkspaceAiOperation(req: WorkspaceAiOperationRequest): Promise<WorkspaceAiOperation> {
+  const resolved = await resolveWorkspaceAiKey(req);
+  if (!resolved.ok) return resolved;
+  const { key } = resolved;
+  const send: WorkspaceAiSend = async (request) => {
+    // No await between this check and the request starting.
+    if (req.currentGeneration() !== req.startGeneration) return { ok: false, error: AI_WORKSPACE_CHANGED_MESSAGE };
+    return { ok: true, value: await request(key) };
+  };
+  return { ok: true, send };
+}

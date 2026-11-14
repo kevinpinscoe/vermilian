@@ -39,7 +39,13 @@ const SEEDS: WorkspaceDocument[] = [
     backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
     folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
   },
+  // Its credential is a real command that takes two seconds (a fictional
+  // value): the window in which the user switches workspaces.
+  ytWorkspace('ws-e2eai7', 'Slow AI', 6, 'anthropic-slow'),
 ];
+
+const SLOW_KEY = 'fictional-slow-key';
+const SLOW_SECONDS = 2;
 
 const OUTCOME = { name: 'Ship it', activeEpics: [], successMeasure: null, targetWindow: null, risks: null };
 
@@ -93,6 +99,10 @@ test.describe('per-workspace storage (e2e gate)', () => {
     }
     // A configured source that cannot be read: resolution must stop there.
     await page.evaluate(() => window.vermilian.setCredentialRefSources('anthropic-broken', { command: '', file: '/nonexistent/vermilian-e2e/broken.key' }));
+    await page.evaluate(
+      ({ key, seconds }) => window.vermilian.setCredentialRefSources('anthropic-slow', { command: `sleep ${seconds}; echo ${key}`, file: '' }),
+      { key: SLOW_KEY, seconds: SLOW_SECONDS },
+    );
     await page.reload();
     await expect(tid(page, 'workspace-switcher')).toBeVisible({ timeout: 15_000 });
   });
@@ -145,6 +155,57 @@ test.describe('per-workspace storage (e2e gate)', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/active workspace changed/);
     expect((await claudeCalls()).length).toBe(before);
+  });
+
+  // The race: workspace A starts resolving its (slow) credential, the user
+  // switches to B, A's credential arrives — and nothing may reach Anthropic.
+  const OPS = {
+    'AI task creation': (id: string) => window.vermilian.aiCreateTask({ description: 'Write the fictional report', projects: [{ id: '0-e1', name: 'Test' }], workspaceId: id }),
+    'Priority Desk recommendation': (id: string) =>
+      window.vermilian.getRecommendation({
+        issueIds: ['0-e1-3'],
+        candidateContext: [{ issueId: '0-e1-3', epicOutcomeContext: { kind: 'none' }, parentEpicIdReadable: null }] as never,
+        outcome: { name: 'Ship it', activeEpics: [], successMeasure: null, targetWindow: null, risks: null },
+        workspaceId: id,
+      }),
+    'stand-up generation': (id: string) => window.vermilian.standupGenerate({ scope: 'all-workspace', window: '7d', workspaceId: id }),
+  } as const;
+
+  for (const [label, op] of Object.entries(OPS)) {
+    test(`${label}: switching workspaces while the credential resolves refuses before Anthropic is contacted`, async () => {
+      await activate('ws-e2eai7');
+      const before = (await claudeCalls()).length;
+      // 1–2. Start the operation in Slow AI without waiting for it (the trailing
+      // `void 0` keeps evaluate from awaiting); its credential command runs.
+      const t0 = Date.now();
+      await page.evaluate(`window.__aiOp = (${op.toString()})('ws-e2eai7'); window.__aiOp.then(() => { window.__aiDone = Date.now(); }); void 0`);
+      await page.waitForTimeout(500);
+      // 3. Switch to Work AI before the credential arrives.
+      await activate('ws-e2eai2');
+      const switchedAt = Date.now() - t0;
+      // 4–5. The credential finishes resolving; the operation is refused.
+      const r = (await page.evaluate('window.__aiOp')) as { ok: boolean; error?: string };
+      // The switch really did land while the credential was still resolving;
+      // otherwise this test would not be exercising the race at all.
+      const doneAt = ((await page.evaluate('window.__aiDone')) as number) - t0;
+      expect(switchedAt).toBeLessThan(SLOW_SECONDS * 1000);
+      expect(doneAt).toBeGreaterThan(switchedAt);
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/active workspace changed/);
+      expect(JSON.stringify(r)).not.toContain(SLOW_KEY);
+      // Nothing reached the fake Claude — not with Slow AI's key, nor Work AI's.
+      expect((await claudeCalls()).length).toBe(before);
+    });
+  }
+
+  test('without a switch, the slow credential is used and the operation succeeds', async () => {
+    await activate('ws-e2eai7');
+    const before = (await claudeCalls()).length;
+    const r = await page.evaluate(`(${OPS['AI task creation'].toString()})('ws-e2eai7')`) as { ok: boolean };
+    expect(r.ok).toBe(true);
+    expect(JSON.stringify(r)).not.toContain(SLOW_KEY);
+    // The real (fictional) command's value, not an e2e stand-in or another reference.
+    expect((await claudeCalls()).slice(before)).toEqual([{ fn: 'extractTaskFields', credentialRef: 'other' }]);
   });
 
   test('AI controls follow the active workspace when switching: available, none selected, unavailable here', async () => {
