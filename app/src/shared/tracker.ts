@@ -127,6 +127,11 @@ export interface TrackerProvider {
   getIssues(projectShortName: string, includeResolved?: boolean): Promise<BoardIssue[]>;
   searchIssues(projectShortNames: string[], query: string): Promise<BoardIssue[]>;
   getIssueDetail(issueId: string): Promise<IssueDetail>;
+  /**
+   * The project's priority values, most urgent first — the order to sort by
+   * (shared/priority.ts). [] when the backend cannot say (VERM-30).
+   */
+  getPriorityValues(projectShortName: string): Promise<string[]>;
 }
 
 /**

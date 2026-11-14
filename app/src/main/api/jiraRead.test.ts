@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getEditMeta,
   getIssue,
   isValidProjectKey,
   listProjects,
@@ -185,6 +186,48 @@ describe('getIssue', () => {
 
   it('refuses a malformed key before any request', async () => {
     await expect(getIssue(BASE, EMAIL, TOKEN, '../myself')).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid Jira issue key/),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// GET /rest/api/3/issue/{key}/editmeta (VERM-30).
+const EDITMETA = {
+  fields: {
+    summary: { required: true, schema: { type: 'string', system: 'summary' }, name: 'Summary', key: 'summary', operations: ['set'] },
+    priority: {
+      required: false,
+      schema: { type: 'priority', system: 'priority' },
+      name: 'Priority',
+      key: 'priority',
+      operations: ['set'],
+      allowedValues: [
+        { self: `${BASE}/rest/api/3/priority/1`, iconUrl: `${BASE}/images/icons/priorities/highest.svg`, name: 'Highest', id: '1' },
+        { self: `${BASE}/rest/api/3/priority/3`, iconUrl: `${BASE}/images/icons/priorities/medium.svg`, name: 'Medium', id: '3' },
+        { self: `${BASE}/rest/api/3/priority/5`, iconUrl: `${BASE}/images/icons/priorities/lowest.svg`, name: 'Lowest', id: '5' },
+      ],
+    },
+  },
+};
+
+describe('getEditMeta', () => {
+  it('GETs the edit metadata and returns the allowed values in order', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, EDITMETA));
+    const meta = await getEditMeta(BASE, EMAIL, TOKEN, 'DEMO-1');
+    expect(meta.fields?.priority?.allowedValues?.map((v) => v.name)).toEqual(['Highest', 'Medium', 'Lowest']);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/rest/api/3/issue/DEMO-1/editmeta`);
+    expect(init.method).toBe('GET');
+  });
+
+  it('returns no fields for an issue the user cannot edit', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { fields: {} }));
+    await expect(getEditMeta(BASE, EMAIL, TOKEN, 'DEMO-1')).resolves.toEqual({ fields: {} });
+  });
+
+  it('refuses a malformed key before any request', async () => {
+    await expect(getEditMeta(BASE, EMAIL, TOKEN, 'DEMO-1/../x')).rejects.toMatchObject({
       message: expect.stringMatching(/Invalid Jira issue key/),
     });
     expect(fetchMock).not.toHaveBeenCalled();

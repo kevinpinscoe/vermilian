@@ -134,6 +134,7 @@ describe('isWritableTracker', () => {
     getIssueDetail: async () => {
       throw new Error('not used');
     },
+    getPriorityValues: async () => [],
   };
   const noop = async () => undefined;
 
