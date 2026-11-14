@@ -224,6 +224,20 @@ export async function getIssue(
   return jiraRequest<JiraSearchIssue>(base, email, token, `/rest/api/3/issue/${key}${query}`);
 }
 
+/** GET /issue/{key}/editmeta: the fields the user may edit, with allowed values. */
+export interface JiraEditMeta {
+  fields?: Record<string, { name?: string; allowedValues?: Array<{ id?: string; name?: string }> }>;
+}
+
+// GET /rest/api/3/issue/{key}/editmeta — read-only despite the name: it
+// describes the edit screen and changes nothing. Fields the user cannot edit
+// are omitted, so an issue they cannot edit returns no fields at all. The key
+// is validated first. Throws JiraError.
+export async function getEditMeta(base: string, email: string, token: string, key: string): Promise<JiraEditMeta> {
+  if (!isValidLocalId('jira', key)) throw invalid(`Invalid Jira issue key: ${JSON.stringify(key)}`);
+  return jiraRequest<JiraEditMeta>(base, email, token, `/rest/api/3/issue/${key}/editmeta`);
+}
+
 export interface JiraProject {
   id: string;
   key: string;

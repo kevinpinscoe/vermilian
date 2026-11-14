@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as JiraClient from '../api/jira';
-import { isValidProjectKey } from '../api/jira';
+import { isValidProjectKey, projectIssuesJql } from '../api/jira';
 import { createJiraProvider } from './jiraProvider';
 import { isWritableTracker } from '../../shared/tracker';
 import { jiraBoardFields, jiraDetailFields } from '../../shared/jiraBoardIssue';
@@ -29,6 +29,10 @@ function stubClient(overrides: Partial<Record<keyof typeof JiraClient, unknown>>
     searchProjectIssues: vi.fn(async () => [ISSUE]),
     searchJql: vi.fn(async () => [ISSUE]),
     getIssue: vi.fn(async () => ISSUE),
+    projectIssuesJql,
+    getEditMeta: vi.fn(async () => ({
+      fields: { priority: { name: 'Priority', allowedValues: ['Critical', 'Highest', 'High', 'None'].map((name, i) => ({ id: String(i), name })) } },
+    })),
     ...overrides,
   };
   return client as unknown as typeof JiraClient & typeof client;
@@ -146,5 +150,58 @@ describe('createJiraProvider', () => {
     const err = { status: 401, message: 'Client must be authenticated' };
     const client = stubClient({ listProjects: vi.fn(async () => Promise.reject(err)) });
     await expect(createJiraProvider(client, CONN).getProjects()).rejects.toBe(err);
+  });
+});
+
+describe('createJiraProvider — priority values from editmeta (VERM-30)', () => {
+  const ISSUES = [{ id: '1', key: 'DEMO-3' }, { id: '2', key: 'DEMO-2' }, { id: '3', key: 'DEMO-1' }, { id: '4', key: 'DEMO-0' }];
+
+  it("returns the project's allowedValues in scheme order, read from one open issue", async () => {
+    const client = stubClient({ searchJql: vi.fn(async () => ISSUES) });
+    await expect(createJiraProvider(client, CONN).getPriorityValues('DEMO')).resolves.toEqual(['Critical', 'Highest', 'High', 'None']);
+    expect(client.searchJql).toHaveBeenCalledWith(...AUTH, 'project = "DEMO" AND statusCategory != Done ORDER BY updated DESC', ['summary'], 1);
+    expect(client.getEditMeta).toHaveBeenCalledTimes(1);
+    expect(client.getEditMeta).toHaveBeenCalledWith(...AUTH, 'DEMO-3');
+  });
+
+  it('tries the next issue when the user cannot edit the first, up to three', async () => {
+    const getEditMeta = vi
+      .fn()
+      .mockResolvedValueOnce({ fields: {} })
+      .mockResolvedValueOnce({ fields: { priority: { allowedValues: [{ name: 'P1' }, { name: 'P2' }] } } });
+    const client = stubClient({ searchJql: vi.fn(async () => ISSUES), getEditMeta });
+    await expect(createJiraProvider(client, CONN).getPriorityValues('DEMO')).resolves.toEqual(['P1', 'P2']);
+    expect(getEditMeta.mock.calls.map((c) => c[3])).toEqual(['DEMO-3', 'DEMO-2']);
+
+    const none = vi.fn(async () => ({ fields: {} }));
+    const c2 = stubClient({ searchJql: vi.fn(async () => ISSUES), getEditMeta: none });
+    await expect(createJiraProvider(c2, CONN).getPriorityValues('DEMO')).resolves.toEqual([]);
+    expect(none).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns [] for a project with no open issues', async () => {
+    const client = stubClient({ searchJql: vi.fn(async () => []) });
+    await expect(createJiraProvider(client, CONN).getPriorityValues('DEMO')).resolves.toEqual([]);
+    expect(client.getEditMeta).not.toHaveBeenCalled();
+  });
+
+  it('reads each project once, and retries after a failure', async () => {
+    const searchJql = vi.fn().mockRejectedValueOnce({ status: 503, message: 'busy' }).mockResolvedValue(ISSUES);
+    const client = stubClient({ searchJql });
+    const p = createJiraProvider(client, CONN);
+    await expect(p.getPriorityValues('DEMO')).rejects.toMatchObject({ status: 503 });
+    const first = await p.getPriorityValues('DEMO');
+    first.push('mutated');
+    await expect(p.getPriorityValues('DEMO')).resolves.toEqual(['Critical', 'Highest', 'High', 'None']);
+    expect(searchJql).toHaveBeenCalledTimes(2);
+    expect(client.getEditMeta).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an invalid project key before any request', async () => {
+    const client = stubClient();
+    await expect(createJiraProvider(client, CONN).getPriorityValues('demo"')).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid Jira project key/),
+    });
+    expect(client.searchJql).not.toHaveBeenCalled();
   });
 });

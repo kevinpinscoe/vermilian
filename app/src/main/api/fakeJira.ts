@@ -4,7 +4,7 @@
 // routes reject, so a spec can exercise the failure path.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
-import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
+import { isValidProjectKey, siteApiBase, type JiraAccount, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions } from './jira';
 import { isValidLocalId } from '../../shared/tracker';
 import type { JiraSearchIssue } from '../../shared/jiraIssue';
 
@@ -26,6 +26,7 @@ export type {
   JiraAccount,
   JiraProbeResult,
   JiraProject,
+  JiraEditMeta,
   ProjectSearchOptions,
 } from './jira';
 
@@ -162,4 +163,21 @@ export async function searchProjectIssues(
       i.key.startsWith(`${projectKey}-`) &&
       (options.includeResolved || i.fields?.status?.statusCategory?.key !== 'done'),
   ).map((i) => ({ ...i, fields: { ...i.fields } }));
+}
+
+// ── Priority schemes (VERM-30) ───────────────────────────────────────────────
+// Fictional schemes, most urgent first. DEMO deliberately differs from the
+// YouTrack list; OPS has no priority field on its screens.
+export const FAKE_JIRA_PRIORITY_SCHEMES: Record<string, string[]> = {
+  DEMO: ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'None'],
+};
+
+export async function getEditMeta(_base: string, _email: string, token: string, key: string): Promise<JiraEditMeta> {
+  rejectBadToken(token);
+  if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
+  if (!FAKE_JIRA_ISSUES.some((i) => i.key === key)) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
+  const scheme = FAKE_JIRA_PRIORITY_SCHEMES[key.replace(/-\d+$/, '')];
+  const fields: NonNullable<JiraEditMeta['fields']> = { summary: { name: 'Summary' } };
+  if (scheme) fields.priority = { name: 'Priority', allowedValues: scheme.map((name, i) => ({ id: String(i + 1), name })) };
+  return { fields };
 }

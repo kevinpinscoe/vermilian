@@ -3,7 +3,9 @@
 // Binds the Jira read client (api/jira.ts, VERM-28) to one connection — the
 // API base the token works through, the account email and the token — and
 // maps every issue through mapJiraIssue with its own project's settings
-// (status mapping, due-date field — VERM-31). It implements TrackerProvider alone,
+// (status mapping, due-date field — VERM-31). Each project's priority values
+// and their order come from its priority scheme through editmeta (VERM-30),
+// never from the YouTrack list. It implements TrackerProvider alone,
 // never WritableTrackerProvider: nothing in Phase 1 writes to Jira, and
 // isWritableTracker() is false for it.
 //
@@ -21,6 +23,12 @@ import {
   mapJiraIssueDetail,
 } from '../../shared/jiraBoardIssue';
 import type { JiraProjectSettings, JiraProjectSettingsMap } from '../../shared/jiraProjectSettings';
+import { jiraPriorityOrder } from '../../shared/priority';
+
+// How many of a project's open issues to try for editmeta before giving up.
+// Normally the first answers; a later one helps only when the user cannot
+// edit the first.
+export const PRIORITY_PROBE_ISSUES = 3;
 
 export interface JiraConnection {
   /** The site URL or gateway base the token works through (jiraApiBase). */
@@ -41,6 +49,23 @@ export function createJiraProvider(
   const { base, email, token } = conn;
   const settingsFor = (projectKey: string): JiraProjectSettings =>
     Object.prototype.hasOwnProperty.call(projectSettings, projectKey) ? projectSettings[projectKey] : {};
+  // A priority scheme changes only by a site admin's hand, so each project's
+  // is read once per provider. A failed read is not remembered.
+  const priorityCache = new Map<string, Promise<string[]>>();
+
+  async function readPriorityValues(projectKey: string): Promise<string[]> {
+    // editmeta is per issue, so it is read from one of the project's open
+    // issues (an issue in a Done status is often not editable, and then
+    // editmeta lists no fields).
+    const issues = await client.searchJql(base, email, token, client.projectIssuesJql(projectKey), ['summary'], 1);
+    for (const issue of issues.slice(0, PRIORITY_PROBE_ISSUES)) {
+      const meta = await client.getEditMeta(base, email, token, issue.key);
+      const order = jiraPriorityOrder(meta.fields);
+      if (order) return order;
+    }
+    return [];
+  }
+
   const mapIssue = (issue: Parameters<typeof mapJiraIssue>[0]) => mapJiraIssue(issue, settingsFor(jiraProjectKeyOf(issue.key)));
 
   return {
@@ -77,6 +102,19 @@ export function createJiraProvider(
       const fields = [...new Set(projectKeys.flatMap((k) => jiraBoardFields(settingsFor(k))))];
       const issues = await client.searchJql(base, email, token, `${projects}${text} ORDER BY updated DESC`, fields);
       return issues.map(mapIssue);
+    },
+
+    getPriorityValues(projectKey) {
+      if (!client.isValidProjectKey(projectKey)) {
+        return Promise.reject({ message: `Invalid Jira project key: ${JSON.stringify(projectKey)}` });
+      }
+      let pending = priorityCache.get(projectKey);
+      if (!pending) {
+        pending = readPriorityValues(projectKey);
+        priorityCache.set(projectKey, pending);
+        pending.catch(() => priorityCache.delete(projectKey));
+      }
+      return pending.then((values) => [...values]);
     },
 
     async getIssueDetail(key) {

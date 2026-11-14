@@ -72,3 +72,17 @@ describe('createYouTrackProvider', () => {
     expect(isWritableTracker(p)).toBe(true);
   });
 });
+
+describe('createYouTrackProvider — priority values (VERM-30)', () => {
+  it('returns the shared YouTrack Priority bundle, in order, without a request', async () => {
+    const { client, calls } = recordingClient();
+    await expect(createYouTrackProvider(client, URL, TOKEN).getPriorityValues('DEMO')).resolves.toEqual([
+      'Show-stopper',
+      'Critical',
+      'Major',
+      'Normal',
+      'Minor',
+    ]);
+    expect(calls).toEqual([]);
+  });
+});
