@@ -83,6 +83,7 @@ const api: VermilianAPI = {
   runwayGet: (args: RunwayGetArgs) => ipcRenderer.invoke(IPC.runwayGet, args),
   runwayUpdate: (args: RunwayUpdateArgs) => ipcRenderer.invoke(IPC.runwayUpdate, args),
   runwayList: (args: RunwayListArgs) => ipcRenderer.invoke(IPC.runwayList, args),
+  runwayExportSnapshot: () => ipcRenderer.invoke(IPC.runwayExportSnapshot),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   openUserData: () => ipcRenderer.invoke(IPC.openUserData),
   getProjects: () => ipcRenderer.invoke(IPC.getProjects),

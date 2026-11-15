@@ -25,6 +25,7 @@ import {
   type RunwayResult,
   type RunwayListArgs,
   type RunwayListResult,
+  type RunwayExportSnapshotResult,
   type MoveIssueArgs,
   type CreateIssueArgs,
   type CreateIssueResult,
@@ -128,6 +129,7 @@ import { toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
+import { defaultSnapshotFileName, exportRunwaySnapshot } from './services/runwaySnapshot';
 import {
   createJiraRunwayStore,
   createYouTrackRunwayStore,
@@ -206,13 +208,19 @@ const youtrackRunwayStore = createYouTrackRunwayStore({
 const runwayStores: RunwayStores = {
   youtrack: youtrackRunwayStore,
   get jira(): JiraRunwayMetadataStore {
-    if (!jiraRunwayStore) {
-      runwayDb = openRunwayDb(path.join(app.getPath('userData'), RUNWAY_DB_FILENAME));
-      jiraRunwayStore = createJiraRunwayStore(runwayDb);
-    }
-    return jiraRunwayStore;
+    return openJiraRunwayStore().store;
   },
 };
+
+// Opens the Runway database on first use. The snapshot export (VERM-50)
+// shares this one connection, so it backs up exactly what the store sees.
+function openJiraRunwayStore(): { db: DatabaseSync; store: JiraRunwayMetadataStore } {
+  if (!runwayDb || !jiraRunwayStore) {
+    runwayDb = openRunwayDb(path.join(app.getPath('userData'), RUNWAY_DB_FILENAME));
+    jiraRunwayStore = createJiraRunwayStore(runwayDb);
+  }
+  return { db: runwayDb, store: jiraRunwayStore };
+}
 
 function closeRunwayDb(): void {
   runwayDb?.close();
@@ -1466,6 +1474,35 @@ export function registerIpc(): void {
       return { ok: true, entries: await runwayStores.jira.list(args.workspaceId) };
     } catch (e) {
       return runwayFailure(e);
+    }
+  });
+
+  ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
+    try {
+      const { db } = openJiraRunwayStore();
+      const options: Electron.SaveDialogOptions = {
+        title: 'Export Runway metadata snapshot',
+        defaultPath: path.join(app.getPath('documents'), defaultSnapshotFileName()),
+        buttonLabel: 'Export',
+        filters: [{ name: 'Vermilian Runway snapshot', extensions: ['sqlite'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      };
+      const parent = BrowserWindow.fromWebContents(e.sender);
+      const choice = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+      if (choice.canceled || !choice.filePath) return { ok: true, canceled: true };
+      const summary = await exportRunwaySnapshot(db, choice.filePath);
+      return {
+        ok: true,
+        canceled: false,
+        snapshot: {
+          path: summary.path,
+          exportedAt: summary.exportedAt,
+          schemaVersion: summary.schemaVersion,
+          rowCounts: summary.rowCounts,
+        },
+      };
+    } catch (err) {
+      return runwayFailure(err);
     }
   });
 
