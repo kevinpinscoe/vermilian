@@ -16,7 +16,7 @@ allowBuilds:
 # no vite peer/dep pin and @vitejs/plugin-react@5.2 supports vite 6 (5.2.0 is the
 # newest plugin-react whose peer range still covers vite 6 — 6.x requires vite 8).
 overrides:
-  vite: ^6.4.3
+  vite: ^6.4.6
   esbuild: ^0.25.0
   # Security (Dependabot) — pin patched versions of transitive deps. Most are
   # build/test/CLI tooling that never reaches the packaged app, because
@@ -28,7 +28,12 @@ overrides:
   # and @vibe/core is a `dependencies` entry. Dependabot scoping their
   # advisories `runtime` is correct. Do not deprioritise an advisory on either
   # one on the assumption that it is only tooling.
-  undici: ^7.28.0
+  # undici — alerts 90, 97, 98, 99, 100 (VERM-52): content-encoding DoS,
+  # cross-origin redirect cache poisoning, TLS renegotiation DoS, dropped TLS
+  # options, WebSocket PONG buffering. Patched in 7.30.1. Reached only via
+  # @electron/get <- electron (the Electron binary download at install time).
+  # The shipped app's fetch uses Electron's built-in Node undici instead.
+  undici: ^7.30.1
   tmp: ^0.2.6
   tar: ^7.5.18
   js-yaml: ^4.2.0
@@ -91,7 +96,10 @@ overrides:
   #
   # Same lesson as alert 43: the range has to exclude the vulnerable version, not
   # merely permit the patched one, or the lockfile stays where it is.
-  fast-uri: ^3.1.6
+  #
+  # Alerts 88, 92, 93, 94 (VERM-52) — host confusion, scheme injection, path
+  # equivalence, percent-encoded scheme spoofing — are patched in 3.1.9.
+  fast-uri: ^3.1.9
   # brace-expansion is vulnerable on every major line it ships, across a chain of
   # three advisories now. Pin each major to its own patched release rather than
   # forcing one major everywhere: this tree resolves minimatch 3, 5, 9 and 10 at
@@ -111,3 +119,18 @@ overrides:
   "brace-expansion@1": ^1.1.18
   "brace-expansion@2": ^2.1.4
   "brace-expansion@5": ^5.0.9
+  # VERM-52 (alerts 74, 107, 101). None of these is in the packaged app's
+  # bundle (verified against the packaged app.asar), but they run on developer
+  # machines and in CI, so they are patched rather than dismissed.
+  #
+  # source-map-js — alert 74, high: event-loop DoS via indexed source-map
+  # section offsets. Patched in 1.2.2. Via postcss <- vite (build only).
+  source-map-js: ^1.2.2
+  # postcss-selector-parser — alert 107, medium: quadratic flat-selector
+  # parsing. Patched in 6.1.5. Via stylelint <- @vibe/style (never bundled).
+  postcss-selector-parser: ^6.1.5
+  # zod — alert 101, high: memory exhaustion validating oversized
+  # unconstrained arrays. Patched in 4.6.6. An optional peer of
+  # @anthropic-ai/sdk (Vermilian imports only the default client) and a
+  # dependency of eslint-plugin-react-hooks; not in the bundle.
+  zod: ^4.6.6
