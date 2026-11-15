@@ -1,19 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
-import type { BoardIssue } from '../../../shared/workspace';
 import { formatDate } from '../project-board/KanbanView';
 import { jiraBoardColumns } from './jiraBoard';
-import { needsJiraReconnect, type WorkspaceJiraFailure } from '../../../shared/jiraConnection';
 import { JiraReconnect } from './JiraReconnect';
-import { JIRA_FULL_REFRESH_MS, JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
-import {
-  fetchFullJiraIssues,
-  pollJiraProject,
-  workspaceJiraIssuesPrefix,
-  workspaceJiraIssuesQueryKey,
-  workspaceJiraPollQueryKey,
-} from './jiraBoardSync';
+import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
+import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
+import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
+import { JiraFocusControl } from './JiraFocusControl';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraWorkspaceBoardProps {
@@ -33,7 +27,8 @@ export { workspaceJiraIssuesQueryKey } from './jiraBoardSync';
  * A Jira workspace's board, read-only (VERM-34). Issues come from Jira through
  * the workspace's own connection; cards cannot be dragged, edited or used to
  * start a timer, because nothing in Phase 1 writes to Jira. Clicking a card
- * opens its read-only detail panel (VERM-35).
+ * opens its read-only detail panel (VERM-35). The star and rank on each card
+ * are Vermilian's own Runway metadata, kept in the local store (VERM-38).
  */
 export function JiraWorkspaceBoard({
   workspaceId,
@@ -47,18 +42,7 @@ export function JiraWorkspaceBoard({
   const [showDone, setShowDone] = useState(false);
 
   const queryClient = useQueryClient();
-  // The issue lists: the full, authoritative read of each project, refreshed
-  // every JIRA_FULL_REFRESH_MS so deleted and moved-away issues eventually
-  // disappear (VERM-39, shared/jiraPoll.ts).
-  const results = useQueries({
-    queries: projectKeys.map((projectKey) => ({
-      queryKey: workspaceJiraIssuesQueryKey(workspaceId, projectKey, showDone),
-      queryFn: ({ signal }: { signal: AbortSignal }) => fetchFullJiraIssues(queryClient, workspaceId, projectKey, showDone, signal),
-      staleTime: 60 * 1000,
-      refetchInterval: JIRA_FULL_REFRESH_MS,
-      refetchIntervalInBackground: false,
-    })),
-  });
+  const { results, issues, priorities, loading, failures, reconnect } = useJiraWorkspaceIssues(workspaceId, projectKeys, showDone);
 
   // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
   // visible, once a project's list has loaded. It merges what changed into
@@ -79,35 +63,12 @@ export function JiraWorkspaceBoard({
     })),
   });
 
-  // A rejected token or unresolvable credential fails every project alike, so
-  // one such failure puts the whole board in the reconnect state (VERM-40).
-  const reconnect = results.map((r) => r.data).find((d): d is WorkspaceJiraFailure => needsJiraReconnect(d)) ?? null;
   const retry = () => {
     void queryClient.invalidateQueries({ queryKey: workspaceJiraIssuesPrefix(workspaceId) });
     void queryClient.invalidateQueries({ queryKey: ['workspace', 'jira-issue-detail', workspaceId] });
   };
 
-  const loading = results.some((r) => r.isLoading);
-  const failures = results.flatMap((r, i) => (r.data && !r.data.ok ? [`${projectKeys[i]}: ${r.data.message}`] : r.error ? [`${projectKeys[i]}: ${(r.error as Error).message}`] : []));
-
-  const { issues, priorities } = useMemo(() => {
-    const all: BoardIssue[] = [];
-    const seen = new Set<string>();
-    const prio: Record<string, string[]> = {};
-    results.forEach((r, i) => {
-      if (r.data?.ok) {
-        // One card per issue, even mid-move between two of the projects.
-        for (const issue of r.data.issues) {
-          if (!seen.has(issue.id)) {
-            seen.add(issue.id);
-            all.push(issue);
-          }
-        }
-        prio[projectKeys[i]] = r.data.priorities;
-      }
-    });
-    return { issues: all, priorities: prio };
-  }, [results, projectKeys]);
+  const summaryOf = (key: string) => issues.find((i) => i.idReadable === key)?.summary;
 
   const columns = useMemo(() => jiraBoardColumns(issues, priorities), [issues, priorities]);
 
@@ -173,7 +134,11 @@ export function JiraWorkspaceBoard({
                         }
                       }}
                     >
-                      <div className={styles.cardKey}>{issue.idReadable}</div>
+                      <div className={styles.cardTop}>
+                        <span className={styles.cardKey}>{issue.idReadable}</span>
+                        {/* Vermilian's own Runway metadata, kept locally (VERM-38): not a Jira write. */}
+                        <JiraFocusControl workspaceId={workspaceId} issueKey={issue.idReadable} summaryOf={summaryOf} />
+                      </div>
                       <div className={styles.cardSummary}>{issue.summary}</div>
                       <div className={styles.cardMeta}>
                         {issue.fields.priority && <span className={styles.chip} data-testid="jira-card-priority">{issue.fields.priority}</span>}

@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { commentTimeLabel, jiraDetailRows } from './jiraDetail';
 import { needsJiraReconnect } from '../../../shared/jiraConnection';
 import { applyJiraDirectRead, boardIssueOf } from './jiraBoardSync';
+import { JiraRunwaySection } from './JiraRunwaySection';
 import styles from './JiraIssueDetailPanel.module.css';
 
 interface JiraIssueDetailPanelProps {
@@ -50,9 +51,10 @@ function JiraMarkdown({ text, testId }: { text: string; testId: string }) {
 
 /**
  * A Jira issue's detail, read-only (VERM-35): its Jira fields, description and
- * comments. YouTrack-only fields (Category, Notes, Focus, …) are not shown,
- * and there is no edit, delete or timer control, because nothing in Phase 1
- * writes to Jira.
+ * comments. YouTrack-only fields (Category, Notes, …) are not shown, and
+ * there is no edit, delete or timer control, because nothing in Phase 1
+ * writes to Jira. The one editable part is the Priority Desk section
+ * (VERM-38): Focus, rank and Why now, kept in Vermilian's local store.
  */
 export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIssueDetailPanelProps) {
   const queryClient = useQueryClient();
@@ -124,6 +126,8 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
               </div>
             ))}
           </dl>
+
+          <JiraRunwaySection workspaceId={workspaceId} issueKey={loaded.issue.idReadable} />
 
           <section className={styles.section}>
             <h4 className={styles.sectionTitle}>Description</h4>

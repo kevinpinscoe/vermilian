@@ -128,10 +128,17 @@ function fromRow(row: RunwayRow | undefined): RunwayMetadata {
   };
 }
 
+/** The Jira store adds a workspace-wide read, which the Jira Priority Desk needs. */
+export interface JiraRunwayMetadataStore extends RunwayMetadataStore {
+  readonly kind: 'jira';
+  /** Every entry stored for `workspaceId`, ordered by issue ID. */
+  list(workspaceId: string): Promise<RunwayEntry[]>;
+}
+
 export function createJiraRunwayStore(
   db: DatabaseSync,
   now: () => Date = () => new Date(),
-): RunwayMetadataStore {
+): JiraRunwayMetadataStore {
   const select = db.prepare(
     `SELECT focus, focus_rank, why_now, deferred FROM runway_entry
      WHERE workspace_id = ? AND issue_id = ?`,
@@ -146,9 +153,17 @@ export function createJiraRunwayStore(
        updated_at = excluded.updated_at`,
   );
   const remove = db.prepare(`DELETE FROM runway_entry WHERE workspace_id = ? AND issue_id = ?`);
+  const selectAll = db.prepare(
+    `SELECT issue_id, focus, focus_rank, why_now, deferred FROM runway_entry
+     WHERE workspace_id = ? ORDER BY issue_id`,
+  );
 
   return {
     kind: 'jira',
+    async list(workspaceId) {
+      const rows = selectAll.all(workspaceId) as unknown as (RunwayRow & { issue_id: string })[];
+      return rows.map((row) => ({ issueId: row.issue_id as NamespacedIssueId, ...fromRow(row) }));
+    },
     async get(workspaceId, issueId) {
       localIdFor('jira', issueId);
       return { issueId, ...fromRow(select.get(workspaceId, issueId) as RunwayRow | undefined) };
@@ -192,7 +207,7 @@ export function createJiraRunwayStore(
 
 export interface RunwayStores {
   youtrack: RunwayMetadataStore;
-  jira: RunwayMetadataStore;
+  jira: JiraRunwayMetadataStore;
 }
 
 /** The store for `issueId`'s provider. Throws on a malformed or bare ID. */
