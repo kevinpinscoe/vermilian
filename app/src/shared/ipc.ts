@@ -56,6 +56,9 @@ export const IPC = {
   runwayUpdate: 'runway:update',
   runwayList: 'runway:list',
   runwayExportSnapshot: 'runway:export-snapshot',
+  runwayImportPreview: 'runway:import-preview',
+  runwayImportConfirm: 'runway:import-confirm',
+  runwayImportCancel: 'runway:import-cancel',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -288,6 +291,47 @@ export type RunwayExportSnapshotResult =
   | { ok: true; canceled: true }
   | { ok: true; canceled: false; snapshot: RunwaySnapshotInfo }
   | { ok: false; error: string; code?: string };
+
+// Whole-database Runway snapshot import (VERM-51, ADR-0011 §7). The preview
+// validates a private copy of the chosen file; nothing changes until the
+// renderer confirms with the preview's token.
+export interface RunwayImportPreview {
+  token: string;
+  fileName: string;
+  path: string;
+  // Filesystem modification time of the chosen file (ISO 8601). File metadata
+  // only: the snapshot does not record when it was exported.
+  fileModifiedAt: string;
+  sizeBytes: number;
+  schemaVersion: number;
+  snapshotRowCounts: Record<string, number>;
+  liveRowCounts: Record<string, number>;
+  // Where the automatic pre-import backup will be written.
+  backupDir: string;
+}
+
+export type RunwayImportPreviewResult =
+  | { ok: true; canceled: true }
+  | { ok: true; canceled: false; preview: RunwayImportPreview }
+  | { ok: false; error: string; code?: string };
+
+export interface RunwayImportConfirmArgs {
+  token: string;
+}
+
+export interface RunwayImportOutcome {
+  backupPath: string;
+  rowCounts: Record<string, number>;
+  previousRowCounts: Record<string, number>;
+  prunedBackups: number;
+  // Set when old backups could not be cleaned up; the import succeeded.
+  pruneWarning?: string;
+}
+
+export type RunwayImportConfirmResult =
+  | { ok: true; result: RunwayImportOutcome }
+  // backupPath is set when a backup was written before the failure.
+  | { ok: false; error: string; code?: string; backupPath?: string };
 
 export interface PatchIssueArgs {
   issueId: string;
@@ -566,6 +610,12 @@ export interface VermilianAPI {
   // Exports the WHOLE Runway metadata database (every workspace) to a file
   // the user picks, using SQLite's online backup (VERM-50). Never overwrites.
   runwayExportSnapshot(): Promise<RunwayExportSnapshotResult>;
+  // Imports a whole-database snapshot (VERM-51): preview opens a file dialog
+  // and validates a private copy; confirm backs up the live database and
+  // replaces it in one transaction; cancel discards the preview.
+  runwayImportPreview(): Promise<RunwayImportPreviewResult>;
+  runwayImportConfirm(args: RunwayImportConfirmArgs): Promise<RunwayImportConfirmResult>;
+  runwayImportCancel(args: RunwayImportConfirmArgs): Promise<{ ok: true }>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

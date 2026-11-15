@@ -266,7 +266,7 @@ What the snapshot is:
 
 - The whole database, every workspace, as an ordinary SQLite file with the
   same schema, `application_id` (`VRML`) and `user_version` as the live one.
-  It is the format the snapshot import (VERM-51) restores.
+  It is the format the snapshot import (below) restores.
 - Taken with SQLite's online backup, so Vermilian keeps reading and writing
   the live database while it runs. The live file is never copied directly.
 - Verified before it appears: the copy must pass `PRAGMA integrity_check`
@@ -292,6 +292,64 @@ sqlite3 -readonly vermilian-runway-20261115-090507.sqlite \
    SELECT count(*) FROM runway_entry; SELECT count(*) FROM dismissal;'
 # Expect: ok, 1448234316 (VRML), 1, then the two row counts.
 ```
+
+### Importing a snapshot (VERM-51)
+
+Importing replaces the Runway metadata for **every** workspace on this
+computer with the snapshot's. Nothing is sent to Jira or YouTrack.
+
+1. Open **Settings → Advanced → Import Runway snapshot…** and choose a
+   snapshot file.
+2. Vermilian reads the file once into a private copy in
+   `runway-import-staging/` (user-data directory) and checks the copy:
+   `integrity_check`, the `VRML` application ID, a schema version exactly the
+   one this build uses (newer and older are refused; nothing is migrated), a
+   schema identical to this build's (extra triggers, views or indexes are
+   refused), Jira-only issue IDs, and a dry run that inserts every row under
+   the live constraints. A file that fails is refused before any preview.
+3. The confirmation shows the file, **Export time: Not recorded in the
+   snapshot** (the export does not store one), the file's last-modified time
+   labelled as file metadata, the schema version, snapshot and current row
+   counts, and the backup folder. **Cancel** changes nothing.
+4. **Replace Runway data**:
+   - the chosen file must still be byte-identical to what was previewed,
+     otherwise the import is refused ("changed after it was previewed");
+   - the current database is backed up, verified, to
+     `runway-backups/runway-before-import-YYYYMMDD-HHMMSS.sqlite` (with a
+     `-2`, `-3` … suffix if that name exists; never overwritten). If the
+     backup fails, nothing is imported;
+   - the replacement is one SQLite transaction on the live connection
+     (`ATTACH`, `BEGIN IMMEDIATE`, `DELETE`, `INSERT … SELECT`, `COMMIT`):
+     every row is re-checked by the live constraints, and any failure rolls
+     back with the live data unchanged. Runway writes wait while it runs, and
+     if live data changed after the backup the import is refused;
+   - the result is verified (`integrity_check` and a row-by-row comparison
+     with the snapshot), the Priority Desk refreshes, and a toast names the
+     backup.
+5. One import at a time: while an import runs, a new preview, a second
+   confirmation (from any window) and a cancel are refused or ignored with
+   "A Runway snapshot import is already running", and the running import's
+   staged copy is removed only when it finishes, succeeded or failed.
+6. Retention: after a successful import only the **10 newest**
+   `runway-before-import-*.sqlite` files are kept. Nothing else in
+   `runway-backups/` (manual exports, other files, links, folders) is ever
+   removed, and nothing is pruned after a failed or cancelled import. A
+   cleanup failure shows a warning; the import itself still succeeded.
+
+**Undo an import**, or recover after "the result did not verify": import the
+backup named in the toast — it is an ordinary snapshot. Open the user-data
+directory with **Settings → Advanced → Open config folder**.
+
+| Message starts with | Meaning | Live data |
+| --- | --- | --- |
+| This file is not an SQLite database / not a Vermilian Runway snapshot | Wrong file | Unchanged |
+| Snapshot failed integrity_check | Corrupt file | Unchanged |
+| Snapshot schema vN is newer / cannot be imported | Different Vermilian version | Unchanged |
+| Snapshot schema does not match / breaks a Runway rule | Edited or damaged file | Unchanged |
+| Nothing was imported: … changed after it was previewed | File replaced or edited after the preview; choose it again | Unchanged |
+| Nothing was imported: the backup … could not be written | Disk or permission problem in the user-data directory | Unchanged |
+| Nothing was imported: … busy / changed while the backup was being written | Try again | Unchanged |
+| The snapshot was imported but the result did not verify | Restore the named backup as above | Replaced; restore the backup |
 
 ---
 

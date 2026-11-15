@@ -209,15 +209,40 @@ user exports a snapshot on one and imports it on the other.
   metadata at once; there is no partial or per-workspace import.
 - **Export** writes a consistent single-file copy of the whole database, using SQLite's online
   backup API (`backup()` in `node:sqlite`), to a location the user chooses.
-- **Import** never touches the live database until every check has passed:
-  1. the file is opened read-only and must pass `PRAGMA integrity_check`;
-  2. its `application_id` must match, and its `user_version` must be one this version can read; a
-     newer schema is refused with a message;
-  3. a timestamped backup of the current database is written first;
-  4. the user sees what will be replaced — the snapshot's export time and how many entries each
-     side holds — and must explicitly confirm;
-  5. the snapshot replaces the live database atomically, by writing a temporary file and renaming
-     it; on any failure the live database is left as it was.
+- **Import** never touches the live database until every check has passed (amended by VERM-51):
+  1. **Select.** The user chooses a snapshot. It is read once into a private copy in the
+     user-data directory; every later step uses that copy.
+  2. **Validate and preview.** The copy is opened read-only and must pass
+     `PRAGMA integrity_check`; its `application_id` must match; its `user_version` must be the one
+     this version uses — a newer schema is refused with a message, and nothing is silently
+     migrated or reinterpreted; its schema must be identical to this version's, and every row
+     must satisfy the live constraints. The user then sees the snapshot's file name, schema
+     version, and how many entries each side holds. The snapshot does not record when it was
+     exported, so no export time is shown as such; the file's modification time may be shown
+     only when clearly labelled as file metadata, since copying a file can change it.
+  3. **Confirm.** The user must explicitly confirm that every workspace's Runway metadata will be
+     replaced.
+  4. **Back up.** A timestamped backup of the current database is written and verified, with the
+     same online backup the export uses, into `runway-backups/` in the user-data directory. If it
+     fails, nothing is imported. The ten newest automatic backups are kept after a successful
+     import; nothing else in that directory is ever removed.
+  5. **Restore transactionally.** The snapshot is `ATTACH`ed to the existing live connection
+     before the transaction begins. Inside one `BEGIN IMMEDIATE` transaction the live rows are
+     confirmed to still match the backup, every row is deleted, every snapshot row is copied in
+     with `INSERT … SELECT` under the live database's own constraints, and the result is compared
+     with the snapshot. `COMMIT` happens only after all of that succeeds; any failure is a
+     complete `ROLLBACK`, leaving the live database as it was. The snapshot is `DETACH`ed once
+     the transaction has committed or rolled back. Runway writes are serialized with the import,
+     so the backup is exactly the state that was replaced.
+  6. **Verify and refresh.** Success is reported only after the restored data passes
+     `integrity_check` and matches the snapshot row for row; the renderer then refreshes its
+     Runway data. If that check fails, the user is pointed to the backup, which is itself an
+     importable snapshot.
+
+  A transaction was chosen over writing a temporary file and renaming it over the live database
+  (this section's original wording) because it keeps the existing database file and connection,
+  avoids the filesystem replacement risks of closing, renaming and reopening a database the app
+  holds open, and makes the restore atomic and constraint-checked by SQLite itself.
 - Snapshots and backups contain user-entered metadata. They belong in private storage and never in
   this repository.
 

@@ -26,6 +26,9 @@ import {
   type RunwayListArgs,
   type RunwayListResult,
   type RunwayExportSnapshotResult,
+  type RunwayImportPreviewResult,
+  type RunwayImportConfirmArgs,
+  type RunwayImportConfirmResult,
   type MoveIssueArgs,
   type CreateIssueArgs,
   type CreateIssueResult,
@@ -129,7 +132,15 @@ import { toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
-import { defaultSnapshotFileName, exportRunwaySnapshot } from './services/runwaySnapshot';
+import { defaultSnapshotFileName, exportRunwaySnapshot, runwayRowCounts } from './services/runwaySnapshot';
+import {
+  RUNWAY_BACKUP_DIRNAME,
+  RUNWAY_IMPORT_STAGING_DIRNAME,
+  RunwayImportError,
+  RunwayWriteGate,
+  importRunwaySnapshot,
+} from './services/runwayImport';
+import { RunwayImportSession } from './services/runwayImportSession';
 import {
   createJiraRunwayStore,
   createYouTrackRunwayStore,
@@ -222,7 +233,33 @@ function openJiraRunwayStore(): { db: DatabaseSync; store: JiraRunwayMetadataSto
   return { db: runwayDb, store: jiraRunwayStore };
 }
 
+// Runway writes and the snapshot import (VERM-51) run one at a time through
+// this gate, so no write can land between the import's backup and its
+// replacement. The import session owns the preview/confirm lifecycle: one
+// pending preview, one active import that exclusively owns its staged copy,
+// and refusal of previews and confirmations while an import runs — enforced
+// here in the main process, for every window.
+const runwayGate = new RunwayWriteGate();
+let runwayImportSession: RunwayImportSession | null = null;
+
+function importSession(): RunwayImportSession {
+  runwayImportSession ??= new RunwayImportSession({
+    stagingDir: path.join(app.getPath('userData'), RUNWAY_IMPORT_STAGING_DIRNAME),
+  });
+  return runwayImportSession;
+}
+
+// E2E only: holds a confirmed import between its backup and the replacement
+// for this many milliseconds, so tests can send overlapping IPC requests
+// while it is active. Ignored outside VERMILIAN_E2E.
+function e2eImportHoldMs(): number {
+  if (!IS_E2E) return 0;
+  const ms = Number(process.env.VERMILIAN_E2E_RUNWAY_IMPORT_HOLD_MS ?? 0);
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
 function closeRunwayDb(): void {
+  runwayImportSession?.shutdown();
   runwayDb?.close();
   runwayDb = null;
   jiraRunwayStore = null;
@@ -1457,8 +1494,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.runwayUpdate, async (_e, args: RunwayUpdateArgs): Promise<RunwayResult> => {
     try {
       const issueId = args.issueId as NamespacedIssueId;
-      const entry = await storeForIssue(runwayStores, issueId).update(
-        args.workspaceId, issueId, args.patch,
+      const entry = await runwayGate.run(() =>
+        storeForIssue(runwayStores, issueId).update(args.workspaceId, issueId, args.patch),
       );
       return { ok: true, entry };
     } catch (e) {
@@ -1504,6 +1541,78 @@ export function registerIpc(): void {
     } catch (err) {
       return runwayFailure(err);
     }
+  });
+
+  ipcMain.handle(IPC.runwayImportPreview, async (e): Promise<RunwayImportPreviewResult> => {
+    try {
+      const { db } = openJiraRunwayStore();
+      const options: Electron.OpenDialogOptions = {
+        title: 'Import Runway metadata snapshot',
+        defaultPath: app.getPath('documents'),
+        buttonLabel: 'Preview import',
+        filters: [{ name: 'Vermilian Runway snapshot', extensions: ['sqlite'] }],
+        properties: ['openFile'],
+      };
+      const parent = BrowserWindow.fromWebContents(e.sender);
+      const staged = await importSession().preview(async () => {
+        const choice = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+        return choice.canceled || choice.filePaths.length === 0 ? null : choice.filePaths[0];
+      });
+      if (!staged) return { ok: true, canceled: true };
+      return {
+        ok: true,
+        canceled: false,
+        preview: {
+          token: staged.token,
+          fileName: path.basename(staged.sourcePath),
+          path: staged.sourcePath,
+          fileModifiedAt: staged.fileModifiedAt,
+          sizeBytes: staged.sizeBytes,
+          schemaVersion: staged.schemaVersion,
+          snapshotRowCounts: staged.rowCounts,
+          liveRowCounts: runwayRowCounts(db),
+          backupDir: path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME),
+        },
+      };
+    } catch (err) {
+      return runwayFailure(err);
+    }
+  });
+
+  ipcMain.handle(
+    IPC.runwayImportConfirm,
+    async (_e, args: RunwayImportConfirmArgs): Promise<RunwayImportConfirmResult> => {
+      try {
+        const { db } = openJiraRunwayStore();
+        const holdMs = e2eImportHoldMs();
+        const result = await importSession().confirm(String(args?.token ?? ''), (staged) =>
+          runwayGate.run(() =>
+            importRunwaySnapshot(db, staged, {
+              backupDir: path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME),
+              hooks: holdMs ? { afterBackup: () => new Promise((r) => setTimeout(r, holdMs)) } : {},
+            }),
+          ),
+        );
+        return {
+          ok: true,
+          result: {
+            backupPath: result.backupPath,
+            rowCounts: result.rowCounts,
+            previousRowCounts: result.previousRowCounts,
+            prunedBackups: result.prunedBackups.length,
+            pruneWarning: result.pruneWarning,
+          },
+        };
+      } catch (err) {
+        const backupPath = err instanceof RunwayImportError ? err.backupPath : undefined;
+        return { ...runwayFailure(err), ...(backupPath ? { backupPath } : {}) };
+      }
+    },
+  );
+
+  ipcMain.handle(IPC.runwayImportCancel, (_e, args: RunwayImportConfirmArgs): { ok: true } => {
+    importSession().cancel(String(args?.token ?? ''));
+    return { ok: true };
   });
 
   app.on('will-quit', closeRunwayDb);
