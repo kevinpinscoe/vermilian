@@ -31,6 +31,20 @@ export function setStatusNotifier(fn: StatusNotifier): void {
   notify = fn;
 }
 
+// ─── Storage guard (VERM-53) ─────────────────────────────────────────────────
+// Every remote write of _vermilian-config asks first. The guard refuses when
+// this machine uses per-workspace storage, when per-workspace storage is
+// active elsewhere, or when the activation marker cannot be verified. A
+// refused write is not sent and not retried; the edit stays in the local
+// cache only, and the renderer is told why.
+
+export type LegacyWriteGuard = () => Promise<{ allowed: boolean; message: string }>;
+let writeGuard: LegacyWriteGuard = async () => ({ allowed: false, message: 'Configuration storage has not been checked yet.' });
+
+export function setWriteGuard(fn: LegacyWriteGuard): void {
+  writeGuard = fn;
+}
+
 // ─── Persistent article ID cache ─────────────────────────────────────────────
 
 function articleIdFile(): string {
@@ -97,8 +111,8 @@ async function _load(url: string, token: string): Promise<void> {
     article = await yt.findVermilianArticle(url, token);
   }
 
-  if (!article) {
-    // First run — create the Article.
+  if (!article && (await writeGuard()).allowed) {
+    // First run — create the Article (never once per-workspace storage is in play).
     article = await yt.createVermilianArticle(url, token, serialiseArticleConfig(emptyArticleConfig()));
   }
 
@@ -216,6 +230,14 @@ export function scheduleSave(url: string, token: string): void {
 async function _write(url: string, token: string): Promise<void> {
   if (!cache || !url || !token) return;
 
+  const guard = await writeGuard();
+  if (!guard.allowed) {
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    retryDelay = 0;
+    notify({ kind: 'storage-blocked', message: guard.message });
+    return;
+  }
+
   // Stale-write check: if the Article was updated by another machine, refetch.
   if (articleId) {
     const current = await yt.getVermilianArticle(url, token, articleId);
@@ -273,6 +295,14 @@ function scheduleRetry(url: string, token: string): void {
     retryTimer = null;
     void _write(url, token);
   }, retryDelay);
+}
+
+// Only a save that is actually waiting (debounced or retrying) is sent; with
+// nothing pending nothing is written. Activation calls this so a last legacy
+// edit is not lost, without rewriting _vermilian-config (VERM-53).
+export async function flushPending(url: string, token: string): Promise<void> {
+  if (!debounceTimer && !retryTimer) return;
+  await flush(url, token);
 }
 
 // ─── Flush (call on quit / before checkpoint) ────────────────────────────────

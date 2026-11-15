@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-workspace configuration storage can be activated** from **Settings → Workspace
+  storage** (VERM-53, ADR-0011 §11). Activation runs only after an explicit confirmation,
+  never on startup or install. It backs up `_vermilian-config` and the Jira profile article
+  to a private local file and verifies it, previews the migration, checks that every
+  credential reference resolves on this computer, migrates each workspace into its own
+  `_vermilian-ws-<id>` article, re-checks that the sources did not change, records a shared
+  `_vermilian-storage-activation` marker and only then switches this computer. Any failure
+  leaves `_vermilian-config` in use and unchanged. Other computers join without migrating
+  again.
+- **Configuration writes are guarded on every computer.** A computer still on the shared
+  configuration stops saving configuration once another computer has activated, and a
+  computer on per-workspace storage stops when the activation is retired or replaced. A
+  marker that cannot be read or verified blocks writes rather than guessing. Changes made
+  to `_vermilian-config` after activation by Vermilian v1.2.10 or older (which cannot see
+  the marker) are detected and shown in Settings.
+- **Return to the shared configuration**, allowed only while no configuration has changed
+  since activation; otherwise it is refused and nothing changes. The workspace articles
+  are always kept. `RUNBOOK.md` documents activation, joining, failure handling, manual
+  reconciliation and recovery.
+
+### Changed
+
+- With per-workspace storage active, YouTrack issue operations use the active workspace's
+  own server and credential reference, and Jira issue listing uses the active Jira
+  workspace's reference, with no fallback to the Settings credentials or another
+  workspace's. A YouTrack workspace on a different server now shows its board.
+- With per-workspace storage active, workspace layout (names, folders, projects), board
+  settings and "Not this week" dismissals are saved to the workspace's own article through
+  the merge-and-verify write. Removing a workspace from the rail is refused there.
+- A refused configuration save shows one short-lived toast instead of stacking persistent
+  ones that could cover the top-bar Settings button.
+
+### Removed
+
+- The standalone "apply migration" API (`applyWorkspaceMigration`). Migration now runs only
+  inside activation; the dry-run preview remains.
+
 ### Security
 
 - **Electron 44.3.0 → 44.11.3.** Electron 44.3.0 still trusted a set of compromised

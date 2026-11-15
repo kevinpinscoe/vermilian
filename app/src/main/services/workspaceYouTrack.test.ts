@@ -57,6 +57,23 @@ describe('resolveWorkspaceYouTrackConnection', () => {
     expect(h.calls).toEqual(['command:show broken']);
   });
 
+  it("never falls back to another workspace's reference (VERM-53)", async () => {
+    const { fake, calls } = io();
+    // Workspace A resolves; workspace B names a reference that does not.
+    const a = await resolveWorkspaceYouTrackConnection(doc('youtrack-home'), CFG, fake, false);
+    expect(a).toEqual({ ok: true, url: 'https://yt.example.com', token: 'fictional-home-token' });
+    const b = await resolveWorkspaceYouTrackConnection({ ...doc('youtrack-broken'), workspaceId: 'ws-b1b2c3d4e5f6' }, CFG, fake, false);
+    expect(b.ok).toBe(false);
+    if (!b.ok) {
+      expect(b.error).toContain('youtrack-broken');
+      expect(b.error).not.toContain('fictional-home-token');
+    }
+    // B's failure read only its own configured source: not A's, not Settings'.
+    expect(calls.filter((c) => c === 'command:show home')).toHaveLength(1);
+    expect(calls).not.toContain('command:show settings token');
+    expect(calls).not.toContain('file:/fictional/fallback.token');
+  });
+
   it('refuses no reference, a missing workspace and a Jira workspace', async () => {
     const h = io();
     expect((await resolveWorkspaceYouTrackConnection(doc(null), CFG, h.fake, false)).ok).toBe(false);

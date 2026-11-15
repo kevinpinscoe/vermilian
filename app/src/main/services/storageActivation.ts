@@ -46,12 +46,14 @@ import {
   type MarkerRead,
   type StorageGuard,
   type StorageMarker,
+  type ActivationResult,
+  type RollbackResult,
 } from '../../shared/storageActivation';
+export type { ActivationResult, RollbackResult } from '../../shared/storageActivation';
 import {
   CONFIG_ARTICLE_TITLE,
   JIRA_PROFILE_ARTICLE_TITLE,
   type WorkspaceMigrationOptions,
-  type WorkspaceMigrationReport,
 } from '../../shared/workspaceMigration';
 import type { WorkspaceCredentialCheck } from '../../shared/ipc';
 import type { WorkspaceDocument } from '../../shared/workspaceSchema';
@@ -84,52 +86,6 @@ export interface ActivationDeps {
   now(): Date;
   newGeneration(): string;
 }
-
-export type ActivationFailureReason =
-  | 'not-confirmed'
-  | 'already-active'
-  | 'local-state-corrupt'
-  | 'marker-unverified'
-  | 'source-unreadable'
-  | 'backup-failed'
-  | 'migration-blocked'
-  | 'credential-failed'
-  | 'migration-incomplete'
-  | 'source-changed'
-  | 'workspaces-unverified'
-  | 'marker-write-failed'
-  | 'local-write-failed';
-
-export type ActivationResult =
-  | {
-      ok: true;
-      outcome: 'activated' | 'joined';
-      generation: string;
-      backupFile: string | null;
-      report: WorkspaceMigrationReport | null;
-      message: string;
-    }
-  | {
-      ok: false;
-      reason: ActivationFailureReason;
-      message: string;
-      backupFile?: string;
-      report?: WorkspaceMigrationReport;
-      credentialFailures?: WorkspaceCredentialCheck[];
-    };
-
-export type RollbackFailureReason =
-  | 'not-confirmed'
-  | 'not-active'
-  | 'local-state-corrupt'
-  | 'marker-unverified'
-  | 'unsafe'
-  | 'marker-write-failed'
-  | 'local-write-failed';
-
-export type RollbackResult =
-  | { ok: true; outcome: 'returned' | 'local-only'; message: string }
-  | { ok: false; reason: RollbackFailureReason; message: string; changes?: ConfigurationChange[] };
 
 export interface StorageStatus {
   local: LocalStorageState;

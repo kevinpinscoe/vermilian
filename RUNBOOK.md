@@ -353,6 +353,166 @@ directory with **Settings → Advanced → Open config folder**.
 
 ---
 
+## Per-workspace configuration storage (VERM-53)
+
+Vermilian keeps workspace configuration in one of two places:
+
+- **Shared configuration (legacy):** every workspace in the one
+  `_vermilian-config` article in the VERM project. This is the default.
+- **Per-workspace storage:** one `_vermilian-ws-<workspaceId>` article per
+  workspace (ADR-0011 §4). Workspaces, folders, projects, board settings and
+  "Not this week" dismissals are written to the workspace's own article.
+
+Two pieces of state decide which one a machine uses:
+
+| State | Where | Written by |
+| --- | --- | --- |
+| This machine's mode and the activation it joined | `workspace-storage.json` in the user-data directory (mode `0600`) | Activation and return to legacy only |
+| Whether per-workspace storage is active, its generation, and the article stamps at activation | The `_vermilian-storage-activation` article in VERM | Activation and return to legacy only |
+
+Nothing switches on startup or install. A missing `workspace-storage.json` means
+legacy. **Every configuration write checks both first and fails closed:** if
+the marker cannot be read, is duplicated or is malformed, or the local file
+cannot be read, nothing is saved and a toast says why.
+
+`_vermilian-config` and the Jira profile article are **never** written by
+activation or return to legacy. Vermilian v1.2.10 and older never read the
+marker and cannot be stopped by it: their writes to `_vermilian-config` are
+detected afterwards (Settings shows a warning), not prevented. Upgrade every
+machine before activating.
+
+### Before activating (live activation needs Kevin's explicit approval)
+
+Live activation on a real host is a separate, approved step: APP-65 (FLDW) and
+APP-66 (Mac). Before it:
+
+1. Every machine that runs Vermilian runs a build that contains VERM-53.
+2. On the host, every credential reference in use resolves: at least
+   `youtrack-1` and `anthropic-1`, and `jira-1` when the Jira profile will
+   become a workspace. These three resolve through the Settings YouTrack
+   token, Claude key and Jira token sources, so the **Test** buttons in
+   **Settings → Connection**, **AI** and **Jira** are a first check.
+   Activation itself runs the real resolution check for every reference the
+   workspaces name, and refuses, naming the reference, if any fails.
+3. **Settings → Workspace storage → Preview migration** shows each workspace as
+   *will be created* or *already migrated*, and nothing as *CONFLICT*,
+   *AMBIGUOUS* or *cannot be read*. The preview writes nothing.
+
+### Activating (first machine)
+
+1. **Settings → Workspace storage.** Optionally enter a name for a new Jira
+   workspace (only if a Jira profile is set up; empty keeps the profile as it
+   is).
+2. **Preview migration**, read the list, then **Activate per-workspace
+   storage…** and confirm.
+3. Vermilian then, in order: flushes a pending legacy save (if any); reads
+   both source articles; writes a backup to
+   `storage-activation-backups/activation-<UTC time>.json` (directory `0700`,
+   file `0600`, never overwritten, never pruned) and verifies it reads back
+   exactly; dry-runs the migration; resolves every credential reference;
+   runs the VERM-44 migration and requires `complete: true`; re-reads both
+   sources and stops if either changed; records every workspace article's
+   stamp; writes the marker (new generation) and verifies it; and only then
+   writes `workspace-storage.json`.
+4. Success shows **Per-workspace storage activated** and the backup path.
+
+### Joining (every other machine)
+
+Once one machine has activated, every machine still on legacy storage shows
+**Configuration changes are not being saved** and saves no configuration. On
+each one: **Settings → Workspace storage → Use per-workspace storage on this
+computer…** and confirm. Joining checks that every workspace article is
+readable and every credential reference resolves on *this* machine, then
+switches. Nothing is migrated again and no backup is written.
+
+### Verifying
+
+- **Settings → Workspace storage** shows **Per-workspace storage since
+  <date>** in green.
+- `workspace-storage.json` holds `"mode": "per-workspace"` and the marker's
+  generation.
+- The backup holds both source articles:
+
+  ```bash
+  jq '.articles[] | {role, articleId, updated}' "<user-data>/storage-activation-backups/activation-*.json"
+  ```
+
+### How to tell activation failed
+
+Activation reports **Not activated** with the cause, and in every case below
+this machine stays on `_vermilian-config`, which stays authoritative:
+
+| Message (starts with) | Cause | What to do |
+| --- | --- | --- |
+| The backup … could not be written / did not read back | Disk or permission problem in the user-data directory | Fix it and run activation again |
+| Migration cannot complete | An existing workspace article conflicts, is duplicated or unreadable; or the Jira profile is invalid | Fix the article named in the message in YouTrack, then preview again |
+| A credential reference does not resolve | The named reference has no working source on this machine | Fix the host's source for it; no fallback is used |
+| Migration did not complete | A create failed part-way | Run again: articles already created are found unchanged |
+| The configuration changed while it was being migrated | Another machine or an older Vermilian saved `_vermilian-config` | Run again to migrate the current configuration |
+| The storage activation marker … could not be verified | The marker write raced another machine, or there are now two markers | See *Marker cannot be verified* below |
+| Per-workspace storage was activated, but this machine could not record the switch | The marker is active; `workspace-storage.json` could not be written | Run activation again on this machine; it joins |
+
+Workspace articles created by a failed run are kept, never deleted.
+
+### Returning to the shared configuration (safe rollback)
+
+**Settings → Workspace storage → Return to the shared configuration…** and
+confirm. It is allowed **only when nothing has changed since activation**:
+every workspace article still has the stamp recorded in the marker, no
+workspace was added or removed, and neither `_vermilian-config` nor the Jira
+profile article moved. Then the marker is retired (verified), this machine
+returns to legacy, and the workspace articles are kept. Every other machine
+still on per-workspace storage then blocks configuration changes until it is
+returned too (the same button; it returns locally because the marker is
+already retired).
+
+If anything changed, it is **refused and nothing changes**: returning would
+hide configuration that exists only in the workspace articles. Vermilian never
+copies workspace articles back into `_vermilian-config`.
+
+### Manual reconciliation (when the return is refused)
+
+The normal answer is to stay on per-workspace storage and fix forward. If the
+shared configuration really must come back:
+
+1. Stop Vermilian on every machine.
+2. In YouTrack, compare each `_vermilian-ws-<id>` article with the matching
+   workspace in `_vermilian-config` and copy any change you want to keep into
+   `_vermilian-config` by hand (names, folders, projects, `boards`,
+   `dismissals`). Anything not copied stays only in the workspace articles,
+   which are kept.
+3. Edit `_vermilian-storage-activation`: set `"state": "retired"`, set
+   `"retiredAt"` to the current UTC time, and add 1 to `"sequence"`.
+4. Start Vermilian on each machine and use **Return to the shared
+   configuration…**: with the marker retired it returns locally.
+
+### Recovery
+
+**Marker cannot be verified** (writes blocked on every machine, "could not
+verify which configuration storage is active"): in YouTrack, list the VERM
+articles titled `_vermilian-storage-activation`. If there are two, keep the one
+whose `generation` matches `workspace-storage.json` on the machine that
+activated and delete the other. If the one marker is malformed, restore its
+JSON from a correct copy (it holds no secrets) or, if per-workspace storage was
+never used, delete it and remove `workspace-storage.json` on every machine.
+
+**`workspace-storage.json` unreadable** (writes blocked on that machine): with
+Vermilian stopped, delete the file to return the machine to legacy, then join
+again from Settings if the marker is active.
+
+**`_vermilian-config` damaged by an older client:** the activation backup holds
+its content as it was at activation. Extract it and paste it into the article
+in YouTrack:
+
+```bash
+jq -r '.articles[] | select(.role == "config") | .content' "<user-data>/storage-activation-backups/activation-<time>.json"
+```
+
+Backups contain configuration (names, project IDs, board settings), never
+credentials. Keep them in the user-data directory; never commit them.
+
+---
+
 ## Rollback Procedure
 
 If `node_modules` becomes corrupt or the linker state is wrong:

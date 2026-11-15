@@ -5,13 +5,18 @@
  * and its titles are not unique. "Another machine" is simulated two ways: an
  * update sent with an out-of-date base (as a second client would send), and
  * the e2e-only debugWriteWorkspaceArticle hook that overwrites an article
- * directly. Nothing in the app uses these articles yet (VERM-44 migrates,
- * VERM-46 switches), so the spec drives the API directly.
+ * directly. The spec drives the API directly, under the e2e per-workspace
+ * storage gate: since VERM-53 these writes are refused on legacy storage.
  */
 
 import { test, expect, type Page } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
+import { STORAGE_MARKER_TITLE } from '../src/shared/storageActivation';
+
+// Workspace articles are written only under per-workspace storage (VERM-53):
+// the e2e gate forces it, with the active marker it would have joined.
+const PER_WORKSPACE = { VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace' };
 import { defaultBoardConfig } from '../src/shared/boardConfig';
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -40,7 +45,9 @@ function doc(workspaceId: string, overrides: Partial<WorkspaceDocument> = {}): W
 
 async function ready(app: ElectronApplication): Promise<Page> {
   const page = await app.firstWindow();
-  await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+  // Settings' gear, not a project: under per-workspace storage with no
+  // workspace articles yet, the rail has no project to show.
+  await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
   return page;
 }
 
@@ -50,7 +57,9 @@ const api = {
   create: (page: Page, d: WorkspaceDocument) => page.evaluate((x) => window.vermilian.createWorkspaceArticle(x), d),
   update: (page: Page, base: WorkspaceDocument, edited: WorkspaceDocument) =>
     page.evaluate(([b, e]) => window.vermilian.updateWorkspaceArticle(b, e), [base, edited] as const),
-  raw: (page: Page) => page.evaluate(() => window.vermilian.debugGetWorkspaceArticles!()),
+  // Workspace articles only: the fake keeps the activation marker in the same store.
+  raw: async (page: Page) =>
+    (await page.evaluate(() => window.vermilian.debugGetWorkspaceArticles!())).filter((a) => a.summary !== STORAGE_MARKER_TITLE),
   overwrite: (page: Page, articleId: string, content: string) =>
     page.evaluate(([id, c]) => window.vermilian.debugWriteWorkspaceArticle!(id, c), [articleId, content] as const),
 };
@@ -70,7 +79,7 @@ test.describe('Per-workspace configuration articles', () => {
   });
 
   test('two workspaces are created, discovered, read and updated independently', async () => {
-    app = await launchAppWithUserDataDir(freshUserDataDir());
+    app = await launchAppWithUserDataDir(freshUserDataDir(), PER_WORKSPACE);
     const page = await ready(app);
 
     expect(await api.list(page)).toEqual({ ok: true, workspaces: [] });
@@ -99,7 +108,7 @@ test.describe('Per-workspace configuration articles', () => {
   });
 
   test('two machines editing one workspace: different fields merge, the same field conflicts', async () => {
-    app = await launchAppWithUserDataDir(freshUserDataDir());
+    app = await launchAppWithUserDataDir(freshUserDataDir(), PER_WORKSPACE);
     const page = await ready(app);
     await api.create(page, doc(A));
     const base = await readDoc(page, A); // both "machines" start here
@@ -131,7 +140,7 @@ test.describe('Per-workspace configuration articles', () => {
   });
 
   test('unknown fields written by another client survive an update', async () => {
-    app = await launchAppWithUserDataDir(freshUserDataDir());
+    app = await launchAppWithUserDataDir(freshUserDataDir(), PER_WORKSPACE);
     const page = await ready(app);
     await api.create(page, doc(A));
     const base = await readDoc(page, A);
@@ -154,7 +163,7 @@ test.describe('Per-workspace configuration articles', () => {
       { summary: `_vermilian-ws-${A}`, content: serialiseNewWorkspaceDocument(doc(A, { name: 'Second' })) },
       { summary: `_vermilian-ws-${B}`, content: serialiseNewWorkspaceDocument(doc(B, { order: 1 })) },
     ];
-    app = await launchAppWithUserDataDir(freshUserDataDir(), { VERMILIAN_E2E_WS_ARTICLES: JSON.stringify(seed) });
+    app = await launchAppWithUserDataDir(freshUserDataDir(), { ...PER_WORKSPACE, VERMILIAN_E2E_WS_ARTICLES: JSON.stringify(seed) });
     const page = await ready(app);
     const before = await api.raw(page);
     const dupIds = before.filter((x) => x.summary.endsWith(A)).map((x) => x.id).sort();

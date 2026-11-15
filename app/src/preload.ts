@@ -121,7 +121,10 @@ const api: VermilianAPI = {
   debugWriteWorkspaceArticle: (articleId: string, content: string) =>
     ipcRenderer.invoke('e2e:writeWorkspaceArticle', articleId, content),
   planWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.planWorkspaceMigration, options),
-  applyWorkspaceMigration: (options?: WorkspaceMigrationOptions) => ipcRenderer.invoke(IPC.applyWorkspaceMigration, options),
+  getStorageStatus: () => ipcRenderer.invoke(IPC.getStorageStatus),
+  activateWorkspaceStorage: (args: { confirmed: boolean; jiraWorkspaceName?: string | null }) =>
+    ipcRenderer.invoke(IPC.activateWorkspaceStorage, args),
+  returnToLegacyStorage: (args: { confirmed: boolean }) => ipcRenderer.invoke(IPC.returnToLegacyStorage, args),
   listCredentialRefs: () => ipcRenderer.invoke(IPC.listCredentialRefs),
   setCredentialRefSources: (credentialRef: string, sources: CredentialSourceConfig) =>
     ipcRenderer.invoke(IPC.setCredentialRefSources, credentialRef, sources),
@@ -138,6 +141,7 @@ const api: VermilianAPI = {
   getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
     ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
+  debugWriteConfigArticle: (content: string) => ipcRenderer.invoke('e2e:writeConfigArticle', content),
   debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),

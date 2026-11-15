@@ -164,6 +164,7 @@ import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace
 import { buildIssueSearchQuery } from '../../shared/search';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
+import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
 import {
   FIELD_DEFS,
   FIELD_KEYS,
@@ -981,5 +982,37 @@ export async function getArticleById(url: string, token: string, articleId: stri
   } catch (e) {
     const status = (e as { status?: unknown } | null)?.status;
     return typeof status === 'number' ? { ok: false, status } : { ok: false };
+  }
+}
+
+// --- _vermilian-storage-activation marker (VERM-53) ---
+// Found by listing the VERM project to exhaustion, so a duplicate is seen
+// rather than the first match picked. Content updates reuse
+// updateVermilianArticle; reads reuse getVermilianArticle.
+
+export async function listStorageMarkerArticles(url: string, token: string): Promise<WorkspaceArticleListing> {
+  const result = await fetchAllProjectArticles(url, token, VERMILIAN_ARTICLE_PROJECT_SHORT_NAME);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    articles: result.articles
+      .filter((a) => a.summary === STORAGE_MARKER_TITLE)
+      .map((a) => ({ id: a.id, summary: a.summary, content: a.content ?? '', updated: a.updated ?? 0 })),
+  };
+}
+
+export async function createStorageMarkerArticle(
+  url: string,
+  token: string,
+  content: string,
+): Promise<(VermilianArticle & { summary: string }) | null> {
+  try {
+    const result = await request<RawArticle>(url, token, `/api/articles?fields=${ARTICLE_FIELDS}`, {
+      method: 'POST',
+      body: JSON.stringify({ summary: STORAGE_MARKER_TITLE, content, project: { shortName: VERMILIAN_ARTICLE_PROJECT_SHORT_NAME } }),
+    });
+    return { id: result.id, summary: STORAGE_MARKER_TITLE, content: result.content ?? content, updated: result.updated ?? 0 };
+  } catch {
+    return null;
   }
 }

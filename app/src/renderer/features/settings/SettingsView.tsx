@@ -21,6 +21,7 @@ import { TimerPomodoroSection } from './sections/TimerPomodoroSection';
 import { DailyNotesSection } from './sections/DailyNotesSection';
 import { AppearanceSection } from './sections/AppearanceSection';
 import { AdvancedSection } from './sections/AdvancedSection';
+import { WorkspaceStorageSection } from './sections/WorkspaceStorageSection';
 import { ACTIVE_WORKSPACE_QUERY_KEY } from '../workspace-nav/api';
 import styles from './SettingsView.module.css';
 
@@ -318,6 +319,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
         <TimerPomodoroSection draft={draft} update={update} worklogTypes={worklogTypes} />
         <DailyNotesSection draft={draft} update={update} />
         <AppearanceSection />
+        {canCancel && <WorkspaceStorageSection />}
         <AdvancedSection onReset={handleReset} />
       </div>
 

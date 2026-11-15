@@ -4,6 +4,7 @@ import { isQuitProtected, sendQuitRequested } from './ipc';
 import * as articleConfig from './services/articleConfig';
 import { readConfig, writeConfig as _writeConfig } from './services/config';
 import { loadSecretWithSources, FILES } from './services/credentials';
+import { workspaceStorageMode } from './services/activeWorkspace';
 
 export function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -77,7 +78,9 @@ export function registerQuitProtection(): void {
         const token = await loadSecretWithSources(
           FILES.youtrackToken, cfg.youtrackTokenCommand, cfg.youtrackTokenFile,
         );
-        if (cfg.youtrackUrl && token) {
+        // Legacy storage only: under per-workspace storage nothing is pending
+        // for _vermilian-config, and its guard would refuse the write anyway (VERM-53).
+        if (cfg.youtrackUrl && token && workspaceStorageMode() === 'legacy') {
           await articleConfig.flush(cfg.youtrackUrl, token);
         }
       } catch { /* best effort */ }

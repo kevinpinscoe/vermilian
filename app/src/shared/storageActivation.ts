@@ -26,6 +26,8 @@
 // Pure TypeScript: no Electron, no React.
 
 import { findSecretShapedValues } from './workspaceSchema';
+import type { WorkspaceMigrationReport } from './workspaceMigration';
+import type { WorkspaceCredentialCheck } from './ipc';
 
 export const STORAGE_MARKER_TITLE = '_vermilian-storage-activation';
 export const STORAGE_MARKER_KIND = 'vermilian-storage-activation';
@@ -198,7 +200,9 @@ export type StorageGuardReason =
   | 'local-state-corrupt' // this machine's storage file could not be read
   | 'activated-elsewhere' // legacy here, but per-workspace storage is active
   | 'retired-elsewhere' // per-workspace here, but the activation was retired
-  | 'superseded'; // per-workspace here, under an older generation
+  | 'superseded' // per-workspace here, under an older generation
+  | 'mode-mismatch' // a write for the other storage mode than this machine uses
+  | 'not-configured'; // no configuration YouTrack to check the marker against
 
 export interface StorageGuard {
   allowed: boolean;
@@ -324,4 +328,66 @@ export function describeChange(c: ConfigurationChange): string {
     case 'jira-profile-changed':
       return 'the Jira profile article was changed';
   }
+}
+
+// ─── Results (cross IPC; plain data, no secrets) ─────────────────────────────
+
+export type ActivationFailureReason =
+  | 'not-confirmed'
+  | 'already-active'
+  | 'local-state-corrupt'
+  | 'marker-unverified'
+  | 'source-unreadable'
+  | 'backup-failed'
+  | 'migration-blocked'
+  | 'credential-failed'
+  | 'migration-incomplete'
+  | 'source-changed'
+  | 'workspaces-unverified'
+  | 'marker-write-failed'
+  | 'local-write-failed';
+
+export type ActivationResult =
+  | {
+      ok: true;
+      outcome: 'activated' | 'joined';
+      generation: string;
+      backupFile: string | null;
+      report: WorkspaceMigrationReport | null;
+      message: string;
+    }
+  | {
+      ok: false;
+      reason: ActivationFailureReason;
+      message: string;
+      backupFile?: string;
+      report?: WorkspaceMigrationReport;
+      credentialFailures?: WorkspaceCredentialCheck[];
+    };
+
+export type RollbackFailureReason =
+  | 'not-confirmed'
+  | 'not-active'
+  | 'local-state-corrupt'
+  | 'marker-unverified'
+  | 'unsafe'
+  | 'marker-write-failed'
+  | 'local-write-failed';
+
+export type RollbackResult =
+  | { ok: true; outcome: 'returned' | 'local-only'; message: string }
+  | { ok: false; reason: RollbackFailureReason; message: string; changes?: ConfigurationChange[] };
+
+
+/** What Settings shows about configuration storage on this machine. */
+export interface StorageStatusView {
+  mode: WorkspaceStorageMode;
+  generation: string | null;
+  localCorrupt: boolean;
+  backupFile: string | null;
+  marker: 'none' | 'active' | 'retired' | 'unverified';
+  markerGeneration: string | null;
+  activatedAt: string | null;
+  guard: StorageGuard;
+  legacyChangedSinceActivation: boolean | null;
 }

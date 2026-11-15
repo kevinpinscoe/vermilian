@@ -19,7 +19,8 @@ import type { Workspace } from './workspace';
 import type { CredentialRef, WorkspaceDocument } from './workspaceSchema';
 import { aiAvailability, type AiAvailability } from './workspaceAi';
 
-export type WorkspaceStorageMode = 'legacy' | 'per-workspace';
+import type { WorkspaceStorageMode } from './storageActivation';
+export type { WorkspaceStorageMode };
 
 export type ActiveBackendContext =
   | { kind: 'youtrack'; serverUrl: string; credentialRef: string | null }
@@ -89,11 +90,6 @@ export function workspacesFromDocuments(docs: readonly WorkspaceDocument[]): Wor
     .map((d) => ({ id: d.workspaceId, name: d.name, order: d.order, folders: d.folders }));
 }
 
-function sameServer(a: string, b: string): boolean {
-  const norm = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
-  return norm(a) !== '' && norm(a) === norm(b);
-}
-
 /** Whether this build can show the board for `backend`. */
 export function boardAvailability(
   backend: ActiveBackendContext | null,
@@ -102,12 +98,10 @@ export function boardAvailability(
   if (!backend) return { available: true, reason: null };
   // Read-only, through the workspace's own Jira connection (VERM-34).
   if (backend.kind === 'jira') return { available: true, reason: null };
-  if (!sameServer(backend.serverUrl, configuredServerUrl)) {
-    return {
-      available: false,
-      reason: 'This workspace uses a different YouTrack server. Its board will be available once per-workspace connections are activated.',
-    };
-  }
+  // Under per-workspace storage every issue operation uses the workspace's
+  // own server and credential reference (VERM-53), so a different server is
+  // fine. Legacy workspaces are always on the configured server.
+  void configuredServerUrl;
   return { available: true, reason: null };
 }
 
