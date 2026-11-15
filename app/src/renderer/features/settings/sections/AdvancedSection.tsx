@@ -11,6 +11,7 @@ interface Props {
 export function AdvancedSection({ onReset }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [resyncing, setResyncing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const qc = useQueryClient();
   const showToast = useToastStore((s) => s.show);
 
@@ -28,6 +29,24 @@ export function AdvancedSection({ onReset }: Props) {
       }
     } finally {
       setResyncing(false);
+    }
+  }
+
+  async function handleExportRunway() {
+    setExporting(true);
+    try {
+      const result = await window.vermilian.runwayExportSnapshot();
+      if (!result.ok) {
+        showToast('negative', `Runway snapshot not exported: ${result.error}`);
+      } else if (!result.canceled) {
+        const { runway_entry = 0, dismissal = 0 } = result.snapshot.rowCounts;
+        showToast(
+          'positive',
+          `Exported Runway snapshot (${runway_entry} entries, ${dismissal} dismissals) to ${result.snapshot.path}`,
+        );
+      }
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -84,6 +103,23 @@ export function AdvancedSection({ onReset }: Props) {
           Discards the cached workspace/project layout and re-fetches it from YouTrack,
           dropping any project assignments that no longer exist. Use this if projects or
           workspaces look empty or wrong on every machine, not just this one.
+        </p>
+      </div>
+
+      <div>
+        <Button
+          data-testid="runway-export-btn"
+          kind="tertiary"
+          loading={exporting}
+          onClick={() => void handleExportRunway()}
+        >
+          Export Runway snapshot…
+        </Button>
+        <p className={styles.hint}>
+          Saves a copy of the local Runway database — Focus, rank, Why now and
+          dismissals for Jira issues in every workspace — to a file you choose. It is
+          a consistent snapshot taken while Vermilian keeps running, and it never
+          replaces an existing file.
         </p>
       </div>
     </section>

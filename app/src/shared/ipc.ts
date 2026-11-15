@@ -55,6 +55,7 @@ export const IPC = {
   runwayGet: 'runway:get',
   runwayUpdate: 'runway:update',
   runwayList: 'runway:list',
+  runwayExportSnapshot: 'runway:export-snapshot',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -272,6 +273,20 @@ export interface RunwayListArgs {
 
 export type RunwayListResult =
   | { ok: true; entries: import('./runway').RunwayEntry[] }
+  | { ok: false; error: string; code?: string };
+
+// Whole-database Runway snapshot export (VERM-50). `canceled` means the user
+// closed the save dialog and nothing was written.
+export interface RunwaySnapshotInfo {
+  path: string;
+  exportedAt: string; // ISO 8601
+  schemaVersion: number;
+  rowCounts: Record<string, number>; // per table, read back from the snapshot
+}
+
+export type RunwayExportSnapshotResult =
+  | { ok: true; canceled: true }
+  | { ok: true; canceled: false; snapshot: RunwaySnapshotInfo }
   | { ok: false; error: string; code?: string };
 
 export interface PatchIssueArgs {
@@ -548,6 +563,9 @@ export interface VermilianAPI {
   // Priority Desk's Now/Next/Then and the star on each Jira card. Local
   // SQLite only; YouTrack issues keep reading their own fields.
   runwayList(args: RunwayListArgs): Promise<RunwayListResult>;
+  // Exports the WHOLE Runway metadata database (every workspace) to a file
+  // the user picks, using SQLite's online backup (VERM-50). Never overwrites.
+  runwayExportSnapshot(): Promise<RunwayExportSnapshotResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

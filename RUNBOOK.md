@@ -14,7 +14,7 @@ source_path: /home/kinscoe/Projects/public/vermilian/RUNBOOK.md
 | Field | Value |
 | --- | --- |
 | **Owner** | Kevin P. Inscoe |
-| **Last Updated** | 2026-06-24 |
+| **Last Updated** | 2026-11-15 |
 | **Last Tested** | 2026-05-22 |
 | **Expected Duration** | 2–5 min (first run); 15–30 s (subsequent runs) |
 | **Risk Level** | Low |
@@ -245,6 +245,53 @@ git push origin vX.Y.Z          # this push triggers the release workflow
 
 Verify the signed tag with `git tag -v vX.Y.Z`. Watch the run with
 `gh run watch --repo kevinpinscoe/vermilian`.
+
+---
+
+## Runway metadata snapshot (Jira workspaces)
+
+Jira workspaces keep their Priority Desk metadata (Focus, Focus rank, Why now,
+"Not this week" dismissals) in a local SQLite file,
+`runway-metadata.sqlite`, in Vermilian's user-data directory. YouTrack
+workspaces keep theirs in YouTrack custom fields and are not in this file.
+
+To take a manual backup (VERM-50):
+
+1. Open **Settings → Advanced → Export Runway snapshot…**.
+2. Choose a new file name. The suggested name is
+   `vermilian-runway-YYYYMMDD-HHMMSS.sqlite` in your Documents folder.
+3. A toast reports the path and the number of entries and dismissals written.
+
+What the snapshot is:
+
+- The whole database, every workspace, as an ordinary SQLite file with the
+  same schema, `application_id` (`VRML`) and `user_version` as the live one.
+  It is the format the snapshot import (VERM-51) restores.
+- Taken with SQLite's online backup, so Vermilian keeps reading and writing
+  the live database while it runs. The live file is never copied directly.
+- Verified before it appears: the copy must pass `PRAGMA integrity_check`
+  and carry the Runway `application_id` and a supported schema version.
+
+It never replaces an existing file. If the chosen name already exists (even
+after the save dialog asked to replace it), the export is refused and the
+existing file is left untouched; choose a new name. A cancelled or failed
+export leaves no file behind.
+
+The finished snapshot is published with a single hard link, so it appears
+complete or not at all. A folder whose filesystem has no hard links (FAT/exFAT
+drives, some network shares) is refused with "No snapshot was created … Choose
+a folder on a local disk" rather than written by a copy that could be seen
+half-finished. Export to a local disk, then copy the file wherever it needs to
+go.
+
+Verify a snapshot by hand:
+
+```bash
+sqlite3 -readonly vermilian-runway-20261115-090507.sqlite \
+  'PRAGMA integrity_check; PRAGMA application_id; PRAGMA user_version;
+   SELECT count(*) FROM runway_entry; SELECT count(*) FROM dismissal;'
+# Expect: ok, 1448234316 (VRML), 1, then the two row counts.
+```
 
 ---
 
