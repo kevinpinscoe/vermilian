@@ -133,6 +133,13 @@ pnpm test
 
 **Expected output:** Vitest reports all suites passing (e.g. `Test Files  2 passed`). Runs in ~0.3s from source — no packaging needed. E2E (`pnpm test:e2e`) packages first and runs under `xvfb-run`.
 
+**E2E profile directories.** Each e2e launch gets its own Electron profile, inside one folder per
+run: `vermilian-e2e-run-*` in `$TMPDIR` (`/tmp` by default). The folder is removed when the run
+ends, pass or fail. A killed run leaves that one folder behind. The next run removes any
+`vermilian-e2e-*` folder older than an hour, including the loose ones left by runs before VERM-54.
+Set `VERMILIAN_E2E_KEEP_PROFILES=1` to keep the profiles for debugging; it also keeps the live
+harness's `vermilian-live-profile-*` profile.
+
 ---
 
 ### Step 6 — Live acceptance harness
