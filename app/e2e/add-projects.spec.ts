@@ -90,6 +90,51 @@ test.describe('Add projects to a workspace', () => {
     await expect(page.locator(`[data-nav-project-name="${moved}"]`)).toBeVisible();
   });
 
+  test('the search box filters by name or short name and keeps hidden ticks (VERM-13)', async () => {
+    await newWorkspace(page, 'Kevin');
+    await page.locator('[data-testid="add-projects-btn"]').click();
+
+    const search = page.locator('[data-testid="add-projects-search"]');
+    const rows = page.locator('[data-testid="add-projects-row"]');
+    await expect(search).toBeFocused();
+    await expect(rows).toHaveCount(4);
+
+    // By name, ignoring case.
+    await search.fill('INBOX');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-project-name', 'Team Inbox');
+
+    // By short name only: "tst2" appears in no project name.
+    await search.fill('tst2');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-project-name', 'Test Project Two');
+
+    // Nothing matches.
+    await search.fill('zzz');
+    await expect(rows).toHaveCount(0);
+    await expect(page.locator('[data-testid="add-projects-no-match"]')).toContainText('zzz');
+
+    // Tick one project, filter it out of view, tick another.
+    await search.fill('inbox');
+    await rows.first().locator('input').check();
+    await search.fill('empty');
+    await expect(rows).toHaveCount(1);
+    await rows.first().locator('input').check();
+
+    // Clearing the filter shows both ticks survived.
+    await search.fill('');
+    await expect(rows).toHaveCount(4);
+    await expect(page.locator('[data-testid="add-projects-row"][data-project-name="Team Inbox"] input')).toBeChecked();
+    await expect(page.locator('[data-testid="add-projects-row"][data-project-name="Empty Project"] input')).toBeChecked();
+
+    // A tick hidden by the filter at save time is still saved.
+    await search.fill('empty');
+    await page.locator('[data-testid="add-projects-save"]').click();
+    await expect(page.locator('[data-testid="nav-project"]')).toHaveCount(2);
+    await expect(page.locator('[data-nav-project-name="Team Inbox"]')).toBeVisible();
+    await expect(page.locator('[data-nav-project-name="Empty Project"]')).toBeVisible();
+  });
+
   test('emptying a workspace leaves nothing to rehome when deleting it', async () => {
     await newWorkspace(page, 'Kevin');
 

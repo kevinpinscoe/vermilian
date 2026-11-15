@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
-import { setWorkspaceProjects } from '../../../shared/workspace';
+import { filterProjects, setWorkspaceProjects } from '../../../shared/workspace';
 import styles from './AddProjectsModal.module.css';
 
 interface AddProjectsModalProps {
@@ -23,6 +23,9 @@ interface AddProjectsModalProps {
  * Membership is exclusive, so checking a project here moves it out of whatever
  * workspace it sits in today — the row shows that origin, and a notice appears
  * once any such move is staged.
+ *
+ * The search box only narrows what is shown. Ticks on rows it hides are kept,
+ * saved, and counted in the move notice (VERM-13).
  */
 export function AddProjectsModal({
   config, workspaceId, workspaceName, allProjects, onClose, onSave,
@@ -44,6 +47,8 @@ export function AddProjectsModal({
   }, [config, workspaceId]);
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initiallyHere));
+  const [query, setQuery] = useState('');
+  const visibleProjects = useMemo(() => filterProjects(allProjects, query), [allProjects, query]);
 
   function toggle(projectId: string) {
     setSelected((prev) => {
@@ -78,36 +83,54 @@ export function AddProjectsModal({
         {allProjects.length === 0 ? (
           <div className={styles.empty}>No YouTrack projects available.</div>
         ) : (
-          <div className={styles.list} data-testid="add-projects-list">
-            {allProjects.map((p) => {
-              const origin = originByProjectId.get(p.id);
-              const here = initiallyHere.has(p.id);
-              return (
-                <label
-                  key={p.id}
-                  className={styles.row}
-                  data-testid="add-projects-row"
-                  data-project-name={p.name}
-                >
-                  <input
-                    type="checkbox"
-                    className={styles.checkbox}
-                    checked={selected.has(p.id)}
-                    onChange={() => toggle(p.id)}
-                    aria-label={p.name}
-                  />
-                  <span className={styles.projectName}>{p.name}</span>
-                  {here ? (
-                    <span className={styles.origin}>in this workspace</span>
-                  ) : origin ? (
-                    <span className={styles.origin}>in “{origin}”</span>
-                  ) : (
-                    <span className={`${styles.origin} ${styles.originUnassigned}`}>unassigned</span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
+          <>
+            <input
+              type="search"
+              className={styles.search}
+              placeholder="Filter projects"
+              aria-label="Filter projects"
+              data-testid="add-projects-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+            />
+            {visibleProjects.length === 0 ? (
+              <div className={styles.empty} data-testid="add-projects-no-match">
+                No projects match “{query.trim()}”.
+              </div>
+            ) : (
+              <div className={styles.list} data-testid="add-projects-list">
+                {visibleProjects.map((p) => {
+                  const origin = originByProjectId.get(p.id);
+                  const here = initiallyHere.has(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className={styles.row}
+                      data-testid="add-projects-row"
+                      data-project-name={p.name}
+                    >
+                      <input
+                        type="checkbox"
+                        className={styles.checkbox}
+                        checked={selected.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        aria-label={p.name}
+                      />
+                      <span className={styles.projectName}>{p.name}</span>
+                      {here ? (
+                        <span className={styles.origin}>in this workspace</span>
+                      ) : origin ? (
+                        <span className={styles.origin}>in “{origin}”</span>
+                      ) : (
+                        <span className={`${styles.origin} ${styles.originUnassigned}`}>unassigned</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         {movingFromElsewhere.length > 0 && (

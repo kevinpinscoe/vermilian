@@ -115,6 +115,19 @@ export function makeInitialConfig(projectIds: string[]): VermilianConfig {
   };
 }
 
+/**
+ * Narrow a project list to those whose name or short name contains `query`,
+ * ignoring case and surrounding whitespace. A blank query returns the list
+ * unchanged. Order is preserved, so a filtered picker keeps the rail's order.
+ */
+export function filterProjects(projects: YouTrackProject[], query: string): YouTrackProject[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return projects;
+  return projects.filter(
+    (p) => p.name.toLowerCase().includes(q) || p.shortName.toLowerCase().includes(q),
+  );
+}
+
 /** Return every project ID that appears in any folder across all workspaces. */
 export function allAssignedProjectIds(config: VermilianConfig): Set<string> {
   const ids = new Set<string>();

@@ -4,6 +4,24 @@
   margin-bottom: 8px;
 }
 
+/* Narrows the list by project name or short name. */
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-text-color, #111111);
+  font-size: 14px;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+}
+
 .list {
   display: flex;
   flex-direction: column;
