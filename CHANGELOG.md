@@ -7,8 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-15
+
+Workspaces become the isolation boundary (ADR-0011), Jira boards arrive read-only, and
+per-workspace configuration storage can be switched on. **Installing or starting 1.3.0 changes
+nothing about where configuration is stored:** `_vermilian-config` stays authoritative until
+you explicitly activate per-workspace storage in **Settings → Workspace storage**. Upgrade
+every computer that runs Vermilian before activating, because v1.2.10 and older cannot see
+the activation marker (see `RUNBOOK.md` → *Per-workspace configuration storage*).
+
 ### Added
 
+- **Jira connection in Settings → Jira** (VERM-18, VERM-19, VERM-20): site URL, account
+  email, and a token from a shell command, a file or the OS keyring. **Test connection**
+  detects the site's cloudId and checks the token. The site URL, email and cloudId are shared
+  between computers through a separate `_vermilian-jira-overlay` article; the token never
+  leaves the computer it is configured on.
+- **Read-only Jira boards** (VERM-21, VERM-27 to VERM-35, VERM-39, VERM-40). A workspace
+  is created as either YouTrack or Jira, with no default. A Jira workspace chooses its Jira
+  projects and shows them on the board with each project's own priorities (read from
+  editmeta), a per-project status mapping, a chosen due-date field and a read-only detail
+  panel (descriptions and comments rendered from ADF). Boards stay fresh by polling
+  recently updated issues and back off on rate limits. A revoked or expired Jira token shows
+  a reconnect state instead of an empty board. **Nothing is ever written to Jira.** Creating
+  a Jira workspace needs per-workspace storage; under the shared configuration every
+  workspace is on the one configured YouTrack server, and the Jira choice explains why it is
+  disabled.
+- **The Priority Desk ranks Jira issues** (VERM-38). Jira Focus, rank, Why now and
+  dismissals are kept in a local Runway metadata database (SQLite), per workspace, because
+  they cannot be stored in Jira.
+- **Runway snapshots** (VERM-50, VERM-51): **Settings → Advanced → Export Runway snapshot…**
+  writes a verified, consistent copy of the whole Runway database, never overwriting a file.
+  **Import Runway snapshot…** validates a snapshot, previews it, backs up the current
+  database first, then replaces it in one transaction and verifies the result.
+- **One active workspace per computer** (VERM-46). The active workspace is stored locally
+  rather than in the shared article, so two computers no longer switch each other.
+  Switching while the timer is running asks **Stop timer** or **Cancel**.
+- **A master plan per workspace, or none** (VERM-48): **Manage workspaces → Master plan…**
+  sets a YouTrack article ID for a workspace. Under the shared configuration the global
+  `_vermilian-master-plan` is still used.
+- **Per-workspace credential references** (VERM-42, VERM-45). Each workspace names the
+  credential it uses (`youtrack-1`, `anthropic-1`, `jira-1`, or its own), resolved only on
+  the computer it runs on. Under per-workspace storage only the first configured source is
+  used, with no fallback to another source, reference or workspace.
 - **Per-workspace configuration storage can be activated** from **Settings → Workspace
   storage** (VERM-53, ADR-0011 §11). Activation runs only after an explicit confirmation,
   never on startup or install. It backs up `_vermilian-config` and the Jira profile article
@@ -34,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Stand-ups cover the active workspace only** (VERM-48), under both storage modes. This
+  changes the default: stand-ups no longer combine every workspace. Stand-ups are not
+  available for Jira workspaces yet.
+- **AI features use the active workspace's Anthropic credential** (VERM-47). Under the
+  shared configuration that is still the Settings key (`anthropic-1`), so nothing changes for
+  an existing install. Under per-workspace storage a workspace with no AI credential selected
+  has AI create, recommendations and stand-ups disabled, and the reason is shown.
 - With per-workspace storage active, YouTrack issue operations use the active workspace's
   own server and credential reference, and Jira issue listing uses the active Jira
   workspace's reference, with no fallback to the Settings credentials or another
@@ -46,6 +94,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Cross-workspace stand-up scopes** (VERM-48): the "All workspaces" and "Custom" choices
+  and the workspace picker are gone from the stand-up modal, and the `standupScope` setting
+  is withdrawn. An older `app-config.json` that still holds it loads normally, and the value
+  is ignored.
 - The standalone "apply migration" API (`applyWorkspaceMigration`). Migration now runs only
   inside activation; the dry-run preview remains.
 
@@ -643,7 +695,9 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
-[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.3.0
+[1.2.10]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.10
 [1.2.9]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.9
 [1.2.8]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.8
 [1.2.7]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.7
