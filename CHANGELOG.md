@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Electron 44.3.0 → 44.11.3.** Electron 44.3.0 still trusted a set of compromised
+  eMudhra intermediate certificates (GHSA-jr5w-w6x2-84p9), so someone able to intercept
+  the connection could impersonate the Jira or Anthropic servers. The update also
+  includes the Electron fixes for GHSA-x562-297c-g43g, GHSA-3qxv-5xgr-q7w9 and
+  GHSA-h3v5-h239-pg29. Vermilian does not use the features those three affect.
+- **Build and test tooling patched.** None of these packages ships inside the packaged
+  app, but they run on development machines and in CI:
+  - Vite 6.4.3 → 6.4.6, staying on Vite 6. This fixes dev-server advisories, including
+    the launch-editor ones.
+  - Vitest 5.0.2 → 5.1.0, which brings `@vitest/mocker` 5.1.0.
+  - Raised dependency overrides: undici 7.30.1, fast-uri 3.1.9, source-map-js 1.2.2,
+    postcss-selector-parser 6.1.5 and zod 4.6.6.
+
 ## [1.2.10] - 2026-11-08
 
 ### Added
