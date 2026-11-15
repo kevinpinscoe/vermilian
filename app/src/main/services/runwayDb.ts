@@ -32,7 +32,11 @@ export const RUNWAY_APPLICATION_ID = 0x5652_4d4c;
 /** Schema version written to PRAGMA user_version. */
 export const RUNWAY_SCHEMA_VERSION = 1;
 
-const SCHEMA_V1 = `
+/**
+ * Schema v1 DDL. Exported so the snapshot import (VERM-51) can compare a
+ * snapshot's schema with exactly what this version creates.
+ */
+export const RUNWAY_SCHEMA_V1 = `
 CREATE TABLE runway_entry (
   workspace_id TEXT    NOT NULL CHECK (length(workspace_id) > 0),
   issue_id     TEXT    NOT NULL CHECK (length(issue_id) > 0),
@@ -124,7 +128,7 @@ export function openRunwayDb(path: string): DatabaseSync {
       db.exec('BEGIN IMMEDIATE');
       try {
         if (checkHeader(db, path)) {
-          db.exec(SCHEMA_V1);
+          db.exec(RUNWAY_SCHEMA_V1);
           db.exec(`PRAGMA application_id = ${RUNWAY_APPLICATION_ID}`);
           db.exec(`PRAGMA user_version = ${RUNWAY_SCHEMA_VERSION}`);
         }

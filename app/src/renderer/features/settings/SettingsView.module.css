@@ -106,3 +106,20 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Runway snapshot import confirmation (VERM-51) */
+.importPreview {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 16px 0;
+}
+
+.importPreview dt {
+  font-weight: 600;
+}
+
+.importPreview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
