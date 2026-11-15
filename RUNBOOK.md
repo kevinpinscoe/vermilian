@@ -371,9 +371,19 @@ Two pieces of state decide which one a machine uses:
 | Whether per-workspace storage is active, its generation, and the article stamps at activation | The `_vermilian-storage-activation` article in VERM | Activation and return to legacy only |
 
 Nothing switches on startup or install. A missing `workspace-storage.json` means
-legacy. **Every configuration write checks both first and fails closed:** if
-the marker cannot be read, is duplicated or is malformed, or the local file
-cannot be read, nothing is saved and a toast says why.
+legacy. **Every configuration write checks both first, reading the marker from
+YouTrack afresh each time, and fails closed:** if the marker cannot be read, is
+duplicated or is malformed, is missing or retired when this machine expects it
+active, or belongs to another generation, or the local file cannot be read,
+nothing is saved and a toast says why. No cached marker ever authorizes a
+write.
+
+**Remaining limitation.** YouTrack has no compare-and-swap. A marker change
+that lands in the one round trip between a write's check and that write is not
+seen by that write; the next write is refused. Two machines activating at the
+same instant can still both write a marker; the marker read-back or the
+duplicate check then blocks writes everywhere until it is resolved (see
+*Recovery*).
 
 `_vermilian-config` and the Jira profile article are **never** written by
 activation or return to legacy. Vermilian v1.2.10 and older never read the
@@ -405,7 +415,10 @@ APP-66 (Mac). Before it:
    is).
 2. **Preview migration**, read the list, then **Activate per-workspace
    storage…** and confirm.
-3. Vermilian then, in order: flushes a pending legacy save (if any); reads
+3. Vermilian then, in order: pauses edits to `_vermilian-config` for the
+   whole activation; if an edit is unsaved (debounced, retrying, in flight or
+   refused earlier), writes it and reads it back, and **refuses to start** if
+   that does not succeed — with no unsaved edit nothing is written; reads
    both source articles; writes a backup to
    `storage-activation-backups/activation-<UTC time>.json` (directory `0700`,
    file `0600`, never overwritten, never pruned) and verifies it reads back
@@ -444,6 +457,8 @@ this machine stays on `_vermilian-config`, which stays authoritative:
 
 | Message (starts with) | Cause | What to do |
 | --- | --- | --- |
+| Your latest configuration change could not be saved to YouTrack | An edit to `_vermilian-config` was unsaved and could not be written and verified (YouTrack unreachable or refusing, or the write guard refused it) | Nothing was migrated and the edit is kept and retried; activate again once YouTrack accepts the save |
+| An activation is already running on this computer | A second activation request while one runs | Wait for the first to finish |
 | The backup … could not be written / did not read back | Disk or permission problem in the user-data directory | Fix it and run activation again |
 | Migration cannot complete | An existing workspace article conflicts, is duplicated or unreadable; or the Jira profile is invalid | Fix the article named in the message in YouTrack, then preview again |
 | A credential reference does not resolve | The named reference has no working source on this machine | Fix the host's source for it; no fallback is used |

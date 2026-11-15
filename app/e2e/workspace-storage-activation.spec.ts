@@ -140,6 +140,40 @@ test.describe('Per-workspace storage activation', () => {
     expect(await api.status(page)).toMatchObject({ mode: 'legacy', guard: { allowed: true } });
   });
 
+  test('an unsaved legacy edit is saved and verified before activation, and is in the migration', async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), SEED);
+    const page = await ready(app);
+    // A board change still inside the 1.5 s debounce when activation starts.
+    const board = { ...defaultBoardConfig('0-e1'), colors: { status: { Open: '#00aa00' } } };
+    await page.evaluate((b) => window.vermilian.saveBoardConfig(b), board);
+    const r = await api.activate(page);
+    expect(r).toMatchObject({ ok: true, outcome: 'activated' });
+    const legacy = JSON.parse((await api.sources(page))[0].content) as { boards: Record<string, { colors?: unknown }> };
+    expect(legacy.boards['0-e1'].colors).toEqual({ status: { Open: '#00aa00' } });
+    const w1 = (await workspaceArticles(page)).map((a) => JSON.parse(a.content) as { workspaceId: string; boards: Record<string, { colors?: unknown }> }).find((d) => d.workspaceId === W1);
+    expect(w1?.boards['0-e1'].colors).toEqual({ status: { Open: '#00aa00' } });
+  });
+
+  test('an unsaved legacy edit that cannot be saved stops activation; nothing is migrated', async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), SEED);
+    const page = await ready(app);
+    await page.evaluate(() => window.vermilian.debugFailConfigWrites!(1000));
+    const board = { ...defaultBoardConfig('0-e1'), colors: { status: { Open: '#aa0000' } } };
+    await page.evaluate((b) => window.vermilian.saveBoardConfig(b), board);
+    const before = await api.sources(page);
+    const r = await api.activate(page);
+    expect(r).toMatchObject({ ok: false, reason: 'legacy-save-unresolved' });
+    expect(await workspaceArticles(page)).toEqual([]);
+    expect(await markers(page)).toEqual([]);
+    expect(await api.sources(page)).toEqual(before);
+    expect(await api.status(page)).toMatchObject({ mode: 'legacy', guard: { allowed: true } });
+    // Once YouTrack accepts writes again, the kept edit is saved and activation proceeds.
+    await page.evaluate(() => window.vermilian.debugFailConfigWrites!(0));
+    expect(await api.activate(page)).toMatchObject({ ok: true, outcome: 'activated' });
+    const legacy = JSON.parse((await api.sources(page))[0].content) as { boards: Record<string, { colors?: unknown }> };
+    expect(legacy.boards['0-e1'].colors).toEqual({ status: { Open: '#aa0000' } });
+  });
+
   test('on legacy storage the workspace-article write API is refused', async () => {
     app = await launchAppWithUserDataDir(freshUserDataDir(), SEED);
     const page = await ready(app);

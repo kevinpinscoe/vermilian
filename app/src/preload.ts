@@ -142,6 +142,7 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
   debugWriteConfigArticle: (content: string) => ipcRenderer.invoke('e2e:writeConfigArticle', content),
+  debugFailConfigWrites: (n: number) => ipcRenderer.invoke('e2e:failConfigWrites', n),
   debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),

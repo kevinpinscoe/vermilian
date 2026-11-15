@@ -15,6 +15,7 @@ import type { WorkspaceCredentialCheck } from '../../shared/ipc';
 import type { WorkspaceArticleRecord } from './workspaceArticles';
 import {
   activateWorkspaceStorage,
+  authorizeConfigWrite,
   parseActivationBackup,
   readMarker,
   returnToLegacyStorage,
@@ -366,6 +367,60 @@ describe('two machines', () => {
     // The Mac returns locally, then joins the new generation.
     expect(await rollback(mac)).toMatchObject({ ok: true, outcome: 'local-only' });
     expect(await activate(mac)).toMatchObject({ ok: true, outcome: 'joined', generation: again.generation });
+  });
+});
+
+// ─── Write authorization: a fresh marker read every time ─────────────────────
+
+describe('write authorization', () => {
+  const auth = (m: Machine, mode: 'legacy' | 'per-workspace') => authorizeConfigWrite(mode, { state: m.state, corrupt: m.corrupt }, yt);
+
+  it('reads the marker on every write: no grace period after another machine retires it', async () => {
+    await activate(fldw);
+    await activate(mac);
+    let reads = 0;
+    const listMarkers = yt.listMarkers.bind(yt);
+    yt.listMarkers = async () => { reads++; return listMarkers(); };
+
+    expect(await auth(mac, 'per-workspace')).toMatchObject({ allowed: true });
+    expect(await auth(mac, 'per-workspace')).toMatchObject({ allowed: true });
+    expect(reads).toBe(2);
+
+    // The FLDW retires the activation; the Mac's very next write is refused.
+    expect(await rollback(fldw)).toMatchObject({ ok: true, outcome: 'returned' });
+    expect(await auth(mac, 'per-workspace')).toMatchObject({ allowed: false, reason: 'retired-elsewhere' });
+  });
+
+  it('refuses immediately after another machine replaces the generation', async () => {
+    await activate(fldw);
+    await activate(mac);
+    expect(await auth(mac, 'per-workspace')).toMatchObject({ allowed: true });
+    await rollback(fldw);
+    await activate(fldw); // new generation
+    expect(await auth(mac, 'per-workspace')).toMatchObject({ allowed: false, reason: 'superseded' });
+    expect(await auth(fldw, 'per-workspace')).toMatchObject({ allowed: true });
+  });
+
+  it('refuses immediately when another machine activates while this one is on legacy storage', async () => {
+    expect(await auth(mac, 'legacy')).toMatchObject({ allowed: true });
+    await activate(fldw);
+    expect(await auth(mac, 'legacy')).toMatchObject({ allowed: false, reason: 'activated-elsewhere' });
+  });
+
+  it('fails closed: marker unreadable, duplicated, malformed or missing; wrong mode; no YouTrack', async () => {
+    await activate(fldw);
+    yt.failMarkerList = true;
+    expect(await auth(fldw, 'per-workspace')).toMatchObject({ allowed: false, reason: 'marker-unverified' });
+    yt.failMarkerList = false;
+    const [m] = yt.byTitle(STORAGE_MARKER_TITLE);
+    yt.put(STORAGE_MARKER_TITLE, m.content);
+    expect(await auth(fldw, 'per-workspace')).toMatchObject({ allowed: false, reason: 'marker-unverified' });
+    yt.articles.clear();
+    expect(await auth(fldw, 'per-workspace')).toMatchObject({ allowed: false, reason: 'retired-elsewhere' });
+    yt.put(STORAGE_MARKER_TITLE, '{"kind":"vermilian-storage-activation","schema":1}');
+    expect(await auth(fldw, 'per-workspace')).toMatchObject({ allowed: false, reason: 'marker-unverified' });
+    expect(await auth(fldw, 'legacy')).toMatchObject({ allowed: false, reason: 'mode-mismatch' });
+    expect(await authorizeConfigWrite('per-workspace', { state: fldw.state, corrupt: false }, null)).toMatchObject({ allowed: false, reason: 'not-configured' });
   });
 });
 

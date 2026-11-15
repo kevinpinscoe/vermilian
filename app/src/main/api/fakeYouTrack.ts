@@ -370,8 +370,18 @@ export async function updateVermilianArticle(
     jiraArticle = { id: articleId, content, updated: Date.now() };
     return { updated: jiraArticle.updated };
   }
+  if (configWriteFailures > 0) {
+    configWriteFailures--;
+    return null;
+  }
   article = { id: articleId, content, updated: nextUpdated() };
   return { updated: article.updated };
+}
+
+// e2e-only: refuse the next N writes to _vermilian-config (VERM-53 review).
+let configWriteFailures = 0;
+export function failConfigWritesForTests(n: number): void {
+  configWriteFailures = Number.isInteger(n) && n > 0 ? Math.min(n, 1000) : 0;
 }
 
 // e2e-only: an older Vermilian on another machine rewrites _vermilian-config.

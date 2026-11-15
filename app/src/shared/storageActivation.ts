@@ -334,6 +334,9 @@ export function describeChange(c: ConfigurationChange): string {
 
 export type ActivationFailureReason =
   | 'not-confirmed'
+  // An edit to _vermilian-config is unsaved and could not be written and
+  // verified before activation, or an activation is already running (VERM-53 review).
+  | 'legacy-save-unresolved'
   | 'already-active'
   | 'local-state-corrupt'
   | 'marker-unverified'

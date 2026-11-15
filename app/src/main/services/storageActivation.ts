@@ -46,6 +46,7 @@ import {
   type MarkerRead,
   type StorageGuard,
   type StorageMarker,
+  type WorkspaceStorageMode,
   type ActivationResult,
   type RollbackResult,
 } from '../../shared/storageActivation';
@@ -150,6 +151,39 @@ async function currentArticles(client: StorageActivationClient): Promise<{ ok: t
       workspaces,
     },
   };
+}
+
+// ─── Write authorization ─────────────────────────────────────────────────────
+
+/**
+ * May this machine write configuration for `mode` right now?
+ *
+ * The marker is read from YouTrack on **every** call; nothing cached ever
+ * authorizes a write (Kevin, 2026-11-15). A write for the other storage mode,
+ * no configuration YouTrack, an unreadable local state file, and a marker that
+ * is missing when it should exist, unreadable, duplicated, malformed, retired
+ * or of another generation are all refused.
+ *
+ * Limitation: YouTrack has no compare-and-swap, so a marker change that lands
+ * between this check and the write that follows it is not seen by that write.
+ * The window is one YouTrack round trip; the next write is refused.
+ */
+export async function authorizeConfigWrite(
+  mode: WorkspaceStorageMode,
+  local: { state: LocalStorageState; corrupt: boolean },
+  client: Pick<StorageActivationClient, 'listMarkers'> | null,
+): Promise<StorageGuard> {
+  if (!local.corrupt && local.state.mode !== mode) {
+    return {
+      allowed: false,
+      reason: 'mode-mismatch',
+      message: local.state.mode === 'per-workspace'
+        ? 'This machine uses per-workspace configuration storage; the old shared configuration is not written.'
+        : 'This machine still uses the old shared configuration; per-workspace configuration is not written.',
+    };
+  }
+  if (!client) return { allowed: false, reason: 'not-configured', message: 'Connect YouTrack first — configuration is stored there.' };
+  return storageWriteGuard(local.state, await readMarker(client), local.corrupt);
 }
 
 // ─── Status ──────────────────────────────────────────────────────────────────

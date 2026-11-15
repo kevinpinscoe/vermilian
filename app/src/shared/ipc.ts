@@ -685,6 +685,7 @@ export interface VermilianAPI {
   returnToLegacyStorage(args: { confirmed: boolean }): Promise<RollbackResult>;
   // e2e-only hooks: an older Vermilian rewrites _vermilian-config.
   debugWriteConfigArticle?(content: string): Promise<boolean>;
+  debugFailConfigWrites?(n: number): Promise<void>;
   listCredentialRefs(): Promise<CredentialRefStatus[]>;
   setCredentialRefSources(credentialRef: string, sources: CredentialSourceConfig): Promise<CredentialRefWriteResult>;
   saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;

@@ -80,6 +80,30 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryDelay = 0;
 let writeHadFailure = false;
 
+// Unsaved-edit tracking (VERM-53 review). Every local edit bumps `revision`;
+// `savedRevision` is the newest revision a write has *verified* in YouTrack
+// (written, then read back identical). The cache has unsaved edits exactly
+// when the two differ — whether a save is debounced, retrying, in flight or
+// was refused.
+let revision = 0;
+let savedRevision = 0;
+const hasUnsavedEdits = () => revision !== savedRevision;
+
+// Writes run one at a time, in order: an overlapping save waits for the one
+// in flight instead of interleaving with it.
+let writeChain: Promise<unknown> = Promise.resolve();
+
+// While activation of per-workspace storage runs, edits to the shared article
+// are refused and no save or retry is started, so nothing can change
+// _vermilian-config after the final verified flush (VERM-53 review).
+let frozen = false;
+export const ACTIVATION_IN_PROGRESS_MESSAGE =
+  'Per-workspace storage is being activated; configuration changes are paused until it finishes.';
+
+export function isFrozenForActivation(): boolean {
+  return frozen;
+}
+
 // Parse / serialise / merge live in shared/articleCodec.ts so they can be
 // unit-tested without Electron.
 
@@ -134,6 +158,7 @@ async function _load(url: string, token: string): Promise<void> {
   }
 
   cache = parsed;
+  savedRevision = revision; // what was just read is what YouTrack holds
 }
 
 // ─── Get helpers ─────────────────────────────────────────────────────────────
@@ -181,45 +206,61 @@ export async function forceReload(url: string, token: string): Promise<Vermilian
   cache = null;
   articleId = null;
   lastReadUpdated = 0;
+  savedRevision = revision; // local edits are discarded on purpose
   await load(url, token);
   return getWorkspaceConfig();
 }
 
 // ─── Update helpers ──────────────────────────────────────────────────────────
 
-export function updateBoardConfig(config: BoardConfig): void {
+// Each edit returns false, changing nothing, while activation is in progress.
+
+export function updateBoardConfig(config: BoardConfig): boolean {
+  if (frozen) return false;
   if (!cache) cache = emptyArticleConfig();
   cache = { ...cache, boards: { ...cache.boards, [config.boardId]: config } };
+  revision++;
+  return true;
 }
 
-export function removeBoardConfig(projectId: string): void {
-  if (!cache) return;
+export function removeBoardConfig(projectId: string): boolean {
+  if (frozen) return false;
+  if (!cache) return true;
   const boards = { ...cache.boards };
   delete boards[projectId];
   cache = { ...cache, boards };
+  revision++;
+  return true;
 }
 
 // The active workspace is per-machine (VERM-46, ADR-0011 §2) and lives in
 // userData/active-workspace.json. The article's activeWorkspaceId is kept as
 // it is — never taken from the caller — so switching on one machine cannot
 // move another, and older clients still find the value they expect.
-export function updateWorkspaceConfig(wsConfig: VermilianConfig): void {
+export function updateWorkspaceConfig(wsConfig: VermilianConfig): boolean {
+  if (frozen) return false;
   if (!cache) cache = emptyArticleConfig();
   cache = {
     ...cache,
     workspaces: wsConfig.workspaces,
   };
+  revision++;
+  return true;
 }
 
-export function setDismissal(entry: NotThisWeekDismissal): void {
+export function setDismissal(entry: NotThisWeekDismissal): boolean {
+  if (frozen) return false;
   if (!cache) cache = emptyArticleConfig();
   const key = dismissalKey(entry.workspace, entry.issueId);
   cache = { ...cache, dismissals: { ...cache.dismissals, [key]: entry } };
+  revision++;
+  return true;
 }
 
 // ─── Debounced write ─────────────────────────────────────────────────────────
 
 export function scheduleSave(url: string, token: string): void {
+  if (frozen) return;
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
@@ -227,16 +268,44 @@ export function scheduleSave(url: string, token: string): void {
   }, 1500);
 }
 
-async function _write(url: string, token: string): Promise<void> {
-  if (!cache || !url || !token) return;
+export type WriteOutcome =
+  | { kind: 'written' } // sent and read back identical
+  | { kind: 'clean' } // no unsaved edits: nothing sent
+  | { kind: 'blocked'; message: string } // the storage guard refused it
+  | { kind: 'failed'; message: string }; // not accepted, or not verified
+
+// Queue a write behind any write already running.
+function _write(url: string, token: string): Promise<WriteOutcome> {
+  const next = writeChain.then(() => doWrite(url, token));
+  writeChain = next.catch(() => undefined);
+  return next;
+}
+
+// Same document, ignoring formatting: YouTrack may store whitespace differently.
+function sameContent(a: string, b: string): boolean {
+  if (a === b) return true;
+  const strip = (x: string) => x.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  try {
+    return JSON.stringify(JSON.parse(strip(a))) === JSON.stringify(JSON.parse(strip(b)));
+  } catch {
+    return false;
+  }
+}
+
+async function doWrite(url: string, token: string): Promise<WriteOutcome> {
+  if (!hasUnsavedEdits()) return { kind: 'clean' };
+  if (!cache || !url || !token) return { kind: 'failed', message: 'YouTrack is not configured, so the configuration could not be saved.' };
 
   const guard = await writeGuard();
   if (!guard.allowed) {
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     retryDelay = 0;
     notify({ kind: 'storage-blocked', message: guard.message });
-    return;
+    return { kind: 'blocked', message: guard.message };
   }
+
+  // The newest edit this write carries; edits made while it runs stay unsaved.
+  const writing = revision;
 
   // Stale-write check: if the Article was updated by another machine, refetch.
   if (articleId) {
@@ -252,24 +321,29 @@ async function _write(url: string, token: string): Promise<void> {
 
   const content = serialiseArticleConfig(cache);
 
-  let ok = false;
+  let written: { id: string; updated: number } | null = null;
   if (articleId) {
     const result = await yt.updateVermilianArticle(url, token, articleId, content);
-    if (result) {
-      lastReadUpdated = result.updated;
-      ok = true;
-    }
+    if (result) written = { id: articleId, updated: result.updated };
   } else {
     const created = await yt.createVermilianArticle(url, token, content);
     if (created) {
       articleId = created.id;
-      lastReadUpdated = created.updated;
       await saveCachedArticleId(articleId);
-      ok = true;
+      written = { id: created.id, updated: created.updated };
     }
   }
 
-  if (ok) {
+  // Positive confirmation: read it back and compare.
+  let verified = false;
+  if (written) {
+    const back = await yt.getVermilianArticle(url, token, written.id);
+    verified = !!back && sameContent(back.content, content);
+    if (back) lastReadUpdated = back.updated;
+  }
+
+  if (verified) {
+    savedRevision = Math.max(savedRevision, writing);
     // Recovered after a prior failure — clear backoff and tell the renderer.
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     retryDelay = 0;
@@ -277,18 +351,27 @@ async function _write(url: string, token: string): Promise<void> {
       writeHadFailure = false;
       notify({ kind: 'write-recovered' });
     }
-  } else {
-    scheduleRetry(url, token);
+    return { kind: 'written' };
   }
+  scheduleRetry(url, token);
+  return {
+    kind: 'failed',
+    message: written
+      ? 'YouTrack accepted the configuration save, but reading it back did not show it.'
+      : 'YouTrack did not accept the configuration save.',
+  };
 }
 
 // Exponential backoff (2s → 30s cap). Only the local cache and file hold the
 // latest edit while retrying, so no data is lost; we just keep trying to push.
+// No retry is started while activation holds the article frozen; unfreezing
+// resumes it.
 function scheduleRetry(url: string, token: string): void {
   if (!writeHadFailure) {
     writeHadFailure = true;
     notify({ kind: 'write-failed' });
   }
+  if (frozen) return;
   retryDelay = retryDelay === 0 ? RETRY_BASE_MS : Math.min(retryDelay * 2, RETRY_MAX_MS);
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(() => {
@@ -297,12 +380,46 @@ function scheduleRetry(url: string, token: string): void {
   }, retryDelay);
 }
 
-// Only a save that is actually waiting (debounced or retrying) is sent; with
-// nothing pending nothing is written. Activation calls this so a last legacy
-// edit is not lost, without rewriting _vermilian-config (VERM-53).
-export async function flushPending(url: string, token: string): Promise<void> {
-  if (!debounceTimer && !retryTimer) return;
-  await flush(url, token);
+// ─── Activation gate (VERM-53 review) ────────────────────────────────────────
+//
+// Activation calls, in order:
+//   freezeForActivation()          edits refused, no new save or retry starts
+//   settleForActivation(url, tok)  waits out any write in flight; if edits are
+//                                  unsaved, writes them now and requires a
+//                                  verified write — anything else refuses
+//   … backup, migration, marker …
+//   unfreezeAfterActivation(...)   in a finally; resumes any pending retry
+//
+// With no unsaved edits nothing is written, so a clean state never rewrites
+// _vermilian-config. On refusal the unsaved edits stay in the cache and are
+// retried after unfreezing, so nothing is lost.
+
+export function freezeForActivation(): void {
+  frozen = true;
+  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+}
+
+export type SettleResult = { ok: true; wrote: boolean } | { ok: false; message: string };
+
+export async function settleForActivation(url: string, token: string): Promise<SettleResult> {
+  if (!frozen) return { ok: false, message: 'Internal error: configuration edits were not paused before activation.' };
+  await writeChain; // a write already running finishes first
+  if (!hasUnsavedEdits()) return { ok: true, wrote: false };
+  const r = await _write(url, token);
+  if (r.kind === 'written' && !hasUnsavedEdits()) return { ok: true, wrote: true };
+  const why = r.kind === 'blocked' || r.kind === 'failed' ? r.message : 'The latest configuration change is still unsaved.';
+  return {
+    ok: false,
+    message:
+      `Your latest configuration change could not be saved to YouTrack (${why}). Activation did not start, so the ` +
+      'migration would not use an older configuration. Nothing was migrated; the change is kept and will be retried.',
+  };
+}
+
+export function unfreezeAfterActivation(url: string, token: string): void {
+  frozen = false;
+  if (hasUnsavedEdits() && url && token) scheduleSave(url, token);
 }
 
 // ─── Flush (call on quit / before checkpoint) ────────────────────────────────
@@ -313,4 +430,21 @@ export async function flush(url: string, token: string): Promise<void> {
     debounceTimer = null;
   }
   await _write(url, token);
+}
+
+// Test-only: back to a fresh module state.
+export function resetForTests(): void {
+  cache = null;
+  articleId = null;
+  lastReadUpdated = 0;
+  if (debounceTimer) clearTimeout(debounceTimer);
+  if (retryTimer) clearTimeout(retryTimer);
+  debounceTimer = null;
+  retryTimer = null;
+  retryDelay = 0;
+  writeHadFailure = false;
+  revision = 0;
+  savedRevision = 0;
+  writeChain = Promise.resolve();
+  frozen = false;
 }

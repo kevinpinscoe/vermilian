@@ -15,12 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to a private local file and verifies it, previews the migration, checks that every
   credential reference resolves on this computer, migrates each workspace into its own
   `_vermilian-ws-<id>` article, re-checks that the sources did not change, records a shared
-  `_vermilian-storage-activation` marker and only then switches this computer. Any failure
+  `_vermilian-storage-activation` marker and only then switches this computer. An unsaved
+  change to `_vermilian-config` must first be saved and verified, or activation does not
+  start, and edits are paused while it runs. Any failure
   leaves `_vermilian-config` in use and unchanged. Other computers join without migrating
   again.
 - **Configuration writes are guarded on every computer.** A computer still on the shared
   configuration stops saving configuration once another computer has activated, and a
-  computer on per-workspace storage stops when the activation is retired or replaced. A
+  computer on per-workspace storage stops when the activation is retired or replaced. The
+  marker is read afresh for every write; nothing cached authorizes one. A
   marker that cannot be read or verified blocks writes rather than guessing. Changes made
   to `_vermilian-config` after activation by Vermilian v1.2.10 or older (which cannot see
   the marker) are detected and shown in Settings.

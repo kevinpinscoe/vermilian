@@ -5,16 +5,14 @@ import { randomUUID } from 'node:crypto';
 import { NO_WORKSPACE_MESSAGE, resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
 import {
   activateWorkspaceStorage,
-  readMarker,
+  authorizeConfigWrite,
   returnToLegacyStorage,
   storageStatus,
   type ActivationDeps,
   type StorageActivationClient,
 } from './services/storageActivation';
 import {
-  storageWriteGuard,
   type ActivationResult,
-  type MarkerRead,
   type RollbackResult,
   type StorageGuard,
   type StorageStatusView,
@@ -824,7 +822,7 @@ export function registerIpc(): void {
       // Write local file immediately (fast, offline-safe).
       await writeWorkspaceConfig(toSave);
       // Update Article cache and schedule debounced remote write.
-      articleConfig.updateWorkspaceConfig(toSave);
+      if (!articleConfig.updateWorkspaceConfig(toSave)) return { ok: false, error: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE };
       if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
       return { ok: true };
     },
@@ -853,8 +851,7 @@ export function registerIpc(): void {
             const projects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
             const pruned = pruneStaleProjectIds(wsConfig, new Set(projects.map((p) => p.id)));
             if (JSON.stringify(pruned) !== JSON.stringify(wsConfig)) {
-              articleConfig.updateWorkspaceConfig(pruned);
-              articleConfig.scheduleSave(cfg.youtrackUrl, token);
+              if (articleConfig.updateWorkspaceConfig(pruned)) articleConfig.scheduleSave(cfg.youtrackUrl, token);
             }
             wsConfig = pruned;
           } catch {
@@ -1093,6 +1090,7 @@ export function registerIpc(): void {
       fakeYouTrackForE2E.writeWorkspaceArticleForTests(articleId, content),
     );
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
+    ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,
     // read which calls were made, and hold searches back to test a poll in
@@ -1379,32 +1377,10 @@ export function registerIpc(): void {
     return cfg.youtrackUrl && token ? youtrackStorageActivationClient(cfg.youtrackUrl, token) : null;
   }
 
-  // A verified marker read is reused for a few seconds, so a burst of saves
-  // does not list the VERM project once per save. A failed read is never cached.
-  const MARKER_TTL_MS = 5_000;
-  let markerCache: { at: number; read: MarkerRead } | null = null;
-  async function currentMarker(client: StorageActivationClient): Promise<MarkerRead> {
-    if (markerCache && Date.now() - markerCache.at < MARKER_TTL_MS) return markerCache.read;
-    const read = await readMarker(client);
-    markerCache = read.status === 'ok' || read.status === 'none' ? { at: Date.now(), read } : null;
-    return read;
-  }
-
-  /** May this machine write configuration for `mode` right now? Fails closed. */
+  // Every configuration write is authorized against a fresh read of the
+  // marker; no cached marker ever authorizes a write (VERM-53 review).
   async function storageGuard(mode: WorkspaceStorageMode): Promise<StorageGuard> {
-    const { state, corrupt } = readLocalStorageState();
-    if (!corrupt && state.mode !== mode) {
-      return {
-        allowed: false,
-        reason: 'mode-mismatch',
-        message: state.mode === 'per-workspace'
-          ? 'This machine uses per-workspace configuration storage; the old shared configuration is not written.'
-          : 'This machine still uses the old shared configuration; per-workspace configuration is not written.',
-      };
-    }
-    const client = await storageClient();
-    if (!client) return { allowed: false, reason: 'not-configured', message: 'Connect YouTrack first — configuration is stored there.' };
-    return storageWriteGuard(state, await currentMarker(client), corrupt);
+    return authorizeConfigWrite(mode, readLocalStorageState(), await storageClient());
   }
 
   articleConfig.setWriteGuard(() => storageGuard('legacy'));
@@ -1428,7 +1404,6 @@ export function registerIpc(): void {
   }
 
   function notifyStorageChanged(): void {
-    markerCache = null;
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send('config:article-synced');
     }
@@ -1459,15 +1434,27 @@ export function registerIpc(): void {
     const cfg = await readConfig();
     const client = await storageClient();
     if (!client) return { ok: false, reason: 'source-unreadable', message: NOT_CONFIGURED_WS.message };
-    // Pending debounced legacy writes go out first, while they are still allowed.
-    const token = await loadYtToken(cfg);
-    if (token) await articleConfig.flushPending(cfg.youtrackUrl, token).catch(() => undefined);
-    const r = await activateWorkspaceStorage(activationDeps(client, cfg.youtrackUrl), {
-      confirmed: args.confirmed === true,
-      ...migrationOptions(args),
-    });
-    if (r.ok) notifyStorageChanged();
-    return r;
+    if (args.confirmed !== true) return { ok: false, reason: 'not-confirmed', message: 'Activation was not confirmed; nothing was done.' };
+    if (articleConfig.isFrozenForActivation()) {
+      return { ok: false, reason: 'legacy-save-unresolved', message: 'An activation is already running on this computer.' };
+    }
+    // Hard gate (VERM-53 review): no edit to _vermilian-config may be unsaved
+    // or land while activation runs. Edits are paused first; any unsaved one
+    // must be written and verified, or activation does not start.
+    const token = (await loadYtToken(cfg)) ?? '';
+    articleConfig.freezeForActivation();
+    try {
+      const settled = await articleConfig.settleForActivation(cfg.youtrackUrl, token);
+      if (!settled.ok) return { ok: false, reason: 'legacy-save-unresolved', message: settled.message };
+      const r = await activateWorkspaceStorage(activationDeps(client, cfg.youtrackUrl), {
+        confirmed: true,
+        ...migrationOptions(args),
+      });
+      if (r.ok) notifyStorageChanged();
+      return r;
+    } finally {
+      articleConfig.unfreezeAfterActivation(cfg.youtrackUrl, token);
+    }
   });
 
   ipcMain.handle(IPC.returnToLegacyStorage, async (_e, raw: unknown): Promise<RollbackResult> => {
@@ -1709,7 +1696,10 @@ export function registerIpc(): void {
       if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
       return;
     }
-    articleConfig.updateBoardConfig(config);
+    if (!articleConfig.updateBoardConfig(config)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
@@ -1881,7 +1871,10 @@ export function registerIpc(): void {
       if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
       return;
     }
-    articleConfig.setDismissal(entry);
+    if (!articleConfig.setDismissal(entry)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
@@ -1897,7 +1890,10 @@ export function registerIpc(): void {
       if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
       return;
     }
-    articleConfig.removeBoardConfig(projectId);
+    if (!articleConfig.removeBoardConfig(projectId)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
