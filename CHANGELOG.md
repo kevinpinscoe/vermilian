@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The Add projects dialog has a search box** (VERM-13). Typing narrows the list to
+  projects whose name or short name contains the text, ignoring case. The box has focus
+  when the dialog opens, and a message shows when nothing matches. Filtering only changes
+  what is shown: a project ticked and then filtered out of view stays ticked, is saved,
+  and is counted in the "will move out of" notice.
+
 ### Fixed
 
 - **The e2e suite no longer leaks an Electron profile per test** (VERM-54). Every launch

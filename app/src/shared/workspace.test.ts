@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   makeInitialConfig,
   allAssignedProjectIds,
+  filterProjects,
   pruneStaleProjectIds,
   setWorkspaceProjects,
   type VermilianConfig,
+  type YouTrackProject,
 } from './workspace';
 
 describe('makeInitialConfig', () => {
@@ -208,5 +210,37 @@ describe('setWorkspaceProjects', () => {
   it('is a no-op on the folder set when nothing changes', () => {
     const next = setWorkspaceProjects(cfg(), 'work', ['p4']);
     expect(folderOf(next, 'work')).toEqual(folderOf(cfg(), 'work'));
+  });
+});
+
+describe('filterProjects', () => {
+  const projects: YouTrackProject[] = [
+    { id: '1', name: 'Test Project', shortName: 'TEST' },
+    { id: '2', name: 'Team Inbox', shortName: 'TMIB' },
+    { id: '3', name: 'Empty Project', shortName: 'EMP' },
+  ];
+  const ids = (list: YouTrackProject[]) => list.map((p) => p.id);
+
+  it('returns every project, in order, for an empty or blank query', () => {
+    expect(ids(filterProjects(projects, ''))).toEqual(['1', '2', '3']);
+    expect(ids(filterProjects(projects, '   '))).toEqual(['1', '2', '3']);
+  });
+
+  it('matches a substring of the name, ignoring case', () => {
+    expect(ids(filterProjects(projects, 'project'))).toEqual(['1', '3']);
+    expect(ids(filterProjects(projects, 'INBOX'))).toEqual(['2']);
+  });
+
+  it('matches a substring of the short name, ignoring case', () => {
+    // "tmib" appears in no project name, so only the short name can match it.
+    expect(ids(filterProjects(projects, 'tmib'))).toEqual(['2']);
+  });
+
+  it('trims surrounding whitespace from the query', () => {
+    expect(ids(filterProjects(projects, '  inbox '))).toEqual(['2']);
+  });
+
+  it('returns nothing when no project matches', () => {
+    expect(filterProjects(projects, 'zzz')).toEqual([]);
   });
 });
