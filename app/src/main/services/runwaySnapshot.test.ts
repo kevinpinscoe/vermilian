@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RUNWAY_APPLICATION_ID, RUNWAY_SCHEMA_VERSION, openRunwayDb } from './runwayDb';
 import {
   RunwaySnapshotError,
+  type SnapshotFs,
   defaultSnapshotFileName,
   exportRunwaySnapshot,
   runwayRowCounts,
@@ -60,7 +61,7 @@ describe('exportRunwaySnapshot', () => {
   it('writes the whole database as a verified snapshot', async () => {
     seed(db);
     const dest = join(outDir, 'snapshot.sqlite');
-    const summary = await exportRunwaySnapshot(db, dest, () => new Date(NOW));
+    const summary = await exportRunwaySnapshot(db, dest, { now: () => new Date(NOW) });
 
     expect(summary).toMatchObject({
       path: dest,
@@ -188,6 +189,119 @@ describe('exportRunwaySnapshot', () => {
     } finally {
       foreign.close();
     }
+  });
+});
+
+// Publication (the last step) through an injected filesystem, so the cases a
+// real disk cannot produce on demand — no hard links, a file that appears
+// between the existence check and the link — are exercised exactly.
+describe('exportRunwaySnapshot publication', () => {
+  function errno(code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(`${code}: simulated`), { code });
+  }
+
+  it('publishes the verified copy with one hard link', async () => {
+    seed(db);
+    const dest = join(outDir, 'linked.sqlite');
+    const calls: Array<[string, string]> = [];
+    const fs: SnapshotFs = {
+      link(tmp, target) {
+        calls.push([tmp, target]);
+        // What is about to be published is already a complete, valid database.
+        const check = new DatabaseSync(tmp, { readOnly: true });
+        try {
+          expect(pragma(check, 'integrity_check')).toBe('ok');
+          expect(runwayRowCounts(check)).toEqual(runwayRowCounts(db));
+        } finally {
+          check.close();
+        }
+        linkSync(tmp, target);
+      },
+    };
+    await exportRunwaySnapshot(db, dest, { fs });
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toBe(dest);
+    expect(calls[0][0]).toMatch(/[/\\]\.linked\.sqlite\.partial-[0-9a-f]{16}$/);
+    expect(readdirSync(outDir)).toEqual(['linked.sqlite']);
+  });
+
+  for (const code of ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS']) {
+    it(`fails safely without creating the destination when hard links are unsupported (${code})`, async () => {
+      seed(db);
+      const dest = join(outDir, 'nolinks.sqlite');
+      const err = await exportRunwaySnapshot(db, dest, {
+        fs: { link: () => { throw errno(code); } },
+      }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RunwaySnapshotError);
+      expect((err as RunwaySnapshotError).code).toBe('publication-unsupported');
+      expect((err as Error).message).toMatch(/No snapshot was created/);
+      expect((err as Error).message).toMatch(/Choose a folder on a local disk/);
+      expect(readdirSync(outDir)).toEqual([]);
+    });
+  }
+
+  it('refuses, and leaves untouched, a file created between the check and publication', async () => {
+    seed(db);
+    const dest = join(outDir, 'race.sqlite');
+    const fs: SnapshotFs = {
+      link(tmp, target) {
+        writeFileSync(target, 'created by someone else'); // appears after the up-front check
+        linkSync(tmp, target); // the real link then fails with EEXIST
+      },
+    };
+    await expect(exportRunwaySnapshot(db, dest, { fs })).rejects.toMatchObject({ code: 'destination-exists' });
+    expect(readFileSync(dest, 'utf8')).toBe('created by someone else');
+    expect(readdirSync(outDir)).toEqual(['race.sqlite']);
+  });
+
+  it('refuses, and leaves untouched, a symbolic link created between the check and publication', async () => {
+    const dest = join(outDir, 'race-link.sqlite');
+    const fs: SnapshotFs = {
+      link(tmp, target) {
+        symlinkSync(join(outDir, 'elsewhere.sqlite'), target);
+        linkSync(tmp, target);
+      },
+    };
+    await expect(exportRunwaySnapshot(db, dest, { fs })).rejects.toMatchObject({ code: 'destination-exists' });
+    expect(lstatSync(dest).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(dest)).toBe(join(outDir, 'elsewhere.sqlite'));
+    expect(readdirSync(outDir)).toEqual(['race-link.sqlite']);
+  });
+
+  it('never deletes a destination it did not create when publication fails', async () => {
+    const dest = join(outDir, 'theirs.sqlite');
+    // The link "fails" after another process put a file there.
+    const fs: SnapshotFs = {
+      link(_tmp, target) {
+        writeFileSync(target, 'theirs');
+        throw errno('EIO');
+      },
+    };
+    await expect(exportRunwaySnapshot(db, dest, { fs })).rejects.toMatchObject({ code: 'export-failed' });
+    expect(readFileSync(dest, 'utf8')).toBe('theirs');
+    expect(readdirSync(outDir)).toEqual(['theirs.sqlite']);
+  });
+
+  it('leaves no snapshot or temporary file when publication fails', async () => {
+    seed(db);
+    const dest = join(outDir, 'failed.sqlite');
+    await expect(
+      exportRunwaySnapshot(db, dest, { fs: { link: () => { throw errno('EIO'); } } }),
+    ).rejects.toMatchObject({ code: 'export-failed' });
+    expect(readdirSync(outDir)).toEqual([]);
+    // The source is unaffected and still usable.
+    expect(runwayRowCounts(db)).toEqual({ runway_entry: 4, dismissal: 2 });
+  });
+
+  it('does not call link at all when the destination already exists', async () => {
+    const dest = join(outDir, 'existing.sqlite');
+    writeFileSync(dest, 'keep me');
+    let linked = false;
+    await expect(
+      exportRunwaySnapshot(db, dest, { fs: { link: () => { linked = true; } } }),
+    ).rejects.toMatchObject({ code: 'destination-exists' });
+    expect(linked).toBe(false);
+    expect(readFileSync(dest, 'utf8')).toBe('keep me');
   });
 });
 

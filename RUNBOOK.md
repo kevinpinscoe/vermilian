@@ -277,6 +277,13 @@ after the save dialog asked to replace it), the export is refused and the
 existing file is left untouched; choose a new name. A cancelled or failed
 export leaves no file behind.
 
+The finished snapshot is published with a single hard link, so it appears
+complete or not at all. A folder whose filesystem has no hard links (FAT/exFAT
+drives, some network shares) is refused with "No snapshot was created … Choose
+a folder on a local disk" rather than written by a copy that could be seen
+half-finished. Export to a local disk, then copy the file wherever it needs to
+go.
+
 Verify a snapshot by hand:
 
 ```bash

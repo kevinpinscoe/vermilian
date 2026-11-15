@@ -16,24 +16,22 @@
 //   - The copy goes to a temporary file next to the destination. It is opened
 //     read-only and verified (integrity_check, application_id, user_version,
 //     row counts) before it is published under the chosen name.
-//   - Publishing never overwrites: the destination is refused if it exists,
-//     and the final step is a hard link (or an exclusive copy where the
-//     filesystem has no hard links), both of which fail rather than replace a
-//     file that appeared in the meantime.
-//   - On any failure the temporary file and its SQLite side files are removed,
-//     so a failed export never leaves something that looks like a valid backup.
+//   - Publishing never overwrites and never exposes a partial file: the
+//     destination is refused if it exists, and the verified copy is published
+//     with a hard link, which appears complete in one atomic step and fails
+//     with EEXIST rather than replace a file (or symbolic link) that appeared
+//     in the meantime. Where the filesystem has no hard links (FAT/exFAT
+//     volumes, some network shares) the export is refused with an actionable
+//     error instead of falling back to a copy, which would expose a
+//     half-written file under the final name.
+//   - The export only ever deletes its own temporary files, never the
+//     destination. On any failure they are removed, so a failed export never
+//     leaves something that looks like a valid backup.
 //
 // No Electron import, so it runs under vitest; the IPC handler owns the dialog.
 
 import { randomBytes } from 'node:crypto';
-import {
-  constants as fsConstants,
-  copyFileSync,
-  existsSync,
-  linkSync,
-  lstatSync,
-  rmSync,
-} from 'node:fs';
+import { existsSync, linkSync, lstatSync, rmSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { RUNWAY_APPLICATION_ID, RUNWAY_SCHEMA_VERSION } from './runwayDb';
@@ -48,6 +46,7 @@ export type RunwaySnapshotErrorCode =
   | 'invalid-destination' // not an absolute path to a file
   | 'destination-exists' // never overwritten
   | 'verification-failed' // the copy did not check out; nothing was published
+  | 'publication-unsupported' // the destination's filesystem has no hard links
   | 'export-failed'; // the backup or the publish step failed
 
 export class RunwaySnapshotError extends Error {
@@ -122,33 +121,51 @@ function verifySnapshot(path: string): { rowCounts: Record<string, number>; sche
   }
 }
 
-// Publishes `tmp` as `dest` without ever replacing an existing file. A hard
-// link is atomic and fails with EEXIST; where the filesystem has no hard links
-// (FAT/exFAT volumes, some network shares) an exclusive copy is used instead,
-// and a half-written destination is removed if that copy fails.
-function publishExclusive(tmp: string, dest: string): void {
+// Error codes meaning the filesystem cannot create a hard link there at all.
+const LINK_UNSUPPORTED = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS', 'EMLINK']);
+
+/** Filesystem operations the publish step uses; replaceable in tests. */
+export interface SnapshotFs {
+  /** Creates `dest` as a hard link to `tmp`; must fail with EEXIST if `dest` exists. */
+  link(tmp: string, dest: string): void;
+}
+
+const nodeFs: SnapshotFs = { link: linkSync };
+
+// Publishes the verified `tmp` as `dest` with one hard link: atomic (the file
+// appears complete or not at all) and no-overwrite (EEXIST if anything,
+// including a dangling symbolic link, is already there). Never touches `dest`
+// on failure: if the link failed, `dest` is not ours.
+function publishExclusive(fs: SnapshotFs, tmp: string, dest: string): void {
   try {
-    linkSync(tmp, dest);
-    return;
+    fs.link(tmp, dest);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+    const code = (err as NodeJS.ErrnoException).code ?? '';
     if (code === 'EEXIST') {
       throw new RunwaySnapshotError('destination-exists', `A file already exists at ${dest}; choose a new name`);
     }
-    if (code !== 'EPERM' && code !== 'ENOTSUP' && code !== 'EOPNOTSUPP' && code !== 'EXDEV' && code !== 'ENOSYS') {
-      throw err;
+    if (LINK_UNSUPPORTED.has(code)) {
+      throw new RunwaySnapshotError(
+        'publication-unsupported',
+        `No snapshot was created: the folder ${dirname(dest)} does not support safe publishing ` +
+          `(hard links, ${code}), which can happen on FAT/exFAT drives and some network shares. ` +
+          'Choose a folder on a local disk.',
+      );
     }
+    const message = err instanceof Error ? err.message : String(err);
+    throw new RunwaySnapshotError('export-failed', `Could not write the snapshot to ${dest}: ${message}`);
   }
-  try {
-    copyFileSync(tmp, dest, fsConstants.COPYFILE_EXCL);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'EEXIST') {
-      throw new RunwaySnapshotError('destination-exists', `A file already exists at ${dest}; choose a new name`);
-    }
-    // COPYFILE_EXCL created the file, so a partial copy is ours to remove.
-    rmSync(dest, { force: true });
-    throw err;
+}
+
+// A temporary name beside the destination that does not exist yet, so the
+// cleanup can never remove a file the export did not create.
+function temporaryPath(destination: string): string {
+  for (;;) {
+    const candidate = join(
+      dirname(destination),
+      `.${basename(destination)}.partial-${randomBytes(8).toString('hex')}`,
+    );
+    if (!['', '-journal', '-wal', '-shm'].some((suffix) => existsSync(candidate + suffix))) return candidate;
   }
 }
 
@@ -167,10 +184,15 @@ export function defaultSnapshotFileName(now: Date = new Date()): string {
  * Resolves with what was written; rejects with a RunwaySnapshotError and
  * leaves no file behind when anything fails.
  */
+export interface ExportRunwaySnapshotOptions {
+  now?: () => Date;
+  fs?: SnapshotFs;
+}
+
 export async function exportRunwaySnapshot(
   source: DatabaseSync,
   destination: string,
-  now: () => Date = () => new Date(),
+  { now = () => new Date(), fs = nodeFs }: ExportRunwaySnapshotOptions = {},
 ): Promise<RunwaySnapshotSummary> {
   if (typeof destination !== 'string' || !isAbsolute(destination) || basename(destination) === '') {
     throw new RunwaySnapshotError('invalid-destination', 'Choose a file to export the Runway snapshot to');
@@ -179,10 +201,7 @@ export async function exportRunwaySnapshot(
     throw new RunwaySnapshotError('destination-exists', `A file already exists at ${destination}; choose a new name`);
   }
 
-  const tmp = join(
-    dirname(destination),
-    `.${basename(destination)}.partial-${randomBytes(6).toString('hex')}`,
-  );
+  const tmp = temporaryPath(destination);
   try {
     let pages: number;
     try {
@@ -192,13 +211,7 @@ export async function exportRunwaySnapshot(
       throw new RunwaySnapshotError('export-failed', `Runway snapshot backup failed: ${message}`);
     }
     const { rowCounts, schemaVersion } = verifySnapshot(tmp);
-    try {
-      publishExclusive(tmp, destination);
-    } catch (err) {
-      if (err instanceof RunwaySnapshotError) throw err;
-      const message = err instanceof Error ? err.message : String(err);
-      throw new RunwaySnapshotError('export-failed', `Could not write the snapshot to ${destination}: ${message}`);
-    }
+    publishExclusive(fs, tmp, destination);
     return { path: destination, exportedAt: now().toISOString(), schemaVersion, rowCounts, pages };
   } finally {
     removeDatabaseFiles(tmp);
