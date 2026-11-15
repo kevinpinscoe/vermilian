@@ -833,6 +833,14 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.forceResyncWorkspaceConfig,
     async (): Promise<{ ok: boolean; error?: string }> => {
+      if (workspaceStorageMode() === 'per-workspace') {
+        // Per-workspace articles are read fresh on every request; there is no
+        // cached layout to discard, and _vermilian-config is not used (VERM-53).
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send('config:article-synced');
+        }
+        return { ok: true };
+      }
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
       if (!cfg.youtrackUrl || !token) {
