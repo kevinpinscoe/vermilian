@@ -114,6 +114,13 @@
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .cardKey {
   font-size: 11px;
   color: var(--secondary-text-color, #444444);

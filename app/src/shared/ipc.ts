@@ -54,6 +54,7 @@ export const IPC = {
   saveDismissal: 'priorityDesk:saveDismissal',
   runwayGet: 'runway:get',
   runwayUpdate: 'runway:update',
+  runwayList: 'runway:list',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -263,6 +264,14 @@ export interface RunwayUpdateArgs extends RunwayGetArgs {
 
 export type RunwayResult =
   | { ok: true; entry: import('./runway').RunwayEntry }
+  | { ok: false; error: string; code?: string };
+
+export interface RunwayListArgs {
+  workspaceId: string;
+}
+
+export type RunwayListResult =
+  | { ok: true; entries: import('./runway').RunwayEntry[] }
   | { ok: false; error: string; code?: string };
 
 export interface PatchIssueArgs {
@@ -535,6 +544,10 @@ export interface VermilianAPI {
   // issue reads/writes the local SQLite database. Never writes to Jira.
   runwayGet(args: RunwayGetArgs): Promise<RunwayResult>;
   runwayUpdate(args: RunwayUpdateArgs): Promise<RunwayResult>;
+  // Every Jira Runway entry stored for a workspace (VERM-38): the Jira
+  // Priority Desk's Now/Next/Then and the star on each Jira card. Local
+  // SQLite only; YouTrack issues keep reading their own fields.
+  runwayList(args: RunwayListArgs): Promise<RunwayListResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

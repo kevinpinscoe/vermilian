@@ -10,6 +10,7 @@ import {
   createJiraRunwayStore,
   createYouTrackRunwayStore,
   storeForIssue,
+  type JiraRunwayMetadataStore,
   type RunwayMetadataStore,
   type YouTrackFocusFields,
 } from './runwayStore';
@@ -104,7 +105,7 @@ describe('YouTrack Runway store: existing custom fields, unchanged', () => {
 describe('Jira Runway store: local SQLite', () => {
   let dir: string;
   let db: DatabaseSync;
-  let store: RunwayMetadataStore;
+  let store: JiraRunwayMetadataStore;
   const clock = () => new Date('2026-01-05T09:00:00.000Z');
 
   beforeEach(() => {
@@ -187,6 +188,23 @@ describe('Jira Runway store: local SQLite', () => {
     await expectStoreError(store.update('ws-a', jira('DEMO-1'), { focus: false, focusRank: 2 }), 'invalid-patch');
     expect(rowCount()).toBe(0);
   });
+
+  it('lists one workspace\'s entries only, ordered by issue ID', async () => {
+    await store.update('ws-a', jira('DEMO-2'), { focusRank: 1 });
+    await store.update('ws-a', jira('DEMO-1'), { whyNow: 'Waiting on review' });
+    await store.update('ws-b', jira('DEMO-3'), { focusRank: 1 });
+    await expect(store.list('ws-a')).resolves.toEqual([
+      { issueId: 'jira:DEMO-1', focus: false, focusRank: null, whyNow: 'Waiting on review' },
+      { issueId: 'jira:DEMO-2', focus: true, focusRank: 1, whyNow: null },
+    ]);
+    await expect(store.list('ws-c')).resolves.toEqual([]);
+  });
+
+  it('drops an entry from the list once nothing is left in it', async () => {
+    await store.update('ws-a', jira('DEMO-1'), { focus: true });
+    await store.update('ws-a', jira('DEMO-1'), { focus: false });
+    await expect(store.list('ws-a')).resolves.toEqual([]);
+  });
 });
 
 // ─── Routing ───────────────────────────────────────────────────────────────
@@ -194,7 +212,7 @@ describe('Jira Runway store: local SQLite', () => {
 describe('storeForIssue', () => {
   const stores = {
     youtrack: { kind: 'youtrack' } as RunwayMetadataStore,
-    jira: { kind: 'jira' } as RunwayMetadataStore,
+    jira: { kind: 'jira' } as JiraRunwayMetadataStore,
   };
 
   it('routes by provider prefix', () => {

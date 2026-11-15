@@ -29,6 +29,7 @@ import {
 } from './features/workspace-nav/api';
 import { JiraProjectsModal } from './features/workspace-nav/JiraProjectsModal';
 import { JiraWorkspaceBoard } from './features/jira-board/JiraWorkspaceBoard';
+import { JiraPriorityDesk } from './features/jira-board/JiraPriorityDesk';
 import { JiraIssueDetailPanel } from './features/jira-board/JiraIssueDetailPanel';
 import { jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
@@ -578,7 +579,16 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         />
 
         <main className={styles.content}>
-          {activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' ? (
+          {activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' && priorityDeskActive ? (
+            // The Jira Priority Desk (VERM-38): ranks from the local Runway store.
+            <JiraPriorityDesk
+              workspaceId={activeContext.data.workspaceId}
+              workspaceName={activeContext.data.workspaceName}
+              projectKeys={activeJiraProjectKeys}
+              onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}
+              onOpenSettings={onOpenSettings}
+            />
+          ) : activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' ? (
             <JiraWorkspaceBoard
               workspaceId={activeContext.data.workspaceId}
               workspaceName={activeContext.data.workspaceName}

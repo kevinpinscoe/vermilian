@@ -23,6 +23,8 @@ import {
   type RunwayGetArgs,
   type RunwayUpdateArgs,
   type RunwayResult,
+  type RunwayListArgs,
+  type RunwayListResult,
   type MoveIssueArgs,
   type CreateIssueArgs,
   type CreateIssueResult,
@@ -130,7 +132,7 @@ import {
   createJiraRunwayStore,
   createYouTrackRunwayStore,
   storeForIssue,
-  type RunwayMetadataStore,
+  type JiraRunwayMetadataStore,
   type RunwayStores,
 } from './services/runwayStore';
 import type { NamespacedIssueId } from '../shared/tracker';
@@ -184,7 +186,7 @@ async function loadClaudeKey(cfg?: AppConfig): Promise<string | null> {
 // YouTrack never touches it, so a database problem cannot affect the
 // existing YouTrack Focus fields.
 let runwayDb: DatabaseSync | null = null;
-let jiraRunwayStore: RunwayMetadataStore | null = null;
+let jiraRunwayStore: JiraRunwayMetadataStore | null = null;
 
 const youtrackRunwayStore = createYouTrackRunwayStore({
   async readFields(issueId) {
@@ -203,7 +205,7 @@ const youtrackRunwayStore = createYouTrackRunwayStore({
 
 const runwayStores: RunwayStores = {
   youtrack: youtrackRunwayStore,
-  get jira(): RunwayMetadataStore {
+  get jira(): JiraRunwayMetadataStore {
     if (!jiraRunwayStore) {
       runwayDb = openRunwayDb(path.join(app.getPath('userData'), RUNWAY_DB_FILENAME));
       jiraRunwayStore = createJiraRunwayStore(runwayDb);
@@ -1451,6 +1453,17 @@ export function registerIpc(): void {
         args.workspaceId, issueId, args.patch,
       );
       return { ok: true, entry };
+    } catch (e) {
+      return runwayFailure(e);
+    }
+  });
+
+  ipcMain.handle(IPC.runwayList, async (_e, args: RunwayListArgs): Promise<RunwayListResult> => {
+    try {
+      if (typeof args?.workspaceId !== 'string' || args.workspaceId.length === 0) {
+        throw new Error('A workspace ID is required');
+      }
+      return { ok: true, entries: await runwayStores.jira.list(args.workspaceId) };
     } catch (e) {
       return runwayFailure(e);
     }
