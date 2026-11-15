@@ -63,13 +63,12 @@ describe('boardAvailability', () => {
     expect(r).toEqual({ available: true, reason: null });
   });
 
-  it('withholds a YouTrack board on a different server', () => {
+  it('shows a YouTrack board on a different server, through its own connection (VERM-53)', () => {
     const r = boardAvailability(
       { kind: 'youtrack', serverUrl: 'https://other.example.com', credentialRef: 'youtrack-2' },
       YT,
     );
-    expect(r.available).toBe(false);
-    expect(r.reason).toMatch(/different YouTrack server/);
+    expect(r).toEqual({ available: true, reason: null });
   });
 
   it('offers a Jira board, read-only through its own connection (VERM-34)', () => {

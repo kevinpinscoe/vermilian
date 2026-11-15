@@ -13,6 +13,7 @@ import type {
   ReadWorkspaceArticleResult,
   SaveWorkspaceArticleResult,
 } from './workspaceArticle';
+import type { ActivationResult, RollbackResult, StorageStatusView } from './storageActivation';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from './workspaceMigration';
 import type {
   CredentialFailure,
@@ -79,7 +80,10 @@ export const IPC = {
   // Migration to per-workspace articles (VERM-44, shared/workspaceMigration.ts).
   // Nothing calls these on startup; VERM-46 runs migration at activation.
   planWorkspaceMigration: 'workspaceMigration:plan',
-  applyWorkspaceMigration: 'workspaceMigration:apply',
+  // VERM-53: migration runs only inside activation; there is no standalone apply.
+  getStorageStatus: 'workspaceStorage:status',
+  activateWorkspaceStorage: 'workspaceStorage:activate',
+  returnToLegacyStorage: 'workspaceStorage:returnToLegacy',
   // Per-reference credentials (VERM-45, shared/credentialRefs.ts). Status,
   // configuration and saving only: a resolved credential never crosses IPC,
   // and nothing here touches the legacy YouTrack/Claude/Jira settings.
@@ -558,7 +562,10 @@ export type ConfigSyncStatus =
   | { kind: 'write-failed' }
   | { kind: 'write-recovered' }
   | { kind: 'remote-newer' }
-  | { kind: 'version-too-high'; version: number };
+  | { kind: 'version-too-high'; version: number }
+  // VERM-53: a configuration write was refused by the storage guard
+  // (shared/storageActivation.ts); nothing was saved. Names no secret.
+  | { kind: 'storage-blocked'; message: string };
 
 // The surface exposed on `window.vermilian` by the preload bridge.
 export interface VermilianAPI {
@@ -668,10 +675,17 @@ export interface VermilianAPI {
   // fake's raw workspace articles, and overwrite one as "another machine".
   debugGetWorkspaceArticles?(): Promise<Array<{ id: string; summary: string; content: string; updated: number }>>;
   debugWriteWorkspaceArticle?(articleId: string, content: string): Promise<boolean>;
-  // Migration (VERM-44). plan is a dry run that writes nothing; apply re-reads
-  // the source articles and creates the workspace articles that are missing.
+  // Migration preview (VERM-44): a dry run that writes nothing. Migration
+  // itself runs only inside activateWorkspaceStorage (VERM-53).
   planWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
-  applyWorkspaceMigration(options?: WorkspaceMigrationOptions): Promise<WorkspaceMigrationResult>;
+  // Per-workspace configuration storage (VERM-53). Both changes require
+  // `confirmed: true`; nothing activates on startup or install.
+  getStorageStatus(): Promise<StorageStatusView>;
+  activateWorkspaceStorage(args: { confirmed: boolean; jiraWorkspaceName?: string | null }): Promise<ActivationResult>;
+  returnToLegacyStorage(args: { confirmed: boolean }): Promise<RollbackResult>;
+  // e2e-only hooks: an older Vermilian rewrites _vermilian-config.
+  debugWriteConfigArticle?(content: string): Promise<boolean>;
+  debugFailConfigWrites?(n: number): Promise<void>;
   listCredentialRefs(): Promise<CredentialRefStatus[]>;
   setCredentialRefSources(credentialRef: string, sources: CredentialSourceConfig): Promise<CredentialRefWriteResult>;
   saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;

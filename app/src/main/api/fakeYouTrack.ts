@@ -18,6 +18,7 @@ import type {
   WorkspaceArticleListing,
 } from './youtrack';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
+import { STORAGE_MARKER_TITLE, serialiseStorageMarker } from '../../shared/storageActivation';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 // Project 0 ("Test Project") is the one e2e navigates into first; it deliberately
@@ -356,7 +357,7 @@ export async function findVermilianArticle(_url: string, _token: string): Promis
 export async function createVermilianArticle(
   _url: string, _token: string, content: string,
 ): Promise<VermilianArticle | null> {
-  article = { id: 'e2e-article', content, updated: Date.now() };
+  article = { id: 'e2e-article', content, updated: nextUpdated() };
   return { id: article.id, content: article.content, updated: article.updated };
 }
 
@@ -369,8 +370,25 @@ export async function updateVermilianArticle(
     jiraArticle = { id: articleId, content, updated: Date.now() };
     return { updated: jiraArticle.updated };
   }
-  article = { id: articleId, content, updated: Date.now() };
+  if (configWriteFailures > 0) {
+    configWriteFailures--;
+    return null;
+  }
+  article = { id: articleId, content, updated: nextUpdated() };
   return { updated: article.updated };
+}
+
+// e2e-only: refuse the next N writes to _vermilian-config (VERM-53 review).
+let configWriteFailures = 0;
+export function failConfigWritesForTests(n: number): void {
+  configWriteFailures = Number.isInteger(n) && n > 0 ? Math.min(n, 1000) : 0;
+}
+
+// e2e-only: an older Vermilian on another machine rewrites _vermilian-config.
+export function writeConfigArticleForTests(content: string): boolean {
+  if (!article) return false;
+  article = { ...article, content, updated: nextUpdated() };
+  return true;
 }
 
 export async function getVermilianArticle(
@@ -444,6 +462,33 @@ export function getWorkspaceArticlesForTests(): FakeWsArticle[] {
 // e2e-only: another machine overwrites an article's body.
 export function writeWorkspaceArticleForTests(articleId: string, content: string): boolean {
   return writeWsArticle(articleId, content) !== null;
+}
+
+// ─── _vermilian-storage-activation marker (in-memory, VERM-53) ─────────────────
+// Kept in the same store as the workspace articles, so get/update and the
+// "another machine" write hook work on it unchanged. VERMILIAN_E2E_STORAGE_MARKER
+// seeds its body — e.g. a marker another machine wrote.
+
+if (process.env.VERMILIAN_E2E_STORAGE_MARKER) {
+  addWsArticle(STORAGE_MARKER_TITLE, process.env.VERMILIAN_E2E_STORAGE_MARKER);
+} else if (process.env.VERMILIAN_E2E_WORKSPACE_STORAGE === 'per-workspace') {
+  // Forced per-workspace storage (services/activeWorkspace.ts) comes with the
+  // active marker it would have joined, so its configuration writes pass the guard.
+  addWsArticle(STORAGE_MARKER_TITLE, serialiseStorageMarker({
+    schema: 1, kind: 'vermilian-storage-activation', state: 'active', generation: 'e2e-generation-0001', sequence: 1,
+    activatedAt: '2026-11-15T00:00:00.000Z', retiredAt: null,
+    sources: { config: { articleId: 'e2e-article', updated: 0 }, jiraProfile: null }, workspaces: {},
+  }));
+}
+
+export async function listStorageMarkerArticles(_url: string, _token: string): Promise<WorkspaceArticleListing> {
+  return { ok: true, articles: [...wsArticles.values()].filter((a) => a.summary === STORAGE_MARKER_TITLE).map((a) => ({ ...a })) };
+}
+
+export async function createStorageMarkerArticle(
+  _url: string, _token: string, content: string,
+): Promise<(VermilianArticle & { summary: string }) | null> {
+  return { ...addWsArticle(STORAGE_MARKER_TITLE, content) };
 }
 
 // ─── _vermilian-jira-overlay Article (in-memory) ────────────────────────────────

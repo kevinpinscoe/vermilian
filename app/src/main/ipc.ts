@@ -1,7 +1,25 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import type { StandupWorkspace } from '../shared/standup';
 import { generateWorkspaceStandup } from './services/workspaceStandup';
-import { resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
+import { randomUUID } from 'node:crypto';
+import { NO_WORKSPACE_MESSAGE, resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
+import {
+  activateWorkspaceStorage,
+  authorizeConfigWrite,
+  returnToLegacyStorage,
+  storageStatus,
+  type ActivationDeps,
+  type StorageActivationClient,
+} from './services/storageActivation';
+import {
+  type ActivationResult,
+  type RollbackResult,
+  type StorageGuard,
+  type StorageStatusView,
+} from '../shared/storageActivation';
+import { planLayoutWrites } from '../shared/workspaceLayout';
+import { e2eFakeCredentialAllowed } from '../shared/e2eFakeCredentials';
+import type { ConfigSyncStatus } from '../shared/ipc';
 import {
   IPC,
   type CredentialStatus,
@@ -70,6 +88,10 @@ import {
   writeStoredActiveWorkspaceId,
   activeWorkspaceGeneration,
   workspaceStorageMode,
+  readLocalStorageState,
+  writeLocalStorageState,
+  writeActivationBackup,
+  readActivationBackup,
 } from './services/activeWorkspace';
 import {
   backendContextOf,
@@ -93,7 +115,8 @@ import { getActiveWorkspaceMasterPlan, getMasterPlanState } from './services/mas
 import type { MasterPlanState } from '../shared/masterPlan';
 import * as jiraProfile from './services/jiraProfile';
 import * as workspaceArticles from './services/workspaceArticles';
-import { youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
+import type { WorkspaceArticleClient } from './services/workspaceArticles';
+import { youtrackStorageActivationClient, youtrackWorkspaceArticleClient, youtrackWorkspaceMigrationClient } from './api/workspaceArticleClient';
 import * as workspaceMigration from './services/workspaceMigration';
 import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredential } from './services/credentialResolver';
 import { aiCredentialRefOf, e2eFakeAnthropicKeyAllowed } from '../shared/workspaceAi';
@@ -149,7 +172,7 @@ import {
   type RunwayStores,
 } from './services/runwayStore';
 import type { NamespacedIssueId } from '../shared/tracker';
-import type { BoardConfig, Dismissals, NotThisWeekDismissal } from '../shared/boardConfig';
+import { defaultBoardConfig, dismissalKey, type BoardConfig, type Dismissals, type NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
 let quitProtected = false;
@@ -184,6 +207,22 @@ async function loadYtToken(cfg?: AppConfig): Promise<string | null> {
   const c = cfg ?? (await readConfig());
   return loadSecretWithSources(FILES.youtrackToken, c.youtrackTokenCommand, c.youtrackTokenFile);
 }
+// The YouTrack connection for issue operations (VERM-53, responsibility 8).
+// Legacy storage: the Settings server and token, as before. Per-workspace
+// storage: the active workspace's own server and credential reference,
+// resolved with no fallback; a failure leaves the operation unavailable.
+// Configuration articles are never read through this — they always use the
+// Settings connection (loadYtToken).
+type TrackerConnection = { ok: true; url: string; token: string } | { ok: false; error: string };
+let activeWorkspaceTrackerConnection: (cfg: AppConfig) => Promise<TrackerConnection> = async () => ({
+  ok: false,
+  error: 'The active workspace is not available yet.',
+});
+async function trackerConnection(cfg: AppConfig): Promise<TrackerConnection> {
+  if (workspaceStorageMode() === 'per-workspace') return activeWorkspaceTrackerConnection(cfg);
+  const token = await loadYtToken(cfg);
+  return cfg.youtrackUrl && token ? { ok: true, url: cfg.youtrackUrl, token } : { ok: false, error: 'YouTrack is not configured.' };
+}
 async function loadJiraToken(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-jira-token';
   return jiraProfile.loadJiraToken(cfg ?? (await readConfig()));
@@ -203,16 +242,14 @@ let jiraRunwayStore: JiraRunwayMetadataStore | null = null;
 
 const youtrackRunwayStore = createYouTrackRunwayStore({
   async readFields(issueId) {
-    const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    return (await youtrackTracker(cfg.youtrackUrl, token).getIssueDetail(issueId)).fields;
+    const yt = await trackerConnection(await readConfig());
+    if (!yt.ok) throw new Error(yt.error);
+    return (await youtrackTracker(yt.url, yt.token).getIssueDetail(issueId)).fields;
   },
   async patch(issueId, field, value) {
-    const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    await youtrackTracker(cfg.youtrackUrl, token).patchIssue(issueId, field, value);
+    const yt = await trackerConnection(await readConfig());
+    if (!yt.ok) throw new Error(yt.error);
+    await youtrackTracker(yt.url, yt.token).patchIssue(issueId, field, value);
   },
 });
 
@@ -302,14 +339,26 @@ async function localActiveWorkspace(wsConfig: VermilianConfig | null) {
   return wsConfig.workspaces.find((w) => w.id === id);
 }
 
+function notifySyncStatus(status: ConfigSyncStatus): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('config:sync-status', status);
+  }
+}
+
 export function registerIpc(): void {
   // Broadcast config-sync lifecycle events to every open renderer window so it
   // can surface toasts / banners (write failures, conflicts, version mismatch).
-  articleConfig.setStatusNotifier((status) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('config:sync-status', status);
-    }
-  });
+  articleConfig.setStatusNotifier(notifySyncStatus);
+
+  // Issue operations under per-workspace storage use the active workspace's
+  // own YouTrack connection, resolved with no fallback (VERM-53).
+  activeWorkspaceTrackerConnection = async (cfg) =>
+    resolveWorkspaceYouTrackConnection(
+      await perWorkspaceDocument((await activeWorkspaceContext()).workspaceId),
+      cfg,
+      credentialSourceIO,
+      IS_E2E,
+    );
 
   ipcMain.handle(IPC.getConfig, (): Promise<AppConfig> => readConfig());
 
@@ -491,6 +540,20 @@ export function registerIpc(): void {
     let token: string | null = null;
     try {
       const cfg = await readConfig();
+      if (workspaceStorageMode() === 'per-workspace') {
+        // The active Jira workspace's own connection and credential
+        // reference, with no fallback to the Settings Jira token (VERM-53).
+        const doc = await perWorkspaceDocument((await activeWorkspaceContext()).workspaceId);
+        if (doc?.backend.kind !== 'jira') return { ok: false, reason: 'not-configured', message: 'The active workspace is not a Jira workspace.' };
+        const { siteUrl, email, cloudId, credentialRef } = doc.backend;
+        const r = await resolveWorkspaceCredential({ workspaceId: doc.workspaceId, credentialRef }, cfg, credentialSourceIO);
+        if (r.ok) token = r.value;
+        else if (IS_E2E && credentialRef && e2eFakeCredentialAllowed(credentialRef, r.reason)) token = 'e2e-jira-token';
+        else return { ok: false, reason: 'not-configured', message: r.message };
+        const profile = { siteUrl, email, cloudId };
+        const issues = await jira.searchMyOpenIssues(profile, token);
+        return { ok: true, siteUrl, issues: issues.map((i) => toJiraIssueRow(i, siteUrl)) };
+      }
       const ytToken = await loadYtToken(cfg);
       if (!cfg.youtrackUrl || !ytToken) return { ok: false, reason: 'not-configured', message: NOT_CONFIGURED };
       const profile = await jiraProfile.getJiraProfile(cfg.youtrackUrl, ytToken);
@@ -531,10 +594,10 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.getProjects, async () => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) return [];
+    const yt = await trackerConnection(cfg);
+    if (!yt.ok) return [];
     try {
-      return await youtrackTracker(cfg.youtrackUrl, token).getProjects();
+      return await youtrackTracker(yt.url, yt.token).getProjects();
     } catch (e) {
       // youtrack.ts throws a plain { status, message } object. Electron
       // stringifies a non-Error thrown across IPC, so the renderer would see
@@ -734,8 +797,9 @@ export function registerIpc(): void {
     IPC.saveWorkspaceConfig,
     async (_e, config: VermilianConfig): Promise<{ ok: boolean; error?: string }> => {
       if (workspaceStorageMode() === 'per-workspace') {
-        // Editing per-workspace articles from the rail arrives with VERM-53.
-        return { ok: false, error: 'Workspace layout cannot be edited with per-workspace storage yet.' };
+        // One merge-and-verify update per changed workspace article (VERM-53).
+        const r = await savePerWorkspaceLayout(config);
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
       }
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
@@ -758,7 +822,7 @@ export function registerIpc(): void {
       // Write local file immediately (fast, offline-safe).
       await writeWorkspaceConfig(toSave);
       // Update Article cache and schedule debounced remote write.
-      articleConfig.updateWorkspaceConfig(toSave);
+      if (!articleConfig.updateWorkspaceConfig(toSave)) return { ok: false, error: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE };
       if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
       return { ok: true };
     },
@@ -767,6 +831,14 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.forceResyncWorkspaceConfig,
     async (): Promise<{ ok: boolean; error?: string }> => {
+      if (workspaceStorageMode() === 'per-workspace') {
+        // Per-workspace articles are read fresh on every request; there is no
+        // cached layout to discard, and _vermilian-config is not used (VERM-53).
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send('config:article-synced');
+        }
+        return { ok: true };
+      }
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
       if (!cfg.youtrackUrl || !token) {
@@ -779,8 +851,7 @@ export function registerIpc(): void {
             const projects = await youtrackTracker(cfg.youtrackUrl, token).getProjects();
             const pruned = pruneStaleProjectIds(wsConfig, new Set(projects.map((p) => p.id)));
             if (JSON.stringify(pruned) !== JSON.stringify(wsConfig)) {
-              articleConfig.updateWorkspaceConfig(pruned);
-              articleConfig.scheduleSave(cfg.youtrackUrl, token);
+              if (articleConfig.updateWorkspaceConfig(pruned)) articleConfig.scheduleSave(cfg.youtrackUrl, token);
             }
             wsConfig = pruned;
           } catch {
@@ -801,16 +872,16 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.getIssues, async (_e, args: GetIssuesArgs) => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) return [];
-    return youtrackTracker(cfg.youtrackUrl, token).getIssues(args.projectShortName, args.includeResolved);
+    const yt = await trackerConnection(cfg);
+    if (!yt.ok) return [];
+    return youtrackTracker(yt.url, yt.token).getIssues(args.projectShortName, args.includeResolved);
   });
 
   ipcMain.handle(IPC.searchIssues, async (_e, args: SearchIssuesArgs) => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) return [];
-    return youtrackTracker(cfg.youtrackUrl, token).searchIssues(args.projectShortNames, args.query);
+    const yt = await trackerConnection(cfg);
+    if (!yt.ok) return [];
+    return youtrackTracker(yt.url, yt.token).searchIssues(args.projectShortNames, args.query);
   });
 
   // Re-fetches and re-parses _vermilian-master-plan on every call — see
@@ -857,9 +928,9 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.getIssueDetail, async (_e, issueId: string) => {
     const cfg = await readConfig();
-    const token = await loadYtToken(cfg);
-    if (!cfg.youtrackUrl || !token) throw new Error('Not configured');
-    return youtrackTracker(cfg.youtrackUrl, token).getIssueDetail(issueId);
+    const yt = await trackerConnection(cfg);
+    if (!yt.ok) throw new Error(yt.error);
+    return youtrackTracker(yt.url, yt.token).getIssueDetail(issueId);
   });
 
   ipcMain.handle(
@@ -867,9 +938,9 @@ export function registerIpc(): void {
     async (_e, args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrackTracker(cfg.youtrackUrl, token).patchIssue(args.issueId, args.field, args.value);
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
+        await youtrackTracker(yt.url, yt.token).patchIssue(args.issueId, args.field, args.value);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -883,9 +954,9 @@ export function registerIpc(): void {
     async (_e, args: CreateIssueArgs): Promise<CreateIssueResult> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        const result = await youtrackTracker(cfg.youtrackUrl, token).createIssue(args);
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
+        const result = await youtrackTracker(yt.url, yt.token).createIssue(args);
         return { ok: true, id: result.id, idReadable: result.idReadable };
       } catch (e) {
         const err = e as { message?: string };
@@ -899,9 +970,9 @@ export function registerIpc(): void {
     async (_e, issueId: string): Promise<{ ok: boolean; error?: string }> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrackTracker(cfg.youtrackUrl, token).deleteIssue(issueId);
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
+        await youtrackTracker(yt.url, yt.token).deleteIssue(issueId);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -915,9 +986,9 @@ export function registerIpc(): void {
     async (_e, args: MoveIssueArgs): Promise<{ ok: boolean; error?: string }> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
-        await youtrackTracker(cfg.youtrackUrl, token).moveIssue(args.issueId, args.targetProjectId);
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
+        await youtrackTracker(yt.url, yt.token).moveIssue(args.issueId, args.targetProjectId);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -940,12 +1011,12 @@ export function registerIpc(): void {
       try {
         if (!args.issueIds.length) return { ok: false, error: 'No candidates to evaluate.' };
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
         const ai = await beginAi(args.workspaceId);
         if (!ai.ok) return { ok: false, error: ai.error };
 
-        const issues = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForRecommendation(args.issueIds);
+        const issues = await youtrackTracker(yt.url, yt.token).getIssuesForRecommendation(args.issueIds);
         const sent = await ai.send((key) =>
           claude.getRecommendation(key, issues, args.candidateContext, args.outcome, cfg.modelForRecommendation),
         );
@@ -967,10 +1038,10 @@ export function registerIpc(): void {
       }
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'Not configured' };
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
         const topIssueId = args.result.ranked[0].issueId;
-        await youtrackTracker(cfg.youtrackUrl, token).postComment(topIssueId, comment);
+        await youtrackTracker(yt.url, yt.token).postComment(topIssueId, comment);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -988,12 +1059,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.dailyReviewGet, async (): Promise<DailyReviewGetResult> => {
     try {
       const cfg = await readConfig();
-      const token = await loadYtToken(cfg);
-      if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
+      const yt = await trackerConnection(cfg);
+      if (!yt.ok) return { ok: false, error: yt.error };
 
-      const projectShortNames = await activeWorkspaceProjectShortNames(cfg.youtrackUrl, token);
+      const projectShortNames = await activeWorkspaceProjectShortNames(yt.url, yt.token);
       const cutoffMs = Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000;
-      const { done } = await youtrackTracker(cfg.youtrackUrl, token).getIssuesForStandup(projectShortNames, cutoffMs);
+      const { done } = await youtrackTracker(yt.url, yt.token).getIssuesForStandup(projectShortNames, cutoffMs);
 
       return {
         ok: true,
@@ -1019,6 +1090,8 @@ export function registerIpc(): void {
       fakeYouTrackForE2E.writeWorkspaceArticleForTests(articleId, content),
     );
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
+    ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
+    ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,
     // read which calls were made, and hold searches back to test a poll in
     // flight.
@@ -1077,6 +1150,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.createWorkspaceArticle,
     async (_e, doc: WorkspaceDocument): Promise<SaveWorkspaceArticleResult> => {
+      const guard = await storageGuard('per-workspace');
+      if (!guard.allowed) return { ok: false, reason: 'write-failed', message: guard.message };
       const client = await workspaceArticleClient();
       return client ? workspaceArticles.createWorkspaceArticle(client, doc) : NOT_CONFIGURED_WS;
     },
@@ -1085,6 +1160,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.updateWorkspaceArticle,
     async (_e, base: WorkspaceDocument, edited: WorkspaceDocument): Promise<SaveWorkspaceArticleResult> => {
+      const guard = await storageGuard('per-workspace');
+      if (!guard.allowed) return { ok: false, reason: 'write-failed', message: guard.message };
       const client = await workspaceArticleClient();
       if (!client) return NOT_CONFIGURED_WS;
       // An update always has a base; only a create may merge without one.
@@ -1272,31 +1349,177 @@ export function registerIpc(): void {
     },
   );
 
-  // ─── Migration to per-workspace articles (VERM-44) ──────────────────────────
-  // Only these two handlers run it — never startup. The backend server of every
-  // migrated workspace is the configuration YouTrack in main settings.
+  // ─── Migration preview (VERM-44) ────────────────────────────────────────────
+  // A dry run only. Migration itself runs inside activation (VERM-53, below);
+  // there is no standalone apply. The backend server of every migrated
+  // workspace is the configuration YouTrack in main settings.
 
   function migrationOptions(raw: unknown): WorkspaceMigrationOptions {
     const name = typeof raw === 'object' && raw !== null ? (raw as WorkspaceMigrationOptions).jiraWorkspaceName : undefined;
     return typeof name === 'string' ? { jiraWorkspaceName: name } : {};
   }
 
-  async function runMigration(
-    run: typeof workspaceMigration.planWorkspaceMigration,
-    rawOptions: unknown,
-  ): Promise<WorkspaceMigrationResult> {
+  ipcMain.handle(IPC.planWorkspaceMigration, async (_e, options: unknown): Promise<WorkspaceMigrationResult> => {
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (!cfg.youtrackUrl || !token) return NOT_CONFIGURED_WS;
-    return run(youtrackWorkspaceMigrationClient(cfg.youtrackUrl, token), cfg.youtrackUrl, migrationOptions(rawOptions));
+    return workspaceMigration.planWorkspaceMigration(youtrackWorkspaceMigrationClient(cfg.youtrackUrl, token), cfg.youtrackUrl, migrationOptions(options));
+  });
+
+  // ─── Per-workspace storage: activation, guard, return (VERM-53) ─────────────
+  // The marker and configuration articles always go through the Settings
+  // connection. Activation and the return to legacy storage require an
+  // explicit `confirmed: true` from Settings; neither ever runs on its own.
+
+  async function storageClient(): Promise<StorageActivationClient | null> {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    return cfg.youtrackUrl && token ? youtrackStorageActivationClient(cfg.youtrackUrl, token) : null;
   }
 
-  ipcMain.handle(IPC.planWorkspaceMigration, (_e, options: unknown) =>
-    runMigration(workspaceMigration.planWorkspaceMigration, options),
-  );
-  ipcMain.handle(IPC.applyWorkspaceMigration, (_e, options: unknown) =>
-    runMigration(workspaceMigration.applyWorkspaceMigration, options),
-  );
+  // Every configuration write is authorized against a fresh read of the
+  // marker; no cached marker ever authorizes a write (VERM-53 review).
+  async function storageGuard(mode: WorkspaceStorageMode): Promise<StorageGuard> {
+    return authorizeConfigWrite(mode, readLocalStorageState(), await storageClient());
+  }
+
+  articleConfig.setWriteGuard(() => storageGuard('legacy'));
+
+  function activationDeps(client: StorageActivationClient, serverUrl: string): ActivationDeps {
+    return {
+      client,
+      serverUrl,
+      local: { read: async () => readLocalStorageState(), write: writeLocalStorageState },
+      backup: { write: writeActivationBackup, read: readActivationBackup },
+      async checkCredential(workspaceId, credentialRef) {
+        const r = await checkWorkspaceCredential({ workspaceId, credentialRef }, await readConfig(), credentialSourceIO);
+        // e2e: only a reference with nothing configured gets the fake's
+        // stand-in; a configured source that fails still fails.
+        if (!r.ok && IS_E2E && e2eFakeCredentialAllowed(credentialRef, r.reason)) return { ok: true, credentialRef, source: 'command' };
+        return r;
+      },
+      now: () => new Date(),
+      newGeneration: () => randomUUID(),
+    };
+  }
+
+  function notifyStorageChanged(): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('config:article-synced');
+    }
+  }
+
+  ipcMain.handle(IPC.getStorageStatus, async (): Promise<StorageStatusView> => {
+    const local = readLocalStorageState();
+    const client = await storageClient();
+    const status = client
+      ? await storageStatus({ client, local: { read: async () => local, write: writeLocalStorageState } })
+      : null;
+    const marker = status?.marker ?? { status: 'error' as const, message: 'YouTrack is not configured.' };
+    return {
+      mode: local.state.mode,
+      generation: local.state.generation,
+      localCorrupt: local.corrupt,
+      backupFile: local.state.backupFile,
+      marker: marker.status === 'ok' ? marker.marker.state : marker.status === 'none' ? 'none' : 'unverified',
+      markerGeneration: marker.status === 'ok' ? marker.marker.generation : null,
+      activatedAt: marker.status === 'ok' ? marker.marker.activatedAt : null,
+      guard: status?.guard ?? { allowed: false, reason: 'not-configured', message: 'Connect YouTrack first — configuration is stored there.' },
+      legacyChangedSinceActivation: status?.legacyChangedSinceActivation ?? null,
+    };
+  });
+
+  ipcMain.handle(IPC.activateWorkspaceStorage, async (_e, raw: unknown): Promise<ActivationResult> => {
+    const args = (typeof raw === 'object' && raw !== null ? raw : {}) as { confirmed?: unknown; jiraWorkspaceName?: unknown };
+    const cfg = await readConfig();
+    const client = await storageClient();
+    if (!client) return { ok: false, reason: 'source-unreadable', message: NOT_CONFIGURED_WS.message };
+    if (args.confirmed !== true) return { ok: false, reason: 'not-confirmed', message: 'Activation was not confirmed; nothing was done.' };
+    if (articleConfig.isFrozenForActivation()) {
+      return { ok: false, reason: 'legacy-save-unresolved', message: 'An activation is already running on this computer.' };
+    }
+    // Hard gate (VERM-53 review): no edit to _vermilian-config may be unsaved
+    // or land while activation runs. Edits are paused first; any unsaved one
+    // must be written and verified, or activation does not start.
+    const token = (await loadYtToken(cfg)) ?? '';
+    articleConfig.freezeForActivation();
+    try {
+      const settled = await articleConfig.settleForActivation(cfg.youtrackUrl, token);
+      if (!settled.ok) return { ok: false, reason: 'legacy-save-unresolved', message: settled.message };
+      const r = await activateWorkspaceStorage(activationDeps(client, cfg.youtrackUrl), {
+        confirmed: true,
+        ...migrationOptions(args),
+      });
+      if (r.ok) notifyStorageChanged();
+      return r;
+    } finally {
+      articleConfig.unfreezeAfterActivation(cfg.youtrackUrl, token);
+    }
+  });
+
+  ipcMain.handle(IPC.returnToLegacyStorage, async (_e, raw: unknown): Promise<RollbackResult> => {
+    const args = (typeof raw === 'object' && raw !== null ? raw : {}) as { confirmed?: unknown };
+    const cfg = await readConfig();
+    const client = await storageClient();
+    if (!client) return { ok: false, reason: 'marker-unverified', message: NOT_CONFIGURED_WS.message };
+    const r = await returnToLegacyStorage(activationDeps(client, cfg.youtrackUrl), { confirmed: args.confirmed === true });
+    if (r.ok) {
+      // Reload the legacy article fresh: this machine reads it again now.
+      const token = await loadYtToken(cfg);
+      if (token) await articleConfig.forceReload(cfg.youtrackUrl, token).catch(() => undefined);
+      notifyStorageChanged();
+    }
+    return r;
+  });
+
+  // ─── Per-workspace configuration writes (VERM-53, decision 3) ───────────────
+  // Workspaces, folders, projects, board settings and dismissals go to the
+  // workspace's own article through the merge-and-verify write
+  // (services/workspaceArticles.ts), after the storage guard.
+
+  type WorkspaceWrite = { ok: true } | { ok: false; error: string };
+
+  async function guardedWorkspaceWrite(
+    run: (client: WorkspaceArticleClient) => Promise<WorkspaceWrite>,
+  ): Promise<WorkspaceWrite> {
+    const guard = await storageGuard('per-workspace');
+    if (!guard.allowed) return { ok: false, error: guard.message };
+    const client = await workspaceArticleClient();
+    if (!client) return { ok: false, error: NOT_CONFIGURED_WS.message };
+    return run(client);
+  }
+
+  /** Apply `edit` to the active workspace's article. */
+  async function editActiveWorkspace(edit: (doc: WorkspaceDocument) => WorkspaceDocument | string): Promise<WorkspaceWrite> {
+    return guardedWorkspaceWrite(async (client) => {
+      const activeId = (await activeWorkspaceContext()).workspaceId;
+      if (!activeId) return { ok: false, error: NO_WORKSPACE_MESSAGE };
+      const read = await workspaceArticles.readWorkspaceArticle(client, activeId);
+      if (!read.ok) return { ok: false, error: read.message };
+      if (read.entry.status !== 'ok') return { ok: false, error: read.entry.message };
+      const base = read.entry.document;
+      const edited = edit(base);
+      if (typeof edited === 'string') return { ok: false, error: edited };
+      const saved = await workspaceArticles.updateWorkspaceArticle(client, base, edited);
+      return saved.ok ? { ok: true } : { ok: false, error: saved.message };
+    });
+  }
+
+  /** The rail's layout (VermilianConfig) written as one article per workspace. */
+  async function savePerWorkspaceLayout(config: VermilianConfig): Promise<WorkspaceWrite> {
+    return guardedWorkspaceWrite(async (client) => {
+      const listed = await workspaceArticles.listWorkspaceArticles(client);
+      if (!listed.ok) return { ok: false, error: listed.message };
+      const existing = new Map(listed.workspaces.map((e) => [e.workspaceId, e]));
+      const plan = planLayoutWrites(config, existing);
+      if (!plan.ok) return { ok: false, error: plan.error };
+      for (const w of plan.writes) {
+        const r = await workspaceArticles.updateWorkspaceArticle(client, w.base, w.edited);
+        if (!r.ok) return { ok: false, error: r.message };
+      }
+      return { ok: true };
+    });
+  }
 
   // ─── Per-reference credentials (VERM-45) ────────────────────────────────────
   // Configuration, status and saving. The check resolves in this process and
@@ -1415,9 +1638,9 @@ export function registerIpc(): void {
     async (_e, args: PostWorklogArgs): Promise<PostWorklogResult> => {
       try {
         const cfg = await readConfig();
-        const token = await loadYtToken(cfg);
-        if (!cfg.youtrackUrl || !token) return { ok: false, error: 'YouTrack not configured.' };
-        await youtrackTracker(cfg.youtrackUrl, token).postWorklog(args.issueId, args.minutes, args.worklogType);
+        const yt = await trackerConnection(cfg);
+        if (!yt.ok) return { ok: false, error: yt.error };
+        await youtrackTracker(yt.url, yt.token).postWorklog(args.issueId, args.minutes, args.worklogType);
         return { ok: true };
       } catch (e) {
         const err = e as { message?: string };
@@ -1449,6 +1672,11 @@ export function registerIpc(): void {
   // ─── Board configuration ────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.getBoardConfig, async (_e, projectId: string): Promise<BoardConfig> => {
+    if (workspaceStorageMode() === 'per-workspace') {
+      // The active workspace's own board settings (VERM-53).
+      const doc = await perWorkspaceDocument((await activeWorkspaceContext()).workspaceId);
+      return doc?.boards[projectId] ?? defaultBoardConfig(projectId);
+    }
     // Ensure Article is loaded (no-op if already cached).
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
@@ -1459,7 +1687,19 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.saveBoardConfig, async (_e, config: BoardConfig): Promise<void> => {
-    articleConfig.updateBoardConfig(config);
+    if (workspaceStorageMode() === 'per-workspace') {
+      const r = await editActiveWorkspace((doc) =>
+        workspaceProjectIds(doc).includes(config.boardId)
+          ? { ...doc, boards: { ...doc.boards, [config.boardId]: config } }
+          : `Project ${config.boardId} is not in the active workspace; its board settings were not saved.`,
+      );
+      if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
+      return;
+    }
+    if (!articleConfig.updateBoardConfig(config)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
@@ -1472,6 +1712,10 @@ export function registerIpc(): void {
   // to function offline.
 
   ipcMain.handle(IPC.getDismissals, async (): Promise<Dismissals> => {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument((await activeWorkspaceContext()).workspaceId);
+      return doc?.dismissals ?? {};
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token && !articleConfig.getCachedConfig()) {
@@ -1618,14 +1862,38 @@ export function registerIpc(): void {
   app.on('will-quit', closeRunwayDb);
 
   ipcMain.handle(IPC.saveDismissal, async (_e, entry: NotThisWeekDismissal): Promise<void> => {
-    articleConfig.setDismissal(entry);
+    if (workspaceStorageMode() === 'per-workspace') {
+      const r = await editActiveWorkspace((doc) =>
+        entry.workspace === doc.workspaceId
+          ? { ...doc, dismissals: { ...doc.dismissals, [dismissalKey(entry.workspace, entry.issueId)]: entry } }
+          : 'That dismissal belongs to a workspace other than the active one; it was not saved.',
+      );
+      if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
+      return;
+    }
+    if (!articleConfig.setDismissal(entry)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
   });
 
   ipcMain.handle(IPC.resetBoardConfig, async (_e, projectId: string): Promise<void> => {
-    articleConfig.removeBoardConfig(projectId);
+    if (workspaceStorageMode() === 'per-workspace') {
+      const r = await editActiveWorkspace((doc) => {
+        const boards = { ...doc.boards };
+        delete boards[projectId];
+        return { ...doc, boards };
+      });
+      if (!r.ok) notifySyncStatus({ kind: 'storage-blocked', message: r.error });
+      return;
+    }
+    if (!articleConfig.removeBoardConfig(projectId)) {
+      notifySyncStatus({ kind: 'storage-blocked', message: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE });
+      return;
+    }
     const cfg = await readConfig();
     const token = await loadYtToken(cfg);
     if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);

@@ -4,6 +4,7 @@
 import { youtrack as yt } from './client';
 import type { WorkspaceArticleClient } from '../services/workspaceArticles';
 import type { WorkspaceMigrationClient } from '../services/workspaceMigration';
+import type { StorageActivationClient } from '../services/storageActivation';
 
 export function youtrackWorkspaceArticleClient(url: string, token: string): WorkspaceArticleClient {
   return {
@@ -23,5 +24,14 @@ export function youtrackWorkspaceMigrationClient(url: string, token: string): Wo
   return {
     ...youtrackWorkspaceArticleClient(url, token),
     listSources: () => yt.listMigrationSourceArticles(url, token),
+  };
+}
+
+// The migration client plus the activation marker (VERM-53).
+export function youtrackStorageActivationClient(url: string, token: string): StorageActivationClient {
+  return {
+    ...youtrackWorkspaceMigrationClient(url, token),
+    listMarkers: () => yt.listStorageMarkerArticles(url, token),
+    createMarker: (content) => yt.createStorageMarkerArticle(url, token, content),
   };
 }

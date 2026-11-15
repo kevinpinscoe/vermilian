@@ -44,6 +44,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const dismissToast = useToastStore((s) => s.dismiss);
   useEffect(() => {
     let failureToastId: number | null = null;
+    // One storage-blocked toast at a time, and not persistent: a refused write
+    // can repeat on every save, and a stack of sticky toasts would cover the
+    // top-bar Settings gear, which must stay reachable (VERM-53).
+    let blockedToastId: number | null = null;
     window.vermilian.onSyncStatus((status) => {
       switch (status.kind) {
         case 'write-failed':
@@ -60,6 +64,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           break;
         case 'remote-newer':
           showToast('warning', 'Configuration was updated on another machine — changes merged.');
+          break;
+        case 'storage-blocked':
+          if (blockedToastId !== null) dismissToast(blockedToastId);
+          blockedToastId = showToast('negative', status.message, 8000);
           break;
         case 'version-too-high':
           showToast(
