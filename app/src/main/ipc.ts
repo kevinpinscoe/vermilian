@@ -138,12 +138,9 @@ import {
   RUNWAY_IMPORT_STAGING_DIRNAME,
   RunwayImportError,
   RunwayWriteGate,
-  clearRunwayImportStaging,
-  discardStagedSnapshot,
   importRunwaySnapshot,
-  stageRunwaySnapshot,
-  type StagedRunwaySnapshot,
 } from './services/runwayImport';
+import { RunwayImportSession } from './services/runwayImportSession';
 import {
   createJiraRunwayStore,
   createYouTrackRunwayStore,
@@ -238,22 +235,31 @@ function openJiraRunwayStore(): { db: DatabaseSync; store: JiraRunwayMetadataSto
 
 // Runway writes and the snapshot import (VERM-51) run one at a time through
 // this gate, so no write can land between the import's backup and its
-// replacement. At most one previewed import is pending; it holds a private
-// staged copy of the chosen file until it is confirmed or cancelled.
+// replacement. The import session owns the preview/confirm lifecycle: one
+// pending preview, one active import that exclusively owns its staged copy,
+// and refusal of previews and confirmations while an import runs — enforced
+// here in the main process, for every window.
 const runwayGate = new RunwayWriteGate();
-let pendingRunwayImport: StagedRunwaySnapshot | null = null;
+let runwayImportSession: RunwayImportSession | null = null;
 
-function runwayImportStagingDir(): string {
-  return path.join(app.getPath('userData'), RUNWAY_IMPORT_STAGING_DIRNAME);
+function importSession(): RunwayImportSession {
+  runwayImportSession ??= new RunwayImportSession({
+    stagingDir: path.join(app.getPath('userData'), RUNWAY_IMPORT_STAGING_DIRNAME),
+  });
+  return runwayImportSession;
 }
 
-function discardPendingRunwayImport(): void {
-  discardStagedSnapshot(pendingRunwayImport);
-  pendingRunwayImport = null;
+// E2E only: holds a confirmed import between its backup and the replacement
+// for this many milliseconds, so tests can send overlapping IPC requests
+// while it is active. Ignored outside VERMILIAN_E2E.
+function e2eImportHoldMs(): number {
+  if (!IS_E2E) return 0;
+  const ms = Number(process.env.VERMILIAN_E2E_RUNWAY_IMPORT_HOLD_MS ?? 0);
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
 }
 
 function closeRunwayDb(): void {
-  discardPendingRunwayImport();
+  runwayImportSession?.shutdown();
   runwayDb?.close();
   runwayDb = null;
   jiraRunwayStore = null;
@@ -1548,13 +1554,11 @@ export function registerIpc(): void {
         properties: ['openFile'],
       };
       const parent = BrowserWindow.fromWebContents(e.sender);
-      const choice = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
-      if (choice.canceled || choice.filePaths.length === 0) return { ok: true, canceled: true };
-      // One pending import at a time: a new preview replaces any earlier one.
-      discardPendingRunwayImport();
-      clearRunwayImportStaging(runwayImportStagingDir());
-      const staged = stageRunwaySnapshot(choice.filePaths[0], runwayImportStagingDir());
-      pendingRunwayImport = staged;
+      const staged = await importSession().preview(async () => {
+        const choice = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+        return choice.canceled || choice.filePaths.length === 0 ? null : choice.filePaths[0];
+      });
+      if (!staged) return { ok: true, canceled: true };
       return {
         ok: true,
         canceled: false,
@@ -1578,17 +1582,16 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.runwayImportConfirm,
     async (_e, args: RunwayImportConfirmArgs): Promise<RunwayImportConfirmResult> => {
-      const staged = pendingRunwayImport;
-      if (!staged || staged.token !== args?.token) {
-        return { ok: false, code: 'no-preview', error: 'Nothing was imported: preview the snapshot again, then confirm' };
-      }
-      pendingRunwayImport = null;
       try {
         const { db } = openJiraRunwayStore();
-        const result = await runwayGate.run(() =>
-          importRunwaySnapshot(db, staged, {
-            backupDir: path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME),
-          }),
+        const holdMs = e2eImportHoldMs();
+        const result = await importSession().confirm(String(args?.token ?? ''), (staged) =>
+          runwayGate.run(() =>
+            importRunwaySnapshot(db, staged, {
+              backupDir: path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME),
+              hooks: holdMs ? { afterBackup: () => new Promise((r) => setTimeout(r, holdMs)) } : {},
+            }),
+          ),
         );
         return {
           ok: true,
@@ -1603,14 +1606,12 @@ export function registerIpc(): void {
       } catch (err) {
         const backupPath = err instanceof RunwayImportError ? err.backupPath : undefined;
         return { ...runwayFailure(err), ...(backupPath ? { backupPath } : {}) };
-      } finally {
-        discardStagedSnapshot(staged);
       }
     },
   );
 
   ipcMain.handle(IPC.runwayImportCancel, (_e, args: RunwayImportConfirmArgs): { ok: true } => {
-    if (pendingRunwayImport && pendingRunwayImport.token === args?.token) discardPendingRunwayImport();
+    importSession().cancel(String(args?.token ?? ''));
     return { ok: true };
   });
 

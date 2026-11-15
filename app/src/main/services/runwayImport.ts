@@ -82,6 +82,7 @@ export type RunwayImportErrorCode =
   | 'schema-mismatch' // right version, but tables/indexes differ from this build's schema
   | 'invalid-data' // a row breaks a Runway rule (non-Jira ID, rank, date, ...)
   | 'no-preview' // confirm without a matching preview
+  | 'import-in-progress' // an import is already running (refused in the main process)
   | 'snapshot-changed' // the chosen file or the staged copy changed after the preview
   | 'backup-failed' // the pre-import backup could not be written; nothing changed
   | 'busy' // another connection holds the database; nothing changed
@@ -351,8 +352,12 @@ export function discardStagedSnapshot(staged: StagedRunwaySnapshot | null | unde
 
 const STAGED_NAME = /^[0-9a-f]{32}\.sqlite(-journal|-wal|-shm)?$/;
 
-/** Removes leftover staged copies (e.g. after a crash). Touches nothing else. */
-export function clearRunwayImportStaging(stagingDir: string): void {
+/**
+ * Removes leftover staged copies (e.g. after a crash). Touches nothing else,
+ * and never a file whose base name (`<token>.sqlite`) is in `keep` — the
+ * active import's staged copy and its side files.
+ */
+export function clearRunwayImportStaging(stagingDir: string, keep: readonly string[] = []): void {
   let entries;
   try {
     entries = readdirSync(stagingDir, { withFileTypes: true });
@@ -360,7 +365,9 @@ export function clearRunwayImportStaging(stagingDir: string): void {
     return; // no staging directory yet
   }
   for (const entry of entries) {
-    if (entry.isFile() && STAGED_NAME.test(entry.name)) rmSync(join(stagingDir, entry.name), { force: true });
+    if (!entry.isFile() || !STAGED_NAME.test(entry.name)) continue;
+    if (keep.some((name) => entry.name === name || entry.name.startsWith(`${name}-`))) continue;
+    rmSync(join(stagingDir, entry.name), { force: true });
   }
 }
 

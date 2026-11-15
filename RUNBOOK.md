@@ -326,7 +326,11 @@ computer with the snapshot's. Nothing is sent to Jira or YouTrack.
    - the result is verified (`integrity_check` and a row-by-row comparison
      with the snapshot), the Priority Desk refreshes, and a toast names the
      backup.
-5. Retention: after a successful import only the **10 newest**
+5. One import at a time: while an import runs, a new preview, a second
+   confirmation (from any window) and a cancel are refused or ignored with
+   "A Runway snapshot import is already running", and the running import's
+   staged copy is removed only when it finishes, succeeded or failed.
+6. Retention: after a successful import only the **10 newest**
    `runway-before-import-*.sqlite` files are kept. Nothing else in
    `runway-backups/` (manual exports, other files, links, folders) is ever
    removed, and nothing is pruned after a failed or cancelled import. A

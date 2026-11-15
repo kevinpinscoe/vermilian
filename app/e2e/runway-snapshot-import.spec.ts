@@ -191,6 +191,59 @@ test.describe('Runway snapshot import', () => {
     expect(await list(page, 'workspace-default')).toHaveLength(2);
   });
 
+  test('overlapping IPC requests cannot touch an active import or its staged snapshot', async () => {
+    // Holds every confirmed import for 3 s between its backup and the
+    // replacement (E2E-only hook), so the requests below overlap it.
+    app = await launchAppWithUserDataDir(userDataDir, { VERMILIAN_E2E_RUNWAY_IMPORT_HOLD_MS: '3000' });
+    const page = await ready(app);
+    const snapshot = await prepare(page, app);
+    const staging = path.join(userDataDir, 'runway-import-staging');
+    const backupsDir = path.join(userDataDir, 'runway-backups');
+
+    await stubOpenDialog(app, snapshot);
+    const preview = await page.evaluate(() => window.vermilian.runwayImportPreview());
+    if (!preview.ok || preview.canceled) throw new Error('preview failed');
+    const token = preview.preview.token;
+    const stagedFile = `${token}.sqlite`;
+    expect(fs.readdirSync(staging)).toEqual([stagedFile]);
+
+    // Confirm, without waiting: the import is now active and held.
+    await page.evaluate((t) => {
+      (window as unknown as { __import: Promise<unknown> }).__import = window.vermilian.runwayImportConfirm({ token: t });
+    }, token);
+    await expect.poll(() => (fs.existsSync(backupsDir) ? fs.readdirSync(backupsDir).length : 0)).toBe(1);
+
+    // A second preview, a duplicate and a foreign confirmation, and a cancel —
+    // all while the import is active.
+    const second = path.join(outDir, 'second.sqlite');
+    fs.copyFileSync(snapshot, second);
+    await stubOpenDialog(app, second);
+    const overlapping = await page.evaluate((t) => Promise.all([
+      window.vermilian.runwayImportPreview(),
+      window.vermilian.runwayImportConfirm({ token: t }),
+      window.vermilian.runwayImportConfirm({ token: 'someone-else' }),
+      window.vermilian.runwayImportCancel({ token: t }),
+    ]), token);
+    expect(overlapping[0]).toMatchObject({ ok: false, code: 'import-in-progress' });
+    expect(overlapping[1]).toMatchObject({ ok: false, code: 'import-in-progress' });
+    expect(overlapping[2]).toMatchObject({ ok: false, code: 'import-in-progress' });
+    expect(overlapping[3]).toEqual({ ok: true });
+    // The active import's staged snapshot is still there, untouched, alone.
+    expect(fs.readdirSync(staging)).toEqual([stagedFile]);
+
+    // Let the held import finish: it succeeds, and only then is staging cleaned.
+    const result = await page.evaluate(() => (window as unknown as { __import: Promise<unknown> }).__import);
+    expect(result).toMatchObject({ ok: true, result: { rowCounts: { runway_entry: 3, dismissal: 0 } } });
+    expect(fs.readdirSync(staging)).toEqual([]);
+    expect(await list(page, 'workspace-other')).toEqual([
+      { issueId: 'jira:DEMO-201', focusRank: 2, whyNow: 'Other workspace' },
+    ]);
+    expect(fs.readdirSync(backupsDir)).toHaveLength(1);
+    // Previews are accepted again afterwards.
+    const after = await page.evaluate(() => window.vermilian.runwayImportPreview());
+    expect(after).toMatchObject({ ok: true, canceled: false });
+  });
+
   test('a snapshot changed after the preview is refused and live data is kept', async () => {
     app = await launchAppWithUserDataDir(userDataDir);
     const page = await ready(app);
