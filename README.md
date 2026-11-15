@@ -18,7 +18,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.2.10 — current release.** Vermilian is feature-complete against its specification and
+**v1.3.0 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -34,11 +34,20 @@ each release.
   workspace delete that re-homes any projects it still holds; the **Priority Desk** (Focus, Focus
   rank and Why now; Now/Next/Then cards; Choose next with *Not this week*; epic and Master Plan
   context; AI recommendations that change nothing until you act; and a read-only Daily Review);
+  **read-only Jira boards** (a Jira connection in Settings, Jira workspaces with their chosen
+  projects, per-project priorities and status mapping, a read-only detail panel, polling for
+  fresh issues, and Priority Desk ranking kept in a local Runway database with export and
+  import); one active workspace per computer, with per-workspace credential references and a
+  per-workspace master plan; stand-ups scoped to the active workspace; **per-workspace
+  configuration storage**, activated only on explicit confirmation (the shared
+  `_vermilian-config` stays in use until then), with write guards on every computer;
   and light/dark themes.
-- **Tested:** over 340 unit tests cover the core logic (board grouping/sorting/filtering, the timer
-  state machine, API transforms, search query building, workspace-config sync, and the Priority
-  Desk's rank rules), alongside an end-to-end (Playwright) suite over the board, detail panel,
-  settings, timer, AI, stand-up, search, workspace-config sync, and Priority Desk flows. A separate
+- **Tested:** over 1,200 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+  state machine, API transforms, search query building, workspace-config sync, the Priority
+  Desk's rank rules, Jira mapping, credential references, workspace migration and storage
+  activation), alongside an end-to-end (Playwright) suite over the board, detail panel,
+  settings, timer, AI, stand-up, search, workspace-config sync, Priority Desk, Jira, Runway
+  snapshot and workspace-storage flows. A separate
   live acceptance harness (`app/e2e-live/`) runs selected Priority Desk cases against a real
   YouTrack server. Verified on Linux (Fedora 42) and macOS; the Windows build is
   published but less extensively exercised. Lint, the unit suite, and a full packaged build run in
