@@ -184,13 +184,24 @@ export class LiveApp {
       if (this.app && this.running) await this.close('end of test');
       else if (this.app) await this.stopTrace();
     } finally {
-      // Keep the application's own state files as evidence; the rest of the
-      // Electron profile (Chromium caches) stays in the temporary directory.
+      // Keep the application's own state files as evidence.
       const snap = this.testInfo.outputPath('profile-files');
       fs.mkdirSync(snap, { recursive: true });
       for (const name of PROFILE_EVIDENCE_FILES) {
         const src = path.join(this.profileDir, name);
         if (fs.existsSync(src)) fs.writeFileSync(path.join(snap, name), redact(fs.readFileSync(src, 'utf-8')));
+      }
+      // The state files are copied out above; the rest of the profile is
+      // Chromium cache and is removed so runs do not pile up in the temp
+      // directory (VERM-54). VERMILIAN_E2E_KEEP_PROFILES=1 keeps it.
+      if (process.env.VERMILIAN_E2E_KEEP_PROFILES === '1') {
+        this.stamp(`kept profile ${this.profileDir} (VERMILIAN_E2E_KEEP_PROFILES=1)`);
+      } else {
+        try {
+          fs.rmSync(this.profileDir, { recursive: true, force: true });
+        } catch (e) {
+          this.stamp(`profile removal failed for ${this.profileDir}: ${(e as Error).message}`);
+        }
       }
       const file = this.testInfo.outputPath('app-log.txt');
       fs.writeFileSync(file, this.log.join('\n') + '\n');

@@ -1,7 +1,6 @@
 import { _electron as electron, ElectronApplication } from '@playwright/test';
 import path from 'path';
-import os from 'os';
-import fs from 'fs';
+import { newProfileDir } from './profiles';
 
 // Uses the packaged binary built by `pnpm package` (electron-forge package).
 // Electron Forge names the output dir `<productName>-<platform>-<arch>`
@@ -14,7 +13,8 @@ import fs from 'fs';
 // (deterministic fixtures, no network, no production mutation — see
 // src/main/api/fakeYouTrack.ts). Each launch also gets a fresh --user-data-dir
 // so config/credential state never leaks between tests or touches the real
-// user profile.
+// user profile; see helpers/profiles.ts for where those directories live and
+// how they are removed.
 const ELECTRON_ARGS = [
   '--no-sandbox',
   '--disable-gpu',
@@ -37,8 +37,10 @@ function resolveExecutablePath(): string {
 
 const EXECUTABLE = resolveExecutablePath();
 
+// A new profile inside this run's profile root, which global-setup.ts removes
+// when the run ends (VERM-54) — so callers never clean up after themselves.
 export function freshUserDataDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-'));
+  return newProfileDir();
 }
 
 export async function launchApp(): Promise<ElectronApplication> {

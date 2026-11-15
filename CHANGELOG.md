@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The e2e suite no longer leaks an Electron profile per test** (VERM-54). Every launch
+  left a `vermilian-e2e-*` directory in the temp directory. 9,614 of them built up on one
+  workstation and used up its `/tmp` inodes. Profiles now live in one folder per run, which
+  is removed when the run ends. The next run sweeps leftovers older than an hour, and
+  `VERMILIAN_E2E_KEEP_PROFILES=1` keeps them. The live acceptance harness now removes its
+  profile once it has copied the evidence files out.
+
 ## [1.3.0] - 2026-11-15
 
 Workspaces become the isolation boundary (ADR-0011), Jira boards arrive read-only, and
