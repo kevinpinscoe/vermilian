@@ -18,7 +18,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.3.0 — current release.** Vermilian is feature-complete against its specification and
+**v1.4.0 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -30,7 +30,8 @@ each release.
   automatic YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage;
   cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
   stale project ids, with a manual "Force resync from server" recovery action); workspace
-  organisation, including an "+ Add projects" picker for moving projects between workspaces and a
+  organisation, including an "+ Add projects" picker, with a search box that filters by project
+  name or short name, for moving projects between workspaces and a
   workspace delete that re-homes any projects it still holds; the **Priority Desk** (Focus, Focus
   rank and Why now; Now/Next/Then cards; Choose next with *Not this week*; epic and Master Plan
   context; AI recommendations that change nothing until you act; and a read-only Daily Review);
