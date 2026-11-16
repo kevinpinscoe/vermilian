@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Credentials are never stored as plain text any more** (VERM-57). When the system
+  keychain cannot encrypt a pasted YouTrack token, Claude key or Jira token, Settings now
+  refuses the save and points to the shell-command or file source, instead of quietly
+  writing a plain-text file. Plain-text copies left by earlier versions are encrypted at
+  startup once the keychain works, and Settings shows any that remain, with an
+  **Encrypt now** button.
+
+### Fixed
+
+- **A newer credential is no longer shadowed by an older encrypted copy** (VERM-57). The
+  old plain-text fallback left the previous encrypted file in place and read it first, so
+  the stale secret won once encryption worked again.
+- **Settings → Test uses the same credential source the app does** (VERM-57). A failing
+  token command or missing token file no longer falls through to a saved credential and
+  passes the test while workspace activation refuses it. The failure names the source,
+  and a saved credential that can no longer be decrypted is reported in Settings.
+
 ## [1.4.0] - 2026-11-15
 
 ### Added
