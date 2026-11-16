@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalHeader } from '@vibe/core';
 import type { AppConfig } from '../../../shared/config';
+import type { CredentialKind } from '../../../shared/ipc';
 import { DEFAULT_CONFIG } from '../../../shared/config';
 import {
   useConfig,
@@ -66,11 +67,19 @@ function jiraProfileChanged(d: SettingsDraft, loaded: JiraProfile | null): boole
   );
 }
 
+// Vermilian never stores a pasted credential unencrypted (VERM-57).
 const FAIL_CLOSED_MSG =
-  'Vermilian could not store your credentials. On Linux, install gnome-keyring or kwallet. On macOS, try restarting the app.';
+  'Vermilian could not encrypt your credentials with the system keychain, so it did not store them. Use a shell command or a file as the source instead. On Linux, installing gnome-keyring or kwallet also fixes this; on macOS, try restarting the app.';
 
-const PLAINTEXT_SAVE_MSG =
-  'Credentials saved, but system encryption is unavailable — tokens are stored as plain text with owner-only file permissions in your app data folder.';
+const CREDENTIAL_LABEL: Record<CredentialKind, string> = {
+  youtrack: 'YouTrack token',
+  claude: 'Claude API key',
+  jira: 'Jira API token',
+};
+
+function credentialList(kinds: CredentialKind[]): string {
+  return kinds.map((k) => CREDENTIAL_LABEL[k]).join(', ');
+}
 
 export function SettingsView({ canCancel, onClose }: Props) {
   const { data: config } = useConfig();
@@ -81,7 +90,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [failClosed, setFailClosed] = useState<string | null>(null);
-  const [plaintextWarn, setPlaintextWarn] = useState(false);
+  const [encrypting, setEncrypting] = useState(false);
+  const [encryptFailed, setEncryptFailed] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [worklogTypes, setWorklogTypes] = useState<string[]>(['Development']);
   const [ytTest, setYtTest] = useState<TestState>({ status: 'idle' });
@@ -178,7 +188,6 @@ export function SettingsView({ canCancel, onClose }: Props) {
     if (!draft) return;
     setSaving(true);
     setFailClosed(null);
-    setPlaintextWarn(false);
     setJiraSaveError(null);
 
     try {
@@ -201,21 +210,17 @@ export function SettingsView({ canCancel, onClose }: Props) {
       });
 
       let saveFailed = false;
-      let usedPlaintext = false;
       if (draft.youtrackToken) {
         const r = await window.vermilian.saveYouTrackToken(draft.youtrackToken);
         if (!r.ok) saveFailed = true;
-        else if (r.secure === false) usedPlaintext = true;
       }
       if (draft.claudeKey) {
         const r = await window.vermilian.saveClaudeKey(draft.claudeKey);
         if (!r.ok) saveFailed = true;
-        else if (r.secure === false) usedPlaintext = true;
       }
       if (draft.jiraToken) {
         const r = await window.vermilian.saveJiraToken(draft.jiraToken);
         if (!r.ok) saveFailed = true;
-        else if (r.secure === false) usedPlaintext = true;
       }
 
       // Blank Jira fields mean "not set up": never write an empty profile.
@@ -250,16 +255,24 @@ export function SettingsView({ canCancel, onClose }: Props) {
         setJiraSaveError(jiraError);
         return;
       }
-      if (usedPlaintext) {
-        setPlaintextWarn(true);
-      } else {
-        setSavedToast(true);
-      }
+      setSavedToast(true);
       onClose();
     } catch {
       setSaving(false);
       setFailClosed('Save failed unexpectedly. Please try again.');
     }
+  }
+
+  async function handleEncryptPlaintext() {
+    setEncrypting(true);
+    try {
+      const r = await window.vermilian.encryptPlaintextCredentials();
+      setEncryptFailed(r.failed > 0);
+    } catch {
+      setEncryptFailed(true);
+    }
+    await qc.invalidateQueries({ queryKey: CRED_STATUS_QUERY_KEY });
+    setEncrypting(false);
   }
 
   async function handleReset() {
@@ -304,6 +317,32 @@ export function SettingsView({ canCancel, onClose }: Props) {
         )}
 
         {failClosed && <AttentionBox type="negative" title="Credentials not saved" text={failClosed} />}
+        {cred.plaintext.length > 0 && (
+          <div data-testid="plaintext-credentials">
+            <AttentionBox
+              type="warning"
+              title="Credentials stored as plain text"
+              text={
+                cred.secure
+                  ? `${credentialList(cred.plaintext)} ${cred.plaintext.length === 1 ? 'is' : 'are'} saved unencrypted by an earlier version of Vermilian. Encrypt ${cred.plaintext.length === 1 ? 'it' : 'them'} with the system keychain now.${encryptFailed ? ' The last attempt failed — paste and save the credential again.' : ''}`
+                  : `${credentialList(cred.plaintext)} ${cred.plaintext.length === 1 ? 'is' : 'are'} saved unencrypted, and system encryption is unavailable. Switch to a shell command or file source, or fix the system keychain; Vermilian encrypts ${cred.plaintext.length === 1 ? 'it' : 'them'} at the next start once it works.`
+              }
+            />
+            {cred.secure && (
+              <Button size="small" onClick={handleEncryptPlaintext} loading={encrypting}>
+                Encrypt now
+              </Button>
+            )}
+          </div>
+        )}
+        {cred.undecryptable.length > 0 && (
+          <AttentionBox
+            data-testid="undecryptable-credentials"
+            type="negative"
+            title="Saved credentials cannot be decrypted"
+            text={`The saved ${credentialList(cred.undecryptable)} can no longer be decrypted on this machine (the system keychain key may have changed). Paste and save ${cred.undecryptable.length === 1 ? 'it' : 'them'} again, or use a shell command or file source.`}
+          />
+        )}
         {jiraSaveError && (
           <AttentionBox
             data-testid="jira-save-error"
@@ -351,12 +390,6 @@ export function SettingsView({ canCancel, onClose }: Props) {
       {savedToast && (
         <Toast open={savedToast} type="positive" autoHideDuration={3000} onClose={() => setSavedToast(false)}>
           Settings saved.
-        </Toast>
-      )}
-
-      {plaintextWarn && (
-        <Toast open={plaintextWarn} type="warning" autoHideDuration={8000} onClose={() => setPlaintextWarn(false)}>
-          {PLAINTEXT_SAVE_MSG}
         </Toast>
       )}
 

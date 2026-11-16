@@ -43,6 +43,7 @@ const api: VermilianAPI = {
   getConfig: () => ipcRenderer.invoke(IPC.getConfig),
   saveConfig: (patch: Partial<AppConfig>) => ipcRenderer.invoke(IPC.saveConfig, patch),
   credentialStatus: () => ipcRenderer.invoke(IPC.credentialStatus),
+  encryptPlaintextCredentials: () => ipcRenderer.invoke(IPC.encryptPlaintextCredentials),
   saveYouTrackToken: (token: string) => ipcRenderer.invoke(IPC.saveYouTrackToken, token),
   saveClaudeKey: (key: string) => ipcRenderer.invoke(IPC.saveClaudeKey, key),
   testYouTrack: (args: TestYouTrackArgs) => ipcRenderer.invoke(IPC.testYouTrack, args),

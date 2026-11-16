@@ -3,6 +3,8 @@
 //   2. File path      — content of a user-configured file path
 //   3. safeStorage    — Electron encrypted blob (original approach; may fail on Linux
 //                       without a keyring daemon)
+// The highest configured source is the only one read; a failure does not fall
+// through to a lower one (VERM-57).
 //
 // All IPC callers should use loadSecretWithSources() / hasSecretWithSources() rather
 // than the bare loadSecret() / hasSecret() so that the priority chain is honoured.
@@ -16,8 +18,12 @@ import { promisify } from 'node:util';
 import {
   blobFilenameFor,
   checkCredentialValue,
+  describeSourceFailure,
   isLegacyCredentialRef,
   refFromBlobFilename,
+  selectSource,
+  type CredentialFailureReason,
+  type CredentialSourceKind,
 } from '../../shared/credentialRefs';
 import { isCredentialRef } from '../../shared/workspaceSchema';
 import type { CredentialRefWriteResult } from '../../shared/ipc';
@@ -62,113 +68,145 @@ async function atomicWrite(file: string, data: Buffer): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-// ─── Source 3: safeStorage (encrypted) with plain-text fallback ──────────────
+// ─── Source 3: safeStorage (encrypted) ───────────────────────────────────────
 
-// Plain-text fallback path — used when safeStorage encryption is unavailable
-// (e.g. macOS 26 with unsigned/Electron builds). Mode 0o600 restricts access
-// to the owning user, matching the security model of ~/.netrc.
+// Plain-text copy left by versions before VERM-57, which wrote one whenever
+// safeStorage could not encrypt. Nothing writes it now: it is only read until
+// encryptPlaintextSecrets() can replace it with an encrypted blob.
 function plaintextPath(filename: string): string {
   return path.join(credentialsDir(), filename.replace(/\.bin$/, '.txt'));
 }
 
+/**
+ * Saves a credential as an encrypted safeStorage blob and removes any
+ * plain-text copy, so exactly one copy is left. Where safeStorage cannot
+ * encrypt, nothing is written: the user is pointed to the command or file
+ * source instead (VERM-57).
+ */
 export async function saveSecret(
   filename: string,
   plaintext: string,
-): Promise<{ ok: boolean; secure?: boolean; backend?: string }> {
-  // On Linux without a keyring daemon there is genuinely nothing to try.
-  if (process.platform === 'linux' && !isSecure()) {
-    return { ok: false, backend: getBackend() };
-  }
-  // Attempt safeStorage encryption. On macOS 26, isEncryptionAvailable() may
-  // return false or encryptString() may throw even though the OS has a keychain
-  // — fall through to the plain-text fallback rather than blocking the user.
+): Promise<{ ok: boolean; backend?: string }> {
+  if (!isSecure()) return { ok: false, backend: getBackend() };
   try {
     const encrypted = safeStorage.encryptString(plaintext.trim());
     await atomicWrite(path.join(credentialsDir(), filename), encrypted);
-    await fs.unlink(plaintextPath(filename)).catch(() => {});
-    return { ok: true, secure: true };
-  } catch { /* fall through to plaintext */ }
-  // Plain-text fallback with owner-only permissions (0o600 via atomicWrite).
-  try {
-    await atomicWrite(plaintextPath(filename), Buffer.from(plaintext.trim(), 'utf-8'));
-    return { ok: true, secure: false, backend: getBackend() };
   } catch {
     return { ok: false, backend: getBackend() };
   }
+  await fs.unlink(plaintextPath(filename)).catch(() => {});
+  return { ok: true };
 }
 
 export async function loadSecret(filename: string): Promise<string | null> {
-  // Try encrypted blob first.
-  try {
-    const buf = await fs.readFile(path.join(credentialsDir(), filename));
-    const val = safeStorage.decryptString(buf).trim();
-    return val || null;
-  } catch { /* fall through */ }
-  // Try plain-text fallback.
-  try {
-    const val = (await fs.readFile(plaintextPath(filename), 'utf-8')).trim();
-    return val || null;
-  } catch {
-    return null;
-  }
+  const r = await credentialSourceIO.readBlob(filename, true);
+  if (!r.ok) return null;
+  return r.value.trim() || null;
 }
 
 export async function hasSecret(filename: string): Promise<boolean> {
-  // Verify the file both exists AND can actually be decrypted — a file that
-  // can't be decrypted (e.g. encrypted under a different Electron key) is
-  // effectively absent from the user's perspective.
+  // A blob that can't be decrypted (e.g. encrypted under a different Electron
+  // key) is effectively absent from the user's perspective.
   const val = await loadSecret(filename);
   return val !== null;
 }
 
-// ─── Source 1: shell command ──────────────────────────────────────────────────
+/** Where a legacy credential's blob tier stands on this host, for Settings. */
+export type LegacySecretStorage = 'none' | 'encrypted' | 'plaintext' | 'undecryptable';
 
-async function runCommand(cmd: string): Promise<string | null> {
-  try {
-    const { stdout } = await execAsync(cmd, { timeout: 10_000 });
-    const value = stdout.trim();
-    return value || null;
-  } catch {
-    return null;
-  }
+export async function legacySecretStorage(filename: string): Promise<LegacySecretStorage> {
+  if (await exists(plaintextPath(filename))) return 'plaintext';
+  if (!(await exists(path.join(credentialsDir(), filename)))) return 'none';
+  return (await loadSecret(filename)) === null ? 'undecryptable' : 'encrypted';
 }
 
-// ─── Source 2: file path ─────────────────────────────────────────────────────
-
-async function readFile(filePath: string): Promise<string | null> {
-  try {
-    const content = await fs.readFile(filePath.trim(), 'utf-8');
-    const value = content.trim();
-    return value || null;
-  } catch {
-    return null;
+/**
+ * Replaces each legacy plain-text copy with an encrypted blob — overwriting
+ * any older blob, which the plain-text copy always postdates — and deletes it.
+ * A copy is kept unless the new blob decrypts back to the same value.
+ */
+export async function encryptPlaintextSecrets(): Promise<{ encrypted: string[]; failed: string[] }> {
+  const encrypted: string[] = [];
+  const failed: string[] = [];
+  for (const filename of Object.values(FILES)) {
+    let value: string;
+    try {
+      value = (await fs.readFile(plaintextPath(filename), 'utf-8')).trim();
+    } catch {
+      continue;
+    }
+    try {
+      if (!isSecure() || checkCredentialValue(value) !== 'ok') throw new Error('not encryptable');
+      const blob = safeStorage.encryptString(value);
+      if (safeStorage.decryptString(blob) !== value) throw new Error('round trip failed');
+      await atomicWrite(path.join(credentialsDir(), filename), blob);
+      await fs.unlink(plaintextPath(filename));
+      encrypted.push(filename);
+    } catch {
+      failed.push(filename);
+    }
   }
+  return { encrypted, failed };
 }
 
 // ─── Three-source priority chain ─────────────────────────────────────────────
 
+export type LegacySecretResolution =
+  | { ok: true; value: string; source: CredentialSourceKind }
+  | { ok: false; source: CredentialSourceKind | null; reason: CredentialFailureReason; message: string };
+
 /**
- * Load a credential using the configured priority chain:
- *   command → file → safeStorage blob
+ * Resolves a Settings credential the way credentialResolver.ts resolves a
+ * workspace reference: the highest-priority configured source — command, then
+ * file, then safeStorage blob — is the only one read. A failing command or
+ * file does not fall through to a stored value (VERM-57), so Settings → Test
+ * and workspace activation agree.
  *
- * @param filename  safeStorage blob filename (fallback)
+ * @param filename  safeStorage blob filename
  * @param command   shell command whose stdout is the credential ('' = skip)
  * @param filePath  file whose content is the credential ('' = skip)
  */
+export async function resolveLegacySecret(
+  filename: string,
+  command: string,
+  filePath: string,
+): Promise<LegacySecretResolution> {
+  const io = credentialSourceIO;
+  const sources = { command, file: filePath };
+  const needBlobCheck = !command.trim() && !filePath.trim();
+  const source = selectSource(sources, needBlobCheck ? await io.blobPresent(filename, true) : false);
+  const fail = (s: CredentialSourceKind | null, reason: CredentialFailureReason): LegacySecretResolution =>
+    ({ ok: false, source: s, reason, message: describeSourceFailure(s, reason) });
+  if (source === null) return fail(null, 'no-source');
+
+  let raw: string;
+  if (source === 'command') {
+    const r = await io.runCommand(command.trim());
+    if (!r.ok) return fail(source, 'command-failed');
+    raw = r.stdout;
+  } else if (source === 'file') {
+    const r = await io.readFile(filePath.trim());
+    if (!r.ok) return fail(source, 'file-unreadable');
+    raw = r.content;
+  } else {
+    const r = await io.readBlob(filename, true);
+    if (!r.ok) return fail(source, 'blob-unreadable');
+    raw = r.value;
+  }
+  const value = raw.trim();
+  const check = checkCredentialValue(value);
+  if (check !== 'ok') return fail(source, check);
+  return { ok: true, value, source };
+}
+
+/** The value resolveLegacySecret() yields, or null when it fails. */
 export async function loadSecretWithSources(
   filename: string,
   command: string,
   filePath: string,
 ): Promise<string | null> {
-  if (command.trim()) {
-    const val = await runCommand(command.trim());
-    if (val) return val;
-  }
-  if (filePath.trim()) {
-    const val = await readFile(filePath.trim());
-    if (val) return val;
-  }
-  return loadSecret(filename);
+  const r = await resolveLegacySecret(filename, command, filePath);
+  return r.ok ? r.value : null;
 }
 
 /**
@@ -222,6 +260,16 @@ export const credentialSourceIO: CredentialSourceIO = {
     return legacy && (await exists(plaintextPath(filename)));
   },
   async readBlob(filename, legacy) {
+    // A legacy plain-text copy is always newer than the blob beside it: a
+    // successful encrypted save deletes it, and the old fallback write left
+    // the blob in place. Reading the blob first returned a stale secret.
+    if (legacy && (await exists(plaintextPath(filename)))) {
+      try {
+        return { ok: true, value: await fs.readFile(plaintextPath(filename), 'utf-8') };
+      } catch {
+        return { ok: false };
+      }
+    }
     const encrypted = path.join(credentialsDir(), filename);
     if (await exists(encrypted)) {
       // An encrypted blob that cannot be decrypted is a failure, not a reason
@@ -232,12 +280,7 @@ export const credentialSourceIO: CredentialSourceIO = {
         return { ok: false };
       }
     }
-    if (!legacy) return { ok: false };
-    try {
-      return { ok: true, value: await fs.readFile(plaintextPath(filename), 'utf-8') };
-    } catch {
-      return { ok: false };
-    }
+    return { ok: false };
   },
 };
 

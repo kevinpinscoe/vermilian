@@ -4,6 +4,7 @@ import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
 import { createWindow, registerQuitProtection } from './main/window';
 import { registerIpc } from './main/ipc';
+import { encryptPlaintextSecrets } from './main/services/credentials';
 import { runSqliteSelfTest } from './main/services/sqliteSelfTest';
 
 // CI-only SQLite compatibility check (ADR-0011): when this variable names an
@@ -28,6 +29,9 @@ if (started) {
 } else {
   app.on('ready', () => {
     registerIpc();
+    // Plain-text credentials left by versions before VERM-57 are encrypted
+    // as soon as safeStorage can; Settings reports any that remain.
+    if (process.env.VERMILIAN_E2E !== '1') void encryptPlaintextSecrets().catch(() => {});
     registerQuitProtection();
     createWindow();
   });

@@ -72,9 +72,18 @@ describe('credentialSourceIO', () => {
     expect(await io.readBlob('ref-ai-4.bin', false)).toEqual({ ok: false });
   });
 
-  it('an undecryptable legacy blob fails instead of falling back to its plain-text file', async () => {
-    writeFileSync(path.join(credDir, 'claude.key.bin'), 'garbage');
+  // A legacy plain-text file always postdates the blob beside it (VERM-57), so
+  // it is the current value, not a fallback — whether the blob decrypts or not.
+  it('a legacy plain-text file is read in preference to an older blob', async () => {
+    writeFileSync(path.join(credDir, 'claude.key.bin'), 'enc:stale-legacy');
     writeFileSync(path.join(credDir, 'claude.key.txt'), 'plain-legacy');
+    expect(await io.readBlob('claude.key.bin', true)).toEqual({ ok: true, value: 'plain-legacy' });
+    writeFileSync(path.join(credDir, 'claude.key.bin'), 'garbage');
+    expect(await io.readBlob('claude.key.bin', true)).toEqual({ ok: true, value: 'plain-legacy' });
+  });
+
+  it('an undecryptable legacy blob with no plain-text file fails', async () => {
+    writeFileSync(path.join(credDir, 'claude.key.bin'), 'garbage');
     expect(await io.readBlob('claude.key.bin', true)).toEqual({ ok: false });
   });
 });

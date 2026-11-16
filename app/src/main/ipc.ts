@@ -23,6 +23,8 @@ import type { ConfigSyncStatus } from '../shared/ipc';
 import {
   IPC,
   type CredentialStatus,
+  type CredentialKind,
+  type EncryptPlaintextResult,
   type SaveSecretResult,
   type CredentialRefWriteResult,
   type WorkspaceCredentialCheck,
@@ -74,6 +76,9 @@ import {
   saveSecret,
   loadSecretWithSources,
   hasSecretWithSources,
+  resolveLegacySecret,
+  legacySecretStorage,
+  encryptPlaintextSecrets,
   credentialSourceIO,
   saveCredentialRefSecret,
   clearCredentialRefSecret,
@@ -376,10 +381,33 @@ export function registerIpc(): void {
     IPC.credentialStatus,
     async (): Promise<CredentialStatus> => {
       if (IS_E2E) {
-        return { hasYouTrackToken: true, hasClaudeKey: true, hasJiraToken: true, backend: 'e2e', secure: true };
+        return {
+          hasYouTrackToken: true,
+          hasClaudeKey: true,
+          hasJiraToken: true,
+          backend: 'e2e',
+          secure: true,
+          plaintext: [],
+          undecryptable: [],
+        };
       }
       const cfg = await readConfig();
+      const plaintext: CredentialKind[] = [];
+      const undecryptable: CredentialKind[] = [];
+      for (const [kind, filename, command, file] of [
+        ['youtrack', FILES.youtrackToken, cfg.youtrackTokenCommand, cfg.youtrackTokenFile],
+        ['claude', FILES.claudeKey, cfg.claudeKeyCommand, cfg.claudeKeyFile],
+        ['jira', FILES.jiraToken, cfg.jiraTokenCommand, cfg.jiraTokenFile],
+      ] as const) {
+        const storage = await legacySecretStorage(filename);
+        // A plain-text copy is reported even when a command or file is the
+        // source in use: it is still a secret on disk in the clear.
+        if (storage === 'plaintext') plaintext.push(kind);
+        else if (storage === 'undecryptable' && !command.trim() && !file.trim()) undecryptable.push(kind);
+      }
       return {
+        plaintext,
+        undecryptable,
         hasYouTrackToken: await hasSecretWithSources(
           FILES.youtrackToken,
           cfg.youtrackTokenCommand,
@@ -394,6 +422,15 @@ export function registerIpc(): void {
         backend: getBackend(),
         secure: isSecure(),
       };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.encryptPlaintextCredentials,
+    async (): Promise<EncryptPlaintextResult> => {
+      if (IS_E2E) return { encrypted: 0, failed: 0 };
+      const r = await encryptPlaintextSecrets();
+      return { encrypted: r.encrypted.length, failed: r.failed.length };
     },
   );
 
@@ -413,15 +450,17 @@ export function registerIpc(): void {
     async (_e, args: TestYouTrackArgs): Promise<TestYouTrackResult> => {
       let token: string | null = null;
       try {
-        const cfg = await readConfig();
-        token =
-          (args.token?.trim() || '') ||
-          (await loadSecretWithSources(
-            FILES.youtrackToken,
-            cfg.youtrackTokenCommand,
-            cfg.youtrackTokenFile,
-          ));
-        if (!token) return { ok: false, message: 'No API token found (check command, file, or paste a token).' };
+        token = args.token?.trim() || null;
+        if (!token) {
+          // The same resolution the app uses, so a broken source fails here
+          // too instead of passing on a lower one (VERM-57).
+          const cfg = await readConfig();
+          const r = IS_E2E
+            ? ({ ok: true, value: 'e2e-token' } as const)
+            : await resolveLegacySecret(FILES.youtrackToken, cfg.youtrackTokenCommand, cfg.youtrackTokenFile);
+          if (!r.ok) return { ok: false, message: `${r.message} Check the token settings, or paste a token.` };
+          token = r.value;
+        }
         const displayName = await youtrackTracker(args.url, token).getCurrentUser();
         return { ok: true, displayName };
       } catch (e) {
@@ -456,8 +495,15 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.testClaude,
     async (_e, args: TestClaudeArgs): Promise<TestClaudeResult> => {
-      const key = (args.key?.trim() || '') || (await loadClaudeKey());
-      if (!key) return { ok: false, error: 'No Claude API key found (check command, file, or paste a key).' };
+      let key = args.key?.trim() || null;
+      if (!key) {
+        const cfg = await readConfig();
+        const r = IS_E2E
+          ? ({ ok: true, value: 'e2e-claude-key' } as const)
+          : await resolveLegacySecret(FILES.claudeKey, cfg.claudeKeyCommand, cfg.claudeKeyFile);
+        if (!r.ok) return { ok: false, error: `${r.message} Check the key settings, or paste a key.` };
+        key = r.value;
+      }
       if (key.includes('...')) return { ok: false, error: 'Key looks like a masked preview — paste the full key from console.anthropic.com or your password manager.' };
       const result = await claude.testKey(key, args.model);
       // Never echo the key back in an error message.
@@ -518,14 +564,16 @@ export function registerIpc(): void {
       if (!profile) {
         return { ok: false, reason: 'invalid-profile', cloudId: givenCloudId, message: 'Enter an https site URL and an account email.' };
       }
-      let token: string | null;
-      try {
-        token = (args.token?.trim() || '') || (await loadJiraToken());
-      } catch {
-        token = null;
-      }
+      let token = args.token?.trim() || null;
       if (!token) {
-        return { ok: false, reason: 'no-token', cloudId: profile.cloudId, message: 'No Jira API token found (check command, file, or paste a token).' };
+        const cfg = await readConfig();
+        const r = IS_E2E
+          ? ({ ok: true, value: 'e2e-jira-token' } as const)
+          : await resolveLegacySecret(FILES.jiraToken, cfg.jiraTokenCommand, cfg.jiraTokenFile);
+        if (!r.ok) {
+          return { ok: false, reason: 'no-token', cloudId: profile.cloudId, message: `${r.message} Check the token settings, or paste a token.` };
+        }
+        token = r.value;
       }
       const r = await jira.probeJiraToken(profile, token);
       if (r.ok) return { ok: true, kind: r.kind, cloudId: r.cloudId, displayName: r.account.displayName };

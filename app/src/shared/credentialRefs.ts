@@ -189,6 +189,18 @@ export function credentialFailure(
   };
 }
 
+/**
+ * A failure of the Settings credential for one kind (VERM-57), which belongs
+ * to no workspace. Like credentialFailure, it names only the source kind.
+ */
+export function describeSourceFailure(
+  source: CredentialSourceKind | null,
+  reason: CredentialFailureReason,
+): string {
+  if (source === null) return `No credential ${REASON_TEXT[reason]}.`;
+  return `The ${SOURCE_LABEL[source]} ${REASON_TEXT[reason]}.`;
+}
+
 function isSafeLabel(s: unknown): s is string {
   return typeof s === 'string' && s.length > 0 && s.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
 }

@@ -26,6 +26,7 @@ export const IPC = {
   getConfig: 'settings:getConfig',
   saveConfig: 'settings:saveConfig',
   credentialStatus: 'credentials:status',
+  encryptPlaintextCredentials: 'credentials:encryptPlaintext',
   saveYouTrackToken: 'credentials:saveYouTrackToken',
   saveClaudeKey: 'credentials:saveClaudeKey',
   testYouTrack: 'youtrack:testConnection',
@@ -137,12 +138,26 @@ export interface CredentialStatus {
   hasJiraToken: boolean;
   backend: string;
   secure: boolean;
+  /**
+   * Saved (safeStorage-tier) credentials that need attention (VERM-57):
+   * held in a plain-text file, or an encrypted blob that no longer decrypts
+   * and is the source in use.
+   */
+  plaintext: CredentialKind[];
+  undecryptable: CredentialKind[];
 }
 
+export type CredentialKind = 'youtrack' | 'claude' | 'jira';
+
+/** Encrypted only: where safeStorage cannot encrypt, nothing is saved (VERM-57). */
 export interface SaveSecretResult {
   ok: boolean;
-  secure?: boolean; // true = encrypted via safeStorage; false = plain-text fallback (0o600 file)
   backend?: string;
+}
+
+export interface EncryptPlaintextResult {
+  encrypted: number;
+  failed: number;
 }
 
 /** Result of changing a per-reference credential's configuration or blob (VERM-45). */
@@ -572,6 +587,7 @@ export interface VermilianAPI {
   getConfig(): Promise<AppConfig>;
   saveConfig(patch: Partial<AppConfig>): Promise<{ ok: boolean }>;
   credentialStatus(): Promise<CredentialStatus>;
+  encryptPlaintextCredentials(): Promise<EncryptPlaintextResult>;
   saveYouTrackToken(token: string): Promise<SaveSecretResult>;
   saveClaudeKey(key: string): Promise<SaveSecretResult>;
   testYouTrack(args: TestYouTrackArgs): Promise<TestYouTrackResult>;
