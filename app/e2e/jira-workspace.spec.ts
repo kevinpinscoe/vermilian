@@ -122,6 +122,25 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     await expect(page.locator('[data-project-key="OPS"] input')).not.toBeChecked();
   });
 
+  // VERM-58: the rail's project button follows the workspace's backend. In a
+  // Jira workspace it opens the Jira picker, never the YouTrack one.
+  test("a Jira workspace's rail opens the Jira project picker, not the YouTrack one", async () => {
+    await openNewWorkspaceForm(page, 'Work');
+    await tid(page, 'new-workspace-backend-jira').click();
+    await tid(page, 'new-workspace-site-url').fill('https://example.atlassian.net');
+    await tid(page, 'new-workspace-email').fill('user@example.com');
+    await tid(page, 'new-workspace-submit').click();
+    await expect(tid(page, 'workspace-backend')).toHaveText('Jira · example.atlassian.net');
+
+    await expect(tid(page, 'add-projects-btn')).toHaveCount(0);
+    const railBtn = tid(page, 'rail-choose-jira-projects-btn');
+    await expect(railBtn).toHaveText('+ Choose Jira projects');
+    await railBtn.click();
+    await expect(page.locator('#jira-projects-modal')).toBeVisible();
+    await expect(page.locator('#add-projects-modal')).toHaveCount(0);
+    await expect(tid(page, 'jira-projects-row')).toHaveCount(2);
+  });
+
   test('a new YouTrack workspace takes the configured server, and its backend stays YouTrack', async () => {
     await openNewWorkspaceForm(page, 'Home 2');
     await tid(page, 'new-workspace-backend-youtrack').click();
@@ -130,8 +149,10 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     await tid(page, 'new-workspace-submit').click();
     await expect(switcher(page)).toContainText('Home 2');
     await expect(tid(page, 'workspace-backend')).toHaveText('YouTrack · e2e.local');
-    // No Jira picker on a YouTrack workspace.
+    // No Jira picker on a YouTrack workspace; the rail keeps the YouTrack one.
     await expect(tid(page, 'choose-jira-projects-btn')).toHaveCount(0);
+    await expect(tid(page, 'rail-choose-jira-projects-btn')).toHaveCount(0);
+    await expect(tid(page, 'add-projects-btn')).toHaveText('+ Add projects');
   });
 
   test('changing the backend of a workspace that has projects is refused, and nothing is lost', async () => {
