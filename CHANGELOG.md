@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-16
+
 ### Added
 
 - **Hide status columns on a Jira board** (VERM-60). A **Columns…** menu in the Jira board
@@ -770,7 +772,8 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
-[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.3.0
 [1.2.10]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.2.10

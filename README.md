@@ -18,16 +18,21 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.4.0 — current release.** Vermilian is feature-complete against its specification and
+**v1.5.0 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
 
 - **Built and working:** the monday.com-style task board (table + Kanban) with grouping, filtering,
-  and sorting; a top-bar issue search scoped to the active project (or the whole workspace when no
-  project is selected); the task detail panel with inline field editing; the full Pomodoro focus
+  and sorting; an **Assignee** filter on every board (Me, Unassigned, and each assignee); a search
+  box above the All tasks and Jira boards that filters the loaded cards by key or summary and
+  searches the backend for issues not on the board (press **/** to focus it); a top-bar issue
+  search scoped to the active project (or the whole workspace when no project is selected) that
+  follows the workspace's backend, so a Jira workspace searches its own Jira projects; the task detail panel with inline field editing; the full Pomodoro focus
   timer (state machine, focus-mode lock, quit protection, crash-recovery checkpointing, and an
-  automatic YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage;
+  automatic YouTrack worklog on stop); the AI and daily stand-up flows; layered credential storage
+  that never writes a secret as plain text (Settings refuses the save when the keychain cannot
+  encrypt, and offers **Encrypt now** for plain-text copies left by older versions);
   cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
   stale project ids, with a manual "Force resync from server" recovery action); workspace
   organisation, including an "+ Add projects" picker, with a search box that filters by project
@@ -35,8 +40,9 @@ each release.
   workspace delete that re-homes any projects it still holds; the **Priority Desk** (Focus, Focus
   rank and Why now; Now/Next/Then cards; Choose next with *Not this week*; epic and Master Plan
   context; AI recommendations that change nothing until you act; and a read-only Daily Review);
-  **read-only Jira boards** (a Jira connection in Settings, Jira workspaces with their chosen
-  projects, per-project priorities and status mapping, a read-only detail panel, polling for
+  **read-only Jira boards** (a Jira connection in Settings whose Test names missing token scopes,
+  Jira workspaces with their chosen projects and Jira boards — a board shows the issues its own
+  saved filter picks — status columns that can be hidden per workspace, per-project priorities and status mapping, a read-only detail panel, polling for
   fresh issues, and Priority Desk ranking kept in a local Runway database with export and
   import); one active workspace per computer, with per-workspace credential references and a
   per-workspace master plan; stand-ups scoped to the active workspace; **per-workspace
@@ -45,8 +51,8 @@ each release.
   and light/dark themes.
 - **Tested:** over 1,200 unit tests cover the core logic (board grouping/sorting/filtering, the timer
   state machine, API transforms, search query building, workspace-config sync, the Priority
-  Desk's rank rules, Jira mapping, credential references, workspace migration and storage
-  activation), alongside an end-to-end (Playwright) suite over the board, detail panel,
+  Desk's rank rules, Jira mapping and boards, board search and the Assignee filter, credential
+  references and plain-text migration, workspace migration and storage activation), alongside an end-to-end (Playwright) suite over the board, detail panel,
   settings, timer, AI, stand-up, search, workspace-config sync, Priority Desk, Jira, Runway
   snapshot and workspace-storage flows. A separate
   live acceptance harness (`app/e2e-live/`) runs selected Priority Desk cases against a real
