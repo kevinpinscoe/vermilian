@@ -35,6 +35,9 @@ interface WorkspaceNavProps {
   // Switch without the timer prompt: the active workspace is being deleted,
   // so staying on it is not an option.
   onForceSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
+  // Set only while the active workspace is a Jira one: the rail's project
+  // button then opens the Jira picker instead of the YouTrack one (VERM-58).
+  onChooseJiraProjects?: () => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -830,7 +833,12 @@ function WorkspaceSwitcher({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForceSwitchWorkspace }: WorkspaceNavProps) {
+export function WorkspaceNav({
+  onOpenSettings,
+  onRequestSwitchWorkspace,
+  onForceSwitchWorkspace,
+  onChooseJiraProjects,
+}: WorkspaceNavProps) {
   const projects = useProjects();
   const workspaceConfig = useWorkspaceConfig();
   const activeContext = useActiveWorkspace();
@@ -1210,14 +1218,25 @@ export function WorkspaceNav({ onOpenSettings, onRequestSwitchWorkspace, onForce
             {/* Add projects / Add folder */}
             {!contentCollapsed && (
               <>
-                <button
-                  type="button"
-                  data-testid="add-projects-btn"
-                  className={styles.addFolderBtn}
-                  onClick={() => setShowAddProjects(true)}
-                >
-                  + Add projects
-                </button>
+                {onChooseJiraProjects ? (
+                  <button
+                    type="button"
+                    data-testid="rail-choose-jira-projects-btn"
+                    className={styles.addFolderBtn}
+                    onClick={onChooseJiraProjects}
+                  >
+                    + Choose Jira projects
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid="add-projects-btn"
+                    className={styles.addFolderBtn}
+                    onClick={() => setShowAddProjects(true)}
+                  >
+                    + Add projects
+                  </button>
+                )}
                 <AddFolderRow onAdd={handleCreateFolder} />
               </>
             )}

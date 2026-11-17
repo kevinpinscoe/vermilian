@@ -168,6 +168,9 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const projects = useProjects();
   const workspaceConfig = useWorkspaceConfig();
   const activeContext = useActiveWorkspace();
+  // The same condition that routes the main area to the Jira board/desk.
+  const isJiraWorkspace =
+    activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace';
   // The active Jira workspace's chosen project keys, in folder order (VERM-33).
   const activeJiraProjectKeys =
     workspaceConfig.data?.workspaces
@@ -576,6 +579,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onOpenSettings={onOpenSettings}
           onRequestSwitchWorkspace={requestWorkspaceSwitch}
           onForceSwitchWorkspace={performWorkspaceSwitch}
+          onChooseJiraProjects={isJiraWorkspace ? () => setShowJiraProjects(true) : undefined}
         />
 
         <main className={styles.content}>

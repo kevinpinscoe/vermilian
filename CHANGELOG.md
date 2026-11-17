@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A newer credential is no longer shadowed by an older encrypted copy** (VERM-57). The
   old plain-text fallback left the previous encrypted file in place and read it first, so
   the stale secret won once encryption worked again.
+- **A Jira workspace's rail no longer opens the YouTrack project picker** (VERM-58). The
+  rail button now reads **+ Choose Jira projects** and opens the Jira picker, so the
+  workspace's projects can be chosen from the rail even while the Priority Desk is showing.
 - **Settings → Test uses the same credential source the app does** (VERM-57). A failing
   token command or missing token file no longer falls through to a saved credential and
   passes the test while workspace activation refuses it. The failure names the source,
