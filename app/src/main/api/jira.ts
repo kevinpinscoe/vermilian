@@ -468,6 +468,9 @@ export interface BoardIssueOptions {
   jql?: string;
   fields?: readonly string[];
   maxPages?: number;
+  // Called when the page guard stops the read with issues still unread, so
+  // the cut is never silent. The result holds the most recently updated.
+  onTruncated?: () => void;
 }
 
 // GET /rest/agile/1.0/board/{id}/issue, paged by startAt until total.
@@ -497,8 +500,10 @@ export async function searchBoardIssues(
     const batch = res.issues ?? [];
     issues.push(...batch);
     startAt += batch.length;
-    if (batch.length === 0 || (typeof res.total === 'number' && startAt >= res.total)) break;
+    if (batch.length === 0 || (typeof res.total === 'number' && startAt >= res.total)) return issues;
   }
+  // The guard ran out first: more issues remain unless Jira reported none.
+  options.onTruncated?.();
   return issues;
 }
 

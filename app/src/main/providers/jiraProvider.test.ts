@@ -296,7 +296,8 @@ describe('createJiraProvider boards', () => {
   it("reads a board's issues from the board, mapping each with its own project's settings", async () => {
     const client = stubClient({ searchBoardIssues: vi.fn(async () => [ISSUE, OPS]) });
     const settings = { OPS: { dueDateField: 'customfield_10050', statusRoles: { Impeded: 'blocked' as const } } };
-    const [demo, ops] = await createJiraProvider(client, CONN, settings).getBoardIssues(12, false);
+    const { issues: [demo, ops], truncated } = await createJiraProvider(client, CONN, settings).getBoardIssues(12, false);
+    expect(truncated).toBe(false);
     const [, , , boardId, options] = vi.mocked(client.searchBoardIssues).mock.calls[0] as unknown as [string, string, string, number, { jql: string; fields: string[] }];
     expect(boardId).toBe(12);
     expect(options.jql).toBe('statusCategory != Done ORDER BY updated DESC');
@@ -304,6 +305,16 @@ describe('createJiraProvider boards', () => {
     expect(demo.statusRole).toBe('inProgress');
     expect(ops).toMatchObject({ statusRole: 'blocked' });
     expect(ops.fields.dueDate).toBe(Date.UTC(2026, 11, 24, 12));
+  });
+
+  it('reports a board list cut at the page guard', async () => {
+    const client = stubClient({
+      searchBoardIssues: vi.fn(async (...args: unknown[]) => {
+        (args[4] as { onTruncated?: () => void }).onTruncated?.();
+        return [ISSUE];
+      }),
+    });
+    expect((await createJiraProvider(client, CONN).getBoardIssues(12, true)).truncated).toBe(true);
   });
 
   it('polls a board over the poll window, resolved included', async () => {

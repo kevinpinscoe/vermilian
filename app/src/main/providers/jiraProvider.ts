@@ -54,8 +54,12 @@ export interface JiraProvider extends TrackerProvider {
   getRecentlyUpdatedIssues(projectKey: string): Promise<BoardIssue[]>;
   /** The boards the account can see, for the workspace's picker (VERM-59). */
   getBoards(): Promise<JiraBoard[]>;
-  /** One board's issues, from the board's own filter, whatever their projects (VERM-59). */
-  getBoardIssues(boardId: number, includeResolved: boolean): Promise<BoardIssue[]>;
+  /**
+   * One board's issues, from the board's own filter, whatever their projects
+   * (VERM-59). `truncated` says the page guard cut the list: it then holds
+   * the most recently updated issues only.
+   */
+  getBoardIssues(boardId: number, includeResolved: boolean): Promise<{ issues: BoardIssue[]; truncated: boolean }>;
   /** One board's issues updated in the poll window, resolved included (VERM-59). */
   getBoardRecentlyUpdatedIssues(boardId: number): Promise<BoardIssue[]>;
   /** Whether an issue is on a board, by the board's own filter (VERM-59). */
@@ -185,11 +189,13 @@ export function createJiraProvider(
     },
 
     async getBoardIssues(boardId, includeResolved) {
+      let truncated = false;
       const issues = await client.searchBoardIssues(base, email, token, boardId, {
         jql: client.boardIssuesJql(includeResolved),
         fields: anyProjectFields(),
+        onTruncated: () => { truncated = true; },
       });
-      return issues.map(mapIssue);
+      return { issues: issues.map(mapIssue), truncated };
     },
 
     async getBoardRecentlyUpdatedIssues(boardId) {

@@ -1387,11 +1387,14 @@ export function registerIpc(): void {
       if ('ok' in source) return source;
       if (source.kind === 'board') {
         try {
-          const issues = await p.provider.getBoardIssues(source.boardId, a.includeResolved === true);
+          const { issues, truncated } = await p.provider.getBoardIssues(source.boardId, a.includeResolved === true);
           // Each project the board's issues come from, for priority order.
           const projects = [...new Set(issues.map((i) => jiraProjectKeyOf(i.idReadable)))];
           const orders = await Promise.all(projects.map((k) => p.provider.getPriorityValues(k).catch(() => [] as string[])));
-          return { ok: true, issues, priorities: [], prioritiesByProject: Object.fromEntries(projects.map((k, i) => [k, orders[i]])) };
+          return {
+            ok: true, issues, priorities: [], truncated,
+            prioritiesByProject: Object.fromEntries(projects.map((k, i) => [k, orders[i]])),
+          };
         } catch (e) {
           return jiraFailure(a.workspaceId, p.doc, e, `The issues of board "${source.label}" could not be loaded.`);
         }

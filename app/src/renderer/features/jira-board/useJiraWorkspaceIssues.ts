@@ -36,6 +36,12 @@ export function useJiraWorkspaceIssues(
   const reconnect = results.map((r) => r.data).find((d): d is WorkspaceJiraFailure => needsJiraReconnect(d)) ?? null;
   const loading = results.some((r) => r.isLoading);
   const labelOf = (i: number) => sourceNames[sources[i]] ?? sources[i];
+  // A board list cut at the page guard (VERM-59): said, never silent.
+  const notices = results.flatMap((r, i) =>
+    r.data?.ok && r.data.truncated
+      ? [`${labelOf(i)}: showing only its ${r.data.issues.length.toLocaleString()} most recently updated issues; older ones are not loaded.`]
+      : [],
+  );
   const failures = results.flatMap((r, i) => (r.data && !r.data.ok ? [`${labelOf(i)}: ${r.data.message}`] : r.error ? [`${labelOf(i)}: ${(r.error as Error).message}`] : []));
 
   const { issues, priorities } = useMemo(() => {
@@ -60,5 +66,5 @@ export function useJiraWorkspaceIssues(
     return { issues: all, priorities: prio };
   }, [results, sources]);
 
-  return { results, issues, priorities, loading, failures, reconnect };
+  return { results, issues, priorities, loading, failures, notices, reconnect };
 }

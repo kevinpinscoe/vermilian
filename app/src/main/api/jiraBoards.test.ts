@@ -94,6 +94,21 @@ describe('searchBoardIssues', () => {
     expect(fetchMock.mock.calls.every((c) => (c[1] as RequestInit).method === 'GET')).toBe(true);
   });
 
+  it('says so when the page guard cuts the list, and only then', async () => {
+    const full = { total: 500, issues: Array.from({ length: 50 }, (_, n) => issue(String(n), `SRE-${n + 1}`)) };
+    fetchMock.mockImplementation(async () => json(200, full));
+    const onTruncated = vi.fn();
+    const found = await searchBoardIssues(BASE, EMAIL, TOKEN, 12, { maxPages: 2, onTruncated });
+    expect(found).toHaveLength(100);
+    expect(onTruncated).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(json(200, { total: 50, issues: full.issues }));
+    const complete = vi.fn();
+    await searchBoardIssues(BASE, EMAIL, TOKEN, 12, { maxPages: 1, onTruncated: complete });
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   it('refuses an invalid board ID before any request', async () => {
     for (const id of [0, -1, 1.5, Number.NaN]) {
       await expect(searchBoardIssues(BASE, EMAIL, TOKEN, id)).rejects.toMatchObject({ message: expect.stringMatching(/Invalid Jira board ID/) });

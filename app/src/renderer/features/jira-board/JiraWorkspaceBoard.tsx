@@ -57,7 +57,7 @@ export function JiraWorkspaceBoard({
   // Every source of the board's issues: the projects, then the boards.
   const sources = useMemo(() => jiraSourceIds(projectKeys, boards.map((b) => b.id)), [projectKeys, boards]);
   const sourceNames = useMemo(() => Object.fromEntries(boards.map((b) => [boardSourceId(b.id), `Board "${b.name}"`])), [boards]);
-  const { results, issues, priorities, loading, failures, reconnect } = useJiraWorkspaceIssues(workspaceId, sources, showDone, sourceNames);
+  const { results, issues, priorities, loading, failures, notices, reconnect } = useJiraWorkspaceIssues(workspaceId, sources, showDone, sourceNames);
 
   // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
   // visible, once a project's list has loaded. It merges what changed into
@@ -158,6 +158,11 @@ export function JiraWorkspaceBoard({
               {filter.assignee.length > 0 && (
                 <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...f, assignee: [] }))}>Clear</button>
               )}
+            </div>
+          )}
+          {notices.length > 0 && (
+            <div className={styles.projects} role="status" data-testid="jira-board-notice">
+              {notices.map((n) => <div key={n}>{n}</div>)}
             </div>
           )}
           {failures.length > 0 && (

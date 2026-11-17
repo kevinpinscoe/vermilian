@@ -188,8 +188,9 @@ export interface GetWorkspaceJiraIssuesArgs {
 export type GetWorkspaceJiraIssuesResult =
   // priorities: the project's values, most urgent first ([] when unknown, and
   // [] for a board). prioritiesByProject: for a board, each project its
-  // issues come from (VERM-59).
-  | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[]; prioritiesByProject?: Record<string, string[]> }
+  // issues come from (VERM-59). truncated: a board's list was cut at the
+  // page guard and holds its most recently updated issues only.
+  | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[]; prioritiesByProject?: Record<string, string[]>; truncated?: boolean }
   | import('./jiraConnection').WorkspaceJiraFailure;
 
 /** One source's recently updated issues — the board's incremental poll (VERM-39). */
