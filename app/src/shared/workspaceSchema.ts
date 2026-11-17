@@ -103,6 +103,10 @@ export interface WorkspaceDocument {
   // projectIds so an older client, which validates those as project keys,
   // still reads this document and writes this field back unchanged.
   jiraBoards?: WorkspaceJiraBoard[];
+  // Jira workspaces only, optional: workflow status names whose columns the
+  // board hides (VERM-60), e.g. "Blocked". Matched exactly, as column names
+  // are. Their issues stay loaded and are counted next to the columns.
+  jiraHiddenStatuses?: string[];
   // YouTrack workspaces only, optional: the workspace's own master-plan
   // article by its readable ID (VERM-48, decision C5). Absent or null is
   // None: the Priority Desk then has no master plan for this workspace.
@@ -516,6 +520,26 @@ function validateJiraBoards(c: Collector, jiraBoards: unknown, backendKind: unkn
   });
 }
 
+// A status name is free text in Jira; this only bounds it.
+const HIDDEN_STATUS_MAX_LENGTH = 255;
+
+function validateJiraHiddenStatuses(c: Collector, statuses: unknown, backendKind: unknown) {
+  if (statuses === undefined) return;
+  if (!c.array(statuses, 'jiraHiddenStatuses')) return;
+  if (backendKind !== 'jira' && statuses.length > 0) {
+    c.add('jiraHiddenStatuses', 'jiraHiddenStatuses is for Jira workspaces only.');
+    return;
+  }
+  const seen = new Set<string>();
+  statuses.forEach((s, i) => {
+    const p = `jiraHiddenStatuses[${i}]`;
+    if (!c.string(s, p, { nonEmpty: true })) return;
+    if (s.length > HIDDEN_STATUS_MAX_LENGTH) c.add(p, `${p} is longer than ${HIDDEN_STATUS_MAX_LENGTH} characters.`);
+    if (seen.has(s)) c.add(p, `${p} duplicates another hidden status.`, 'duplicate');
+    seen.add(s);
+  });
+}
+
 function validateDismissals(c: Collector, dismissals: unknown, workspaceId: unknown) {
   if (!c.object(dismissals, 'dismissals')) return;
   for (const [key, d] of Object.entries(dismissals)) {
@@ -564,6 +588,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateDismissals(c, input.dismissals, input.workspaceId);
   validateJiraProjects(c, input.jiraProjects, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateJiraBoards(c, input.jiraBoards, isPlainObject(input.backend) ? input.backend.kind : undefined);
+  validateJiraHiddenStatuses(c, input.jiraHiddenStatuses, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateMasterPlan(c, input.masterPlan, isPlainObject(input.backend) ? input.backend.kind : undefined);
   return [...c.errors, ...secrets];
 }
@@ -621,6 +646,7 @@ const DOCUMENT_SHAPE = struct({
   dismissals: { t: 'record', of: struct({ workspace: LEAF, issueId: LEAF, dismissedWeekOf: LEAF }) },
   jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
   jiraBoards: { t: 'array', key: 'id', of: struct({ id: LEAF, name: LEAF }) },
+  jiraHiddenStatuses: LEAF,
   masterPlan: struct({ articleId: LEAF }),
 });
 

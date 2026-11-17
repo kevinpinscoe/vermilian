@@ -61,3 +61,35 @@ export function jiraBoardColumns(issues: readonly BoardIssue[], priorities: Read
   for (const c of cols) c.issues.sort((a, b) => compareJiraIssues(a, b, priorities));
   return cols.sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.status.localeCompare(b.status));
 }
+
+/** A hidden column, by status name, with how many loaded issues it holds. */
+export interface HiddenJiraColumn {
+  status: string;
+  count: number;
+}
+
+/**
+ * Splits the board's columns into those shown and those the workspace hides
+ * by status name (VERM-60). Hidden columns keep their counts, in board order,
+ * so their issues are never dropped silently. Matching is exact, as column
+ * names are. A hidden status no issue is in has no column and no entry.
+ */
+export function splitHiddenColumns(
+  columns: readonly JiraBoardColumn[],
+  hiddenStatuses: readonly string[],
+): { shown: JiraBoardColumn[]; hidden: HiddenJiraColumn[] } {
+  const hide = new Set(hiddenStatuses);
+  const shown: JiraBoardColumn[] = [];
+  const hidden: HiddenJiraColumn[] = [];
+  for (const col of columns) {
+    if (hide.has(col.status)) hidden.push({ status: col.status, count: col.issues.length });
+    else shown.push(col);
+  }
+  return { shown, hidden };
+}
+
+/** The hidden-columns line: "2 hidden: Blocked (4), Waiting (1)"; '' when none. */
+export function describeHiddenColumns(hidden: readonly HiddenJiraColumn[]): string {
+  if (hidden.length === 0) return '';
+  return `${hidden.length} hidden: ${hidden.map((h) => `${h.status} (${h.count})`).join(', ')}`;
+}

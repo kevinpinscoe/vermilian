@@ -27,6 +27,8 @@ export interface Workspace {
   // Read-only here: per-workspace Jira documents only (VERM-59). The rail
   // layout save writes folders alone and never this.
   jiraBoards?: WorkspaceJiraBoard[];
+  // Read-only here too: status columns the Jira board hides (VERM-60).
+  jiraHiddenStatuses?: string[];
 }
 
 export interface VermilianConfig {

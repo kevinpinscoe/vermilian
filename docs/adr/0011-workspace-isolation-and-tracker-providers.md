@@ -127,6 +127,10 @@ server in Vermilian's main settings. This holds whichever backend the workspace 
   scoped tokens need `read:board-scope:jira-software` as well as `read:jira-work`. Runway metadata
   stays keyed by `jira:<KEY>`, so an issue on two boards, or on a board and in a project, has one
   entry.
+- A Jira workspace may hide status columns from its board (VERM-60), in an optional
+  `jiraHiddenStatuses` list of workflow status names, matched exactly as column names are. It is
+  workspace configuration, so it lives in the article and follows the workspace to every machine.
+  Hidden issues stay loaded and are counted beside the board; nothing is written to Jira.
 - Only known fields are interpreted or used. A field this version does not know is never read,
   but it is written back unchanged whenever an existing workspace article is updated, so an older
   client does not drop configuration a newer one added.
