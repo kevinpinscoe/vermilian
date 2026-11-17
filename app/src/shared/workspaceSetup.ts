@@ -21,6 +21,7 @@ import {
   workspaceProjectIds,
   type CredentialRef,
   type WorkspaceDocument,
+  type WorkspaceJiraBoard,
   type WorkspaceValidationError,
 } from './workspaceSchema';
 
@@ -125,6 +126,31 @@ export function withJiraProjects(doc: WorkspaceDocument, projectKeys: readonly s
 }
 
 /**
+ * The workspace with exactly `boards` chosen, in that order (VERM-59). A
+ * board's name is refreshed from the picker each time it is saved.
+ *
+ * Throws WorkspaceSetupError for a workspace that is not Jira-backed or for a
+ * value that is not a Jira board ID.
+ */
+export function withJiraBoards(doc: WorkspaceDocument, boards: readonly WorkspaceJiraBoard[]): WorkspaceDocument {
+  if (doc.backend.kind !== 'jira') {
+    throw new WorkspaceSetupError('Jira boards can only be chosen for a Jira workspace.');
+  }
+  const seen = new Set<number>();
+  const jiraBoards: WorkspaceJiraBoard[] = [];
+  for (const b of boards) {
+    if (typeof b?.id !== 'number' || !Number.isInteger(b.id) || b.id <= 0) {
+      throw new WorkspaceSetupError(`Not a Jira board ID: ${JSON.stringify(b?.id)}`);
+    }
+    if (seen.has(b.id)) continue;
+    seen.add(b.id);
+    jiraBoards.push({ id: b.id, name: typeof b.name === 'string' && b.name ? b.name : `Board ${b.id}` });
+  }
+  const { jiraBoards: _old, ...rest } = doc;
+  return jiraBoards.length ? { ...rest, jiraBoards } : rest;
+}
+
+/**
  * Why `edited` may not replace `base`, or null when it may. A change of
  * backend kind is refused while the workspace holds anything configured for
  * the old backend; the message says what to do instead. A change within the
@@ -134,6 +160,7 @@ export function backendChangeProblem(base: WorkspaceDocument, edited: WorkspaceD
   if (base.backend.kind === edited.backend.kind) return null;
   const held: string[] = [];
   if (workspaceProjectIds(base).length) held.push('projects');
+  if (base.jiraBoards?.length) held.push('Jira boards');
   if (Object.keys(base.boards ?? {}).length) held.push('board settings');
   if (Object.keys(base.jiraProjects ?? {}).length) held.push('Jira project settings');
   if (Object.keys(base.dismissals ?? {}).length) held.push('"Not this week" dismissals');

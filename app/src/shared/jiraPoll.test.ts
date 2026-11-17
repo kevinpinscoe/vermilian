@@ -264,3 +264,39 @@ describe('needsFullRefresh', () => {
     expect(needsFullRefresh(T0 - 1, T0)).toBe(true);
   });
 });
+
+// ─── Board lists (VERM-59) ───────────────────────────────────────────────────
+
+describe('board scope', () => {
+  const BOARD = { boardId: 12, includeResolved: false };
+
+  it('keeps issues from any project on a board list', () => {
+    const list = [issue('1', 'DEMO-1'), issue('2', 'OPS-2')];
+    const edited = issue('2', 'OPS-2', { summary: 'Edited', updated: T0 + 1000 });
+    expect(mergeRecentlyUpdated(list, [edited], BOARD).map((i) => i.summary)).toEqual(['Summary of DEMO-1', 'Edited']);
+  });
+
+  it("adds a new issue only from the board's own reads", () => {
+    const list = [issue('1', 'DEMO-1')];
+    const fresh = issue('9', 'OPS-9', { updated: T0 + 5000 });
+    expect(ids(mergeRecentlyUpdated(list, [fresh], BOARD, false))).toEqual(['DEMO-1']);
+    expect(ids(mergeRecentlyUpdated(list, [fresh], BOARD, true))).toEqual(['OPS-9', 'DEMO-1']);
+  });
+
+  it('removes a card resolved while Show done is off, whatever the source of the update', () => {
+    const list = [issue('1', 'DEMO-1'), issue('2', 'OPS-2')];
+    expect(ids(mergeRecentlyUpdated(list, [done(list[1])], BOARD, false))).toEqual(['DEMO-1']);
+  });
+
+  it("lets a board's full read decide membership, across projects", () => {
+    const cached = [issue('1', 'DEMO-1'), issue('2', 'OPS-2')];
+    const full = [issue('2', 'OPS-2'), issue('3', 'SRE-3')];
+    expect(ids(reconcileFullRefresh(cached, full, BOARD))).toEqual(['OPS-2', 'SRE-3']);
+  });
+
+  it('a project list still adds by default and refuses other projects', () => {
+    const fresh = issue('9', 'OPS-9', { updated: T0 + 5000 });
+    expect(ids(mergeRecentlyUpdated([], [fresh], DEMO))).toEqual([]);
+    expect(ids(mergeRecentlyUpdated([], [issue('8', 'DEMO-8')], DEMO))).toEqual(['DEMO-8']);
+  });
+});

@@ -38,7 +38,7 @@ import {
 import { normaliseSiteUrl, type JiraProfile } from './jiraProfile';
 import { jiraProjectSettingsProblems, type JiraProjectSettingsMap } from './jiraProjectSettings';
 import { isTrackerKind } from './tracker';
-import type { WorkspaceFolder } from './workspace';
+import type { WorkspaceFolder, WorkspaceJiraBoard } from './workspace';
 
 // The per-workspace article format is new with ADR-0011, so its first version
 // is 1 (the ADR's example). It is unrelated to `version` in _vermilian-config.
@@ -77,6 +77,7 @@ export function isMasterPlanArticleId(v: unknown): v is string {
   return typeof v === 'string' && v.length <= 64 && /^[A-Z][A-Z0-9_]*-A-[1-9]\d*$/.test(v);
 }
 
+export type { WorkspaceJiraBoard } from './workspace';
 export interface WorkspaceDocument {
   schema: typeof WORKSPACE_SCHEMA_VERSION;
   workspaceId: string;
@@ -95,6 +96,13 @@ export interface WorkspaceDocument {
   // due-date field choice, keyed by project key (VERM-31). A project with
   // no entry uses Jira's status categories and the system due date.
   jiraProjects?: JiraProjectSettingsMap;
+  // Jira workspaces only, optional: the Jira boards chosen alongside (or
+  // instead of) projects, in display order (VERM-59). A board's issues come
+  // from the board's own filter, whatever their projects. The name is a
+  // snapshot for display; the ID is what is read. Kept apart from folders'
+  // projectIds so an older client, which validates those as project keys,
+  // still reads this document and writes this field back unchanged.
+  jiraBoards?: WorkspaceJiraBoard[];
   // YouTrack workspaces only, optional: the workspace's own master-plan
   // article by its readable ID (VERM-48, decision C5). Absent or null is
   // None: the Priority Desk then has no master plan for this workspace.
@@ -135,6 +143,11 @@ export function generateWorkspaceId(): string {
 /** The workspace's selected projects, in folder order then position. */
 export function workspaceProjectIds(doc: Pick<WorkspaceDocument, 'folders'>): string[] {
   return [...doc.folders].sort((a, b) => a.order - b.order).flatMap((f) => f.projectIds);
+}
+
+/** The workspace's chosen Jira board IDs, in display order (VERM-59). */
+export function workspaceBoardIds(doc: Pick<WorkspaceDocument, 'jiraBoards'>): number[] {
+  return (doc.jiraBoards ?? []).map((b) => b.id);
 }
 
 // ─── Secret detection ────────────────────────────────────────────────────────
@@ -482,6 +495,27 @@ function isIsoDate(s: unknown): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
 
+function validateJiraBoards(c: Collector, jiraBoards: unknown, backendKind: unknown) {
+  if (jiraBoards === undefined) return;
+  if (!c.array(jiraBoards, 'jiraBoards')) return;
+  if (backendKind !== 'jira' && jiraBoards.length > 0) {
+    c.add('jiraBoards', 'jiraBoards is for Jira workspaces only.');
+    return;
+  }
+  const seen = new Set<number>();
+  jiraBoards.forEach((b, i) => {
+    const p = `jiraBoards[${i}]`;
+    if (!c.object(b, p)) return;
+    if (typeof b.id !== 'number' || !Number.isInteger(b.id) || b.id <= 0 || b.id > Number.MAX_SAFE_INTEGER) {
+      c.add(`${p}.id`, `${p}.id must be a Jira board ID, a positive whole number.`);
+    } else {
+      if (seen.has(b.id)) c.add(`${p}.id`, `${p}.id duplicates another chosen board.`, 'duplicate');
+      seen.add(b.id);
+    }
+    c.string(b.name, `${p}.name`);
+  });
+}
+
 function validateDismissals(c: Collector, dismissals: unknown, workspaceId: unknown) {
   if (!c.object(dismissals, 'dismissals')) return;
   for (const [key, d] of Object.entries(dismissals)) {
@@ -529,6 +563,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateBoards(c, input.boards);
   validateDismissals(c, input.dismissals, input.workspaceId);
   validateJiraProjects(c, input.jiraProjects, isPlainObject(input.backend) ? input.backend.kind : undefined);
+  validateJiraBoards(c, input.jiraBoards, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateMasterPlan(c, input.masterPlan, isPlainObject(input.backend) ? input.backend.kind : undefined);
   return [...c.errors, ...secrets];
 }
@@ -585,6 +620,7 @@ const DOCUMENT_SHAPE = struct({
   },
   dismissals: { t: 'record', of: struct({ workspace: LEAF, issueId: LEAF, dismissedWeekOf: LEAF }) },
   jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
+  jiraBoards: { t: 'array', key: 'id', of: struct({ id: LEAF, name: LEAF }) },
   masterPlan: struct({ articleId: LEAF }),
 });
 

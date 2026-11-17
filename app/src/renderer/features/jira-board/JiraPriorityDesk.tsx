@@ -7,10 +7,11 @@
 //
 // Choose next, the AI recommendation and "Not this week" stay YouTrack-only
 // for now; this desk is Now mode.
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
-import type { BoardIssue } from '../../../shared/workspace';
+import type { BoardIssue, WorkspaceJiraBoard } from '../../../shared/workspace';
+import { jiraSourceIds } from '../../../shared/jiraSource';
 import type { RunwayRank } from '../../../shared/runway';
 import { ChipCell } from '../project-board/KanbanView';
 import { PRIORITY_COLORS } from '../project-board/colors';
@@ -25,6 +26,8 @@ interface JiraPriorityDeskProps {
   workspaceId: string;
   workspaceName: string;
   projectKeys: string[];
+  // Jira boards chosen alongside the projects (VERM-59): their issues can be ranked too.
+  boards?: WorkspaceJiraBoard[];
   onSelectIssue: (issueKey: string) => void;
   onOpenSettings: () => void;
 }
@@ -35,11 +38,13 @@ const SLOTS: { rank: RunwayRank; label: string }[] = [
   { rank: 3, label: 'Then' },
 ];
 
-export function JiraPriorityDesk({ workspaceId, workspaceName, projectKeys, onSelectIssue, onOpenSettings }: JiraPriorityDeskProps) {
+export function JiraPriorityDesk({ workspaceId, workspaceName, projectKeys, boards = [], onSelectIssue, onOpenSettings }: JiraPriorityDeskProps) {
   const queryClient = useQueryClient();
   const runway = useJiraRunway(workspaceId);
   // Open issues only, the board's default view, so the desk shares its cache.
-  const { issues, loading, reconnect } = useJiraWorkspaceIssues(workspaceId, projectKeys, false);
+  // The same sources, and so the same cache, as the board.
+  const sources = useMemo(() => jiraSourceIds(projectKeys, boards.map((b) => b.id)), [projectKeys, boards]);
+  const { issues, loading, reconnect } = useJiraWorkspaceIssues(workspaceId, sources, false);
   const issueByKey = new Map(issues.map((i) => [i.idReadable, i]));
   const summaryOf = (key: string) => issueByKey.get(key)?.summary;
   const allEmpty = SLOTS.every((s) => !runway.index.byRank.has(s.rank));

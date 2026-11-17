@@ -72,6 +72,16 @@ Vermilian reads Jira and never writes to it.
 | **cloudId** | Filled in by **Test connection**; enter it by hand only if detection fails |
 | **Jira API Token** | A classic or scoped Atlassian API token, from one of the three sources |
 
+A **scoped** token needs these scopes:
+
+| Scope | Used for |
+| --- | --- |
+| `read:jira-work` | Reading issues, comments and project lists |
+| `read:board-scope:jira-software` | Listing Jira boards and reading a board's issues (Jira workspaces that choose boards) |
+
+**Test connection** checks both and names any that are missing. A classic token reads whatever its
+account can see, so it needs no scopes.
+
 The site URL, email and cloudId are shared between your computers through the
 `_vermilian-jira-overlay` article in YouTrack. The token is not: configure it on each computer.
 

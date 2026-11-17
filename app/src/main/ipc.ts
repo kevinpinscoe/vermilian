@@ -132,6 +132,7 @@ import type {
   CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
   SearchWorkspaceJiraIssuesResult,
+  ListWorkspaceJiraBoardsResult,
   GetWorkspaceJiraMyAccountIdResult,
   GetWorkspaceJiraIssuesResult,
   GetWorkspaceJiraRecentlyUpdatedResult,
@@ -142,7 +143,7 @@ import {
   isLegacyCredentialRef,
   type CredentialRefStatus,
 } from '../shared/credentialRefs';
-import { isCredentialRef, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
+import { isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
@@ -578,7 +579,13 @@ export function registerIpc(): void {
         token = r.value;
       }
       const r = await jira.probeJiraToken(profile, token);
-      if (r.ok) return { ok: true, kind: r.kind, cloudId: r.cloudId, displayName: r.account.displayName };
+      if (r.ok) {
+        // A scoped token can pass /myself and still lack what the board reads
+        // need (VERM-59): check each with one minimal read.
+        const base = r.kind === 'scoped' ? jira.gatewayApiBase(r.cloudId) : jira.siteApiBase(profile.siteUrl);
+        const missingScopes = await jira.missingJiraScopes(base, profile.email, token);
+        return { ok: true, kind: r.kind, cloudId: r.cloudId, displayName: r.account.displayName, missingScopes };
+      }
       // Never echo the credential back to the renderer.
       const message = r.message.includes(token) ? r.message.split(token).join('[redacted]') : r.message;
       return { ok: false, reason: r.reason, cloudId: r.cloudId, message, status: r.status };
@@ -1312,6 +1319,36 @@ export function registerIpc(): void {
   const refused = (message: string, doc: WorkspaceDocument): WorkspaceJiraFailure =>
     ({ ok: false, message, reason: 'error', credentialRef: doc.backend.credentialRef ?? null });
 
+  // Which of the workspace's own sources a request names: a chosen board
+  // (boardId) or a chosen project (projectKey). Anything else is refused, so
+  // a renderer cannot read a project or board just by naming it (VERM-59).
+  function workspaceSource(
+    doc: WorkspaceDocument,
+    a: Record<string, unknown>,
+  ): { kind: 'board'; boardId: number; label: string } | { kind: 'project'; projectKey: string; label: string } | WorkspaceJiraFailure {
+    if (a.boardId !== undefined) {
+      const boardId = a.boardId;
+      const board = (doc.jiraBoards ?? []).find((b) => b.id === boardId);
+      if (!board) return refused(`That board is not one of this workspace's Jira boards.`, doc);
+      return { kind: 'board', boardId: board.id, label: board.name };
+    }
+    const projectKey = typeof a.projectKey === 'string' ? a.projectKey : '';
+    if (!workspaceProjectIds(doc).includes(projectKey)) {
+      return refused(`${projectKey || 'That project'} is not one of this workspace's Jira projects.`, doc);
+    }
+    return { kind: 'project', projectKey, label: projectKey };
+  }
+
+  // Whether an issue belongs to the workspace: in one of its projects, or on
+  // one of its boards by that board's own filter (VERM-59).
+  async function workspaceOwnsIssue(provider: JiraProvider, doc: WorkspaceDocument, issueKey: string): Promise<boolean> {
+    if (workspaceProjectIds(doc).includes(jiraProjectKeyOf(issueKey))) return true;
+    for (const id of workspaceBoardIds(doc)) {
+      if (await provider.isOnBoard(id, issueKey)) return true;
+    }
+    return false;
+  }
+
   ipcMain.handle(
     IPC.listWorkspaceJiraProjects,
     async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraProjectsResult> => {
@@ -1326,17 +1363,43 @@ export function registerIpc(): void {
   );
 
   ipcMain.handle(
+    IPC.listWorkspaceJiraBoards,
+    async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraBoardsResult> => {
+      const p = await workspaceJiraProvider(workspaceId);
+      if (!p.ok) return p;
+      try {
+        return { ok: true, boards: await p.provider.getBoards() };
+      } catch (e) {
+        return jiraFailure(workspaceId, p.doc, e, 'The Jira boards could not be listed. A scoped token needs read:board-scope:jira-software.');
+      }
+    },
+  );
+
+  ipcMain.handle(
     IPC.getWorkspaceJiraIssues,
     async (_e, args: unknown): Promise<GetWorkspaceJiraIssuesResult> => {
       const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
-      const projectKey = typeof a.projectKey === 'string' ? a.projectKey : '';
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
-      // Only the workspace's own projects: a renderer cannot read any project
-      // the user can browse just by naming it.
-      if (!workspaceProjectIds(p.doc).includes(projectKey)) {
-        return refused(`${projectKey || 'That project'} is not one of this workspace's Jira projects.`, p.doc);
+      // Only the workspace's own projects and boards: a renderer cannot read
+      // any project the user can browse just by naming it.
+      const source = workspaceSource(p.doc, a);
+      if ('ok' in source) return source;
+      if (source.kind === 'board') {
+        try {
+          const { issues, truncated } = await p.provider.getBoardIssues(source.boardId, a.includeResolved === true);
+          // Each project the board's issues come from, for priority order.
+          const projects = [...new Set(issues.map((i) => jiraProjectKeyOf(i.idReadable)))];
+          const orders = await Promise.all(projects.map((k) => p.provider.getPriorityValues(k).catch(() => [] as string[])));
+          return {
+            ok: true, issues, priorities: [], truncated,
+            prioritiesByProject: Object.fromEntries(projects.map((k, i) => [k, orders[i]])),
+          };
+        } catch (e) {
+          return jiraFailure(a.workspaceId, p.doc, e, `The issues of board "${source.label}" could not be loaded.`);
+        }
       }
+      const projectKey = source.projectKey;
       try {
         const [issues, priorities] = await Promise.all([
           p.provider.getIssues(projectKey, a.includeResolved === true),
@@ -1355,16 +1418,17 @@ export function registerIpc(): void {
     IPC.getWorkspaceJiraRecentlyUpdated,
     async (_e, args: unknown): Promise<GetWorkspaceJiraRecentlyUpdatedResult> => {
       const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
-      const projectKey = typeof a.projectKey === 'string' ? a.projectKey : '';
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
-      if (!workspaceProjectIds(p.doc).includes(projectKey)) {
-        return refused(`${projectKey || 'That project'} is not one of this workspace's Jira projects.`, p.doc);
-      }
+      const source = workspaceSource(p.doc, a);
+      if ('ok' in source) return source;
       try {
-        return { ok: true, issues: await p.provider.getRecentlyUpdatedIssues(projectKey) };
+        const issues = source.kind === 'board'
+          ? await p.provider.getBoardRecentlyUpdatedIssues(source.boardId)
+          : await p.provider.getRecentlyUpdatedIssues(source.projectKey);
+        return { ok: true, issues };
       } catch (e) {
-        return jiraFailure(a.workspaceId, p.doc, e, `The recent changes in ${projectKey} could not be loaded.`);
+        return jiraFailure(a.workspaceId, p.doc, e, `The recent changes in ${source.label} could not be loaded.`);
       }
     },
   );
@@ -1377,20 +1441,20 @@ export function registerIpc(): void {
       if (!isJiraIssueKey(issueKey)) return { ok: false, message: 'That is not a Jira issue key.', reason: 'error', credentialRef: null };
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
-      // Only issues in the workspace's own projects, as for the board.
-      const own = workspaceProjectIds(p.doc);
-      if (!own.includes(jiraProjectKeyOf(issueKey))) {
-        return refused(`${issueKey} is not in one of this workspace's Jira projects.`, p.doc);
-      }
+      // Only issues in the workspace's own projects or on its own boards, as
+      // for the board.
       try {
+        if (!(await workspaceOwnsIssue(p.provider, p.doc, issueKey))) {
+          return refused(`${issueKey} is not in one of this workspace's Jira projects or boards.`, p.doc);
+        }
         const [issue, content] = await Promise.all([
           p.provider.getIssueDetail(issueKey),
           p.provider.getIssueContent(issueKey),
         ]);
         // Jira answers a moved issue's old key with the issue under its new
         // key and project, which may be outside the workspace.
-        if (!own.includes(issue.project.shortName)) {
-          return refused(`${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects.`, p.doc);
+        if (issue.idReadable !== issueKey && !(await workspaceOwnsIssue(p.provider, p.doc, issue.idReadable))) {
+          return refused(`${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects and boards.`, p.doc);
         }
         return { ok: true, issue, content };
       } catch (e) {
@@ -1410,7 +1474,8 @@ export function registerIpc(): void {
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
       try {
-        return { ok: true, issues: await p.provider.searchIssues(workspaceProjectIds(p.doc), query) };
+        const scope = { projectKeys: workspaceProjectIds(p.doc), boardIds: workspaceBoardIds(p.doc) };
+        return { ok: true, issues: await p.provider.searchWorkspace(scope, query) };
       } catch (e) {
         return jiraFailure(a.workspaceId, p.doc, e, 'The Jira search failed.');
       }

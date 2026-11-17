@@ -142,6 +142,7 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.getWorkspaceJiraRecentlyUpdated, args),
   getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
     ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
+  listWorkspaceJiraBoards: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraBoards, workspaceId),
   searchWorkspaceJiraIssues: (args: SearchWorkspaceJiraIssuesArgs) =>
     ipcRenderer.invoke(IPC.searchWorkspaceJiraIssues, args),
   getWorkspaceJiraMyAccountId: (workspaceId: string) =>

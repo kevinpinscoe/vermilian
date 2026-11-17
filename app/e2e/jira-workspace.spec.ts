@@ -96,7 +96,7 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
 
     await expect(switcher(page)).toContainText('Work');
     await expect(tid(page, 'workspace-backend')).toHaveText('Jira · example.atlassian.net');
-    await expect(tid(page, 'jira-workspace-projects')).toHaveText('No Jira projects chosen yet.');
+    await expect(tid(page, 'jira-workspace-projects')).toHaveText('No Jira projects or boards chosen yet.');
 
     const created = (await readAllWorkspaces(page)).find((d) => d.name === 'Work')!;
     expect(created.backend).toEqual({ kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' });
@@ -134,7 +134,7 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
 
     await expect(tid(page, 'add-projects-btn')).toHaveCount(0);
     const railBtn = tid(page, 'rail-choose-jira-projects-btn');
-    await expect(railBtn).toHaveText('+ Choose Jira projects');
+    await expect(railBtn).toHaveText('+ Choose Jira projects or boards');
     await railBtn.click();
     await expect(page.locator('#jira-projects-modal')).toBeVisible();
     await expect(page.locator('#add-projects-modal')).toHaveCount(0);

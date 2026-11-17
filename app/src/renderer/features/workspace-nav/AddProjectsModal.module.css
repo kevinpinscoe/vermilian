@@ -97,3 +97,13 @@
   gap: 8px;
   margin-top: 16px;
 }
+
+/* Section headings in the Jira projects and boards picker (VERM-59) */
+.sectionLabel {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--secondary-text-color);
+}

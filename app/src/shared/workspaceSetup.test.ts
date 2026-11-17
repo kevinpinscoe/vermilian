@@ -6,6 +6,7 @@ import {
   backendChangeProblem,
   buildWorkspaceDocument,
   nextWorkspaceOrder,
+  withJiraBoards,
   withJiraProjects,
   type NewWorkspaceInput,
 } from './workspaceSetup';
@@ -191,5 +192,31 @@ describe('backendChangeProblem — a backend change never silently discards conf
     expect(msg).toContain('Jira project settings');
     expect(msg).toContain('dismissals');
     expect(msg).toContain('Create a new YouTrack workspace instead');
+  });
+});
+
+describe('withJiraBoards — choosing a Jira workspace\'s boards (VERM-59)', () => {
+  it('sets the boards in the given order, without duplicates, and keeps the projects', () => {
+    const doc = withJiraBoards(withJiraProjects(built(JIRA), ['DEMO']), [{ id: 13, name: 'Ops' }, { id: 12, name: 'Planned' }, { id: 13, name: 'Ops again' }]);
+    expect(doc.jiraBoards).toEqual([{ id: 13, name: 'Ops' }, { id: 12, name: 'Planned' }]);
+    expect(workspaceProjectIds(doc)).toEqual(['DEMO']);
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+  });
+
+  it('drops the field when no board is chosen, and names an unnamed board', () => {
+    const chosen = withJiraBoards(built(JIRA), [{ id: 5, name: '' }]);
+    expect(chosen.jiraBoards).toEqual([{ id: 5, name: 'Board 5' }]);
+    expect('jiraBoards' in withJiraBoards(chosen, [])).toBe(false);
+  });
+
+  it('refuses a YouTrack workspace and an invalid board ID', () => {
+    expect(() => withJiraBoards(built(YT), [{ id: 1, name: 'B' }])).toThrow(WorkspaceSetupError);
+    expect(() => withJiraBoards(built(JIRA), [{ id: -1, name: 'B' }])).toThrow(/Not a Jira board ID/);
+  });
+
+  it('counts chosen boards as configuration a backend change would discard', () => {
+    const doc = withJiraBoards(built(JIRA), [{ id: 12, name: 'Planned' }]);
+    const asYouTrack = { ...doc, backend: built(YT).backend } as WorkspaceDocument;
+    expect(backendChangeProblem(doc, asYouTrack)).toMatch(/Jira boards/);
   });
 });

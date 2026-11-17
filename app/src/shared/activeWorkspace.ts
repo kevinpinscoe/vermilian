@@ -87,7 +87,10 @@ export function backendContextOf(doc: Pick<WorkspaceDocument, 'backend'>): Activ
 export function workspacesFromDocuments(docs: readonly WorkspaceDocument[]): Workspace[] {
   return [...docs]
     .sort((a, b) => a.order - b.order)
-    .map((d) => ({ id: d.workspaceId, name: d.name, order: d.order, folders: d.folders }));
+    .map((d) => ({
+      id: d.workspaceId, name: d.name, order: d.order, folders: d.folders,
+      ...(d.jiraBoards?.length ? { jiraBoards: d.jiraBoards } : {}),
+    }));
 }
 
 /** Whether this build can show the board for `backend`. */

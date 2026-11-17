@@ -13,6 +13,7 @@
 // in under VERMILIAN_E2E.
 
 import type * as JiraClient from '../api/jira';
+import type { JiraBoard } from '../api/jira';
 import type { TrackerProject, TrackerProvider } from '../../shared/tracker';
 import {
   jiraBoardFields,
@@ -20,6 +21,7 @@ import {
   jiraProjectKeyOf,
   jiraSearchJql,
   jiraSearchKey,
+  jqlTextClause,
   mapJiraIssue,
   mapJiraIssueDetail,
 } from '../../shared/jiraBoardIssue';
@@ -50,6 +52,24 @@ export interface JiraProvider extends TrackerProvider {
    * resolved ones included — the board's incremental poll (VERM-39).
    */
   getRecentlyUpdatedIssues(projectKey: string): Promise<BoardIssue[]>;
+  /** The boards the account can see, for the workspace's picker (VERM-59). */
+  getBoards(): Promise<JiraBoard[]>;
+  /**
+   * One board's issues, from the board's own filter, whatever their projects
+   * (VERM-59). `truncated` says the page guard cut the list: it then holds
+   * the most recently updated issues only.
+   */
+  getBoardIssues(boardId: number, includeResolved: boolean): Promise<{ issues: BoardIssue[]; truncated: boolean }>;
+  /** One board's issues updated in the poll window, resolved included (VERM-59). */
+  getBoardRecentlyUpdatedIssues(boardId: number): Promise<BoardIssue[]>;
+  /** Whether an issue is on a board, by the board's own filter (VERM-59). */
+  isOnBoard(boardId: number, key: string): Promise<boolean>;
+  /**
+   * Key or text search over a workspace's chosen projects and boards, Done
+   * included (VERM-61, VERM-59). An exact key is returned only when it is in
+   * one of the projects or on one of the boards.
+   */
+  searchWorkspace(scope: { projectKeys: readonly string[]; boardIds: readonly number[] }, query: string): Promise<BoardIssue[]>;
   /** The connection's own accountId: what "Me" means on this workspace's board (VERM-62). */
   getMyAccountId(): Promise<string>;
 }
@@ -80,6 +100,26 @@ export function createJiraProvider(
   }
 
   const mapIssue = (issue: Parameters<typeof mapJiraIssue>[0]) => mapJiraIssue(issue, settingsFor(jiraProjectKeyOf(issue.key)));
+  // A board's issues can come from any project, so its reads request every
+  // configured project's fields; each issue still maps with its own.
+  const anyProjectFields = (): string[] =>
+    [...new Set([...jiraBoardFields(), ...Object.keys(projectSettings).flatMap((k) => jiraBoardFields(settingsFor(k)))])];
+
+  // The text half of searchWorkspace: one search/jql over the projects, and
+  // one board read per board, each narrowed by the same text clause.
+  async function searchByText(scope: { projectKeys: readonly string[]; boardIds: readonly number[] }, term: string) {
+    const reads: Array<Promise<Parameters<typeof mapJiraIssue>[0][]>> = [];
+    const jql = jiraSearchJql(scope.projectKeys, term);
+    if (jql) {
+      const fields = [...new Set(scope.projectKeys.flatMap((k) => jiraBoardFields(settingsFor(k))))];
+      reads.push(client.searchJql(base, email, token, jql, fields, 1));
+    }
+    const boardJql = `${jqlTextClause(term)} ORDER BY updated DESC`;
+    for (const id of scope.boardIds) {
+      reads.push(client.searchBoardIssues(base, email, token, id, { jql: boardJql, fields: anyProjectFields(), maxPages: 1 }));
+    }
+    return (await Promise.all(reads)).flat();
+  }
 
   return {
     kind: 'jira',
@@ -142,6 +182,64 @@ export function createJiraProvider(
       const exact = byKey && projectKeys.includes(jiraProjectKeyOf(byKey.key)) ? [byKey] : [];
       const seen = new Set(exact.map((i) => i.id));
       return [...exact, ...byText.filter((i) => !seen.has(i.id))].map(mapIssue);
+    },
+
+    async getBoards() {
+      return client.listBoards(base, email, token);
+    },
+
+    async getBoardIssues(boardId, includeResolved) {
+      let truncated = false;
+      const issues = await client.searchBoardIssues(base, email, token, boardId, {
+        jql: client.boardIssuesJql(includeResolved),
+        fields: anyProjectFields(),
+        onTruncated: () => { truncated = true; },
+      });
+      return { issues: issues.map(mapIssue), truncated };
+    },
+
+    async getBoardRecentlyUpdatedIssues(boardId) {
+      const issues = await client.searchBoardIssues(base, email, token, boardId, {
+        jql: client.boardRecentlyUpdatedJql(JIRA_POLL_WINDOW_MINUTES),
+        fields: anyProjectFields(),
+      });
+      return issues.map(mapIssue);
+    },
+
+    isOnBoard(boardId, key) {
+      return client.isIssueOnBoard(base, email, token, boardId, key);
+    },
+
+    async searchWorkspace(scope, query) {
+      for (const k of scope.projectKeys) {
+        if (!client.isValidProjectKey(k)) throw { message: `Invalid Jira project key: ${JSON.stringify(k)}` };
+      }
+      for (const id of scope.boardIds) {
+        if (!client.isValidBoardId(id)) throw { message: `Invalid Jira board ID: ${JSON.stringify(id)}` };
+      }
+      const term = query.trim();
+      if (!term || (scope.projectKeys.length === 0 && scope.boardIds.length === 0)) return [];
+      // A key-shaped term is looked up directly, then kept only if it is in
+      // one of the projects or on one of the boards.
+      const asKey = term.toUpperCase();
+      const keyLike = jiraSearchKey([jiraProjectKeyOf(asKey)], term);
+      const [byKey, byText] = await Promise.all([
+        keyLike
+          ? client.getIssue(base, email, token, keyLike, anyProjectFields()).catch((e: unknown) => {
+              if ((e as { status?: unknown } | null)?.status === 404) return null;
+              throw e;
+            })
+          : Promise.resolve(null),
+        searchByText(scope, term),
+      ]);
+      let exact: typeof byText = [];
+      if (byKey) {
+        const inProject = scope.projectKeys.includes(jiraProjectKeyOf(byKey.key));
+        const onBoard = inProject ? false : (await Promise.all(scope.boardIds.map((id) => client.isIssueOnBoard(base, email, token, id, byKey.key)))).some(Boolean);
+        if (inProject || onBoard) exact = [byKey];
+      }
+      const seen = new Set<string>();
+      return [...exact, ...byText].filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true))).map(mapIssue);
     },
 
     getPriorityValues(projectKey) {

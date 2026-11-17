@@ -401,3 +401,166 @@ export async function searchProjectRecentlyUpdated(
   const jql = projectRecentlyUpdatedJql(projectKey, options.windowMinutes);
   return searchJql(base, email, token, jql, options.fields ?? JIRA_LIST_FIELDS, options.maxPages);
 }
+
+// ── Boards, through the Agile API (VERM-59) ──────────────────────────────────
+// Read-only. A board's issues come from the board itself, so its saved filter
+// decides which issues (from any project) are on it. Scoped tokens need
+// read:board-scope:jira-software and read:jira-work for these calls.
+
+export interface JiraBoard {
+  id: number;
+  name: string;
+  type: string; // 'scrum' | 'kanban' | 'simple', as Jira reports it
+  projectKey: string; // the board's location project, '' when none
+}
+
+export const BOARD_PAGE_SIZE = 50;
+// A runaway guard, not a feature limit: 20 pages is 1,000 boards or issues.
+export const BOARD_MAX_PAGES = 20;
+
+interface BoardListResponse {
+  values?: Array<{ id?: number; name?: string; type?: string; location?: { projectKey?: string } }>;
+  isLast?: boolean;
+}
+
+/** Whether a value is a Jira board ID: a positive integer. */
+export function isValidBoardId(id: unknown): id is number {
+  return typeof id === 'number' && Number.isInteger(id) && id > 0 && id <= Number.MAX_SAFE_INTEGER;
+}
+
+// GET /rest/agile/1.0/board, paged by startAt until isLast. Only the boards
+// the token's user can see are returned. Throws JiraError.
+export async function listBoards(
+  base: string,
+  email: string,
+  token: string,
+  maxPages = BOARD_MAX_PAGES,
+): Promise<JiraBoard[]> {
+  const boards: JiraBoard[] = [];
+  let startAt = 0;
+  for (let page = 0; page < maxPages; page++) {
+    const res = await jiraRequest<BoardListResponse>(
+      base,
+      email,
+      token,
+      `/rest/agile/1.0/board?startAt=${startAt}&maxResults=${BOARD_PAGE_SIZE}`,
+    );
+    const values = res.values ?? [];
+    for (const v of values) {
+      if (isValidBoardId(v.id)) {
+        boards.push({ id: v.id, name: v.name || `Board ${v.id}`, type: v.type ?? '', projectKey: v.location?.projectKey ?? '' });
+      }
+    }
+    if (res.isLast !== false || values.length === 0) break;
+    startAt += values.length;
+  }
+  return boards;
+}
+
+interface BoardIssuesResponse {
+  issues?: JiraSearchIssue[];
+  total?: number;
+}
+
+export interface BoardIssueOptions {
+  // Narrows the board's own filter; never widens it. Built only from the
+  // checked helpers below.
+  jql?: string;
+  fields?: readonly string[];
+  maxPages?: number;
+  // Called when the page guard stops the read with issues still unread, so
+  // the cut is never silent. The result holds the most recently updated.
+  onTruncated?: () => void;
+}
+
+// GET /rest/agile/1.0/board/{id}/issue, paged by startAt until total.
+// Read-only. Throws JiraError.
+export async function searchBoardIssues(
+  base: string,
+  email: string,
+  token: string,
+  boardId: number,
+  options: BoardIssueOptions = {},
+): Promise<JiraSearchIssue[]> {
+  if (!isValidBoardId(boardId)) throw invalid(`Invalid Jira board ID: ${JSON.stringify(boardId)}`);
+  const fields = options.fields ?? JIRA_LIST_FIELDS;
+  const query = [
+    options.jql ? `jql=${encodeURIComponent(options.jql)}` : '',
+    fields.length ? `fields=${encodeURIComponent(fields.join(','))}` : '',
+  ].filter(Boolean).join('&');
+  const issues: JiraSearchIssue[] = [];
+  let startAt = 0;
+  for (let page = 0; page < (options.maxPages ?? BOARD_MAX_PAGES); page++) {
+    const res = await jiraRequest<BoardIssuesResponse>(
+      base,
+      email,
+      token,
+      `/rest/agile/1.0/board/${boardId}/issue?startAt=${startAt}&maxResults=${BOARD_PAGE_SIZE}${query ? `&${query}` : ''}`,
+    );
+    const batch = res.issues ?? [];
+    issues.push(...batch);
+    startAt += batch.length;
+    if (batch.length === 0 || (typeof res.total === 'number' && startAt >= res.total)) return issues;
+  }
+  // The guard ran out first: more issues remain unless Jira reported none.
+  options.onTruncated?.();
+  return issues;
+}
+
+// The board's open issues, or all of them with includeResolved.
+export function boardIssuesJql(includeResolved = false): string {
+  return includeResolved ? 'ORDER BY updated DESC' : 'statusCategory != Done ORDER BY updated DESC';
+}
+
+// The board's issues updated in the last `windowMinutes`, resolved included,
+// like projectRecentlyUpdatedJql. Throws on an invalid window.
+export function boardRecentlyUpdatedJql(windowMinutes = JIRA_POLL_WINDOW_MINUTES): string {
+  if (!Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > POLL_WINDOW_MAX_MINUTES) {
+    throw invalid(`Invalid poll window: ${String(windowMinutes)} minutes`);
+  }
+  return `updated >= -${windowMinutes}m ORDER BY updated DESC`;
+}
+
+// Whether an issue is on a board: the board's own filter, narrowed to the
+// key. JQL rejects a key that does not exist with a 400, which is "no" here;
+// a refused token is not hidden. Throws JiraError on 401/403.
+export async function isIssueOnBoard(base: string, email: string, token: string, boardId: number, key: string): Promise<boolean> {
+  if (!isValidLocalId('jira', key)) return false;
+  try {
+    const found = await searchBoardIssues(base, email, token, boardId, { jql: `key = "${key}"`, fields: ['summary'], maxPages: 1 });
+    return found.some((i) => i.key === key);
+  } catch (e) {
+    const status = (e as { status?: unknown } | null)?.status;
+    if (status === 401 || status === 403) throw e;
+    return false;
+  }
+}
+
+// ── Scope check for Test connection (VERM-59) ────────────────────────────────
+
+export const JIRA_WORK_SCOPE = 'read:jira-work';
+export const JIRA_BOARD_SCOPE = 'read:board-scope:jira-software';
+
+// Which of the scopes Vermilian reads with the token lacks, by one minimal
+// read each: a one-issue search (read:jira-work) and a one-board listing
+// (read:board-scope:jira-software). A 401 or 403 on a read counts as the
+// scope missing; any other failure is not reported as a scope. Never throws.
+export async function missingJiraScopes(base: string, email: string, token: string): Promise<string[]> {
+  const refused = (e: unknown) => {
+    const status = (e as { status?: unknown } | null)?.status;
+    return status === 401 || status === 403;
+  };
+  const checks: Array<[string, () => Promise<unknown>]> = [
+    [JIRA_WORK_SCOPE, () => jiraRequest(base, email, token, '/rest/api/3/search/jql', { body: { jql: 'ORDER BY created DESC', maxResults: 1, fields: ['summary'] }, idempotent: true })],
+    [JIRA_BOARD_SCOPE, () => jiraRequest(base, email, token, '/rest/agile/1.0/board?maxResults=1')],
+  ];
+  const missing: string[] = [];
+  for (const [scope, read] of checks) {
+    try {
+      await read();
+    } catch (e) {
+      if (refused(e)) missing.push(scope);
+    }
+  }
+  return missing;
+}
