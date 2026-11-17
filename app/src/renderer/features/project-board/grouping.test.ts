@@ -12,6 +12,11 @@ import {
   applyManualOrder,
   orderedUnique,
   EMPTY_FILTER,
+  ASSIGNEE_ME,
+  ASSIGNEE_UNASSIGNED,
+  matchesAssignee,
+  assigneeOptions,
+  assigneeLabel,
   type FilterState,
 } from './grouping';
 
@@ -154,6 +159,89 @@ describe('filterCount', () => {
   it('counts an active due-date filter as one', () => {
     expect(filterCount({ ...EMPTY_FILTER, dueMode: 'before', dueFrom: '2026-06-15' })).toBe(1);
     expect(filterCount({ ...EMPTY_FILTER, dueMode: 'any' })).toBe(0);
+  });
+});
+
+// ─── applyFilter: assignee (VERM-62) ──────────────────────────────────────────
+
+describe('applyFilter (assignee)', () => {
+  const issues = [
+    issue('mine',   { assignee: 'kevin', status: 'To do',       priority: 'Major' }),
+    issue('alice',  { assignee: 'alice', status: 'In Progress', priority: 'Major' }),
+    issue('bob',    { assignee: 'bob',   status: 'To do',       priority: 'Minor' }),
+    issue('nobody', { assignee: null,    status: 'To do',       priority: 'Major' }),
+  ];
+  const ids = (f: FilterState, me = 'kevin') => applyFilter(issues, f, me).map((i) => i.id);
+
+  it('an empty selection keeps every issue', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: [] })).toEqual(['mine', 'alice', 'bob', 'nobody']);
+  });
+
+  it('a named assignee keeps only their issues', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: ['alice'] })).toEqual(['alice']);
+  });
+
+  it('several assignees are ORed', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: ['alice', 'bob'] })).toEqual(['alice', 'bob']);
+  });
+
+  it('Me resolves to the configured login', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: [ASSIGNEE_ME] })).toEqual(['mine']);
+    expect(ids({ ...EMPTY_FILTER, assignee: [ASSIGNEE_ME] }, 'bob')).toEqual(['bob']);
+  });
+
+  it('Me with no configured login matches nothing, rather than everything', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: [ASSIGNEE_ME] }, '')).toEqual([]);
+  });
+
+  it('Unassigned keeps only issues with no assignee', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: [ASSIGNEE_UNASSIGNED] })).toEqual(['nobody']);
+  });
+
+  it('Me and Unassigned combine with OR', () => {
+    expect(ids({ ...EMPTY_FILTER, assignee: [ASSIGNEE_ME, ASSIGNEE_UNASSIGNED] })).toEqual(['mine', 'nobody']);
+  });
+
+  it('is ANDed with Status and Priority', () => {
+    const f: FilterState = {
+      ...EMPTY_FILTER,
+      assignee: [ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, 'bob'],
+      status: ['To do'],
+      priority: ['Major'],
+    };
+    expect(ids(f)).toEqual(['mine', 'nobody']);
+  });
+
+  it('counts each selected assignee in filterCount', () => {
+    expect(filterCount({ ...EMPTY_FILTER, assignee: [ASSIGNEE_ME, 'alice'] })).toBe(2);
+  });
+
+  it('matchesAssignee leaves unassigned issues out of a named selection', () => {
+    expect(matchesAssignee(null, ['alice', ASSIGNEE_ME], 'kevin')).toBe(false);
+  });
+});
+
+describe('assigneeOptions', () => {
+  const issues = [
+    issue('a', { assignee: 'zoe' }),
+    issue('b', { assignee: 'kevin' }),
+    issue('c', { assignee: 'alice' }),
+    issue('d', { assignee: 'zoe' }),
+    issue('e', { assignee: null }),
+  ];
+
+  it('lists Me, Unassigned, then the other assignees alphabetically, without duplicates', () => {
+    expect(assigneeOptions(issues, 'kevin')).toEqual([ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, 'alice', 'zoe']);
+  });
+
+  it('omits Me when no login is configured, and lists that user by login instead', () => {
+    expect(assigneeOptions(issues, '')).toEqual([ASSIGNEE_UNASSIGNED, 'alice', 'kevin', 'zoe']);
+  });
+
+  it('labels the two tokens for display and passes logins through', () => {
+    expect(assigneeLabel(ASSIGNEE_ME)).toBe('Me');
+    expect(assigneeLabel(ASSIGNEE_UNASSIGNED)).toBe('Unassigned');
+    expect(assigneeLabel('alice')).toBe('alice');
   });
 });
 

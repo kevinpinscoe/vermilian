@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Filter boards by Assignee** (VERM-62). The All tasks board and every project board's
+  filter bar have an **Assignee** section: pills for **Me**, **Unassigned**, and each other
+  person assigned to a loaded issue. Pills combine with OR, and with AND against Status,
+  Priority and Category. **Me** resolves to the YouTrack login set in Settings on each
+  machine. On All tasks, the existing **Assigned to me** button now toggles the same Me pill.
+
 ### Security
 
 - **Credentials are never stored as plain text any more** (VERM-57). When the system

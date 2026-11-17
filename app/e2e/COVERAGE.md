@@ -53,6 +53,7 @@ notifications, or the timer worklog round-trip.
 | Filtering (bar, pills, search, clear, empty state) | ✅ E2E | `board-filter-sort.spec.ts` |
 | Empty state — project has no tasks ("No tasks in this project yet") | ✅ E2E | `empty-state.spec.ts` (Empty Project fixture) |
 | Due Date range filter (Before / On / After / Range) | ✅ E2E | `board-filter-sort.spec.ts` (dated TEST fixtures) |
+| Assignee filter (Me / Unassigned / named, All tasks + project board) | ✅ E2E | `assignee-filter.spec.ts` (assigned TEST/TST2 fixtures) |
 | Data loading — Loader / Refresh / error Banner | ⬜ Gap | — |
 | Inbox indicator (board header) | ✅ E2E | `board-header.spec.ts` (Team Inbox fixture) |
 

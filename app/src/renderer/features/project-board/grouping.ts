@@ -63,6 +63,7 @@ export interface FilterState {
   status: string[];
   priority: string[];
   category: string[];
+  assignee: string[]; // YouTrack logins, plus the ASSIGNEE_ME / ASSIGNEE_UNASSIGNED tokens
   search: string; // free text over summary + idReadable
   dueMode: DueDateMode;
   dueFrom: string | null; // 'YYYY-MM-DD' — anchor for before/on/after, lower bound for range
@@ -70,14 +71,52 @@ export interface FilterState {
 }
 
 export const EMPTY_FILTER: FilterState = {
-  status: [], priority: [], category: [], search: '',
+  status: [], priority: [], category: [], assignee: [], search: '',
   dueMode: 'any', dueFrom: null, dueTo: null,
 };
 
+// "Me" is stored as a token, not a login, and resolved against the configured
+// youtrackLogin at filter time — so it means whoever is signed in on this
+// machine. Neither token can collide with a real login (logins have no '__').
+export const ASSIGNEE_ME = '__me__';
+export const ASSIGNEE_UNASSIGNED = '__unassigned__';
+
 export function filterCount(filter: FilterState): number {
   return filter.status.length + filter.priority.length + filter.category.length +
+    filter.assignee.length +
     (filter.search.trim() ? 1 : 0) +
     (filter.dueMode !== 'any' ? 1 : 0);
+}
+
+// OR within the selection. "Me" with no configured login matches nothing
+// rather than everything, so it never silently widens the board.
+export function matchesAssignee(assignee: string | null, selected: string[], myLogin: string): boolean {
+  if (selected.length === 0) return true;
+  if (assignee == null) return selected.includes(ASSIGNEE_UNASSIGNED);
+  if (selected.includes(assignee)) return true;
+  return myLogin !== '' && assignee === myLogin && selected.includes(ASSIGNEE_ME);
+}
+
+// Pill values for the Assignee section: Me (when a login is configured),
+// Unassigned, then every other assignee on the loaded issues, alphabetically.
+// The current user's own login is left out — the Me pill already covers it.
+export function assigneeOptions(issues: BoardIssue[], myLogin: string): string[] {
+  const logins = new Set<string>();
+  for (const i of issues) {
+    const a = i.fields.assignee;
+    if (a && a !== myLogin) logins.add(a);
+  }
+  return [
+    ...(myLogin ? [ASSIGNEE_ME] : []),
+    ASSIGNEE_UNASSIGNED,
+    ...[...logins].sort((a, b) => a.localeCompare(b)),
+  ];
+}
+
+export function assigneeLabel(value: string): string {
+  if (value === ASSIGNEE_ME) return 'Me';
+  if (value === ASSIGNEE_UNASSIGNED) return 'Unassigned';
+  return value;
 }
 
 // Local calendar day of an epoch-ms timestamp as 'YYYY-MM-DD'. Lexicographic
@@ -107,12 +146,13 @@ function matchesDue(dueDate: number | null, filter: FilterState): boolean {
   }
 }
 
-export function applyFilter(issues: BoardIssue[], filter: FilterState): BoardIssue[] {
+export function applyFilter(issues: BoardIssue[], filter: FilterState, myLogin = ''): BoardIssue[] {
   const q = filter.search.trim().toLowerCase();
   return issues.filter((issue) => {
     if (filter.status.length > 0 && !filter.status.includes(issue.fields.status ?? '')) return false;
     if (filter.priority.length > 0 && !filter.priority.includes(issue.fields.priority ?? '')) return false;
     if (filter.category.length > 0 && !filter.category.includes(issue.fields.category ?? '')) return false;
+    if (!matchesAssignee(issue.fields.assignee, filter.assignee, myLogin)) return false;
     if (q && !issue.summary.toLowerCase().includes(q) && !issue.idReadable.toLowerCase().includes(q)) return false;
     if (!matchesDue(issue.fields.dueDate, filter)) return false;
     return true;

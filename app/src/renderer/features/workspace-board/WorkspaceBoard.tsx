@@ -9,6 +9,9 @@ import { COLUMN_LABELS } from '../../../shared/boardConfig';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS } from '../project-board/colors';
 import { ChipCell, EffectiveColors, formatDate } from '../project-board/KanbanView';
 import { usePatchIssueOnBoard } from '../project-board/api';
+import {
+  ASSIGNEE_ME, matchesAssignee, assigneeOptions, assigneeLabel,
+} from '../project-board/grouping';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
@@ -69,13 +72,19 @@ interface WsFilter {
   status: string[];
   priority: string[];
   category: string[];
-  assignedToMe: boolean;
+  assignee: string[]; // logins plus the ASSIGNEE_ME / ASSIGNEE_UNASSIGNED tokens (VERM-62)
 }
-const EMPTY_FILTER: WsFilter = { status: [], priority: [], category: [], assignedToMe: false };
+const EMPTY_FILTER: WsFilter = { status: [], priority: [], category: [], assignee: [] };
+
+// Assignee pills share one neutral colour — there is no per-person palette.
+const ASSIGNEE_PILL_COLOR = '#676879';
 
 function FilterPills({
-  label, values, active, colorMap, onToggle,
-}: { label: string; values: string[]; active: string[]; colorMap: Record<string, string>; onToggle: (v: string) => void }) {
+  label, values, active, colorMap, onToggle, displayValue = (v) => v,
+}: {
+  label: string; values: string[]; active: string[]; colorMap: Record<string, string>;
+  onToggle: (v: string) => void; displayValue?: (v: string) => string;
+}) {
   if (!values.length) return null;
   const hasActive = active.length > 0;
   return (
@@ -85,10 +94,11 @@ function FilterPills({
         const bg = colorMap[v] ?? '#C4C4C4';
         return (
           <button key={v} type="button"
+            data-testid="ws-filter-pill" data-section={label} data-value={v}
             className={`${pbStyles.filterPill} ${active.includes(v) ? pbStyles.filterPillActive : ''} ${hasActive && !active.includes(v) ? pbStyles.filterPillDim : ''}`}
             style={{ backgroundColor: bg, color: '#fff' }}
             onClick={() => onToggle(v)}
-          >{v}</button>
+          >{displayValue(v)}</button>
         );
       })}
     </div>
@@ -110,6 +120,7 @@ function IssueRow({
   const [hovered, setHovered] = useState(false);
   return (
     <tr className={pbStyles.issueRow} onClick={onClick} style={{ cursor: 'pointer' }}
+      data-testid="ws-issue-row" data-issue-id={issue.idReadable}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <td className={`${pbStyles.cell} ${pbStyles.cellTask}`}>
         {isActiveTimer ? (
@@ -220,8 +231,8 @@ export function WorkspaceBoard({
     if (filter.status.length) items = items.filter((i) => filter.status.includes(i.fields.status ?? ''));
     if (filter.priority.length) items = items.filter((i) => filter.priority.includes(i.fields.priority ?? ''));
     if (filter.category.length) items = items.filter((i) => filter.category.includes(i.fields.category ?? ''));
-    if (filter.assignedToMe && youtrackLogin) {
-      items = items.filter((i) => i.fields.assignee === youtrackLogin);
+    if (filter.assignee.length) {
+      items = items.filter((i) => matchesAssignee(i.fields.assignee, filter.assignee, youtrackLogin));
     }
     return items;
   }, [allIssues, filter, youtrackLogin, showClosed]);
@@ -240,7 +251,7 @@ export function WorkspaceBoard({
     );
   }
 
-  function toggle(field: keyof Omit<WsFilter, 'assignedToMe'>, value: string) {
+  function toggle(field: keyof WsFilter, value: string) {
     const cur = filter[field];
     setFilter((f) => ({
       ...f,
@@ -260,7 +271,9 @@ export function WorkspaceBoard({
   const statusVals = [...new Set(allIssues.map((i) => i.fields.status).filter(Boolean) as string[])];
   const priorityVals = [...new Set(allIssues.map((i) => i.fields.priority).filter(Boolean) as string[])];
   const categoryVals = [...new Set(allIssues.map((i) => i.fields.category).filter(Boolean) as string[])];
-  const hasFilters = filter.status.length > 0 || filter.priority.length > 0 || filter.category.length > 0 || filter.assignedToMe;
+  const assigneeVals = assigneeOptions(allIssues, youtrackLogin);
+  const assignedToMe = filter.assignee.includes(ASSIGNEE_ME);
+  const hasFilters = filter.status.length > 0 || filter.priority.length > 0 || filter.category.length > 0 || filter.assignee.length > 0;
   const colSpan = 1 + VISIBLE_COLS.length;
 
   return (
@@ -286,8 +299,8 @@ export function WorkspaceBoard({
         {youtrackLogin && (
           <button
             type="button"
-            className={`${styles.assignedBtn} ${filter.assignedToMe ? styles.assignedBtnActive : ''}`}
-            onClick={() => setFilter((f) => ({ ...f, assignedToMe: !f.assignedToMe }))}
+            className={`${styles.assignedBtn} ${assignedToMe ? styles.assignedBtnActive : ''}`}
+            onClick={() => toggle('assignee', ASSIGNEE_ME)}
             title={`Show only tasks assigned to ${youtrackLogin}`}
           >
             Assigned to me
@@ -307,13 +320,19 @@ export function WorkspaceBoard({
       </div>
 
       {/* Filter bar */}
-      {(statusVals.length > 0 || priorityVals.length > 0 || categoryVals.length > 0) && (
-        <div className={pbStyles.filterBar}>
+      {allIssues.length > 0 && (
+        <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
           <FilterPills label="Status"   values={statusVals.filter((v) => STATUS_OPTIONS.includes(v as never))} active={filter.status}   colorMap={COLORS.Status}   onToggle={(v) => toggle('status', v)} />
           {statusVals.length > 0 && priorityVals.length > 0 && <span className={pbStyles.filterSep} />}
           <FilterPills label="Priority" values={priorityVals.filter((v) => PRIORITY_OPTIONS.includes(v as never))} active={filter.priority} colorMap={COLORS.Priority} onToggle={(v) => toggle('priority', v)} />
           {priorityVals.length > 0 && categoryVals.length > 0 && <span className={pbStyles.filterSep} />}
           <FilterPills label="Category" values={categoryVals.filter((v) => CATEGORY_OPTIONS.includes(v as never))} active={filter.category} colorMap={COLORS.Category} onToggle={(v) => toggle('category', v)} />
+          <span className={pbStyles.filterSep} />
+          <FilterPills
+            label="Assignee" values={assigneeVals} active={filter.assignee}
+            colorMap={Object.fromEntries(assigneeVals.map((v) => [v, ASSIGNEE_PILL_COLOR]))}
+            onToggle={(v) => toggle('assignee', v)} displayValue={assigneeLabel}
+          />
           {hasFilters && (
             <button type="button" className={pbStyles.filterClear} onClick={() => setFilter(EMPTY_FILTER)}>Clear</button>
           )}
