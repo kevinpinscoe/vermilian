@@ -31,6 +31,7 @@ import {
   type GetWorkspaceJiraIssuesArgs,
   type GetWorkspaceJiraRecentlyUpdatedArgs,
   type GetWorkspaceJiraIssueDetailArgs,
+  type SearchWorkspaceJiraIssuesArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
 import type { JiraProfile } from './shared/jiraProfile';
@@ -141,6 +142,10 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.getWorkspaceJiraRecentlyUpdated, args),
   getWorkspaceJiraIssueDetail: (args: GetWorkspaceJiraIssueDetailArgs) =>
     ipcRenderer.invoke(IPC.getWorkspaceJiraIssueDetail, args),
+  searchWorkspaceJiraIssues: (args: SearchWorkspaceJiraIssuesArgs) =>
+    ipcRenderer.invoke(IPC.searchWorkspaceJiraIssues, args),
+  getWorkspaceJiraMyAccountId: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC.getWorkspaceJiraMyAccountId, workspaceId),
   debugGetMigrationSources: () => ipcRenderer.invoke('e2e:getMigrationSources'),
   debugWriteConfigArticle: (content: string) => ipcRenderer.invoke('e2e:writeConfigArticle', content),
   debugFailConfigWrites: (n: number) => ipcRenderer.invoke('e2e:failConfigWrites', n),

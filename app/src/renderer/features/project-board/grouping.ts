@@ -97,26 +97,38 @@ export function matchesAssignee(assignee: string | null, selected: string[], myL
   return myLogin !== '' && assignee === myLogin && selected.includes(ASSIGNEE_ME);
 }
 
-// Pill values for the Assignee section: Me (when a login is configured),
-// Unassigned, then every other assignee on the loaded issues, alphabetically.
-// The current user's own login is left out — the Me pill already covers it.
+// Display names by assignee value, for backends whose assignee value is an
+// opaque id (Jira's accountId, carried with BoardIssue.assigneeName). Empty
+// for YouTrack, whose logins are shown as they are.
+export function assigneeNames(issues: BoardIssue[]): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const i of issues) {
+    if (i.fields.assignee && i.assigneeName) names[i.fields.assignee] = i.assigneeName;
+  }
+  return names;
+}
+
+export function assigneeLabel(value: string, names: Record<string, string> = {}): string {
+  if (value === ASSIGNEE_ME) return 'Me';
+  if (value === ASSIGNEE_UNASSIGNED) return 'Unassigned';
+  return names[value] ?? value;
+}
+
+// Pill values for the Assignee section: Me (when the current user is known),
+// Unassigned, then every other assignee on the loaded issues, by display name.
+// The current user's own value is left out — the Me pill already covers it.
 export function assigneeOptions(issues: BoardIssue[], myLogin: string): string[] {
-  const logins = new Set<string>();
+  const names = assigneeNames(issues);
+  const others = new Set<string>();
   for (const i of issues) {
     const a = i.fields.assignee;
-    if (a && a !== myLogin) logins.add(a);
+    if (a && a !== myLogin) others.add(a);
   }
   return [
     ...(myLogin ? [ASSIGNEE_ME] : []),
     ASSIGNEE_UNASSIGNED,
-    ...[...logins].sort((a, b) => a.localeCompare(b)),
+    ...[...others].sort((a, b) => assigneeLabel(a, names).localeCompare(assigneeLabel(b, names))),
   ];
-}
-
-export function assigneeLabel(value: string): string {
-  if (value === ASSIGNEE_ME) return 'Me';
-  if (value === ASSIGNEE_UNASSIGNED) return 'Unassigned';
-  return value;
 }
 
 // Local calendar day of an epoch-ms timestamp as 'YYYY-MM-DD'. Lexicographic

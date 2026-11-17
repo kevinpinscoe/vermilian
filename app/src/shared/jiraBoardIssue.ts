@@ -46,6 +46,7 @@ export const JIRA_BOARD_BASE_FIELDS = [
   'parent',
   'resolutiondate',
   'updated',
+  'assignee',
 ] as const;
 
 /** The fields to request so mapJiraIssue has everything it reads. */
@@ -153,6 +154,10 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
   fields.status = named(status);
   fields.priority = named(f.priority);
   fields.dueDate = jiraDateToEpochMs(f[options.dueDateField || JIRA_SYSTEM_DUE_DATE_FIELD]);
+  // The assignee is matched by accountId, which is stable; the display name
+  // is carried separately for the filter pills (VERM-62).
+  const assignee = (f.assignee ?? null) as { accountId?: unknown; displayName?: unknown } | null;
+  fields.assignee = str(assignee?.accountId);
 
   return {
     id: issue.id,
@@ -164,6 +169,7 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
     isEpic: isEpicType(f.issuetype as JiraIssueType | null | undefined),
     statusRole,
     updated: timestampMs(f.updated),
+    assigneeName: fields.assignee ? (str(assignee?.displayName) ?? fields.assignee) : null,
   };
 }
 
@@ -194,6 +200,35 @@ export function mapJiraIssueDetail(issue: JiraIssue, options: JiraMappingOptions
  * escaping so the query can never break out of the quoted string.
  */
 export function jqlTextClause(query: string): string {
-  const escaped = query.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n\t]+/g, ' ');
-  return `text ~ "${escaped}"`;
+  return `text ~ ${jqlString(query)}`;
+}
+
+/** A JQL string literal: quoted, with backslashes, quotes and line breaks neutralised. */
+export function jqlString(value: string): string {
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n\t]+/g, ' ');
+  return `"${escaped}"`;
+}
+
+/**
+ * The board search's text JQL (VERM-61): the workspace's projects and a text
+ * match. Resolution is never filtered, so Done issues are found too. Returns
+ * null when there is nothing to search. An exact key is looked up separately
+ * (jiraSearchKey): JQL's `key = "X"` fails the whole query with a 400 when X
+ * does not exist, so it cannot be ORed in here.
+ */
+export function jiraSearchJql(projectKeys: readonly string[], term: string): string | null {
+  const t = term.trim();
+  if (projectKeys.length === 0 || t === '') return null;
+  const projects = `project in (${projectKeys.map((k) => jqlString(k)).join(', ')})`;
+  return `${projects} AND ${jqlTextClause(t)} ORDER BY updated DESC`;
+}
+
+/**
+ * The issue key a search term names, uppercased as Jira compares keys, when
+ * it is one and belongs to one of the given projects; otherwise null. Keys
+ * outside the workspace are never looked up (credential isolation, VERM-61).
+ */
+export function jiraSearchKey(projectKeys: readonly string[], term: string): string | null {
+  const key = term.trim().toUpperCase();
+  return isJiraIssueKey(key) && projectKeys.includes(jiraProjectKeyOf(key)) ? key : null;
 }

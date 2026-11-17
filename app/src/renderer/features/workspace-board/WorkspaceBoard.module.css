@@ -29,3 +29,8 @@
   color: var(--primary-color, #0073ea);
   font-weight: 600;
 }
+
+/* Board search row (VERM-61) */
+.searchRow {
+  padding: 0 16px 8px;
+}

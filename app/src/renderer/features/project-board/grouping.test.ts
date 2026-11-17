@@ -17,6 +17,7 @@ import {
   matchesAssignee,
   assigneeOptions,
   assigneeLabel,
+  assigneeNames,
   type FilterState,
 } from './grouping';
 
@@ -242,6 +243,41 @@ describe('assigneeOptions', () => {
     expect(assigneeLabel(ASSIGNEE_ME)).toBe('Me');
     expect(assigneeLabel(ASSIGNEE_UNASSIGNED)).toBe('Unassigned');
     expect(assigneeLabel('alice')).toBe('alice');
+  });
+});
+
+describe('assignee display names (Jira accountIds)', () => {
+  const withName = (id: string, accountId: string | null, name: string | null): BoardIssue =>
+    ({ ...issue(id, { assignee: accountId }), assigneeName: name });
+  const issues = [withName('a', 'acc-z', 'Zed'), withName('b', 'acc-a', 'Amy'), withName('c', 'acc-me', 'Me Myself'), withName('d', null, null)];
+
+  it('collects names by accountId and labels pills with them', () => {
+    const names = assigneeNames(issues);
+    expect(names).toEqual({ 'acc-z': 'Zed', 'acc-a': 'Amy', 'acc-me': 'Me Myself' });
+    expect(assigneeLabel('acc-a', names)).toBe('Amy');
+    expect(assigneeLabel(ASSIGNEE_ME, names)).toBe('Me');
+  });
+
+  it('orders the other assignees by display name, not by accountId', () => {
+    expect(assigneeOptions(issues, 'acc-me')).toEqual([ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, 'acc-a', 'acc-z']);
+  });
+
+  it('Me matches the configured accountId', () => {
+    const f: FilterState = { ...EMPTY_FILTER, assignee: [ASSIGNEE_ME] };
+    expect(applyFilter(issues, f, 'acc-me').map((i) => i.id)).toEqual(['c']);
+  });
+});
+
+describe('applyFilter (board search text with assignee)', () => {
+  it('matches key or summary, ignoring case, ANDed with the assignee', () => {
+    const issues = [
+      issue('demo-101', { assignee: 'kevin' }, 'Rotate the staging credentials'),
+      issue('demo-102', { assignee: 'alice' }, 'Rotate the backups'),
+      issue('ops-7', { assignee: null }, 'Review thresholds'),
+    ];
+    expect(applyFilter(issues, { ...EMPTY_FILTER, search: 'ROTATE' }).map((i) => i.id)).toEqual(['demo-101', 'demo-102']);
+    expect(applyFilter(issues, { ...EMPTY_FILTER, search: 'ops-7' }).map((i) => i.id)).toEqual(['ops-7']);
+    expect(applyFilter(issues, { ...EMPTY_FILTER, search: 'rotate', assignee: [ASSIGNEE_ME] }, 'kevin').map((i) => i.id)).toEqual(['demo-101']);
   });
 });
 

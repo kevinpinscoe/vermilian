@@ -34,6 +34,7 @@ import {
   assigneeOptions, assigneeLabel,
 } from './grouping';
 import { useConfig } from '../settings/api';
+import { ASSIGNEE_PILL_COLOR } from './FilterPills';
 import styles from './ProjectBoard.module.css';
 
 interface FilterSectionProps {
@@ -82,9 +83,6 @@ interface FilterBarProps {
   myLogin: string;
 }
 
-// Assignee pills share one neutral colour — there is no per-person palette.
-const ASSIGNEE_PILL_COLOR = '#676879';
-
 function FilterBar({ issues, filter, colors, onChange, searchRef, myLogin }: FilterBarProps) {
   const statusVals   = orderedUnique(issues.map((i) => i.fields.status),   STATUS_ORDER);
   const priorityVals = orderedUnique(issues.map((i) => i.fields.priority), PRIORITY_OPTIONS);
@@ -122,7 +120,7 @@ function FilterBar({ issues, filter, colors, onChange, searchRef, myLogin }: Fil
       <FilterSection
         label="Assignee" values={assigneeVals} active={filter.assignee}
         colorMap={Object.fromEntries(assigneeVals.map((v) => [v, ASSIGNEE_PILL_COLOR]))}
-        onToggle={(v) => toggle('assignee', v)} displayValue={assigneeLabel}
+        onToggle={(v) => toggle('assignee', v)} displayValue={(v) => assigneeLabel(v)}
       />
       <span className={styles.filterSep} />
       <div className={styles.filterSection} data-testid="filter-due">

@@ -185,3 +185,8 @@
   border-radius: 4px;
   font: inherit;
 }
+
+/* Board search row (VERM-61) */
+.searchRow {
+  padding: 0 0 8px;
+}

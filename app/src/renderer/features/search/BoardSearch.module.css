@@ -1,0 +1,11 @@
+.container {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--secondary-text-color);
+}
