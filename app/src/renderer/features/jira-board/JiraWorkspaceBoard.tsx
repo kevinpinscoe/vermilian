@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
 import { formatDate } from '../project-board/KanbanView';
-import { jiraBoardColumns } from './jiraBoard';
+import { describeHiddenColumns, jiraBoardColumns, splitHiddenColumns } from './jiraBoard';
+import { JiraColumnsMenu } from './JiraColumnsMenu';
 import { JiraReconnect } from './JiraReconnect';
 import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
@@ -22,6 +23,10 @@ interface JiraWorkspaceBoardProps {
   projectKeys: string[];
   // Jira boards chosen alongside the projects (VERM-59).
   boards?: WorkspaceJiraBoard[];
+  // Status columns the workspace hides (VERM-60), and the hook to reload the
+  // workspace once the Columns menu saves a new choice.
+  hiddenStatuses?: string[];
+  onHiddenStatusesSaved?: () => void;
   onChooseProjects: () => void;
   selectedIssueKey?: string | null;
   // Opens the read-only detail panel (VERM-35).
@@ -43,6 +48,8 @@ export function JiraWorkspaceBoard({
   workspaceName,
   projectKeys,
   boards = [],
+  hiddenStatuses = [],
+  onHiddenStatusesSaved = () => undefined,
   onChooseProjects,
   selectedIssueKey = null,
   onSelectIssue,
@@ -99,6 +106,11 @@ export function JiraWorkspaceBoard({
   // Columns come from every loaded issue, so they keep their order and place
   // while a filter empties some of them; each shows "N of M" while filtering.
   const columns = useMemo(() => jiraBoardColumns(issues, priorities), [issues, priorities]);
+  // Columns the workspace hides, counted rather than dropped (VERM-60).
+  const { shown: shownColumns, hidden: hiddenColumns } = useMemo(
+    () => splitHiddenColumns(columns, hiddenStatuses),
+    [columns, hiddenStatuses],
+  );
   const filtering = filter.search.trim() !== '' || filter.assignee.length > 0;
   const visible = useMemo(() => new Set(applyFilter(issues, filter, myAccountId).map((i) => i.id)), [issues, filter, myAccountId]);
   const searchMatchCount = useMemo(
@@ -123,6 +135,12 @@ export function JiraWorkspaceBoard({
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} data-testid="jira-show-done" />
           Show done
         </label>
+        <JiraColumnsMenu
+          workspaceId={workspaceId}
+          statuses={columns.map((c) => c.status)}
+          hidden={hiddenStatuses}
+          onSaved={onHiddenStatusesSaved}
+        />
         <Button kind="tertiary" size="small" data-testid="choose-jira-projects-btn" onClick={onChooseProjects}>
           Choose projects and boards…
         </Button>
@@ -160,6 +178,11 @@ export function JiraWorkspaceBoard({
               )}
             </div>
           )}
+          {hiddenColumns.length > 0 && (
+            <div className={styles.hiddenColumns} data-testid="jira-hidden-columns">
+              {describeHiddenColumns(hiddenColumns)}
+            </div>
+          )}
           {notices.length > 0 && (
             <div className={styles.projects} role="status" data-testid="jira-board-notice">
               {notices.map((n) => <div key={n}>{n}</div>)}
@@ -174,7 +197,7 @@ export function JiraWorkspaceBoard({
             <div className={styles.empty}><Loader size="small" /></div>
           ) : (
             <div className={styles.columns}>
-              {columns.map((col) => {
+              {shownColumns.map((col) => {
                 const shown = filtering ? col.issues.filter((i) => visible.has(i.id)) : col.issues;
                 return (
                 <section key={col.status} className={styles.column} data-testid="jira-column" data-status={col.status} data-role={col.role ?? ''}>

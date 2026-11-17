@@ -696,3 +696,25 @@ describe('jiraBoards', () => {
     expect(parsed.ok && parsed.document.jiraBoards).toEqual([{ id: 12, name: 'SRE planned work' }]);
   });
 });
+
+// ─── Hidden Jira columns (VERM-60) ───────────────────────────────────────────
+
+describe('jiraHiddenStatuses', () => {
+  it('accepts status names on a Jira workspace and survives a round trip', () => {
+    const doc = jiraDoc({ jiraHiddenStatuses: ['Blocked', 'Waiting for customer'] });
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    expect(parsed.ok && parsed.document.jiraHiddenStatuses).toEqual(['Blocked', 'Waiting for customer']);
+  });
+
+  it('refuses them on a YouTrack workspace', () => {
+    expect(paths(validateWorkspaceDocument(youtrackDoc({ jiraHiddenStatuses: ['Blocked'] })))).toContain('jiraHiddenStatuses');
+  });
+
+  it('refuses blank, duplicate, overlong and non-string entries', () => {
+    const doc = jiraDoc({ jiraHiddenStatuses: ['', 'Blocked', 'Blocked', 'x'.repeat(256), 7 as unknown as string] });
+    expect(paths(validateWorkspaceDocument(doc))).toEqual(
+      expect.arrayContaining(['jiraHiddenStatuses[0]', 'jiraHiddenStatuses[2]', 'jiraHiddenStatuses[3]', 'jiraHiddenStatuses[4]']),
+    );
+  });
+});

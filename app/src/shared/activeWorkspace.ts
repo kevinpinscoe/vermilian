@@ -90,6 +90,7 @@ export function workspacesFromDocuments(docs: readonly WorkspaceDocument[]): Wor
     .map((d) => ({
       id: d.workspaceId, name: d.name, order: d.order, folders: d.folders,
       ...(d.jiraBoards?.length ? { jiraBoards: d.jiraBoards } : {}),
+      ...(d.jiraHiddenStatuses?.length ? { jiraHiddenStatuses: d.jiraHiddenStatuses } : {}),
     }));
 }
 

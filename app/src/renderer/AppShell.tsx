@@ -183,6 +183,11 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
     () => workspaceConfig.data?.workspaces.find((w) => w.id === activeContext.data?.workspaceId)?.jiraBoards ?? [],
     [workspaceConfig.data, activeContext.data?.workspaceId],
   );
+  // Status columns the active Jira workspace hides (VERM-60).
+  const activeJiraHiddenStatuses = useMemo(
+    () => workspaceConfig.data?.workspaces.find((w) => w.id === activeContext.data?.workspaceId)?.jiraHiddenStatuses ?? [],
+    [workspaceConfig.data, activeContext.data?.workspaceId],
+  );
   const setActiveWorkspaceInStore = useWorkspaceStore((s) => s.setActiveWorkspace);
 
   const timer = useTimerStore((s) => s.timer);
@@ -611,6 +616,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               workspaceName={activeContext.data.workspaceName}
               projectKeys={activeJiraProjectKeys}
               boards={activeJiraBoards}
+              hiddenStatuses={activeJiraHiddenStatuses}
+              onHiddenStatusesSaved={() => void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY })}
               onChooseProjects={() => setShowJiraProjects(true)}
               selectedIssueKey={openJiraIssueKey}
               onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}

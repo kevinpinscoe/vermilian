@@ -126,9 +126,11 @@ describe('per-workspace documents', () => {
   });
 
   it("carry a Jira workspace's chosen boards, and nothing for others (VERM-59)", () => {
-    const withBoards = [{ ...docs[0], jiraBoards: [{ id: 12, name: 'Planned' }] }, docs[1]];
+    const withBoards = [{ ...docs[0], jiraBoards: [{ id: 12, name: 'Planned' }], jiraHiddenStatuses: ['Blocked'] }, docs[1]];
     const [yt, j] = workspacesFromDocuments(withBoards);
     expect(j.jiraBoards).toEqual([{ id: 12, name: 'Planned' }]);
+    expect(j.jiraHiddenStatuses).toEqual(['Blocked']);
+    expect('jiraHiddenStatuses' in yt).toBe(false);
     expect('jiraBoards' in yt).toBe(false);
   });
 

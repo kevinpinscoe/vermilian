@@ -7,6 +7,7 @@ import {
   buildWorkspaceDocument,
   nextWorkspaceOrder,
   withJiraBoards,
+  withJiraHiddenStatuses,
   withJiraProjects,
   type NewWorkspaceInput,
 } from './workspaceSetup';
@@ -218,5 +219,23 @@ describe('withJiraBoards — choosing a Jira workspace\'s boards (VERM-59)', () 
     const doc = withJiraBoards(built(JIRA), [{ id: 12, name: 'Planned' }]);
     const asYouTrack = { ...doc, backend: built(YT).backend } as WorkspaceDocument;
     expect(backendChangeProblem(doc, asYouTrack)).toMatch(/Jira boards/);
+  });
+});
+
+describe('withJiraHiddenStatuses (VERM-60)', () => {
+  it('sets the hidden statuses, trimmed and without blanks or duplicates', () => {
+    const doc = withJiraHiddenStatuses(built(JIRA), [' Blocked ', 'Waiting', '', 'Blocked']);
+    expect(doc.jiraHiddenStatuses).toEqual(['Blocked', 'Waiting']);
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+  });
+
+  it('drops the field when nothing is hidden', () => {
+    expect('jiraHiddenStatuses' in withJiraHiddenStatuses(withJiraHiddenStatuses(built(JIRA), ['Blocked']), [])).toBe(false);
+  });
+
+  it('refuses a YouTrack workspace, and counts hidden columns in the backend-change guard', () => {
+    expect(() => withJiraHiddenStatuses(built(YT), ['Blocked'])).toThrow(WorkspaceSetupError);
+    const doc = withJiraHiddenStatuses(built(JIRA), ['Blocked']);
+    expect(backendChangeProblem(doc, { ...doc, backend: built(YT).backend } as WorkspaceDocument)).toMatch(/hidden Jira columns/);
   });
 });

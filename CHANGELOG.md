@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hide status columns on a Jira board** (VERM-60). A **Columns…** menu in the Jira board
+  header lists every status column with a checkbox; unchecked columns are hidden. The choice is
+  saved in the workspace, so it applies on every computer. Hidden columns are never silent: a
+  line under the board names them with their issue counts, such as "1 hidden: Blocked (4)".
+
 - **Jira workspaces can choose Jira boards** (VERM-59), not only projects. The picker
   (**Choose projects and boards…**) lists the boards your Jira account can see, from the Agile
   API, read-only. A chosen board shows the issues its own saved filter picks, from any project,

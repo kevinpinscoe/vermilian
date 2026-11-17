@@ -151,6 +151,21 @@ export function withJiraBoards(doc: WorkspaceDocument, boards: readonly Workspac
 }
 
 /**
+ * The workspace with exactly `statuses` hidden from its Jira board (VERM-60):
+ * trimmed, without blanks or duplicates, in the given order.
+ *
+ * Throws WorkspaceSetupError for a workspace that is not Jira-backed.
+ */
+export function withJiraHiddenStatuses(doc: WorkspaceDocument, statuses: readonly string[]): WorkspaceDocument {
+  if (doc.backend.kind !== 'jira') {
+    throw new WorkspaceSetupError('Board columns can only be hidden on a Jira workspace.');
+  }
+  const hidden = [...new Set(statuses.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean))];
+  const { jiraHiddenStatuses: _old, ...rest } = doc;
+  return hidden.length ? { ...rest, jiraHiddenStatuses: hidden } : rest;
+}
+
+/**
  * Why `edited` may not replace `base`, or null when it may. A change of
  * backend kind is refused while the workspace holds anything configured for
  * the old backend; the message says what to do instead. A change within the
@@ -161,6 +176,7 @@ export function backendChangeProblem(base: WorkspaceDocument, edited: WorkspaceD
   const held: string[] = [];
   if (workspaceProjectIds(base).length) held.push('projects');
   if (base.jiraBoards?.length) held.push('Jira boards');
+  if (base.jiraHiddenStatuses?.length) held.push('hidden Jira columns');
   if (Object.keys(base.boards ?? {}).length) held.push('board settings');
   if (Object.keys(base.jiraProjects ?? {}).length) held.push('Jira project settings');
   if (Object.keys(base.dismissals ?? {}).length) held.push('"Not this week" dismissals');

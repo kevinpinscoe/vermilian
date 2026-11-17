@@ -129,6 +129,8 @@ function documentShape(
     jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
     // One ordered selection, merged as a whole like a view (VERM-59).
     jiraBoards: LEAF,
+    // One choice, merged as a whole (VERM-60).
+    jiraHiddenStatuses: LEAF,
   });
 }
 
