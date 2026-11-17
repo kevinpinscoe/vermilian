@@ -50,7 +50,12 @@ export function friendlyClaudeError(raw?: string): string {
 export function describeJiraTest(res: TestJiraResult): string {
   if (res.ok) {
     const how = res.kind === 'classic' ? 'classic API token, via the site URL' : 'scoped API token, via the api.atlassian.com gateway';
-    return `Connected — logged in as ${res.displayName || 'user'} (${how}).`;
+    const connected = `Connected — logged in as ${res.displayName || 'user'} (${how}).`;
+    // A scoped token can log in and still lack a scope a read needs (VERM-59).
+    const missing = res.missingScopes ?? [];
+    return missing.length
+      ? `${connected} But the token is missing ${missing.join(' and ')}, so some reads will fail. Add ${missing.length > 1 ? 'those scopes' : 'that scope'} to the token.`
+      : connected;
   }
   if (res.reason === 'error' && !res.status) {
     return 'Could not reach Jira. Check the site URL and your network.';

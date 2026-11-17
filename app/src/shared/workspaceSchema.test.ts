@@ -11,6 +11,7 @@ import {
   serialiseNewWorkspaceDocument,
   serialiseUpdatedWorkspaceDocument,
   validateWorkspaceDocument,
+  workspaceBoardIds,
   workspaceProjectIds,
   type WorkspaceDocument,
 } from './workspaceSchema';
@@ -665,5 +666,33 @@ describe('jiraProjects — per-project status mapping and due-date field (VERM-3
     const edited = { ...parsed.document, jiraProjects: { DEMO: { dueDateField: 'customfield_10042' } } };
     const out = JSON.parse(serialiseUpdatedWorkspaceDocument(parsed.source, edited));
     expect(out.jiraProjects.DEMO).toEqual({ dueDateField: 'customfield_10042', flaggedField: 'customfield_1' });
+  });
+});
+
+// ─── Jira boards (VERM-59) ───────────────────────────────────────────────────
+
+describe('jiraBoards', () => {
+  it('accepts chosen boards on a Jira workspace and reads their IDs in order', () => {
+    const doc = jiraDoc({ jiraBoards: [{ id: 13, name: 'SRE ops' }, { id: 12, name: 'SRE planned work' }] });
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+    expect(workspaceBoardIds(doc)).toEqual([13, 12]);
+    expect(workspaceBoardIds(jiraDoc())).toEqual([]);
+  });
+
+  it('refuses boards on a YouTrack workspace', () => {
+    expect(paths(validateWorkspaceDocument(youtrackDoc({ jiraBoards: [{ id: 1, name: 'B' }] })))).toContain('jiraBoards');
+  });
+
+  it('refuses an invalid or duplicate board ID, and a non-string name', () => {
+    const doc = jiraDoc({ jiraBoards: [{ id: 0, name: 'Zero' }, { id: 7, name: 'A' }, { id: 7, name: 'B' }, { id: 8, name: 3 as unknown as string }] });
+    expect(paths(validateWorkspaceDocument(doc))).toEqual(
+      expect.arrayContaining(['jiraBoards[0].id', 'jiraBoards[2].id', 'jiraBoards[3].name']),
+    );
+  });
+
+  it('survives a parse and serialise round trip', () => {
+    const doc = jiraDoc({ jiraBoards: [{ id: 12, name: 'SRE planned work' }] });
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    expect(parsed.ok && parsed.document.jiraBoards).toEqual([{ id: 12, name: 'SRE planned work' }]);
   });
 });

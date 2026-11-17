@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Jira workspaces can choose Jira boards** (VERM-59), not only projects. The picker
+  (**Choose projects and boards…**) lists the boards your Jira account can see, from the Agile
+  API, read-only. A chosen board shows the issues its own saved filter picks, from any project,
+  so a team can work from one board when several share a project. Boards and projects can be
+  combined; an issue in both shows once, and its Priority Desk star and rank are shared. The
+  incremental poll, Show done, the board search and the detail panel all work for board issues.
+  Vermilian only reads boards the workspace chose, and opens an issue outside its projects only
+  when Jira confirms it is on one of those boards.
+- **Test connection names missing Jira token scopes** (VERM-59). A scoped token needs
+  `read:jira-work`, and `read:board-scope:jira-software` for boards; Settings and the connection
+  docs now say so.
 - **Search above the board** (VERM-61). The All tasks board and Jira workspace boards have
   a search box above the cards. Typing filters the loaded cards by key or summary at once;
   Enter, or a term no loaded card matches, searches the backend and lists issues that are

@@ -116,6 +116,17 @@ server in Vermilian's main settings. This holds whichever backend the workspace 
 - The workspace's projects are its folders' `projectIds`: YouTrack project IDs or Jira project
   keys, each in exactly one folder. Folders are the single project-selection structure for both
   backends; there is no second project list.
+- A Jira workspace may also choose **Jira boards** (VERM-59), in an optional `jiraBoards` list of
+  `{ "id": <board ID>, "name": "<display snapshot>" }`, in display order. A board is not a project:
+  its saved filter decides which issues it shows, from any project, so it cannot live in folders'
+  `projectIds`. It is a separate field also because older clients validate every `projectIds`
+  entry as a project key and would reject the whole document; a new field is instead ignored and
+  written back unchanged (the rule below). The workspace's reach is its projects **and** its boards:
+  an issue outside its projects is read only when Jira confirms it is on one of its boards, and a
+  board is read only when the workspace has chosen it. Board reads use the Agile API, read-only;
+  scoped tokens need `read:board-scope:jira-software` as well as `read:jira-work`. Runway metadata
+  stays keyed by `jira:<KEY>`, so an issue on two boards, or on a board and in a project, has one
+  entry.
 - Only known fields are interpreted or used. A field this version does not know is never read,
   but it is written back unchanged whenever an existing workspace article is updated, so an older
   client does not drop configuration a newer one added.

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { standupAvailability } from '../shared/standup';
 import { useWorkspaceAi } from './features/workspace-nav/useWorkspaceAi';
 import { Text, Button, Tooltip, IconButton, AttentionBox } from '@vibe/core';
@@ -178,6 +178,11 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
       ?.folders.slice()
       .sort((a, b) => a.order - b.order)
       .flatMap((f) => f.projectIds) ?? [];
+  // The active Jira workspace's chosen boards, in their order (VERM-59).
+  const activeJiraBoards = useMemo(
+    () => workspaceConfig.data?.workspaces.find((w) => w.id === activeContext.data?.workspaceId)?.jiraBoards ?? [],
+    [workspaceConfig.data, activeContext.data?.workspaceId],
+  );
   const setActiveWorkspaceInStore = useWorkspaceStore((s) => s.setActiveWorkspace);
 
   const timer = useTimerStore((s) => s.timer);
@@ -201,7 +206,9 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
     activeContext.data?.backend?.kind === 'jira' &&
     activeContext.data.storage === 'per-workspace' &&
     activeContext.data.workspaceId === selectedJiraIssue.workspaceId &&
-    activeJiraProjectKeys.includes(jiraProjectKeyOf(selectedJiraIssue.issueKey))
+    // An issue on one of the chosen boards can come from any project; the
+    // main process checks its board membership when the panel reads it.
+    (activeJiraBoards.length > 0 || activeJiraProjectKeys.includes(jiraProjectKeyOf(selectedJiraIssue.issueKey)))
       ? selectedJiraIssue.issueKey
       : null;
   const closeJiraIssue = useCallback(() => setSelectedJiraIssue(null), []);
@@ -594,6 +601,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               workspaceId={activeContext.data.workspaceId}
               workspaceName={activeContext.data.workspaceName}
               projectKeys={activeJiraProjectKeys}
+              boards={activeJiraBoards}
               onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}
               onOpenSettings={onOpenSettings}
             />
@@ -602,6 +610,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               workspaceId={activeContext.data.workspaceId}
               workspaceName={activeContext.data.workspaceName}
               projectKeys={activeJiraProjectKeys}
+              boards={activeJiraBoards}
               onChooseProjects={() => setShowJiraProjects(true)}
               selectedIssueKey={openJiraIssueKey}
               onSelectIssue={(issueKey) => setSelectedJiraIssue({ workspaceId: activeContext.data!.workspaceId, issueKey })}

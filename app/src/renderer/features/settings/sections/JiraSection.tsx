@@ -78,7 +78,10 @@ export function JiraSection({ draft, update, hasToken, onTest, test }: Props) {
       {/* Credential source — priority 3 */}
       <div className={styles.field}>
         <Text weight="bold">Source 3: Paste token (saved to OS keyring)</Text>
-        <Text>Used only if Sources 1 and 2 are blank or fail. A classic or scoped API token both work.</Text>
+        <Text>
+          Used only if Sources 1 and 2 are blank or fail. A classic or scoped API token both work. A scoped token needs
+          read:jira-work, and read:board-scope:jira-software to use Jira boards; Test connection checks both.
+        </Text>
         <div className={styles.inline}>
           <span className={styles.grow}>
             <TextField

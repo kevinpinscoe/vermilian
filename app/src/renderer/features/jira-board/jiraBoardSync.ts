@@ -29,14 +29,22 @@ import {
   reconcileFullRefresh,
   type JiraMergeScope,
 } from '../../../shared/jiraPoll';
+import { jiraSourceArgs, parseJiraSource } from '../../../shared/jiraSource';
 
-export const workspaceJiraIssuesQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
-  ['workspace', 'jira-issues', workspaceId, projectKey, includeResolved] as const;
+// `source` is a project key or a board's "board:<id>" (shared/jiraSource.ts).
+export const workspaceJiraIssuesQueryKey = (workspaceId: string, source: string, includeResolved: boolean) =>
+  ['workspace', 'jira-issues', workspaceId, source, includeResolved] as const;
 
-export const workspaceJiraPollQueryKey = (workspaceId: string, projectKey: string, includeResolved: boolean) =>
-  ['workspace', 'jira-poll', workspaceId, projectKey, includeResolved] as const;
+export const workspaceJiraPollQueryKey = (workspaceId: string, source: string, includeResolved: boolean) =>
+  ['workspace', 'jira-poll', workspaceId, source, includeResolved] as const;
 
-/** Every board issue list of one workspace, whichever project or Show done setting. */
+/** The merge scope of one source's list. */
+function scopeOf(source: string, includeResolved: boolean): JiraMergeScope {
+  const s = parseJiraSource(source);
+  return s.kind === 'board' ? { boardId: s.boardId, includeResolved } : { projectKey: s.projectKey, includeResolved };
+}
+
+/** Every board issue list of one workspace, whichever source or Show done setting. */
 export const workspaceJiraIssuesPrefix = (workspaceId: string) => ['workspace', 'jira-issues', workspaceId] as const;
 
 // When the last successful sync of each board query *started*, and when its
@@ -82,26 +90,26 @@ function markSynced(s: SyncState, startedAt: number): void {
 }
 
 /**
- * The full read of one project, reconciled into what is cached: the result
- * decides which issues exist, and a newer cached copy of an issue is kept
- * over an older one from the search.
+ * The full read of one source (a project or a board), reconciled into what is
+ * cached: the result decides which issues exist, and a newer cached copy of
+ * an issue is kept over an older one from the search.
  */
 export async function fetchFullJiraIssues(
   queryClient: QueryClient,
   workspaceId: string,
-  projectKey: string,
+  source: string,
   includeResolved: boolean,
   signal?: AbortSignal,
 ): Promise<GetWorkspaceJiraIssuesResult> {
-  const key = workspaceJiraIssuesQueryKey(workspaceId, projectKey, includeResolved);
+  const key = workspaceJiraIssuesQueryKey(workspaceId, source, includeResolved);
   const s = syncState(key);
   const startedAt = Date.now();
   s.lastFullStartedAt = startedAt;
-  const res = await window.vermilian.getWorkspaceJiraIssues({ workspaceId, projectKey, includeResolved });
+  const res = await window.vermilian.getWorkspaceJiraIssues({ workspaceId, ...jiraSourceArgs(source), includeResolved });
   if (!res.ok) return res;
   const prev = queryClient.getQueryData<GetWorkspaceJiraIssuesResult>(key);
   const protectedIds = protectedIssueIds(workspaceId, Date.now());
-  const issues = reconcileFullRefresh(prev?.ok ? prev.issues : undefined, res.issues, { projectKey, includeResolved }, protectedIds);
+  const issues = reconcileFullRefresh(prev?.ok ? prev.issues : undefined, res.issues, scopeOf(source, includeResolved), protectedIds);
   // An issue the search lists has been indexed: it needs no more protection.
   const reads = directReads.get(workspaceId);
   if (reads) for (const i of res.issues) reads.delete(i.id);
@@ -112,15 +120,19 @@ export async function fetchFullJiraIssues(
 /**
  * Merges recently updated or directly read issues into every cached board
  * list of one workspace. An issue that moved between two of the workspace's
- * projects leaves one list and joins the other.
+ * projects leaves one list and joins the other. A board's list gains new
+ * issues only from its own board's poll (`origin`, VERM-59); updates from
+ * elsewhere refresh or remove the cards it already shows.
  */
-export function applyJiraUpdates(queryClient: QueryClient, workspaceId: string, updates: readonly BoardIssue[]): void {
+export function applyJiraUpdates(queryClient: QueryClient, workspaceId: string, updates: readonly BoardIssue[], origin?: string): void {
   if (updates.length === 0) return;
   for (const [key, data] of queryClient.getQueriesData<GetWorkspaceJiraIssuesResult>({ queryKey: workspaceJiraIssuesPrefix(workspaceId) })) {
     if (!data || !data.ok) continue;
     const list: JiraIssuesOk = data;
-    const scope: JiraMergeScope = { projectKey: String(key[3]), includeResolved: key[4] === true };
-    const merged = mergeRecentlyUpdated(list.issues, updates, scope);
+    const source = String(key[3]);
+    const scope = scopeOf(source, key[4] === true);
+    const addNew = scope.boardId === undefined || source === origin;
+    const merged = mergeRecentlyUpdated(list.issues, updates, scope, addNew);
     if (merged !== list.issues) {
       const next: JiraIssuesOk = { ...list, issues: merged };
       queryClient.setQueryData<GetWorkspaceJiraIssuesResult>(key, next);
@@ -149,7 +161,7 @@ export function applyJiraDirectRead(queryClient: QueryClient, workspaceId: strin
 export type JiraPollOutcome = 'merged' | 'full-refresh' | 'skipped';
 
 /**
- * One incremental poll of one project. Skips when a full read of it is
+ * One incremental poll of one source (a project or a board). Skips when a full read of it is
  * already running or it has no list yet; runs a full read instead when the
  * chain is broken (needsFullRefresh: first sync, sleep, a hidden window, a
  * missed window); otherwise merges what changed in the lookback window.
@@ -160,11 +172,11 @@ export type JiraPollOutcome = 'merged' | 'full-refresh' | 'skipped';
 export async function pollJiraProject(
   queryClient: QueryClient,
   workspaceId: string,
-  projectKey: string,
+  source: string,
   includeResolved: boolean,
   signal?: AbortSignal,
 ): Promise<JiraPollOutcome> {
-  const listKey = workspaceJiraIssuesQueryKey(workspaceId, projectKey, includeResolved);
+  const listKey = workspaceJiraIssuesQueryKey(workspaceId, source, includeResolved);
   if (queryClient.isFetching({ queryKey: listKey, exact: true }) > 0) return 'skipped';
   if (!queryClient.getQueryData(listKey)) return 'skipped';
 
@@ -175,7 +187,7 @@ export async function pollJiraProject(
     return 'full-refresh';
   }
 
-  const res = await window.vermilian.getWorkspaceJiraRecentlyUpdated({ workspaceId, projectKey });
+  const res = await window.vermilian.getWorkspaceJiraRecentlyUpdated({ workspaceId, ...jiraSourceArgs(source) });
   if (signal?.aborted) return 'skipped';
   if (!res.ok) {
     if (needsJiraReconnect(res)) void queryClient.refetchQueries({ queryKey: listKey, exact: true });
@@ -184,7 +196,7 @@ export async function pollJiraProject(
   // A full read that started after this poll is at least as current; this
   // answer could only bring back an issue it removed.
   if ((s.lastFullStartedAt ?? 0) > startedAt) return 'skipped';
-  applyJiraUpdates(queryClient, workspaceId, res.issues);
+  applyJiraUpdates(queryClient, workspaceId, res.issues, source);
   markSynced(s, startedAt);
   return 'merged';
 }

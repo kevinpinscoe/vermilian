@@ -13,11 +13,20 @@ export interface WorkspaceFolder {
   projectIds: string[];
 }
 
+/** A Jira board chosen for a workspace (VERM-59). */
+export interface WorkspaceJiraBoard {
+  id: number;
+  name: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   order: number;
   folders: WorkspaceFolder[];
+  // Read-only here: per-workspace Jira documents only (VERM-59). The rail
+  // layout save writes folders alone and never this.
+  jiraBoards?: WorkspaceJiraBoard[];
 }
 
 export interface VermilianConfig {

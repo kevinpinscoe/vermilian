@@ -935,8 +935,10 @@ export function WorkspaceNav({
 
   // Drives the empty hint: a workspace can hold folders and still show no
   // projects, so count projects rather than folders.
+  // A Jira workspace's chosen boards count too (VERM-59).
   const workspaceProjectCount =
-    activeWorkspace?.folders.reduce((n, f) => n + f.projectIds.length, 0) ?? 0;
+    (activeWorkspace?.folders.reduce((n, f) => n + f.projectIds.length, 0) ?? 0) +
+    (activeWorkspace?.jiraBoards?.length ?? 0);
 
   // Projects in YouTrack but not assigned to any folder
   const assignedIds = config ? allAssignedProjectIds(config) : new Set<string>();
@@ -1225,7 +1227,7 @@ export function WorkspaceNav({
                     className={styles.addFolderBtn}
                     onClick={onChooseJiraProjects}
                   >
-                    + Choose Jira projects
+                    + Choose Jira projects or boards
                   </button>
                 ) : (
                   <button

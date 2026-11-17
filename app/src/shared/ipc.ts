@@ -97,6 +97,8 @@ export const IPC = {
   getCredentialRefStatus: 'credentialRefs:status',
   // A Jira workspace's selectable projects, read with its own credential (VERM-33).
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
+  // The boards the workspace's account can see, read with its own credential (VERM-59).
+  listWorkspaceJiraBoards: 'workspaceJira:listBoards',
   // One of a Jira workspace's projects, read-only, for its board (VERM-34).
   getWorkspaceJiraIssues: 'workspaceJira:getIssues',
   getWorkspaceJiraRecentlyUpdated: 'workspaceJira:getRecentlyUpdated',
@@ -173,22 +175,41 @@ export type CredentialRefWriteResult =
     };
 
 /** Whether a workspace's credential resolves on this host — never the value (VERM-45). */
+// One source of a Jira workspace's board: a chosen project (projectKey) or,
+// with boardId, a chosen Jira board (VERM-59), whose issues may come from any
+// project. Exactly one of the two is used; boardId wins when both are given.
 export interface GetWorkspaceJiraIssuesArgs {
   workspaceId: string;
-  projectKey: string;
+  projectKey?: string;
+  boardId?: number;
   includeResolved?: boolean;
 }
 
 export type GetWorkspaceJiraIssuesResult =
-  // priorities: the project's values, most urgent first ([] when unknown).
-  | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[] }
+  // priorities: the project's values, most urgent first ([] when unknown, and
+  // [] for a board). prioritiesByProject: for a board, each project its
+  // issues come from (VERM-59).
+  | { ok: true; issues: import('./workspace').BoardIssue[]; priorities: string[]; prioritiesByProject?: Record<string, string[]> }
   | import('./jiraConnection').WorkspaceJiraFailure;
 
-/** One project's recently updated issues — the board's incremental poll (VERM-39). */
+/** One source's recently updated issues — the board's incremental poll (VERM-39). */
 export interface GetWorkspaceJiraRecentlyUpdatedArgs {
   workspaceId: string;
-  projectKey: string;
+  projectKey?: string;
+  boardId?: number;
 }
+
+/** A Jira board the workspace's account can see, for the picker (VERM-59). */
+export interface WorkspaceJiraBoardOption {
+  id: number;
+  name: string;
+  type: string;
+  projectKey: string; // the board's location project, '' when none
+}
+
+export type ListWorkspaceJiraBoardsResult =
+  | { ok: true; boards: WorkspaceJiraBoardOption[] }
+  | import('./jiraConnection').WorkspaceJiraFailure;
 
 export type GetWorkspaceJiraRecentlyUpdatedResult =
   // Resolved issues included: the renderer drops them when Show done is off.
@@ -272,7 +293,9 @@ export interface TestJiraArgs {
 // Mirrors JiraProbeResult (main/api/jira.ts) plus a 'no-token' / 'invalid-profile'
 // pre-check. cloudId is the detected or given value, so the form can fill it in.
 export type TestJiraResult =
-  | { ok: true; kind: 'classic' | 'scoped'; cloudId: string; displayName: string }
+  // missingScopes: scopes the token lacks for reads Vermilian makes (VERM-59);
+  // empty when none are missing or they could not be checked.
+  | { ok: true; kind: 'classic' | 'scoped'; cloudId: string; displayName: string; missingScopes?: string[] }
   | {
       ok: false;
       reason: 'unauthorized' | 'cloudid-unavailable' | 'error' | 'no-token' | 'invalid-profile';
@@ -728,6 +751,8 @@ export interface VermilianAPI {
   // The Jira projects a Jira workspace can choose from, listed through its own
   // connection and credential reference. Read-only; nothing is written to Jira.
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
+  // The Jira boards the workspace's account can see, read-only (VERM-59).
+  listWorkspaceJiraBoards(workspaceId: string): Promise<ListWorkspaceJiraBoardsResult>;
   // A Jira workspace project's issues and priority order, read-only (VERM-34).
   getWorkspaceJiraIssues(args: GetWorkspaceJiraIssuesArgs): Promise<GetWorkspaceJiraIssuesResult>;
   getWorkspaceJiraRecentlyUpdated(args: GetWorkspaceJiraRecentlyUpdatedArgs): Promise<GetWorkspaceJiraRecentlyUpdatedResult>;
@@ -741,7 +766,7 @@ export interface VermilianAPI {
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
   // e2e-only hooks on the fake Jira (VERM-39): see main/api/fakeJira.ts.
   debugJiraChange?(change: unknown): Promise<boolean>;
-  debugGetJiraCalls?(): Promise<Array<{ fn: string; projectKey?: string; key?: string; jql?: string; at: number }>>;
+  debugGetJiraCalls?(): Promise<Array<{ fn: string; projectKey?: string; key?: string; jql?: string; boardId?: number; at: number }>>;
   debugSetJiraSearchDelay?(ms: number): Promise<void>;
   // e2e-only (VERM-47): the credential reference each fake Claude call used.
   debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;

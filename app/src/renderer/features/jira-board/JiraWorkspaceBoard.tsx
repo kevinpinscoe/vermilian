@@ -12,12 +12,16 @@ import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/gr
 import { AssigneePills } from '../project-board/FilterPills';
 import { BoardSearch } from '../search/BoardSearch';
 import pbStyles from '../project-board/ProjectBoard.module.css';
+import { boardSourceId, jiraSourceIds } from '../../../shared/jiraSource';
+import type { WorkspaceJiraBoard } from '../../../shared/workspace';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraWorkspaceBoardProps {
   workspaceId: string;
   workspaceName: string;
   projectKeys: string[];
+  // Jira boards chosen alongside the projects (VERM-59).
+  boards?: WorkspaceJiraBoard[];
   onChooseProjects: () => void;
   selectedIssueKey?: string | null;
   // Opens the read-only detail panel (VERM-35).
@@ -38,6 +42,7 @@ export function JiraWorkspaceBoard({
   workspaceId,
   workspaceName,
   projectKeys,
+  boards = [],
   onChooseProjects,
   selectedIssueKey = null,
   onSelectIssue,
@@ -49,15 +54,18 @@ export function JiraWorkspaceBoard({
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
 
   const queryClient = useQueryClient();
-  const { results, issues, priorities, loading, failures, reconnect } = useJiraWorkspaceIssues(workspaceId, projectKeys, showDone);
+  // Every source of the board's issues: the projects, then the boards.
+  const sources = useMemo(() => jiraSourceIds(projectKeys, boards.map((b) => b.id)), [projectKeys, boards]);
+  const sourceNames = useMemo(() => Object.fromEntries(boards.map((b) => [boardSourceId(b.id), `Board "${b.name}"`])), [boards]);
+  const { results, issues, priorities, loading, failures, reconnect } = useJiraWorkspaceIssues(workspaceId, sources, showDone, sourceNames);
 
   // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
   // visible, once a project's list has loaded. It merges what changed into
   // the lists above and stores nothing of its own.
   useQueries({
-    queries: projectKeys.map((projectKey, i) => ({
-      queryKey: workspaceJiraPollQueryKey(workspaceId, projectKey, showDone),
-      queryFn: ({ signal }: { signal: AbortSignal }) => pollJiraProject(queryClient, workspaceId, projectKey, showDone, signal),
+    queries: sources.map((source, i) => ({
+      queryKey: workspaceJiraPollQueryKey(workspaceId, source, showDone),
+      queryFn: ({ signal }: { signal: AbortSignal }) => pollJiraProject(queryClient, workspaceId, source, showDone, signal),
       enabled: results[i]?.data?.ok === true,
       staleTime: JIRA_POLL_INTERVAL_MS,
       refetchInterval: JIRA_POLL_INTERVAL_MS,
@@ -84,7 +92,7 @@ export function JiraWorkspaceBoard({
     queryFn: () => window.vermilian.getWorkspaceJiraMyAccountId(workspaceId),
     staleTime: Infinity,
     retry: false,
-    enabled: projectKeys.length > 0,
+    enabled: sources.length > 0,
   });
   const myAccountId = myAccount.data?.ok ? myAccount.data.accountId : '';
 
@@ -116,19 +124,24 @@ export function JiraWorkspaceBoard({
           Show done
         </label>
         <Button kind="tertiary" size="small" data-testid="choose-jira-projects-btn" onClick={onChooseProjects}>
-          Choose Jira projects…
+          Choose projects and boards…
         </Button>
       </div>
 
       {reconnect ? (
         <JiraReconnect workspaceName={workspaceName} failure={reconnect} onRetry={retry} onOpenSettings={onOpenSettings} />
-      ) : projectKeys.length === 0 ? (
+      ) : sources.length === 0 ? (
         <div className={styles.empty} data-testid="jira-workspace-projects">
-          <Text type="text1">No Jira projects chosen yet.</Text>
+          <Text type="text1">No Jira projects or boards chosen yet.</Text>
         </div>
       ) : (
         <>
-          <div className={styles.projects} data-testid="jira-workspace-projects">Jira projects: {projectKeys.join(', ')}</div>
+          {projectKeys.length > 0 && (
+            <div className={styles.projects} data-testid="jira-workspace-projects">Jira projects: {projectKeys.join(', ')}</div>
+          )}
+          {boards.length > 0 && (
+            <div className={styles.projects} data-testid="jira-workspace-boards">Jira boards: {boards.map((b) => b.name).join(', ')}</div>
+          )}
           <div className={styles.searchRow}>
             <BoardSearch
               value={filter.search}

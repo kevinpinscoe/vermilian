@@ -75,14 +75,21 @@ export function compareUpdated(incoming: BoardIssue, existing: BoardIssue): Upda
   return a > b ? 'newer' : a < b ? 'older' : 'equal';
 }
 
-/** Which cached issue list a merge writes: one project's board query. */
+/**
+ * Which cached issue list a merge writes: one project's board query, or one
+ * Jira board's (VERM-59). A project list decides membership by the issue's
+ * key; a board list cannot — its saved filter lives in Jira — so it treats
+ * every issue as a member and only ever gains issues from its own board's
+ * reads (`addNew`, mergeRecentlyUpdated). Its full read settles the rest.
+ */
 export interface JiraMergeScope {
-  projectKey: string;
+  projectKey?: string;
+  boardId?: number;
   includeResolved: boolean;
 }
 
 function inScope(issue: BoardIssue, scope: JiraMergeScope): boolean {
-  if (jiraProjectKeyOf(issue.idReadable) !== scope.projectKey) return false;
+  if (scope.boardId === undefined && jiraProjectKeyOf(issue.idReadable) !== scope.projectKey) return false;
   return scope.includeResolved || issue.resolved === null;
 }
 
@@ -102,7 +109,10 @@ function winner(incoming: BoardIssue, existing: BoardIssue | undefined): BoardIs
  * - A known-older copy never replaces, resolves or removes a newer one.
  * - A winning copy that is resolved (Show done off) or now in another
  *   project removes the card; one in scope replaces it in place.
- * - Issues not yet cached are added, newest first, ahead of the rest.
+ * - Issues not yet cached are added, newest first, ahead of the rest —
+ *   unless `addNew` is false: a board list (VERM-59) takes new issues only
+ *   from its own board's reads, since an update from elsewhere may not be
+ *   on that board at all.
  *
  * Returns `current` itself when nothing changed; never mutates its input.
  */
@@ -110,6 +120,7 @@ export function mergeRecentlyUpdated(
   current: readonly BoardIssue[],
   updates: readonly BoardIssue[],
   scope: JiraMergeScope,
+  addNew = true,
 ): BoardIssue[] {
   let list = current as BoardIssue[];
   const added: BoardIssue[] = [];
@@ -125,7 +136,7 @@ export function mergeRecentlyUpdated(
     } else if (addedAt >= 0) {
       if (stays) added[addedAt] = keep;
       else added.splice(addedAt, 1);
-    } else if (stays) {
+    } else if (stays && addNew) {
       added.push(keep);
     }
   }

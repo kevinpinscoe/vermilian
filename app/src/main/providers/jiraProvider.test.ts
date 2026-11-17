@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as JiraClient from '../api/jira';
-import { isValidProjectKey, projectIssuesJql } from '../api/jira';
+import { boardIssuesJql, boardRecentlyUpdatedJql, isValidBoardId, isValidProjectKey, projectIssuesJql } from '../api/jira';
 import { createJiraProvider } from './jiraProvider';
 import { isWritableTracker } from '../../shared/tracker';
 import { jiraBoardFields, jiraDetailFields } from '../../shared/jiraBoardIssue';
@@ -31,6 +31,12 @@ function stubClient(overrides: Partial<Record<keyof typeof JiraClient, unknown>>
     searchJql: vi.fn(async () => [ISSUE]),
     getIssue: vi.fn(async () => ISSUE),
     projectIssuesJql,
+    isValidBoardId,
+    boardIssuesJql,
+    boardRecentlyUpdatedJql,
+    listBoards: vi.fn(async () => [{ id: 12, name: 'Planned', type: 'scrum', projectKey: 'DEMO' }]),
+    searchBoardIssues: vi.fn(async () => [ISSUE]),
+    isIssueOnBoard: vi.fn(async () => false),
     getIssueComments: vi.fn(async () => []),
     getEditMeta: vi.fn(async () => ({
       fields: { priority: { name: 'Priority', allowedValues: ['Critical', 'Highest', 'High', 'None'].map((name, i) => ({ id: String(i), name })) } },
@@ -279,5 +285,71 @@ describe('createJiraProvider — description and comments (VERM-32)', () => {
     const err = { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
     const client = stubClient({ getIssueComments: vi.fn(async () => Promise.reject(err)) });
     await expect(createJiraProvider(client, CONN).getIssueContent('DEMO-1')).rejects.toBe(err);
+  });
+});
+
+// ─── Boards (VERM-59) ─────────────────────────────────────────────────────────
+
+describe('createJiraProvider boards', () => {
+  const OPS = { id: '20002', key: 'OPS-4', fields: { status: { name: 'Impeded', statusCategory: { key: 'indeterminate' } }, customfield_10050: '2026-12-24' } };
+
+  it("reads a board's issues from the board, mapping each with its own project's settings", async () => {
+    const client = stubClient({ searchBoardIssues: vi.fn(async () => [ISSUE, OPS]) });
+    const settings = { OPS: { dueDateField: 'customfield_10050', statusRoles: { Impeded: 'blocked' as const } } };
+    const [demo, ops] = await createJiraProvider(client, CONN, settings).getBoardIssues(12, false);
+    const [, , , boardId, options] = vi.mocked(client.searchBoardIssues).mock.calls[0] as unknown as [string, string, string, number, { jql: string; fields: string[] }];
+    expect(boardId).toBe(12);
+    expect(options.jql).toBe('statusCategory != Done ORDER BY updated DESC');
+    expect(options.fields).toEqual(expect.arrayContaining(['duedate', 'customfield_10050']));
+    expect(demo.statusRole).toBe('inProgress');
+    expect(ops).toMatchObject({ statusRole: 'blocked' });
+    expect(ops.fields.dueDate).toBe(Date.UTC(2026, 11, 24, 12));
+  });
+
+  it('polls a board over the poll window, resolved included', async () => {
+    const client = stubClient();
+    await createJiraProvider(client, CONN).getBoardRecentlyUpdatedIssues(12);
+    const options = vi.mocked(client.searchBoardIssues).mock.calls[0][4] as { jql: string };
+    expect(options.jql).toBe('updated >= -5m ORDER BY updated DESC');
+  });
+
+  it('lists boards and checks membership through the client', async () => {
+    const client = stubClient({ isIssueOnBoard: vi.fn(async () => true) });
+    const p = createJiraProvider(client, CONN);
+    expect(await p.getBoards()).toEqual([{ id: 12, name: 'Planned', type: 'scrum', projectKey: 'DEMO' }]);
+    expect(await p.isOnBoard(12, 'OPS-4')).toBe(true);
+    expect(client.isIssueOnBoard).toHaveBeenCalledWith(...AUTH, 12, 'OPS-4');
+  });
+
+  it('searchWorkspace searches the projects and each board by the same text', async () => {
+    const client = stubClient({ searchJql: vi.fn(async () => [ISSUE]), searchBoardIssues: vi.fn(async () => [OPS, ISSUE]) });
+    const found = await createJiraProvider(client, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [12] }, 'rotate');
+    expect(vi.mocked(client.searchJql).mock.calls[0][3]).toBe('project in ("DEMO") AND text ~ "rotate" ORDER BY updated DESC');
+    expect((vi.mocked(client.searchBoardIssues).mock.calls[0][4] as { jql: string }).jql).toBe('text ~ "rotate" ORDER BY updated DESC');
+    // One result per issue, whichever source found it.
+    expect(found.map((i) => i.idReadable)).toEqual(['DEMO-1', 'OPS-4']);
+  });
+
+  it('searchWorkspace finds an exact key outside the projects only when it is on a board', async () => {
+    const onBoard = stubClient({ getIssue: vi.fn(async () => OPS), searchJql: vi.fn(async () => []), searchBoardIssues: vi.fn(async () => []), isIssueOnBoard: vi.fn(async () => true) });
+    expect((await createJiraProvider(onBoard, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [12] }, 'ops-4')).map((i) => i.idReadable)).toEqual(['OPS-4']);
+
+    const offBoard = stubClient({ getIssue: vi.fn(async () => OPS), searchJql: vi.fn(async () => []), searchBoardIssues: vi.fn(async () => []) });
+    expect(await createJiraProvider(offBoard, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [12] }, 'OPS-4')).toEqual([]);
+  });
+
+  it('searchWorkspace with no boards never looks a key up beyond the projects', async () => {
+    const client = stubClient({ getIssue: vi.fn(async () => OPS), searchJql: vi.fn(async () => []) });
+    expect(await createJiraProvider(client, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [] }, 'OPS-4')).toEqual([]);
+    expect(client.isIssueOnBoard).not.toHaveBeenCalled();
+  });
+
+  it('searchWorkspace refuses an invalid board ID and asks nothing for an empty term', async () => {
+    const client = stubClient();
+    const p = createJiraProvider(client, CONN);
+    await expect(p.searchWorkspace({ projectKeys: [], boardIds: [0] }, 'x')).rejects.toMatchObject({ message: expect.stringMatching(/Invalid Jira board ID/) });
+    await expect(p.searchWorkspace({ projectKeys: ['DEMO'], boardIds: [12] }, '  ')).resolves.toEqual([]);
+    expect(client.searchJql).not.toHaveBeenCalled();
+    expect(client.searchBoardIssues).not.toHaveBeenCalled();
   });
 });

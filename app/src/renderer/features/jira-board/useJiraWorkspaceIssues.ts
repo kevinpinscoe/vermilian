@@ -9,15 +9,22 @@ import { needsJiraReconnect, type WorkspaceJiraFailure } from '../../../shared/j
 import { JIRA_FULL_REFRESH_MS } from '../../../shared/jiraPoll';
 import { fetchFullJiraIssues, workspaceJiraIssuesQueryKey } from './jiraBoardSync';
 
-export function useJiraWorkspaceIssues(workspaceId: string, projectKeys: readonly string[], showDone: boolean) {
+// `sources` are the workspace's project keys and boards' "board:<id>"
+// (shared/jiraSource.ts, VERM-59); `sourceNames` labels failures by name.
+export function useJiraWorkspaceIssues(
+  workspaceId: string,
+  sources: readonly string[],
+  showDone: boolean,
+  sourceNames: Readonly<Record<string, string>> = {},
+) {
   const queryClient = useQueryClient();
   // The full, authoritative read of each project, refreshed every
   // JIRA_FULL_REFRESH_MS so deleted and moved-away issues eventually
   // disappear (VERM-39, shared/jiraPoll.ts).
   const results = useQueries({
-    queries: projectKeys.map((projectKey) => ({
-      queryKey: workspaceJiraIssuesQueryKey(workspaceId, projectKey, showDone),
-      queryFn: ({ signal }: { signal: AbortSignal }) => fetchFullJiraIssues(queryClient, workspaceId, projectKey, showDone, signal),
+    queries: sources.map((source) => ({
+      queryKey: workspaceJiraIssuesQueryKey(workspaceId, source, showDone),
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchFullJiraIssues(queryClient, workspaceId, source, showDone, signal),
       staleTime: 60 * 1000,
       refetchInterval: JIRA_FULL_REFRESH_MS,
       refetchIntervalInBackground: false,
@@ -28,7 +35,8 @@ export function useJiraWorkspaceIssues(workspaceId: string, projectKeys: readonl
   // one such failure puts the whole view in the reconnect state (VERM-40).
   const reconnect = results.map((r) => r.data).find((d): d is WorkspaceJiraFailure => needsJiraReconnect(d)) ?? null;
   const loading = results.some((r) => r.isLoading);
-  const failures = results.flatMap((r, i) => (r.data && !r.data.ok ? [`${projectKeys[i]}: ${r.data.message}`] : r.error ? [`${projectKeys[i]}: ${(r.error as Error).message}`] : []));
+  const labelOf = (i: number) => sourceNames[sources[i]] ?? sources[i];
+  const failures = results.flatMap((r, i) => (r.data && !r.data.ok ? [`${labelOf(i)}: ${r.data.message}`] : r.error ? [`${labelOf(i)}: ${(r.error as Error).message}`] : []));
 
   const { issues, priorities } = useMemo(() => {
     const all: BoardIssue[] = [];
@@ -43,11 +51,14 @@ export function useJiraWorkspaceIssues(workspaceId: string, projectKeys: readonl
             all.push(issue);
           }
         }
-        prio[projectKeys[i]] = r.data.priorities;
+        // Priority orders are per project: a board brings one per project
+        // its issues come from (VERM-59).
+        if (r.data.prioritiesByProject) Object.assign(prio, r.data.prioritiesByProject);
+        else prio[sources[i]] = r.data.priorities;
       }
     });
     return { issues: all, priorities: prio };
-  }, [results, projectKeys]);
+  }, [results, sources]);
 
   return { results, issues, priorities, loading, failures, reconnect };
 }

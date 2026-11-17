@@ -4,7 +4,7 @@
 // routes reject, so a spec can exercise the failure path.
 
 import type { JiraProfile } from '../../shared/jiraProfile';
-import { isValidProjectKey, projectRecentlyUpdatedJql, siteApiBase, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions, type RecentlyUpdatedOptions } from './jira';
+import { isValidBoardId, isValidProjectKey, JIRA_BOARD_SCOPE, projectRecentlyUpdatedJql, siteApiBase, type JiraBoard, type BoardIssueOptions, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions, type RecentlyUpdatedOptions } from './jira';
 import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
 import { isValidLocalId } from '../../shared/tracker';
 import type { JiraSearchIssue } from '../../shared/jiraIssue';
@@ -23,6 +23,13 @@ export {
   isValidProjectKey,
   projectIssuesJql,
   projectRecentlyUpdatedJql,
+  BOARD_PAGE_SIZE,
+  BOARD_MAX_PAGES,
+  isValidBoardId,
+  boardIssuesJql,
+  boardRecentlyUpdatedJql,
+  JIRA_WORK_SCOPE,
+  JIRA_BOARD_SCOPE,
 } from './jira';
 export type {
   JiraError,
@@ -34,6 +41,8 @@ export type {
   JiraComment,
   ProjectSearchOptions,
   RecentlyUpdatedOptions,
+  JiraBoard,
+  BoardIssueOptions,
 } from './jira';
 
 export const FAKE_JIRA_CLOUD_ID = 'e2e00000-0000-4000-8000-000000000000';
@@ -55,6 +64,7 @@ export interface FakeJiraCall {
   projectKey?: string;
   key?: string;
   jql?: string;
+  boardId?: number;
   at: number;
 }
 
@@ -407,4 +417,65 @@ export function getCallsForTests(): FakeJiraCall[] {
 
 export function setSearchDelayForTests(ms: number): void {
   searchDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+}
+
+// ── Boards (VERM-59) ─────────────────────────────────────────────────────────
+// Two fictional boards. "Ops tasks" spans two projects: its filter takes
+// OPS-7 and DEMO-102, so a workspace that chose only that board must still
+// open DEMO-102. Membership is by key, standing in for each board's filter.
+export const FAKE_JIRA_BOARDS: Array<JiraBoard & { keys: string[] }> = [
+  { id: 1, name: 'DEMO planned work', type: 'scrum', projectKey: 'DEMO', keys: ['DEMO-101', 'DEMO-109'] },
+  { id: 2, name: 'Ops tasks', type: 'kanban', projectKey: 'OPS', keys: ['OPS-7', 'DEMO-102'] },
+];
+
+export async function listBoards(_base: string, _email: string, token: string, _maxPages?: number): Promise<JiraBoard[]> {
+  logCall('listBoards');
+  rejectBadToken(token);
+  return FAKE_JIRA_BOARDS.map(({ keys: _keys, ...b }) => ({ ...b }));
+}
+
+// Honours the narrowing JQL the real callers build: statusCategory != Done,
+// updated >= -Nm, key = "X" and text ~ "term".
+export async function searchBoardIssues(
+  _base: string,
+  _email: string,
+  token: string,
+  boardId: number,
+  options: BoardIssueOptions = {},
+): Promise<JiraSearchIssue[]> {
+  const jql = options.jql ?? '';
+  logCall('searchBoardIssues', { boardId, jql });
+  rejectBadToken(token);
+  if (!isValidBoardId(boardId)) throw { message: `Invalid Jira board ID: ${JSON.stringify(boardId)}` };
+  const board = FAKE_JIRA_BOARDS.find((b) => b.id === boardId);
+  if (!board) throw { status: 404, message: 'The requested board cannot be viewed because it either does not exist or you do not have permission to view it.' };
+  await searchDelay();
+  const window = /updated >= -(\d+)m/.exec(jql);
+  const since = window ? Date.now() - Number(window[1]) * 60_000 : null;
+  const key = /key = "([^"]+)"/.exec(jql)?.[1] ?? null;
+  const text = /text ~ "((?:[^"\\]|\\.)*)"/.exec(jql)?.[1]?.replace(/\\(.)/g, '$1').toLowerCase() ?? null;
+  return FAKE_JIRA_ISSUES.filter((i) => {
+    if (unindexed.has(i.id) || !board.keys.includes(i.key)) return false;
+    if (jql.includes('statusCategory != Done') && i.fields?.status?.statusCategory?.key === 'done') return false;
+    if (since !== null) {
+      const at = Date.parse(String(i.fields?.updated ?? ''));
+      if (Number.isNaN(at) || at < since) return false;
+    }
+    if (key !== null && i.key !== key) return false;
+    if (text !== null && !(i.fields?.summary ?? '').toLowerCase().includes(text)) return false;
+    return true;
+  }).map((i) => ({ ...i, fields: { ...i.fields } }));
+}
+
+export async function isIssueOnBoard(base: string, email: string, token: string, boardId: number, key: string): Promise<boolean> {
+  const found = await searchBoardIssues(base, email, token, boardId, { jql: `key = "${key}"`, fields: ['summary'], maxPages: 1 });
+  return found.some((i) => i.key === key);
+}
+
+// VERMILIAN_E2E_JIRA_NO_BOARD_SCOPE=1 simulates a scoped token without the
+// board scope, for Test connection.
+export async function missingJiraScopes(_base: string, _email: string, token: string): Promise<string[]> {
+  logCall('missingJiraScopes');
+  rejectBadToken(token);
+  return process.env.VERMILIAN_E2E_JIRA_NO_BOARD_SCOPE === '1' ? [JIRA_BOARD_SCOPE] : [];
 }

@@ -127,6 +127,8 @@ function documentShape(
     // Per status and per field, so two machines mapping different statuses
     // of one project both keep their change.
     jiraProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF }, dueDateField: LEAF, epicLinkField: LEAF }) },
+    // One ordered selection, merged as a whole like a view (VERM-59).
+    jiraBoards: LEAF,
   });
 }
 

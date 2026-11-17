@@ -125,6 +125,13 @@ describe('per-workspace documents', () => {
     expect(workspacesFromDocuments(docs).map((w) => w.id)).toEqual(['ws-y', 'ws-j']);
   });
 
+  it("carry a Jira workspace's chosen boards, and nothing for others (VERM-59)", () => {
+    const withBoards = [{ ...docs[0], jiraBoards: [{ id: 12, name: 'Planned' }] }, docs[1]];
+    const [yt, j] = workspacesFromDocuments(withBoards);
+    expect(j.jiraBoards).toEqual([{ id: 12, name: 'Planned' }]);
+    expect('jiraBoards' in yt).toBe(false);
+  });
+
   it('keep only non-secret backend fields in the context', () => {
     expect(backendContextOf(docs[0])).toEqual({
       kind: 'jira',
