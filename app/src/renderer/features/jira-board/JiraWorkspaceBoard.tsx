@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
 import { formatDate } from '../project-board/KanbanView';
 import { jiraBoardColumns } from './jiraBoard';
@@ -8,6 +8,10 @@ import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
 import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
 import { JiraFocusControl } from './JiraFocusControl';
+import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
+import { AssigneePills } from '../project-board/FilterPills';
+import { BoardSearch } from '../search/BoardSearch';
+import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraWorkspaceBoardProps {
@@ -40,6 +44,9 @@ export function JiraWorkspaceBoard({
   onOpenSettings,
 }: JiraWorkspaceBoardProps) {
   const [showDone, setShowDone] = useState(false);
+  // Board search text and Assignee pills (VERM-61/62), the same FilterState
+  // and applyFilter the YouTrack boards use. Not persisted.
+  const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
 
   const queryClient = useQueryClient();
   const { results, issues, priorities, loading, failures, reconnect } = useJiraWorkspaceIssues(workspaceId, projectKeys, showDone);
@@ -70,7 +77,28 @@ export function JiraWorkspaceBoard({
 
   const summaryOf = (key: string) => issues.find((i) => i.idReadable === key)?.summary;
 
+  // "Me" is this workspace's own Jira account, read through its own
+  // connection; until it is known the Me pill is simply not offered.
+  const myAccount = useQuery({
+    queryKey: ['workspace', 'jira-my-account', workspaceId],
+    queryFn: () => window.vermilian.getWorkspaceJiraMyAccountId(workspaceId),
+    staleTime: Infinity,
+    retry: false,
+    enabled: projectKeys.length > 0,
+  });
+  const myAccountId = myAccount.data?.ok ? myAccount.data.accountId : '';
+
+  // Columns come from every loaded issue, so they keep their order and place
+  // while a filter empties some of them; each shows "N of M" while filtering.
   const columns = useMemo(() => jiraBoardColumns(issues, priorities), [issues, priorities]);
+  const filtering = filter.search.trim() !== '' || filter.assignee.length > 0;
+  const visible = useMemo(() => new Set(applyFilter(issues, filter, myAccountId).map((i) => i.id)), [issues, filter, myAccountId]);
+  const searchMatchCount = useMemo(
+    () => applyFilter(issues, { ...EMPTY_FILTER, search: filter.search }).length,
+    [issues, filter.search],
+  );
+  const toggleAssignee = (v: string) =>
+    setFilter((f) => ({ ...f, assignee: f.assignee.includes(v) ? f.assignee.filter((a) => a !== v) : [...f.assignee, v] }));
 
   return (
     <div className={styles.board} data-testid="jira-workspace-board">
@@ -79,7 +107,9 @@ export function JiraWorkspaceBoard({
         <span className={styles.readOnly} data-testid="jira-board-read-only" title="Nothing in this version changes Jira issues.">
           Jira · read-only
         </span>
-        <span className={styles.count} data-testid="jira-issue-count">{issues.length} issues</span>
+        <span className={styles.count} data-testid="jira-issue-count">
+          {filtering ? `${visible.size} of ${issues.length}` : issues.length} issues
+        </span>
         <span className={styles.spacer} />
         <label className={styles.toggle}>
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} data-testid="jira-show-done" />
@@ -99,6 +129,24 @@ export function JiraWorkspaceBoard({
       ) : (
         <>
           <div className={styles.projects} data-testid="jira-workspace-projects">Jira projects: {projectKeys.join(', ')}</div>
+          <div className={styles.searchRow}>
+            <BoardSearch
+              value={filter.search}
+              onChange={(search) => setFilter((f) => ({ ...f, search }))}
+              localMatchCount={searchMatchCount}
+              scope={{ kind: 'jira', workspaceId }}
+              onSelectIssue={(issue) => onSelectIssue(issue.idReadable)}
+              placeholder={`Search ${workspaceName} by key or text  ( / )`}
+            />
+          </div>
+          {issues.length > 0 && (
+            <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
+              <AssigneePills issues={issues} myId={myAccountId} active={filter.assignee} onToggle={toggleAssignee} />
+              {filter.assignee.length > 0 && (
+                <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...f, assignee: [] }))}>Clear</button>
+              )}
+            </div>
+          )}
           {failures.length > 0 && (
             <div className={styles.error} role="alert" data-testid="jira-board-error">
               {failures.map((f) => <div key={f}>{f}</div>)}
@@ -108,13 +156,17 @@ export function JiraWorkspaceBoard({
             <div className={styles.empty}><Loader size="small" /></div>
           ) : (
             <div className={styles.columns}>
-              {columns.map((col) => (
+              {columns.map((col) => {
+                const shown = filtering ? col.issues.filter((i) => visible.has(i.id)) : col.issues;
+                return (
                 <section key={col.status} className={styles.column} data-testid="jira-column" data-status={col.status} data-role={col.role ?? ''}>
                   <div className={styles.columnHeader}>
                     <span>{col.status}</span>
-                    <span className={styles.columnCount}>{col.issues.length}</span>
+                    <span className={styles.columnCount} data-testid="jira-column-count">
+                      {filtering ? `${shown.length} of ${col.issues.length}` : col.issues.length}
+                    </span>
                   </div>
-                  {col.issues.map((issue) => (
+                  {shown.map((issue) => (
                     <article
                       key={issue.id}
                       className={`${styles.card} ${issue.idReadable === selectedIssueKey ? styles.cardSelected : ''}`}
@@ -148,7 +200,8 @@ export function JiraWorkspaceBoard({
                     </article>
                   ))}
                 </section>
-              ))}
+                );
+              })}
               {columns.length === 0 && !loading && failures.length === 0 && (
                 <div className={styles.empty}><Text type="text1">No {showDone ? '' : 'open '}issues in these projects.</Text></div>
               )}

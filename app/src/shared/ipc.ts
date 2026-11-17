@@ -102,6 +102,10 @@ export const IPC = {
   getWorkspaceJiraRecentlyUpdated: 'workspaceJira:getRecentlyUpdated',
   // One Jira issue's fields, description and comments, read-only (VERM-35).
   getWorkspaceJiraIssueDetail: 'workspaceJira:getIssueDetail',
+  // Key or text search over the workspace's own projects, Done included (VERM-61).
+  searchWorkspaceJiraIssues: 'workspaceJira:searchIssues',
+  // The workspace connection's own accountId, for the "Me" filter (VERM-62).
+  getWorkspaceJiraMyAccountId: 'workspaceJira:getMyAccountId',
   getIssues: 'youtrack:getIssues',
   searchIssues: 'youtrack:searchIssues',
   // _vermilian-master-plan (ADR-0008) — read-only discovery + parse; never
@@ -203,6 +207,19 @@ export type GetWorkspaceJiraIssueDetailResult =
       // Description and comments as Markdown, escaped; render without raw HTML.
       content: import('./jiraContent').JiraIssueContent;
     }
+  | import('./jiraConnection').WorkspaceJiraFailure;
+
+export interface SearchWorkspaceJiraIssuesArgs {
+  workspaceId: string;
+  query: string;
+}
+
+export type SearchWorkspaceJiraIssuesResult =
+  | { ok: true; issues: import('./workspace').BoardIssue[] }
+  | import('./jiraConnection').WorkspaceJiraFailure;
+
+export type GetWorkspaceJiraMyAccountIdResult =
+  | { ok: true; accountId: string }
   | import('./jiraConnection').WorkspaceJiraFailure;
 
 export type ListWorkspaceJiraProjectsResult =
@@ -716,6 +733,10 @@ export interface VermilianAPI {
   getWorkspaceJiraRecentlyUpdated(args: GetWorkspaceJiraRecentlyUpdatedArgs): Promise<GetWorkspaceJiraRecentlyUpdatedResult>;
   // One of those issues in full, read-only, for its detail panel (VERM-35).
   getWorkspaceJiraIssueDetail(args: GetWorkspaceJiraIssueDetailArgs): Promise<GetWorkspaceJiraIssueDetailResult>;
+  // Board search over the workspace's own projects, read-only (VERM-61).
+  searchWorkspaceJiraIssues(args: SearchWorkspaceJiraIssuesArgs): Promise<SearchWorkspaceJiraIssuesResult>;
+  // The workspace connection's accountId, for the Assignee filter's "Me" (VERM-62).
+  getWorkspaceJiraMyAccountId(workspaceId: string): Promise<GetWorkspaceJiraMyAccountIdResult>;
   // e2e-only: the fake's _vermilian-config and Jira profile articles as stored.
   debugGetMigrationSources?(): Promise<Array<{ id: string; content: string; updated: number }>>;
   // e2e-only hooks on the fake Jira (VERM-39): see main/api/fakeJira.ts.

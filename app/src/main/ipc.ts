@@ -131,6 +131,8 @@ import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
   CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
+  SearchWorkspaceJiraIssuesResult,
+  GetWorkspaceJiraMyAccountIdResult,
   GetWorkspaceJiraIssuesResult,
   GetWorkspaceJiraRecentlyUpdatedResult,
   ListWorkspaceJiraProjectsResult,
@@ -1393,6 +1395,37 @@ export function registerIpc(): void {
         return { ok: true, issue, content };
       } catch (e) {
         return jiraFailure(a.workspaceId, p.doc, e, `${issueKey} could not be loaded.`);
+      }
+    },
+  );
+
+  // Board search (VERM-61): read-only, through the workspace's own provider,
+  // and never wider than the workspace's own projects — a key from any other
+  // project is not looked up. There is no fallback to another credential.
+  ipcMain.handle(
+    IPC.searchWorkspaceJiraIssues,
+    async (_e, args: unknown): Promise<SearchWorkspaceJiraIssuesResult> => {
+      const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+      const query = typeof a.query === 'string' ? a.query.slice(0, 500) : '';
+      const p = await workspaceJiraProvider(a.workspaceId);
+      if (!p.ok) return p;
+      try {
+        return { ok: true, issues: await p.provider.searchIssues(workspaceProjectIds(p.doc), query) };
+      } catch (e) {
+        return jiraFailure(a.workspaceId, p.doc, e, 'The Jira search failed.');
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.getWorkspaceJiraMyAccountId,
+    async (_e, workspaceId: unknown): Promise<GetWorkspaceJiraMyAccountIdResult> => {
+      const p = await workspaceJiraProvider(workspaceId);
+      if (!p.ok) return p;
+      try {
+        return { ok: true, accountId: await p.provider.getMyAccountId() };
+      } catch (e) {
+        return jiraFailure(workspaceId, p.doc, e, 'The Jira account could not be read.');
       }
     },
   );

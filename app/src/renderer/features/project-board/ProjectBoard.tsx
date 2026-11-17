@@ -31,7 +31,10 @@ import {
   STATUS_ORDER, GROUP_FIELD_MAP, groupIssues, getGroupColorMap,
   applyFilter, filterCount, sortIssues, applyManualOrder, orderedUnique,
   EMPTY_FILTER, type FilterState, type DueDateMode,
+  assigneeOptions, assigneeLabel,
 } from './grouping';
+import { useConfig } from '../settings/api';
+import { ASSIGNEE_PILL_COLOR } from './FilterPills';
 import styles from './ProjectBoard.module.css';
 
 interface FilterSectionProps {
@@ -40,9 +43,10 @@ interface FilterSectionProps {
   active: string[];
   colorMap: Record<string, string>;
   onToggle: (value: string) => void;
+  displayValue?: (value: string) => string;
 }
 
-function FilterSection({ label, values, active, colorMap, onToggle }: FilterSectionProps) {
+function FilterSection({ label, values, active, colorMap, onToggle, displayValue = (v) => v }: FilterSectionProps) {
   if (values.length === 0) return null;
   const hasActive = active.length > 0;
   return (
@@ -60,9 +64,9 @@ function FilterSection({ label, values, active, colorMap, onToggle }: FilterSect
             className={`${styles.filterPill} ${isActive ? styles.filterPillActive : ''} ${hasActive && !isActive ? styles.filterPillDim : ''}`}
             style={{ backgroundColor: bg, color: '#fff' }}
             onClick={() => onToggle(val)}
-            title={isActive ? `Remove ${val} filter` : `Filter by ${val}`}
+            title={isActive ? `Remove ${displayValue(val)} filter` : `Filter by ${displayValue(val)}`}
           >
-            {val}
+            {displayValue(val)}
           </button>
         );
       })}
@@ -76,16 +80,18 @@ interface FilterBarProps {
   colors: EffectiveColors;
   onChange: (f: FilterState) => void;
   searchRef?: React.Ref<HTMLInputElement>;
+  myLogin: string;
 }
 
-function FilterBar({ issues, filter, colors, onChange, searchRef }: FilterBarProps) {
+function FilterBar({ issues, filter, colors, onChange, searchRef, myLogin }: FilterBarProps) {
   const statusVals   = orderedUnique(issues.map((i) => i.fields.status),   STATUS_ORDER);
   const priorityVals = orderedUnique(issues.map((i) => i.fields.priority), PRIORITY_OPTIONS);
   const categoryVals = orderedUnique(issues.map((i) => i.fields.category), CATEGORY_OPTIONS);
+  const assigneeVals = assigneeOptions(issues, myLogin);
 
   const hasFilters = filterCount(filter) > 0;
 
-  function toggle(field: 'status' | 'priority' | 'category', value: string) {
+  function toggle(field: 'status' | 'priority' | 'category' | 'assignee', value: string) {
     const cur = filter[field];
     onChange({
       ...filter,
@@ -110,6 +116,12 @@ function FilterBar({ issues, filter, colors, onChange, searchRef }: FilterBarPro
       <FilterSection label="Priority" values={priorityVals} active={filter.priority} colorMap={colors.Priority} onToggle={(v) => toggle('priority', v)} />
       {priorityVals.length > 0 && categoryVals.length > 0 && <span className={styles.filterSep} />}
       <FilterSection label="Category" values={categoryVals} active={filter.category} colorMap={colors.Category} onToggle={(v) => toggle('category', v)} />
+      <span className={styles.filterSep} />
+      <FilterSection
+        label="Assignee" values={assigneeVals} active={filter.assignee}
+        colorMap={Object.fromEntries(assigneeVals.map((v) => [v, ASSIGNEE_PILL_COLOR]))}
+        onToggle={(v) => toggle('assignee', v)} displayValue={(v) => assigneeLabel(v)}
+      />
       <span className={styles.filterSep} />
       <div className={styles.filterSection} data-testid="filter-due">
         <span className={styles.filterLabel}>Due</span>
@@ -1062,6 +1074,7 @@ export function ProjectBoard({
 
   const { data: issues, isLoading, isError, error, refetch } = useIssues(projectShortName, showClosed);
   const { data: boardConfig } = useBoardConfig(projectId);
+  const myLogin = useConfig().data?.youtrackLogin ?? '';
   const saveBoardConfig = useSaveBoardConfig();
   const resetBoardConfig = useResetBoardConfig();
   const patchMutation = usePatchIssueOnBoard(projectShortName);
@@ -1196,7 +1209,7 @@ export function ProjectBoard({
 
   const isKanban = activeView.type === 'kanban';
   const effectiveGroupBy = isKanban ? 'Status' : activeView.groupBy;
-  const filteredIssues = applyFilter(issues ?? [], filter);
+  const filteredIssues = applyFilter(issues ?? [], filter, myLogin);
   const activeFilterCount = filterCount(filter);
   // All issues filtered out by active filters (vs. a genuinely empty board).
   const filteredEmpty = (issues?.length ?? 0) > 0 && filteredIssues.length === 0;
@@ -1329,7 +1342,7 @@ export function ProjectBoard({
 
       {/* Filter bar — toggled by the Filter button; stays open while filters are active */}
       {!isLoading && !isError && issues && (showFilter || activeFilterCount > 0) && (
-        <FilterBar issues={issues} filter={filter} colors={colors} onChange={setFilter} searchRef={searchInputRef} />
+        <FilterBar issues={issues} filter={filter} colors={colors} onChange={setFilter} searchRef={searchInputRef} myLogin={myLogin} />
       )}
 
       {/* Focus-rank repair state — two or more issues sharing a rank in the

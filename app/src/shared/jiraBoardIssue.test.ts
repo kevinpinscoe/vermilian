@@ -5,6 +5,9 @@ import {
   jiraDateToEpochMs,
   jiraDetailFields,
   jqlTextClause,
+  jqlString,
+  jiraSearchJql,
+  jiraSearchKey,
   mapJiraIssue,
   mapJiraIssueDetail,
   type JiraIssue,
@@ -261,5 +264,71 @@ describe('isJiraIssueKey', () => {
       expect(isJiraIssueKey(k)).toBe(false);
     }
     expect(isJiraIssueKey(`${'A'.repeat(260)}-1`)).toBe(false);
+  });
+});
+
+// ─── Board search (VERM-61) and assignee (VERM-62) ───────────────────────────
+
+describe('jqlString', () => {
+  it('quotes and escapes so the value can never leave the string', () => {
+    expect(jqlString('plain')).toBe('"plain"');
+    expect(jqlString('a" OR project = "X')).toBe('"a\\" OR project = \\"X"');
+    expect(jqlString('back\\slash')).toBe('"back\\\\slash"');
+    expect(jqlString('tab\tand\nnewline')).toBe('"tab and newline"');
+  });
+});
+
+describe('jiraSearchJql', () => {
+  it('searches the given projects by text, with no resolution filter', () => {
+    const jql = jiraSearchJql(['DEMO', 'OPS'], '  db creds ');
+    expect(jql).toBe('project in ("DEMO", "OPS") AND text ~ "db creds" ORDER BY updated DESC');
+    expect(jql).not.toMatch(/resolution|statusCategory/i);
+  });
+
+  it('escapes the term', () => {
+    expect(jiraSearchJql(['DEMO'], 'x" OR key = "Y')).toBe(
+      'project in ("DEMO") AND text ~ "x\\" OR key = \\"Y" ORDER BY updated DESC',
+    );
+  });
+
+  it('is null for an empty term or no projects', () => {
+    expect(jiraSearchJql(['DEMO'], '   ')).toBeNull();
+    expect(jiraSearchJql([], 'x')).toBeNull();
+  });
+});
+
+describe('jiraSearchKey', () => {
+  it('detects a key, uppercasing it as Jira compares keys', () => {
+    expect(jiraSearchKey(['DEMO', 'OPS_2'], ' demo-101 ')).toBe('DEMO-101');
+    expect(jiraSearchKey(['DEMO', 'OPS_2'], 'OPS_2-7')).toBe('OPS_2-7');
+  });
+
+  it('ignores terms that are not keys', () => {
+    expect(jiraSearchKey(['DEMO'], 'DEMO')).toBeNull();
+    expect(jiraSearchKey(['DEMO'], 'DEMO-0')).toBeNull();
+    expect(jiraSearchKey(['DEMO'], 'rotate DEMO-1')).toBeNull();
+  });
+
+  it('never names a key outside the given projects', () => {
+    expect(jiraSearchKey(['DEMO'], 'SRE-4640')).toBeNull();
+  });
+});
+
+describe('mapJiraIssue assignee', () => {
+  it('keeps the accountId as the value and the display name alongside', () => {
+    const i = mapJiraIssue({ id: '1', key: 'DEMO-1', fields: { assignee: { accountId: 'acc-1', displayName: 'Dana' } } });
+    expect(i.fields.assignee).toBe('acc-1');
+    expect(i.assigneeName).toBe('Dana');
+  });
+
+  it('falls back to the accountId when no display name is visible', () => {
+    const i = mapJiraIssue({ id: '1', key: 'DEMO-1', fields: { assignee: { accountId: 'acc-1' } } });
+    expect(i.assigneeName).toBe('acc-1');
+  });
+
+  it('maps an unassigned issue to null', () => {
+    const i = mapJiraIssue({ id: '1', key: 'DEMO-1', fields: { assignee: null } });
+    expect(i.fields.assignee).toBeNull();
+    expect(i.assigneeName).toBeNull();
   });
 });

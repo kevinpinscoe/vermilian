@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Search above the board** (VERM-61). The All tasks board and Jira workspace boards have
+  a search box above the cards. Typing filters the loaded cards by key or summary at once;
+  Enter, or a term no loaded card matches, searches the backend and lists issues that are
+  not on the board, Done included. Picking a result opens its detail panel. Press **/** to
+  focus the box. Jira columns show "N of M" while filtering.
+- **The top-bar search follows the workspace's backend** (VERM-61). In a Jira workspace it
+  searches that workspace's own Jira projects, through that workspace's own credential, and
+  never YouTrack. A rejected token or missing scope shows Jira's own message.
+- **Filter boards by Assignee** (VERM-62). The All tasks board, Jira workspace boards and
+  every project board's filter bar have an **Assignee** section: pills for **Me**,
+  **Unassigned**, and each other person assigned to a loaded issue. Pills combine with OR,
+  and with AND against the other filters and the search text. **Me** is the YouTrack login
+  set in Settings, or the Jira workspace's own account. On All tasks, the existing
+  **Assigned to me** button now toggles the same Me pill. Filters are not saved between
+  sessions.
+
 ### Security
 
 - **Credentials are never stored as plain text any more** (VERM-57). When the system

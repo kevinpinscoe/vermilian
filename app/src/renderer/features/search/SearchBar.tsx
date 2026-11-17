@@ -1,28 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader } from '@vibe/core';
-import { useIssueSearch, SEARCH_MIN_CHARS } from './api';
+import type { BoardIssue } from '../../../shared/workspace';
+import { useScopedIssueSearch, searchScopeEnabled, SEARCH_MIN_CHARS, type SearchScope } from './api';
 import styles from './SearchBar.module.css';
 
 interface SearchBarProps {
-  // Projects in scope: the active project (one), or every project in the active
-  // workspace (many) when no single project is selected.
-  projectShortNames: string[];
+  // YouTrack: the active project (one), or every project in the active
+  // workspace (many) when no single project is selected. Jira: the active
+  // workspace's own projects, through its own connection (VERM-61) — a Jira
+  // workspace never searches YouTrack.
+  scope: SearchScope;
   scopeLabel: string | null; // project or workspace name, for the placeholder
-  onSelectIssue: (issueId: string) => void;
+  onSelectIssue: (issue: BoardIssue) => void;
 }
 
 // Top-bar issue search. Scoped to the active project when one is selected,
 // otherwise to every project in the active workspace. Debounces input, shows a
 // results dropdown, and opens the selected issue in the detail panel. Enabled
 // whenever there is at least one project in scope.
-export function SearchBar({ projectShortNames, scopeLabel, onSelectIssue }: SearchBarProps) {
+export function SearchBar({ scope, scopeLabel, onSelectIssue }: SearchBarProps) {
   const [text, setText] = useState('');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const enabled = projectShortNames.length > 0;
-  const scopeKey = [...projectShortNames].sort().join(',');
+  const enabled = searchScopeEnabled(scope);
+  const scopeKey = scope.kind === 'jira' ? `jira:${scope.workspaceId}` : [...scope.projectShortNames].sort().join(',');
 
   // Debounce the terms handed to the search hook.
   useEffect(() => {
@@ -49,13 +52,13 @@ export function SearchBar({ projectShortNames, scopeLabel, onSelectIssue }: Sear
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const query = useIssueSearch(projectShortNames, debounced);
+  const query = useScopedIssueSearch(scope, debounced);
   const terms = debounced.trim();
   const showResults = open && enabled && terms.length >= SEARCH_MIN_CHARS;
   const results = query.data ?? [];
 
-  function handleSelect(id: string) {
-    onSelectIssue(id);
+  function handleSelect(issue: BoardIssue) {
+    onSelectIssue(issue);
     setOpen(false);
     setText('');
     setDebounced('');
@@ -92,7 +95,9 @@ export function SearchBar({ projectShortNames, scopeLabel, onSelectIssue }: Sear
             </div>
           ) : query.isError ? (
             <div className={styles.state} data-testid="issue-search-error">
-              Search failed. Check your connection and try again.
+              {scope.kind === 'jira' && (query.error as Error)?.message
+                ? (query.error as Error).message
+                : 'Search failed. Check your connection and try again.'}
             </div>
           ) : results.length === 0 ? (
             <div className={styles.state} data-testid="issue-search-empty">
@@ -107,7 +112,7 @@ export function SearchBar({ projectShortNames, scopeLabel, onSelectIssue }: Sear
                     className={styles.result}
                     data-testid="issue-search-result"
                     data-issue-id={issue.id}
-                    onClick={() => handleSelect(issue.id)}
+                    onClick={() => handleSelect(issue)}
                   >
                     <span className={styles.resultId}>{issue.idReadable}</span>
                     <span className={styles.resultSummary}>{issue.summary}</span>

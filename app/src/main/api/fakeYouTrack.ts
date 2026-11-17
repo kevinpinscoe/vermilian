@@ -82,6 +82,14 @@ function makeIssues(): FakeIssue[] {
   // without changing any existing visible-candidate assertion.
   const EPIC_TEST_3: ParentEpic = { id: '0-e1-3', idReadable: 'TEST-3', summary: 'To do task 3' };
   const EPIC_TEST_4: ParentEpic = { id: '0-e1-4', idReadable: 'TEST-4', summary: 'To do task 4' };
+  // VERM-62: assignees for the Assignee filter, applied after construction so
+  // every row above keeps its position. 'e2e-user' is the login the
+  // assignee-filter spec configures as "Me"; every other issue is unassigned.
+  const ASSIGNEES: Record<string, string> = {
+    'TEST-1': 'e2e-user', 'TEST-5': 'e2e-user', 'TEST-2': 'alice', 'TST2-2': 'bob',
+  };
+  const withAssignee = (i: FakeIssue): FakeIssue =>
+    ({ ...i, fields: { ...i.fields, assignee: ASSIGNEES[i.idReadable] ?? null } });
   return [
     // TEST: 4 in "To do", 2 in "In Progress" → >=2 groups, >=3 in one group
     mk(1, '0-e1', 'TEST', 'To do', 'Normal', DUE_EARLY, EPIC_TEST_3),
@@ -95,7 +103,7 @@ function makeIssues(): FakeIssue[] {
     mk(2, '0-e2', 'TST2', 'In Progress', 'Major'),
     // INB: one issue so the Inbox board renders content
     mk(1, '0-e3', 'INB', 'To do', 'Normal'),
-  ];
+  ].map(withAssignee);
 }
 
 // ─── Mutable state ──────────────────────────────────────────────────────────────

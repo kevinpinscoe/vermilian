@@ -107,6 +107,7 @@ export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
       summary: 'Rotate the staging database credentials',
       status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } },
       priority: { name: 'High' },
+      assignee: { accountId: 'e2e-account', displayName: 'E2E Jira User' },
       updated: '2026-11-09T14:00:00.000+0000',
     },
   },
@@ -117,6 +118,7 @@ export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
       summary: 'Document the on-call handover',
       status: { name: 'To Do', statusCategory: { key: 'new' } },
       priority: { name: 'Medium' },
+      assignee: { accountId: 'e2e-account-dana', displayName: 'Dana Ops' },
       updated: '2026-11-08T09:30:00.000+0000',
     },
   },
@@ -130,7 +132,37 @@ export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
       updated: '2026-11-07T16:45:00.000+0000',
     },
   },
+  // Done, so it is off the board while Show done is off and the board search
+  // must reach the backend to find it (VERM-61). Every other read path that
+  // lists open issues leaves it out.
+  {
+    id: '10009',
+    key: 'DEMO-109',
+    fields: {
+      summary: 'Archive the legacy runbook',
+      status: { name: 'Done', statusCategory: { key: 'done' } },
+      priority: { name: 'Low' },
+      updated: '2026-11-01T10:00:00.000+0000',
+    },
+  },
 ];
+
+// The board search's text JQL (shared/jiraBoardIssue.ts jiraSearchJql):
+// `project in ("A", "B") AND text ~ "term" ORDER BY …`. The fake honours just
+// that shape — project list and a case-insensitive summary match — so a spec
+// can tell a backend search from a local filter (VERM-61).
+function fakeTextSearch(jql: string): JiraSearchIssue[] | null {
+  const text = /text ~ "((?:[^"\\]|\\.)*)"/.exec(jql);
+  if (!text) return null;
+  const term = text[1].replace(/\\(.)/g, '$1').toLowerCase();
+  const projects = [...(/project in \(([^)]*)\)/.exec(jql)?.[1] ?? '').matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  return FAKE_JIRA_ISSUES.filter(
+    (i) =>
+      !unindexed.has(i.id) &&
+      projects.some((k) => i.key.startsWith(`${k}-`)) &&
+      (i.fields?.summary ?? '').toLowerCase().includes(term),
+  );
+}
 
 export async function searchJql(
   _base: string,
@@ -142,7 +174,8 @@ export async function searchJql(
 ): Promise<JiraSearchIssue[]> {
   logCall('searchJql', { jql: _jql });
   if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
-  return FAKE_JIRA_ISSUES.map((i) => ({ ...i, fields: { ...i.fields } }));
+  const found = fakeTextSearch(_jql) ?? FAKE_JIRA_ISSUES.filter((i) => i.fields?.status?.statusCategory?.key !== 'done');
+  return found.map((i) => ({ ...i, fields: { ...i.fields } }));
 }
 
 export async function searchMyOpenIssues(_profile: JiraProfile, token: string): Promise<JiraSearchIssue[]> {

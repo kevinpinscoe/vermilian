@@ -76,6 +76,9 @@ export interface BoardIssue {
   // poll can tell which of two copies is newer (VERM-39, shared/jiraPoll.ts);
   // absent for YouTrack.
   updated?: number | null;
+  // The assignee's display name, for Jira issues, whose fields.assignee is an
+  // accountId (VERM-62); absent for YouTrack, whose assignee is a login.
+  assigneeName?: string | null;
 }
 
 /** What a status means to Vermilian, whatever the workflow calls it. */

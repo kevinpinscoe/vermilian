@@ -9,6 +9,11 @@ import { COLUMN_LABELS } from '../../../shared/boardConfig';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS } from '../project-board/colors';
 import { ChipCell, EffectiveColors, formatDate } from '../project-board/KanbanView';
 import { usePatchIssueOnBoard } from '../project-board/api';
+import {
+  ASSIGNEE_ME, EMPTY_FILTER, applyFilter, filterCount, type FilterState,
+} from '../project-board/grouping';
+import { FilterPills, AssigneePills } from '../project-board/FilterPills';
+import { BoardSearch } from '../search/BoardSearch';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
@@ -64,36 +69,9 @@ function sortIssues(issues: BoardIssue[], sort: BoardSortConfig | undefined): Bo
 }
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
-
-interface WsFilter {
-  status: string[];
-  priority: string[];
-  category: string[];
-  assignedToMe: boolean;
-}
-const EMPTY_FILTER: WsFilter = { status: [], priority: [], category: [], assignedToMe: false };
-
-function FilterPills({
-  label, values, active, colorMap, onToggle,
-}: { label: string; values: string[]; active: string[]; colorMap: Record<string, string>; onToggle: (v: string) => void }) {
-  if (!values.length) return null;
-  const hasActive = active.length > 0;
-  return (
-    <div className={pbStyles.filterSection}>
-      <span className={pbStyles.filterLabel}>{label}</span>
-      {values.map((v) => {
-        const bg = colorMap[v] ?? '#C4C4C4';
-        return (
-          <button key={v} type="button"
-            className={`${pbStyles.filterPill} ${active.includes(v) ? pbStyles.filterPillActive : ''} ${hasActive && !active.includes(v) ? pbStyles.filterPillDim : ''}`}
-            style={{ backgroundColor: bg, color: '#fff' }}
-            onClick={() => onToggle(v)}
-          >{v}</button>
-        );
-      })}
-    </div>
-  );
-}
+// The project board's FilterState and applyFilter (VERM-62): status, priority,
+// category, assignee and the board search's text (VERM-61). Due date stays
+// 'any' here — this board has no due-date control.
 
 // ─── Issue row ────────────────────────────────────────────────────────────────
 
@@ -110,6 +88,7 @@ function IssueRow({
   const [hovered, setHovered] = useState(false);
   return (
     <tr className={pbStyles.issueRow} onClick={onClick} style={{ cursor: 'pointer' }}
+      data-testid="ws-issue-row" data-issue-id={issue.idReadable}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <td className={`${pbStyles.cell} ${pbStyles.cellTask}`}>
         {isActiveTimer ? (
@@ -186,7 +165,7 @@ export function WorkspaceBoard({
   onSelectIssue, onNewTask, onAiCreate, onStartTimer, hasClaudeKey, aiUnavailableReason,
 }: WorkspaceBoardProps) {
   const patchMutation = usePatchIssueOnBoard(null);
-  const [filter, setFilter] = useState<WsFilter>(EMPTY_FILTER);
+  const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [sort, setSort] = useState<BoardSortConfig | undefined>(undefined);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const timer = useTimerStore((s) => s.timer);
@@ -215,16 +194,17 @@ export function WorkspaceBoard({
     [results.map((r) => r.dataUpdatedAt).join(',')],
   );
 
-  const filteredIssues = useMemo(() => {
-    let items = allIssues; // server already applied #Unresolved when showClosed=false
-    if (filter.status.length) items = items.filter((i) => filter.status.includes(i.fields.status ?? ''));
-    if (filter.priority.length) items = items.filter((i) => filter.priority.includes(i.fields.priority ?? ''));
-    if (filter.category.length) items = items.filter((i) => filter.category.includes(i.fields.category ?? ''));
-    if (filter.assignedToMe && youtrackLogin) {
-      items = items.filter((i) => i.fields.assignee === youtrackLogin);
-    }
-    return items;
-  }, [allIssues, filter, youtrackLogin, showClosed]);
+  // The server already applied #Unresolved when showClosed=false.
+  const filteredIssues = useMemo(
+    () => applyFilter(allIssues, filter, youtrackLogin),
+    [allIssues, filter, youtrackLogin],
+  );
+  // How many loaded issues the search text alone matches — with none, the
+  // board search asks the backend without waiting for Enter (VERM-61).
+  const searchMatchCount = useMemo(
+    () => applyFilter(allIssues, { ...EMPTY_FILTER, search: filter.search }).length,
+    [allIssues, filter.search],
+  );
 
   const groups = useMemo(() => groupByStatus(filteredIssues), [filteredIssues]);
 
@@ -240,7 +220,7 @@ export function WorkspaceBoard({
     );
   }
 
-  function toggle(field: keyof Omit<WsFilter, 'assignedToMe'>, value: string) {
+  function toggle(field: 'status' | 'priority' | 'category' | 'assignee', value: string) {
     const cur = filter[field];
     setFilter((f) => ({
       ...f,
@@ -260,7 +240,9 @@ export function WorkspaceBoard({
   const statusVals = [...new Set(allIssues.map((i) => i.fields.status).filter(Boolean) as string[])];
   const priorityVals = [...new Set(allIssues.map((i) => i.fields.priority).filter(Boolean) as string[])];
   const categoryVals = [...new Set(allIssues.map((i) => i.fields.category).filter(Boolean) as string[])];
-  const hasFilters = filter.status.length > 0 || filter.priority.length > 0 || filter.category.length > 0 || filter.assignedToMe;
+  const assignedToMe = filter.assignee.includes(ASSIGNEE_ME);
+  // The search text has its own clear (Escape); Clear resets the pills only.
+  const hasFilters = filterCount({ ...filter, search: '' }) > 0;
   const colSpan = 1 + VISIBLE_COLS.length;
 
   return (
@@ -286,8 +268,8 @@ export function WorkspaceBoard({
         {youtrackLogin && (
           <button
             type="button"
-            className={`${styles.assignedBtn} ${filter.assignedToMe ? styles.assignedBtnActive : ''}`}
-            onClick={() => setFilter((f) => ({ ...f, assignedToMe: !f.assignedToMe }))}
+            className={`${styles.assignedBtn} ${assignedToMe ? styles.assignedBtnActive : ''}`}
+            onClick={() => toggle('assignee', ASSIGNEE_ME)}
             title={`Show only tasks assigned to ${youtrackLogin}`}
           >
             Assigned to me
@@ -301,21 +283,35 @@ export function WorkspaceBoard({
         >
           {showClosed ? 'Hide closed' : 'Show closed'}
         </button>
-        <Text type="text2" className={styles.issueCount}>
-          {filteredIssues.length} {showClosed ? 'issues' : 'open'}
+        <Text type="text2" className={styles.issueCount} data-testid="ws-issue-count">
+          {filteredIssues.length !== allIssues.length ? `${filteredIssues.length} of ${allIssues.length}` : filteredIssues.length} {showClosed ? 'issues' : 'open'}
         </Text>
       </div>
 
+      {/* Board search (VERM-61) */}
+      <div className={styles.searchRow}>
+        <BoardSearch
+          value={filter.search}
+          onChange={(search) => setFilter((f) => ({ ...f, search }))}
+          localMatchCount={searchMatchCount}
+          scope={{ kind: 'youtrack', projectShortNames }}
+          onSelectIssue={(issue) => onSelectIssue(issue.id)}
+          placeholder={`Search ${workspaceName} by key or text  ( / )`}
+        />
+      </div>
+
       {/* Filter bar */}
-      {(statusVals.length > 0 || priorityVals.length > 0 || categoryVals.length > 0) && (
-        <div className={pbStyles.filterBar}>
+      {allIssues.length > 0 && (
+        <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
           <FilterPills label="Status"   values={statusVals.filter((v) => STATUS_OPTIONS.includes(v as never))} active={filter.status}   colorMap={COLORS.Status}   onToggle={(v) => toggle('status', v)} />
           {statusVals.length > 0 && priorityVals.length > 0 && <span className={pbStyles.filterSep} />}
           <FilterPills label="Priority" values={priorityVals.filter((v) => PRIORITY_OPTIONS.includes(v as never))} active={filter.priority} colorMap={COLORS.Priority} onToggle={(v) => toggle('priority', v)} />
           {priorityVals.length > 0 && categoryVals.length > 0 && <span className={pbStyles.filterSep} />}
           <FilterPills label="Category" values={categoryVals.filter((v) => CATEGORY_OPTIONS.includes(v as never))} active={filter.category} colorMap={COLORS.Category} onToggle={(v) => toggle('category', v)} />
+          <span className={pbStyles.filterSep} />
+          <AssigneePills issues={allIssues} myId={youtrackLogin} active={filter.assignee} onToggle={(v) => toggle('assignee', v)} />
           {hasFilters && (
-            <button type="button" className={pbStyles.filterClear} onClick={() => setFilter(EMPTY_FILTER)}>Clear</button>
+            <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...EMPTY_FILTER, search: f.search }))}>Clear</button>
           )}
         </div>
       )}
@@ -328,7 +324,7 @@ export function WorkspaceBoard({
         <div className={pbStyles.tableWrapper}>
           {groups.length === 0 ? (
             <div className={pbStyles.emptyState}>
-              <Text>{projectShortNames.length === 0 ? 'No projects in this workspace.' : 'No open tasks.'}</Text>
+              <Text>{projectShortNames.length === 0 ? 'No projects in this workspace.' : allIssues.length > 0 ? 'No tasks match your filters.' : 'No open tasks.'}</Text>
             </div>
           ) : (
             <table className={pbStyles.table}>

@@ -18,7 +18,8 @@ import {
   jiraBoardFields,
   jiraDetailFields,
   jiraProjectKeyOf,
-  jqlTextClause,
+  jiraSearchJql,
+  jiraSearchKey,
   mapJiraIssue,
   mapJiraIssueDetail,
 } from '../../shared/jiraBoardIssue';
@@ -49,6 +50,8 @@ export interface JiraProvider extends TrackerProvider {
    * resolved ones included — the board's incremental poll (VERM-39).
    */
   getRecentlyUpdatedIssues(projectKey: string): Promise<BoardIssue[]>;
+  /** The connection's own accountId: what "Me" means on this workspace's board (VERM-62). */
+  getMyAccountId(): Promise<string>;
 }
 
 export function createJiraProvider(
@@ -85,6 +88,10 @@ export function createJiraProvider(
       return (await client.getMyself(base, email, token)).displayName;
     },
 
+    async getMyAccountId() {
+      return (await client.getMyself(base, email, token)).accountId;
+    },
+
     async getProjects(): Promise<TrackerProject[]> {
       const projects = await client.listProjects(base, email, token);
       return projects.map((p) => ({ id: p.id, name: p.name, shortName: p.key }));
@@ -114,12 +121,27 @@ export function createJiraProvider(
       for (const k of projectKeys) {
         if (!client.isValidProjectKey(k)) throw { message: `Invalid Jira project key: ${JSON.stringify(k)}` };
       }
-      const projects = `project in (${projectKeys.map((k) => `"${k}"`).join(', ')})`;
-      const text = query.trim() ? ` AND ${jqlTextClause(query.trim())}` : '';
+      // Key or text over every status, Done included (VERM-61).
+      const jql = jiraSearchJql(projectKeys, query);
+      if (!jql) return [];
+      const key = jiraSearchKey(projectKeys, query);
       // Every searched project's fields, so each issue maps with its own.
       const fields = [...new Set(projectKeys.flatMap((k) => jiraBoardFields(settingsFor(k))))];
-      const issues = await client.searchJql(base, email, token, `${projects}${text} ORDER BY updated DESC`, fields);
-      return issues.map(mapIssue);
+      const [byKey, byText] = await Promise.all([
+        // A 404 is simply "no such issue"; anything else (401, 403) surfaces.
+        key
+          ? client.getIssue(base, email, token, key, fields).catch((e: unknown) => {
+              if ((e as { status?: unknown } | null)?.status === 404) return null;
+              throw e;
+            })
+          : Promise.resolve(null),
+        client.searchJql(base, email, token, jql, fields, 1),
+      ]);
+      // A moved issue answers its old key from its new project; keep it only
+      // while that project is still one of the workspace's.
+      const exact = byKey && projectKeys.includes(jiraProjectKeyOf(byKey.key)) ? [byKey] : [];
+      const seen = new Set(exact.map((i) => i.id));
+      return [...exact, ...byText.filter((i) => !seen.has(i.id))].map(mapIssue);
     },
 
     getPriorityValues(projectKey) {

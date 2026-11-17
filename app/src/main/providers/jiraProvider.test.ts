@@ -108,7 +108,7 @@ describe('createJiraProvider', () => {
     const ops = { id: '20001', key: 'OPS-4', fields: { status: { name: 'Impeded', statusCategory: { key: 'indeterminate' } }, customfield_10050: '2026-12-24' } };
     const client = stubClient({ searchJql: vi.fn(async () => [ISSUE, ops]) });
     const settings = { OPS: { dueDateField: 'customfield_10050', statusRoles: { Impeded: 'blocked' as const } } };
-    const [demo, opsIssue] = await createJiraProvider(client, CONN, settings).searchIssues(['DEMO', 'OPS'], '');
+    const [demo, opsIssue] = await createJiraProvider(client, CONN, settings).searchIssues(['DEMO', 'OPS'], 'thresholds');
     const fields = vi.mocked(client.searchJql).mock.calls[0][4] as string[];
     expect(fields).toEqual(expect.arrayContaining(['duedate', 'customfield_10050']));
     expect(new Set(fields).size).toBe(fields.length);
@@ -125,16 +125,52 @@ describe('createJiraProvider', () => {
       ...AUTH,
       'project in ("DEMO", "OPS") AND text ~ "db \\"creds\\"" ORDER BY updated DESC',
       jiraBoardFields(),
+      1,
     );
+    // Not a key, so nothing is looked up by key.
+    expect(client.getIssue).not.toHaveBeenCalled();
   });
 
-  it('omits the text clause for an empty query and returns nothing for no projects', async () => {
+  it('returns nothing, and asks Jira nothing, for an empty query or no projects', async () => {
     const client = stubClient();
     const p = createJiraProvider(client, CONN);
-    await p.searchIssues(['DEMO'], '   ');
-    expect(vi.mocked(client.searchJql).mock.calls[0][3]).toBe('project in ("DEMO") ORDER BY updated DESC');
+    await expect(p.searchIssues(['DEMO'], '   ')).resolves.toEqual([]);
     await expect(p.searchIssues([], 'x')).resolves.toEqual([]);
-    expect(client.searchJql).toHaveBeenCalledTimes(1);
+    expect(client.searchJql).not.toHaveBeenCalled();
+  });
+
+  // VERM-61: an exact key is fetched directly, because JQL's key = "X" fails
+  // the whole query when X does not exist.
+  it('looks up an exact key in a workspace project and lists it first, once', async () => {
+    const other = { ...ISSUE, id: '10099', key: 'DEMO-9' };
+    const client = stubClient({ searchJql: vi.fn(async () => [other, ISSUE]) });
+    const found = await createJiraProvider(client, CONN).searchIssues(['DEMO'], 'demo-1');
+    expect(client.getIssue).toHaveBeenCalledWith(...AUTH, 'DEMO-1', jiraBoardFields());
+    expect(found.map((i) => i.idReadable)).toEqual(['DEMO-1', 'DEMO-9']);
+  });
+
+  it('treats a 404 on the key as no match and still returns the text matches', async () => {
+    const client = stubClient({ getIssue: vi.fn(async () => Promise.reject({ status: 404, message: 'gone' })) });
+    const found = await createJiraProvider(client, CONN).searchIssues(['DEMO'], 'DEMO-404');
+    expect(found.map((i) => i.idReadable)).toEqual(['DEMO-1']);
+  });
+
+  it('surfaces a 401 from the key lookup rather than hiding it', async () => {
+    const err = { status: 401, message: 'Client must be authenticated' };
+    const client = stubClient({ getIssue: vi.fn(async () => Promise.reject(err)) });
+    await expect(createJiraProvider(client, CONN).searchIssues(['DEMO'], 'DEMO-1')).rejects.toBe(err);
+  });
+
+  it('never looks up a key outside the given projects', async () => {
+    const client = stubClient();
+    await createJiraProvider(client, CONN).searchIssues(['DEMO'], 'SECRET-1');
+    expect(client.getIssue).not.toHaveBeenCalled();
+  });
+
+  it('drops a key that has moved to a project outside the given ones', async () => {
+    const moved = { ...ISSUE, id: '10500', key: 'ELSEWHERE-3' };
+    const client = stubClient({ getIssue: vi.fn(async () => moved), searchJql: vi.fn(async () => []) });
+    await expect(createJiraProvider(client, CONN).searchIssues(['DEMO'], 'DEMO-3')).resolves.toEqual([]);
   });
 
   it('refuses a project key that could alter the JQL', async () => {

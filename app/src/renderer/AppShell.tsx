@@ -463,9 +463,14 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           Validate Estimates, Requirements, and Milestones; Identify, Log Issues, Assign Next steps
         </span>
         <SearchBar
-          projectShortNames={activeProjectShortName ? [activeProjectShortName] : workspaceShortNames}
-          scopeLabel={activeProject?.name ?? workspaceName}
-          onSelectIssue={(id) => setSelectedIssue(id)}
+          scope={isJiraWorkspace && activeContext.data
+            ? { kind: 'jira', workspaceId: activeContext.data.workspaceId }
+            : { kind: 'youtrack', projectShortNames: activeProjectShortName ? [activeProjectShortName] : workspaceShortNames }}
+          scopeLabel={isJiraWorkspace ? (activeContext.data?.workspaceName ?? workspaceName) : (activeProject?.name ?? workspaceName)}
+          onSelectIssue={(issue) =>
+            isJiraWorkspace && activeContext.data
+              ? setSelectedJiraIssue({ workspaceId: activeContext.data.workspaceId, issueKey: issue.idReadable })
+              : setSelectedIssue(issue.id)}
         />
         <div className={styles.topBarSpacer} />
         {activeContext.data?.backend && (

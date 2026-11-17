@@ -13,6 +13,7 @@ export interface JiraSearchIssue {
     status?: { name?: string; statusCategory?: { key?: string } } | null;
     priority?: { name?: string } | null;
     updated?: string | null;
+    assignee?: { accountId?: string; displayName?: string } | null; // board reads only (VERM-62)
   };
 }
 

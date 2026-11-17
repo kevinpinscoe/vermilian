@@ -53,6 +53,8 @@ notifications, or the timer worklog round-trip.
 | Filtering (bar, pills, search, clear, empty state) | ✅ E2E | `board-filter-sort.spec.ts` |
 | Empty state — project has no tasks ("No tasks in this project yet") | ✅ E2E | `empty-state.spec.ts` (Empty Project fixture) |
 | Due Date range filter (Before / On / After / Range) | ✅ E2E | `board-filter-sort.spec.ts` (dated TEST fixtures) |
+| Assignee filter (Me / Unassigned / named, All tasks + project board + Jira board) | ✅ E2E | `assignee-filter.spec.ts`, `board-search.spec.ts` (assigned TEST/TST2 and DEMO fixtures) |
+| Board search — instant filter, backend search incl. Done, result opens detail, `/` shortcut, Jira top-bar scope, 401 message | ✅ E2E | `board-search.spec.ts` (fake Jira DEMO-109 Done fixture) |
 | Data loading — Loader / Refresh / error Banner | ⬜ Gap | — |
 | Inbox indicator (board header) | ✅ E2E | `board-header.spec.ts` (Team Inbox fixture) |
 
