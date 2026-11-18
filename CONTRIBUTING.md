@@ -149,3 +149,5 @@ Native Mermaid blocks also work if the Mermaid module is enabled in wiki.js:
 ## AI assistance (Claude Code)
 
 Claude Code is used to generate and iterate on design artifacts. When a PR contains AI-generated content, note the scope in the PR description under the **AI assistance** section of the template. This keeps the design rationale traceable.
+
+Agents answering "how do I…?" questions start at [docs/ai-help-desk.md](docs/ai-help-desk.md). **Any change to user-facing behaviour updates that file in the same pull request, and every release updates the version stated at the top of it.**

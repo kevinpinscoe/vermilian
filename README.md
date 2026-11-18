@@ -315,6 +315,7 @@ vermilian/
 
 ## Documentation
 
+- [AI help desk](docs/ai-help-desk.md): how to perform each function, for AI agents
 - [Requirements](docs/requirements.md)
 - [Project plan](PLAN.md)
 - [To-do / next steps](TODO.md)
