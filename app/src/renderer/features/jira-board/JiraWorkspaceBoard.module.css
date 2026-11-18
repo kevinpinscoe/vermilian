@@ -123,7 +123,11 @@
 
 .cardKey {
   font-size: 11px;
-  color: var(--secondary-text-color, #444444);
+  color: #1a7f37;
+}
+
+:global(.dark-app-theme) .cardKey {
+  color: #4ade80;
 }
 
 .cardSummary {

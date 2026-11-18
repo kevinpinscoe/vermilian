@@ -180,6 +180,11 @@ so when the Status list may be incomplete, as it does when the token cannot read
 
 Issues refresh every 60 seconds while the window is visible.
 
+### Jira cards
+
+Each card on a Jira **All tasks** board shows its ticket ID in green, with the summary, priority, due date
+and epic below it.
+
 ### Jira detail panel
 
 Click a Jira card to open it. It shows Status, Priority, Due date, Epic if any, the **Priority Desk**
