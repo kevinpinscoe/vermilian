@@ -95,6 +95,16 @@ export const IPC = {
   checkWorkspaceCredential: 'credentialRefs:check',
   // One reference's configuration (never a value), for the Jira reconnect state (VERM-40).
   getCredentialRefStatus: 'credentialRefs:status',
+  // OpenBao credential backend (VERM-64). Status and configuration only: a
+  // stored credential or OpenBao token never crosses IPC.
+  openbaoGetState: 'openbao:getState',
+  openbaoSaveConnection: 'openbao:saveConnection',
+  openbaoTest: 'openbao:test',
+  openbaoMigrate: 'openbao:migrate',
+  openbaoSaveSecret: 'openbao:saveSecret',
+  openbaoDeleteSecret: 'openbao:deleteSecret',
+  openbaoDeactivate: 'openbao:deactivate',
+  openbaoCleanupOriginal: 'openbao:cleanupOriginal',
   // A Jira workspace's selectable projects, read with its own credential (VERM-33).
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
   // The boards the workspace's account can see, read with its own credential (VERM-59).
@@ -749,6 +759,14 @@ export interface VermilianAPI {
   clearCredentialRefSecret(credentialRef: string): Promise<CredentialRefWriteResult>;
   checkWorkspaceCredential(workspaceId: string, credentialRef: string | null): Promise<WorkspaceCredentialCheck>;
   getCredentialRefStatus(credentialRef: string): Promise<CredentialRefStatusResult>;
+  openbaoGetState(scope: import('./openbao').OpenBaoScope): Promise<import('./openbao').OpenBaoScopeState>;
+  openbaoSaveConnection(scope: import('./openbao').OpenBaoScope, connection: import('./openbao').OpenBaoConnection): Promise<import('./openbao').OpenBaoWriteResult>;
+  openbaoTest(scope: import('./openbao').OpenBaoScope): Promise<import('./openbao').OpenBaoTestResult>;
+  openbaoMigrate(scope: import('./openbao').OpenBaoScope, credentialRefs: string[]): Promise<import('./openbao').OpenBaoMigrationResult>;
+  openbaoSaveSecret(scope: import('./openbao').OpenBaoScope, credentialRef: string, value: string): Promise<import('./openbao').OpenBaoWriteResult>;
+  openbaoDeleteSecret(scope: import('./openbao').OpenBaoScope, credentialRef: string, args: { confirmed: boolean }): Promise<import('./openbao').OpenBaoWriteResult>;
+  openbaoDeactivate(scope: import('./openbao').OpenBaoScope, credentialRef: string): Promise<import('./openbao').OpenBaoWriteResult>;
+  openbaoCleanupOriginal(scope: import('./openbao').OpenBaoScope, credentialRef: string, args: { confirmed: boolean }): Promise<import('./openbao').OpenBaoWriteResult>;
   // The Jira projects a Jira workspace can choose from, listed through its own
   // connection and credential reference. Read-only; nothing is written to Jira.
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;

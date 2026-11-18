@@ -80,6 +80,8 @@ import {
   legacySecretStorage,
   encryptPlaintextSecrets,
   credentialSourceIO,
+  openBaoClient,
+  clearLegacySecret,
   saveCredentialRefSecret,
   clearCredentialRefSecret,
   listCredentialRefBlobs,
@@ -141,8 +143,31 @@ import type {
 import {
   LEGACY_CREDENTIAL_REFS,
   isLegacyCredentialRef,
+  blobFilenameFor,
+  checkCredentialValue,
+  legacyRefForBlob,
+  openBaoSourceFor,
+  selectSource,
+  sourcesFor,
   type CredentialRefStatus,
 } from '../shared/credentialRefs';
+import {
+  OPENBAO_REASON_TEXT,
+  SETTINGS_SCOPE_ID,
+  checkOpenBaoConnection,
+  defaultOpenBaoBinding,
+  describeOpenBaoTest,
+  sanitiseOpenBaoScopes,
+  type OpenBaoConnection,
+  type OpenBaoMigrationResult,
+  type OpenBaoReferenceState,
+  type OpenBaoScope,
+  type OpenBaoScopeConfig,
+  type OpenBaoScopeState,
+  type OpenBaoTestResult,
+  type OpenBaoWriteResult,
+} from '../shared/openbao';
+import { cleanupBlocker, migrateToOpenBao } from './services/openbaoMigration';
 import { isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
@@ -374,8 +399,10 @@ export function registerIpc(): void {
     // Per-reference sources change only through setCredentialRefSources, one
     // reference at a time, so a stale full map can never overwrite another
     // reference's entry.
-    const { credentialSources: _ignored, ...rest } = (patch ?? {}) as Partial<AppConfig>;
+    // OpenBao scopes likewise change only through their own handlers (VERM-64).
+    const { credentialSources: _ignored, openbaoScopes: _ignoredBao, ...rest } = (patch ?? {}) as Partial<AppConfig>;
     void _ignored;
+    void _ignoredBao;
     await writeConfig(rest);
     return { ok: true };
   });
@@ -406,7 +433,10 @@ export function registerIpc(): void {
         // A plain-text copy is reported even when a command or file is the
         // source in use: it is still a secret on disk in the clear.
         if (storage === 'plaintext') plaintext.push(kind);
-        else if (storage === 'undecryptable' && !command.trim() && !file.trim()) undecryptable.push(kind);
+        else if (
+          storage === 'undecryptable' && !command.trim() && !file.trim()
+          && !openBaoSourceFor(legacyRefForBlob(filename) ?? '', SETTINGS_SCOPE_ID, cfg)
+        ) undecryptable.push(kind);
       }
       return {
         plaintext,
@@ -765,14 +795,14 @@ export function registerIpc(): void {
 
   // Whether the reference has a source on this machine — without running or
   // reading it. Legacy storage keeps the Settings key's own check, unchanged.
-  async function aiConfigured(storage: WorkspaceStorageMode, ref: CredentialRef | null): Promise<boolean> {
+  async function aiConfigured(storage: WorkspaceStorageMode, ref: CredentialRef | null, workspaceId: string): Promise<boolean> {
     if (ref === null) return false;
     const cfg = await readConfig();
     if (storage === 'legacy') {
       if (IS_E2E) return true;
       return hasSecretWithSources(FILES.claudeKey, cfg.claudeKeyCommand, cfg.claudeKeyFile);
     }
-    const status = await credentialRefStatus(ref, cfg, credentialSourceIO);
+    const status = await credentialRefStatus(ref, cfg, credentialSourceIO, workspaceId);
     if (status.selected !== null) return true;
     return IS_E2E && e2eFakeAnthropicKeyAllowed(ref, 'no-source');
   }
@@ -780,7 +810,7 @@ export function registerIpc(): void {
   async function contextFor(choices: WorkspaceChoice[], id: string, configuredServerUrl: string): Promise<ActiveWorkspaceContext> {
     const storage = workspaceStorageMode();
     const ref = choices.find((c) => c.id === id)?.aiCredentialRef ?? null;
-    return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref));
+    return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref, id));
   }
 
   // One AI operation for the active workspace only (services/workspaceAiKey.ts).
@@ -1711,7 +1741,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.getCredentialRefStatus, async (_e, ref: unknown): Promise<CredentialRefStatusResult> => {
     if (!isCredentialRef(ref)) return { ok: false, message: 'That is not a valid credential reference.' };
     try {
-      return { ok: true, status: await credentialRefStatus(ref, await readConfig(), credentialSourceIO) };
+      const workspaceId = workspaceStorageMode() === 'per-workspace' ? (await activeWorkspaceContext()).workspaceId : '';
+      return { ok: true, status: await credentialRefStatus(ref, await readConfig(), credentialSourceIO, workspaceId) };
     } catch {
       return { ok: false, message: 'The credential configuration could not be read.' };
     }
@@ -1727,6 +1758,222 @@ export function registerIpc(): void {
       );
     },
   );
+
+  // ─── OpenBao credential backend (VERM-64) ───────────────────────────────────
+  // The renderer names a scope kind only; which workspace is meant is decided
+  // here, so a renderer can never reach another workspace's configuration.
+
+  async function openBaoTarget(scope: unknown): Promise<{
+    scopeId: string;
+    label: string;
+    refs: CredentialRef[];
+    settings: boolean;
+  } | null> {
+    if (scope === 'settings') {
+      return {
+        scopeId: SETTINGS_SCOPE_ID,
+        label: 'The YouTrack, Claude and Jira credentials in Settings. Vermilian loads your workspaces with these.',
+        refs: Object.keys(LEGACY_CREDENTIAL_REFS),
+        settings: true,
+      };
+    }
+    if (scope !== 'workspace' || workspaceStorageMode() !== 'per-workspace') return null;
+    const doc = await perWorkspaceDocument((await activeWorkspaceContext()).workspaceId);
+    if (!doc) return null;
+    const refs = [doc.backend.credentialRef, aiCredentialRefOf('per-workspace', doc)]
+      .filter((r): r is CredentialRef => typeof r === 'string');
+    return { scopeId: doc.workspaceId, label: `Workspace: ${doc.name}`, refs: [...new Set(refs)], settings: false };
+  }
+
+  const NO_OPENBAO_TARGET: OpenBaoWriteResult = {
+    ok: false,
+    message: 'This scope is not available. Workspace credentials need per-workspace storage and an active workspace.',
+  };
+
+  async function originalSourceOf(ref: CredentialRef, cfg: AppConfig): Promise<OpenBaoReferenceState['original']> {
+    const blobPresent = await credentialSourceIO.blobPresent(blobFilenameFor(ref), isLegacyCredentialRef(ref));
+    const source = selectSource(sourcesFor(ref, cfg), blobPresent);
+    return source === 'openbao' ? null : source;
+  }
+
+  async function setOpenBaoBindings(
+    scopeId: string,
+    change: (current: OpenBaoScopeConfig['credentials']) => OpenBaoScopeConfig['credentials'],
+  ): Promise<boolean> {
+    try {
+      const cfg = await readConfig();
+      const scope = cfg.openbaoScopes[scopeId];
+      if (!scope) return false;
+      await writeConfig({
+        openbaoScopes: { ...cfg.openbaoScopes, [scopeId]: { ...scope, credentials: change(scope.credentials) } },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  ipcMain.handle(IPC.openbaoGetState, async (_e, scope: unknown): Promise<OpenBaoScopeState> => {
+    const kind: OpenBaoScope = scope === 'workspace' ? 'workspace' : 'settings';
+    const target = await openBaoTarget(kind);
+    if (!target) {
+      return { scope: kind, available: false, label: NO_OPENBAO_TARGET.message, connection: null, references: [] };
+    }
+    const cfg = await readConfig();
+    const stored = cfg.openbaoScopes[target.scopeId];
+    const references = await Promise.all(target.refs.map(async (ref): Promise<OpenBaoReferenceState> => ({
+      credentialRef: ref,
+      active: Boolean(stored?.credentials[ref]),
+      binding: stored?.credentials[ref] ?? defaultOpenBaoBinding(ref),
+      original: await originalSourceOf(ref, cfg),
+    })));
+    let connection: OpenBaoConnection | null = null;
+    if (stored) {
+      const { credentials: _bindings, ...rest } = stored;
+      void _bindings;
+      connection = rest;
+    }
+    return { scope: kind, available: true, label: target.label, connection, references };
+  });
+
+  ipcMain.handle(IPC.openbaoSaveConnection, async (_e, scope: unknown, input: unknown): Promise<OpenBaoWriteResult> => {
+    const target = await openBaoTarget(scope);
+    if (!target) return NO_OPENBAO_TARGET;
+    const parsed = sanitiseOpenBaoScopes({ [target.scopeId]: input })[target.scopeId];
+    const checked = parsed ? checkOpenBaoConnection(parsed) : { ok: false as const, problems: ['The connection is incomplete.'] };
+    if (!checked.ok) return { ok: false, message: checked.problems.join(' ') };
+    const cfg = await readConfig();
+    const current = cfg.openbaoScopes[target.scopeId];
+    const next = checked.connection;
+    const moved = current && (current.url !== next.url || current.namespace !== next.namespace
+      || current.kvMount !== next.kvMount || current.pathPrefix !== next.pathPrefix);
+    if (moved && Object.keys(current.credentials).length > 0) {
+      return { ok: false, message: 'Stop using OpenBao for every credential here before moving to a different server or path.' };
+    }
+    try {
+      await writeConfig({
+        openbaoScopes: { ...cfg.openbaoScopes, [target.scopeId]: { ...next, credentials: current?.credentials ?? {} } },
+      });
+    } catch {
+      return { ok: false, message: 'The connection could not be saved.' };
+    }
+    openBaoClient.forget(target.scopeId);
+    return { ok: true, message: 'Connection saved.' };
+  });
+
+  ipcMain.handle(IPC.openbaoTest, async (_e, scope: unknown): Promise<OpenBaoTestResult> => {
+    const target = await openBaoTarget(scope);
+    const stored = target ? (await readConfig()).openbaoScopes[target.scopeId] : undefined;
+    if (!target || !stored) return { status: 'incomplete', message: describeOpenBaoTest('incomplete'), references: [] };
+    const bindings = Object.entries(stored.credentials).map(([credentialRef, binding]) => ({ credentialRef, binding }));
+    return openBaoClient.test(target.scopeId, stored, bindings);
+  });
+
+  ipcMain.handle(IPC.openbaoMigrate, async (_e, scope: unknown, refs: unknown): Promise<OpenBaoMigrationResult> => {
+    const refused = (message: string): OpenBaoMigrationResult => ({ ok: false, activated: false, message, references: [] });
+    const target = await openBaoTarget(scope);
+    if (!target) return refused(NO_OPENBAO_TARGET.message);
+    const cfg = await readConfig();
+    const stored = cfg.openbaoScopes[target.scopeId];
+    if (!stored) return refused(describeOpenBaoTest('incomplete'));
+    const wanted = Array.isArray(refs) ? refs.filter((r): r is CredentialRef => target.refs.includes(r as CredentialRef)) : [];
+    // The original is read with OpenBao out of the picture, so a retry can never
+    // copy a value from OpenBao back onto itself.
+    const localOnly: AppConfig = { ...cfg, openbaoScopes: {} };
+    return migrateToOpenBao({
+      references: wanted.map((credentialRef) => ({
+        credentialRef,
+        binding: stored.credentials[credentialRef] ?? defaultOpenBaoBinding(credentialRef),
+        active: Boolean(stored.credentials[credentialRef]),
+      })),
+      readOriginal: async (credentialRef) => {
+        const r = await resolveWorkspaceCredential({ workspaceId: target.settings ? 'settings' : target.scopeId, credentialRef }, localOnly, credentialSourceIO);
+        return r.ok ? { ok: true, value: r.value } : { ok: false, message: r.message };
+      },
+      store: (binding, value) => openBaoClient.storeVerified(target.scopeId, stored, binding, value, { overwrite: false }),
+      activate: (verified) => setOpenBaoBindings(target.scopeId, (current) => ({
+        ...current,
+        ...Object.fromEntries(verified.map((v) => [v.credentialRef, v.binding])),
+      })),
+    });
+  });
+
+  ipcMain.handle(IPC.openbaoSaveSecret, async (_e, scope: unknown, ref: unknown, value: unknown): Promise<OpenBaoWriteResult> => {
+    const target = await openBaoTarget(scope);
+    if (!target) return NO_OPENBAO_TARGET;
+    if (!target.refs.includes(ref as CredentialRef)) return { ok: false, message: 'That credential does not belong here.' };
+    const credentialRef = ref as CredentialRef;
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (checkCredentialValue(trimmed) !== 'ok') return { ok: false, message: 'That is not a single credential value.' };
+    const stored = (await readConfig()).openbaoScopes[target.scopeId];
+    if (!stored) return { ok: false, message: describeOpenBaoTest('incomplete') };
+    const binding = stored.credentials[credentialRef] ?? defaultOpenBaoBinding(credentialRef);
+    const r = await openBaoClient.storeVerified(target.scopeId, stored, binding, trimmed, { overwrite: true });
+    if (!r.ok) return { ok: false, message: OPENBAO_REASON_TEXT[r.reason] };
+    const saved = await setOpenBaoBindings(target.scopeId, (c) => ({ ...c, [credentialRef]: binding }));
+    return saved
+      ? { ok: true, message: 'Stored in OpenBao and verified.' }
+      : { ok: false, message: 'Stored in OpenBao, but the switch could not be saved.' };
+  });
+
+  ipcMain.handle(IPC.openbaoDeleteSecret, async (_e, scope: unknown, ref: unknown, args: unknown): Promise<OpenBaoWriteResult> => {
+    if ((args as { confirmed?: unknown } | null)?.confirmed !== true) return { ok: false, message: 'Deleting needs confirmation.' };
+    const target = await openBaoTarget(scope);
+    if (!target) return NO_OPENBAO_TARGET;
+    if (!target.refs.includes(ref as CredentialRef)) return { ok: false, message: 'That credential does not belong here.' };
+    const credentialRef = ref as CredentialRef;
+    const stored = (await readConfig()).openbaoScopes[target.scopeId];
+    if (!stored) return { ok: false, message: describeOpenBaoTest('incomplete') };
+    if (stored.credentials[credentialRef]) return { ok: false, message: 'Stop using OpenBao for this credential before deleting it.' };
+    const r = await openBaoClient.deleteField(target.scopeId, stored, defaultOpenBaoBinding(credentialRef));
+    return r.ok ? { ok: true, message: 'Deleted from OpenBao.' } : { ok: false, message: OPENBAO_REASON_TEXT[r.reason] };
+  });
+
+  ipcMain.handle(IPC.openbaoDeactivate, async (_e, scope: unknown, ref: unknown): Promise<OpenBaoWriteResult> => {
+    const target = await openBaoTarget(scope);
+    if (!target) return NO_OPENBAO_TARGET;
+    if (!target.refs.includes(ref as CredentialRef)) return { ok: false, message: 'That credential does not belong here.' };
+    const saved = await setOpenBaoBindings(target.scopeId, (current) => {
+      const next = { ...current };
+      delete next[ref as CredentialRef];
+      return next;
+    });
+    return saved
+      ? { ok: true, message: 'This credential no longer uses OpenBao. The copy in OpenBao was kept.' }
+      : { ok: false, message: 'The change could not be saved.' };
+  });
+
+  ipcMain.handle(IPC.openbaoCleanupOriginal, async (_e, scope: unknown, ref: unknown, args: unknown): Promise<OpenBaoWriteResult> => {
+    if ((args as { confirmed?: unknown } | null)?.confirmed !== true) return { ok: false, message: 'Removing the local copy needs confirmation.' };
+    const target = await openBaoTarget(scope);
+    if (!target) return NO_OPENBAO_TARGET;
+    if (!target.refs.includes(ref as CredentialRef)) return { ok: false, message: 'That credential does not belong here.' };
+    const credentialRef = ref as CredentialRef;
+    const legacy = isLegacyCredentialRef(credentialRef);
+    const stored = (await readConfig()).openbaoScopes[target.scopeId];
+    const binding = stored?.credentials[credentialRef];
+    let otherUsers: number | null = 0;
+    if (!target.settings) {
+      const client = await workspaceArticleClient();
+      const listed = client ? await workspaceArticles.listWorkspaceArticles(client) : null;
+      const cfg = await readConfig();
+      otherUsers = listed?.ok
+        ? listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : [])).filter((d) =>
+          d.workspaceId !== target.scopeId
+          && (d.backend.credentialRef === credentialRef || aiCredentialRefOf('per-workspace', d) === credentialRef)
+          && !openBaoSourceFor(credentialRef, d.workspaceId, cfg)).length
+        : null;
+    }
+    const blocked = cleanupBlocker({ legacy, settingsScope: target.settings, active: Boolean(binding), otherUsers });
+    if (blocked) return { ok: false, message: blocked };
+    // The copy in OpenBao must be readable now, or the local copy is the only one left.
+    const live = await openBaoClient.readField(target.scopeId, stored, binding);
+    if (!live.ok) return { ok: false, message: `The local copy was kept. ${OPENBAO_REASON_TEXT[live.reason]}` };
+    const removed = legacy
+      ? await clearLegacySecret(blobFilenameFor(credentialRef))
+      : (await clearCredentialRefSecret(credentialRef)).ok;
+    return removed ? { ok: true, message: 'The saved local copy was removed.' } : { ok: false, message: 'The local copy could not be removed.' };
+  });
 
   ipcMain.handle(
     IPC.standupGenerate,

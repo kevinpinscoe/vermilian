@@ -138,7 +138,8 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
 - **monday.com-style board** — a high-density task board with colour-coded status, priority, and
   category chips, grouping, filtering, and sorting; table and Kanban views.
 - **Layered credential sources** — read your YouTrack token from a shell command (e.g. a secrets
-  manager), a file path, or the OS keyring — whichever fits your setup.
+  manager), a file path, the OS keyring, or [OpenBao](RUNBOOK.md#openbao-credential-storage-verm-64),
+  configured separately for each workspace.
 - **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (Apple Silicon `.dmg`), and Windows.
   Intel macOS and Raspberry Pi / arm64 Linux can be built from source (see
   [Target platforms](#target-platforms)).

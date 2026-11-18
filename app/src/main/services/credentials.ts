@@ -20,6 +20,8 @@ import {
   checkCredentialValue,
   describeSourceFailure,
   isLegacyCredentialRef,
+  legacyRefForBlob,
+  openBaoSourceFor,
   refFromBlobFilename,
   selectSource,
   type CredentialFailureReason,
@@ -28,6 +30,9 @@ import {
 import { isCredentialRef } from '../../shared/workspaceSchema';
 import type { CredentialRefWriteResult } from '../../shared/ipc';
 import type { CredentialSourceIO } from './credentialResolver';
+import { readConfig } from './config';
+import { createOpenBaoClient } from './openbaoClient';
+import { SETTINGS_SCOPE_ID, type OpenBaoFailureReason } from '../../shared/openbao';
 
 const execAsync = promisify(exec);
 
@@ -172,6 +177,18 @@ export async function resolveLegacySecret(
   filePath: string,
 ): Promise<LegacySecretResolution> {
   const io = credentialSourceIO;
+  // A Settings credential switched to OpenBao reads nothing else (VERM-64).
+  const legacyRef = legacyRefForBlob(filename);
+  const bao = legacyRef ? openBaoSourceFor(legacyRef, SETTINGS_SCOPE_ID, await readConfig()) : null;
+  if (bao) {
+    const r = await openBaoClient.readField(bao.scopeId, bao.scope, bao.binding);
+    const failed = (reason: CredentialFailureReason): LegacySecretResolution =>
+      ({ ok: false, source: 'openbao', reason, message: describeSourceFailure('openbao', reason) });
+    if (!r.ok) return failed(`openbao-${r.reason as OpenBaoFailureReason}`);
+    const value = r.value.trim();
+    const check = checkCredentialValue(value);
+    return check === 'ok' ? { ok: true, value, source: 'openbao' } : failed(check);
+  }
   const sources = { command, file: filePath };
   const needBlobCheck = !command.trim() && !filePath.trim();
   const source = selectSource(sources, needBlobCheck ? await io.blobPresent(filename, true) : false);
@@ -219,6 +236,8 @@ export async function hasSecretWithSources(
   command: string,
   filePath: string,
 ): Promise<boolean> {
+  const legacyRef = legacyRefForBlob(filename);
+  if (legacyRef && openBaoSourceFor(legacyRef, SETTINGS_SCOPE_ID, await readConfig())) return true;
   if (command.trim()) return true; // trust user's configuration
   if (filePath.trim()) {
     try {
@@ -236,8 +255,22 @@ export async function hasSecretWithSources(
 // read reports only whether it worked, and the resolver stops on the first
 // configured source that fails.
 
+/** OpenBao access for this process; the login secret comes from a command or file (VERM-64). */
+export const openBaoClient = createOpenBaoClient({
+  fetch: (input, init) => fetch(input, init),
+  async readAuthSecret(auth) {
+    if (auth.secretCommand) {
+      const r = await credentialSourceIO.runCommand(auth.secretCommand);
+      return r.ok ? r.stdout : null;
+    }
+    const r = await credentialSourceIO.readFile(auth.secretFile);
+    return r.ok ? r.content : null;
+  },
+});
+
 /** Electron/Node reads for credentialResolver.ts. */
 export const credentialSourceIO: CredentialSourceIO = {
+  readOpenBao: (scopeId, conn, binding) => openBaoClient.readField(scopeId, conn, binding),
   async runCommand(command) {
     try {
       const { stdout } = await execAsync(command, { timeout: 10_000 });
@@ -332,6 +365,17 @@ export async function clearCredentialRefSecret(ref: string): Promise<CredentialR
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return { ok: false, reason: 'write-failed' };
   }
   return { ok: true };
+}
+
+/** Deletes a Settings credential's saved blob and any plain-text copy. Absent is success. */
+export async function clearLegacySecret(filename: string): Promise<boolean> {
+  try {
+    await fs.rm(path.join(credentialsDir(), filename), { force: true });
+    await fs.rm(plaintextPath(filename), { force: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** References that have a per-reference blob on this host. */

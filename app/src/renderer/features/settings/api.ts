@@ -6,6 +6,7 @@ import type { AppConfig } from '../../../shared/config';
 export const CONFIG_QUERY_KEY = ['config'] as const;
 export const CRED_STATUS_QUERY_KEY = ['cred-status'] as const;
 export const JIRA_PROFILE_QUERY_KEY = ['jira-profile'] as const;
+export const OPENBAO_STATE_QUERY_KEY = ['openbao-state'] as const;
 
 export function useConfig() {
   return useQuery({

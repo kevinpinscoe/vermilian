@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OpenBao credential storage** (VERM-64). **Settings → OpenBao credential storage** adds OpenBao
+  as a fourth place to keep credentials, beside a shell command, a file and the system keychain.
+  Each workspace, and this machine's Settings credentials, has its own server, login and secret
+  path. **Move credentials to OpenBao** copies each credential, reads it back to verify it, and
+  only then switches over; the originals stay until you remove them. If OpenBao is unavailable,
+  operations that need a credential stop with a clear message: Vermilian never falls back to
+  another store. Credentials in OpenBao do not depend on the macOS keychain, so an upgrade to a
+  differently signed build cannot lock them out.
+
 ## [1.5.0] - 2026-11-16
 
 ### Added

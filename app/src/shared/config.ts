@@ -2,6 +2,8 @@
 // `userData/app-config.json`. This object MUST NEVER contain tokens or API keys
 // (those live only in safeStorage blobs — see ADR-0004).
 
+import type { OpenBaoScopeConfig } from './openbao';
+
 export type ThemeSetting = 'light' | 'dark' | 'system';
 
 export interface PomodoroConfig {
@@ -59,6 +61,10 @@ export interface AppConfig {
   // blob, not an entry here.
   credentialSources: Record<string, CredentialSourceConfig>;
 
+  // OpenBao backends (VERM-64), keyed by workspace ID or SETTINGS_SCOPE_ID.
+  // Connection details and references only: never a token or a SecretID.
+  openbaoScopes: Record<string, OpenBaoScopeConfig>;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -88,6 +94,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   jiraTokenCommand: '',
   jiraTokenFile: '',
   credentialSources: {},
+  openbaoScopes: {},
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',
