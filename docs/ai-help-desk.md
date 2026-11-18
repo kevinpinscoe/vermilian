@@ -2,8 +2,9 @@
 
 Look up how to perform a Vermilian function here before reading source code. Written for AI
 agents answering "how do I…?" questions. Facts are for **v1.5.0** and were checked against the
-code. Paths are relative to `app/src/` unless they start with `app/` or `docs/`, and `tid` means
-`data-testid`.
+code, except [OpenBao credential storage](#store-credentials-in-openbao), which is merged but not
+yet in a release. Paths are relative to `app/src/` unless they start with `app/` or `docs/`, and
+`tid` means `data-testid`.
 
 ## How to use this file
 
@@ -41,6 +42,7 @@ code. Paths are relative to `app/src/` unless they start with `app/` or `docs/`,
 | Per-workspace storage | Both | [Workspace storage](#activate-per-workspace-storage) |
 | Master plan | YouTrack | [Master plan](#set-a-master-plan) |
 | Token, credentials, Test connection, revoked token | Both | [Settings and credentials](#settings-and-credentials) |
+| OpenBao, move credentials to OpenBao, keychain lockout after an upgrade | Both | [Store credentials in OpenBao](#store-credentials-in-openbao) |
 | Theme, reset settings, config folder | Both | [Other settings](#other-settings) |
 | Back up or restore Jira ranks, Runway snapshot | Jira | [Runway snapshots](#runway-snapshots) |
 
@@ -53,7 +55,8 @@ code. Paths are relative to `app/src/` unless they start with `app/` or `docs/`,
 | A starred issue is not on the desk | That the star failed. The desk shows ranked issues only | Give it rank 1, 2 or 3 |
 | A desk card says "Not among this workspace's open Jira issues." | That the rank was lost. The issue is Done, deleted, or outside the chosen projects and boards | Clear the rank on the card if it is no longer wanted |
 | The board picker shows "Unauthorized; scope does not match" | That projects are broken. The text is Jira's own error for listing boards | See [Jira connection problems](#jira-connection-problems) |
-| **Test connection** passes but the app still fails | That the saved credential works. A pasted token is tested even when Source 1 or 2 overrides it | See [Settings and credentials](#settings-and-credentials) |
+| **Test connection** passes but the app still fails | That the saved credential works. A pasted token is tested even when OpenBao or Source 1 or 2 overrides it | See [Settings and credentials](#settings-and-credentials) |
+| An OpenBao error appears although a token is still saved locally | That the local copy can be used. A credential using OpenBao reads nothing else | Restore OpenBao, or choose **Stop using OpenBao**. See [Store credentials in OpenBao](#store-credentials-in-openbao) |
 
 ## Priority Desk
 
@@ -326,25 +329,68 @@ is broken. Click **Save** to keep changes. Theme applies immediately.
 
 | Priority | Source | Behaviour |
 | --- | --- | --- |
-| 1 | **Source 1: Shell command** | Output is used as the token |
-| 2 | **Source 2: File path** | File content is used as the token |
-| 3 | **Source 3: Paste token (saved to OS keyring)** | Used only when Sources 1 and 2 are blank |
+| 1 | **OpenBao**, once a credential is switched to it | Read from the OpenBao server. Sources 1 to 3 are ignored |
+| 2 | **Source 1: Shell command** | Output is used as the token |
+| 3 | **Source 2: File path** | File content is used as the token |
+| 4 | **Source 3: Paste token (saved to OS keyring)** | Used only when Sources 1 and 2 are blank |
 
 **The highest configured source is the only one used.** A failing source stops resolution and does
 not fall through to the next one, although the on-screen text says "blank or fails". To use a pasted
-token, blank Sources 1 and 2.
+token, blank Sources 1 and 2, and choose **Stop using OpenBao** if that credential uses it.
 
 **Test connection** tests a pasted token if one is in the field, even when a higher source overrides
 it. It does not save.
 
-**Credentials not saved** means the keychain cannot encrypt on this computer. Use a shell command or
-file instead.
+**Credentials not saved** means the keychain cannot encrypt on this computer. Use a shell command,
+a file or OpenBao instead.
+
+### Store credentials in OpenBao
+
+**Not yet in a release.** This section describes the code merged after v1.5.0.
+
+**Preconditions:** a reachable OpenBao server with a KV version 2 mount, and a login for Vermilian.
+Remote servers must use `https://`. The section is absent from the first-run Settings screen.
+
+1. Open **Settings → OpenBao credential storage** (tid `openbao-section`).
+2. In **Applies to**, choose **This machine’s Settings credentials** or **The active workspace**.
+3. Fill in **Server address**, **KV v2 mount** and **Secret path**.
+4. In **Sign in with**, choose **AppRole** or **Short-lived token**, then give a command or a file
+   that supplies the SecretID or token.
+5. Click **Use this connection**, then **Test connection**.
+6. Click **Move credentials to OpenBao**. Each credential is copied and read back before Vermilian
+   switches to it.
+7. Restart Vermilian and confirm the board loads.
+
+**Expected result:** each credential's line reads **using OpenBao**.
+
+**Limits:**
+
+- **The active workspace** needs per-workspace storage. Without it the section reads "This scope is
+  not available."
+- Each scope has its own server and login. A workspace never reads another workspace's scope.
+- If OpenBao is unavailable, operations that need that credential stop. There is no offline copy
+  and no fallback to another source.
+- The move stops, and overwrites nothing, if the secret path already holds a different value.
+- If a saved credential can no longer be read, paste its value in that credential's field and click
+  **Store**.
+
+| Task | Control |
+| --- | --- |
+| Replace a stored value | Paste the new value and click **Store** |
+| Go back to the previous source | **Stop using OpenBao**. The OpenBao copy is kept |
+| Delete the keychain copy | **Remove local copy**. A configured command or file is left alone |
+| Delete the OpenBao copy | **Delete from OpenBao**, offered once the credential is not using OpenBao |
+
+**Proof:** `renderer/features/settings/sections/OpenBaoSection.tsx`,
+`main/services/credentialResolver.ts`, `shared/credentialRefs.ts`. Spec:
+`app/e2e/openbao-settings.spec.ts`. Failure messages and recovery are in `RUNBOOK.md`.
 
 ### Recover from a revoked token
 
 1. The banner **Cannot load projects from YouTrack** appears with **Open Settings** and **Retry**.
 2. Open Settings with the top-bar gear.
-3. Fix the token at whichever source is configured.
+3. Fix the token at whichever source is configured. For a credential using OpenBao, paste the new
+   value in **OpenBao credential storage** and click **Store**.
 4. Click **Test connection**, then **Save**.
 5. Click **Retry** if the banner remains.
 
