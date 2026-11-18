@@ -179,6 +179,9 @@ Issues refresh every 60 seconds while the window is visible.
 Click a Jira card to open it. It shows Status, Priority, Due date, Epic if any, the **Priority Desk**
 section, Description and Comments. Close it with the X or **Esc**.
 
+To open the issue in Jira, click its key at the top of the panel, such as `SRE-4446`. It opens in the
+default browser and the panel stays open.
+
 **Vermilian never writes to Jira.** Cards cannot be dragged, and there are no edit, delete or timer
 controls. Only star, rank and Why now can be changed, and they stay on this computer.
 

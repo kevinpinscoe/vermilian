@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toJiraIssueRow, type JiraSearchIssue } from './jiraIssue';
+import { jiraIssueUrl, toJiraIssueRow, type JiraSearchIssue } from './jiraIssue';
 
 const SITE = 'https://example.atlassian.net';
 
@@ -16,6 +16,20 @@ function issue(overrides: Partial<JiraSearchIssue> = {}): JiraSearchIssue {
     ...overrides,
   };
 }
+
+describe('jiraIssueUrl', () => {
+  it('links to the issue on the site', () => {
+    expect(jiraIssueUrl(SITE, 'SRE-4446')).toBe(`${SITE}/browse/SRE-4446`);
+  });
+
+  it('tolerates trailing slashes on the site URL', () => {
+    expect(jiraIssueUrl(`${SITE}//`, 'SRE-4446')).toBe(`${SITE}/browse/SRE-4446`);
+  });
+
+  it('encodes the key', () => {
+    expect(jiraIssueUrl(SITE, 'A B-1')).toBe(`${SITE}/browse/A%20B-1`);
+  });
+});
 
 describe('toJiraIssueRow', () => {
   it('maps key, summary, status, category, priority, updated and the browse URL', () => {

@@ -159,7 +159,7 @@ import { FAKE_JIRA_BAD_TOKEN } from './api/fakeJira';
 import * as fakeJiraForE2E from './api/fakeJira';
 import * as fakeClaudeForE2E from './api/fakeClaude';
 import { normaliseJiraProfile, type JiraProfile } from '../shared/jiraProfile';
-import { toJiraIssueRow } from '../shared/jiraIssue';
+import { jiraIssueUrl, toJiraIssueRow } from '../shared/jiraIssue';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
@@ -1456,7 +1456,8 @@ export function registerIpc(): void {
         if (issue.idReadable !== issueKey && !(await workspaceOwnsIssue(p.provider, p.doc, issue.idReadable))) {
           return refused(`${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects and boards.`, p.doc);
         }
-        return { ok: true, issue, content };
+        const siteUrl = p.doc.backend.kind === 'jira' ? p.doc.backend.siteUrl : '';
+        return { ok: true, issue, issueUrl: jiraIssueUrl(siteUrl, issue.idReadable), content };
       } catch (e) {
         return jiraFailure(a.workspaceId, p.doc, e, `${issueKey} could not be loaded.`);
       }
