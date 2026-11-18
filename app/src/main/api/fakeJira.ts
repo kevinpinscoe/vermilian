@@ -286,6 +286,21 @@ export async function searchProjectIssues(
   ).map((i) => ({ ...i, fields: { ...i.fields } }));
 }
 
+// ── Workflow statuses (VERM-67) ──────────────────────────────────────────────
+// Fictional workflows. In Review and Done have no open fixture issue.
+export const FAKE_JIRA_STATUSES: Record<string, string[]> = {
+  DEMO: ['To Do', 'In Progress', 'In Review', 'Done'],
+  OPS: ['Waiting', 'Done'],
+};
+let statusReadsFail = false;
+
+export async function listProjectStatuses(_base: string, _email: string, token: string, projectKey: string): Promise<string[]> {
+  logCall('listProjectStatuses', { projectKey });
+  rejectBadToken(token);
+  if (statusReadsFail) throw { status: 403, message: 'Unauthorized; scope does not match' };
+  return [...(FAKE_JIRA_STATUSES[projectKey] ?? [])];
+}
+
 // ── Priority schemes (VERM-30) ───────────────────────────────────────────────
 // Fictional schemes, most urgent first. DEMO deliberately differs from the
 // YouTrack list; OPS has no priority field on its screens.
@@ -375,13 +390,19 @@ export type FakeJiraChange =
   | { op: 'delete'; key: string }
   | { op: 'move'; key: string; toKey: string; touch?: boolean }
   // Search-index lag: the issue stays readable by key but no search lists it.
-  | { op: 'unindex'; key: string };
+  | { op: 'unindex'; key: string }
+  // A token that cannot read workflow statuses (VERM-67).
+  | { op: 'failStatusReads' };
 
 function stampNow(): string {
   return new Date().toISOString();
 }
 
 export function applyChangeForTests(change: FakeJiraChange): boolean {
+  if (change.op === 'failStatusReads') {
+    statusReadsFail = true;
+    return true;
+  }
   if (change.op === 'create') {
     if (FAKE_JIRA_ISSUES.some((i) => i.key === change.key || i.id === change.id)) return false;
     FAKE_JIRA_ISSUES.push({

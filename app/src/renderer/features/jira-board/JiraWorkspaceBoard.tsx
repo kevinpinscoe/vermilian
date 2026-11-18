@@ -2,8 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Heading, Loader, Text } from '@vibe/core';
 import { formatDate } from '../project-board/KanbanView';
-import { describeHiddenColumns, jiraBoardColumns, splitHiddenColumns } from './jiraBoard';
+import { describeHiddenColumns, jiraBoardColumns, jiraStatusOptions, splitHiddenColumns, withAlwaysShownColumn } from './jiraBoard';
 import { JiraColumnsMenu } from './JiraColumnsMenu';
+import { JiraStatusPills } from './JiraStatusPills';
+import { useJiraHiddenStatuses } from './useJiraHiddenStatuses';
 import { JiraReconnect } from './JiraReconnect';
 import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
@@ -106,10 +108,26 @@ export function JiraWorkspaceBoard({
   // Columns come from every loaded issue, so they keep their order and place
   // while a filter empties some of them; each shows "N of M" while filtering.
   const columns = useMemo(() => jiraBoardColumns(issues, priorities), [issues, priorities]);
+  // Every status the workspace's projects define, for the filter (VERM-67).
+  const statusList = useQuery({
+    queryKey: ['workspace', 'jira-statuses', workspaceId, sources] as const,
+    queryFn: () => window.vermilian.listWorkspaceJiraStatuses(workspaceId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    enabled: sources.length > 0,
+  });
+  const knownStatuses = useMemo(() => (statusList.data?.ok ? statusList.data.statuses : []), [statusList.data]);
+  const statusesIncomplete = statusList.isError || (statusList.data !== undefined && (!statusList.data.ok || statusList.data.incomplete));
+  const statusFilter = useJiraHiddenStatuses(workspaceId, hiddenStatuses, onHiddenStatusesSaved);
+  const boardColumns = useMemo(() => withAlwaysShownColumn(columns, knownStatuses), [columns, knownStatuses]);
+  const statusOptions = useMemo(
+    () => jiraStatusOptions(boardColumns, knownStatuses, statusFilter.hidden),
+    [boardColumns, knownStatuses, statusFilter.hidden],
+  );
   // Columns the workspace hides, counted rather than dropped (VERM-60).
   const { shown: shownColumns, hidden: hiddenColumns } = useMemo(
-    () => splitHiddenColumns(columns, hiddenStatuses),
-    [columns, hiddenStatuses],
+    () => splitHiddenColumns(boardColumns, statusFilter.hidden),
+    [boardColumns, statusFilter.hidden],
   );
   const filtering = filter.search.trim() !== '' || filter.assignee.length > 0;
   const visible = useMemo(() => new Set(applyFilter(issues, filter, myAccountId).map((i) => i.id)), [issues, filter, myAccountId]);
@@ -137,8 +155,8 @@ export function JiraWorkspaceBoard({
         </label>
         <JiraColumnsMenu
           workspaceId={workspaceId}
-          statuses={columns.map((c) => c.status)}
-          hidden={hiddenStatuses}
+          statuses={statusOptions}
+          hidden={statusFilter.hidden}
           onSaved={onHiddenStatusesSaved}
         />
         <Button kind="tertiary" size="small" data-testid="choose-jira-projects-btn" onClick={onChooseProjects}>
@@ -170,13 +188,27 @@ export function JiraWorkspaceBoard({
               placeholder={`Search ${workspaceName} by key or text  ( / )`}
             />
           </div>
-          {issues.length > 0 && (
+          {(issues.length > 0 || statusOptions.length > 0) && (
             <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
+              <JiraStatusPills
+                statuses={statusOptions}
+                hidden={statusFilter.hidden}
+                saving={statusFilter.saving}
+                onToggle={statusFilter.toggle}
+              />
               <AssigneePills issues={issues} myId={myAccountId} active={filter.assignee} onToggle={toggleAssignee} />
               {filter.assignee.length > 0 && (
                 <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...f, assignee: [] }))}>Clear</button>
               )}
             </div>
+          )}
+          {statusesIncomplete && (
+            <div className={styles.projects} role="status" data-testid="jira-status-list-note">
+              Some Jira statuses could not be listed, so the Status filter may be incomplete.
+            </div>
+          )}
+          {statusFilter.error && (
+            <div className={styles.error} role="alert" data-testid="jira-status-filter-error">{statusFilter.error}</div>
           )}
           {hiddenColumns.length > 0 && (
             <div className={styles.hiddenColumns} data-testid="jira-hidden-columns">

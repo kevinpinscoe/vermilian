@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@vibe/core';
-import { withJiraHiddenStatuses } from '../../../shared/workspaceSetup';
+import { isAlwaysShownStatus } from './jiraBoard';
+import { saveJiraHiddenStatuses } from './useJiraHiddenStatuses';
 import styles from './JiraWorkspaceBoard.module.css';
 
 interface JiraColumnsMenuProps {
@@ -17,7 +18,7 @@ interface JiraColumnsMenuProps {
  * Unchecked columns are hidden. The choice is saved to the workspace's own
  * article, so it follows the workspace to every machine; nothing is written
  * to Jira. A hidden status no loaded issue is in is still listed, so it can
- * be shown again.
+ * be shown again. In Progress is listed but locked on (VERM-67).
  */
 export function JiraColumnsMenu({ workspaceId, statuses, hidden, onSaved }: JiraColumnsMenuProps) {
   const [open, setOpen] = useState(false);
@@ -47,14 +48,8 @@ export function JiraColumnsMenu({ workspaceId, statuses, hidden, onSaved }: Jira
     setSaving(true);
     setError(null);
     try {
-      // The document the edit starts from: the base of the save's three-way merge.
-      const read = await window.vermilian.readWorkspaceArticle(workspaceId);
-      if (!read.ok) { setError(read.message); return; }
-      if (read.entry.status !== 'ok') { setError(read.entry.message); return; }
-      const base = read.entry.document;
-      const next = listed.filter((s) => draft.has(s));
-      const r = await window.vermilian.updateWorkspaceArticle(base, withJiraHiddenStatuses(base, next));
-      if (!r.ok) { setError(r.message); return; }
+      const problem = await saveJiraHiddenStatuses(workspaceId, listed.filter((s) => draft.has(s) && !isAlwaysShownStatus(s)));
+      if (problem) { setError(problem); return; }
       onSaved();
       setOpen(false);
     } catch (e) {
@@ -74,12 +69,13 @@ export function JiraColumnsMenu({ workspaceId, statuses, hidden, onSaved }: Jira
           <div className={styles.columnsHint}>Unchecked columns are hidden on this workspace's board.</div>
           {listed.length === 0 && <div className={styles.columnsHint}>No columns yet.</div>}
           {listed.map((status) => (
-            <label key={status} className={styles.columnsRow}>
+            <label key={status} className={styles.columnsRow} title={isAlwaysShownStatus(status) ? 'In Progress is always shown.' : undefined}>
               <input
                 type="checkbox"
                 data-testid="jira-column-toggle"
                 data-status={status}
-                checked={!draft.has(status)}
+                checked={isAlwaysShownStatus(status) || !draft.has(status)}
+                disabled={isAlwaysShownStatus(status)}
                 onChange={() =>
                   setDraft((prev) => {
                     const n = new Set(prev);

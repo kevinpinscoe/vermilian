@@ -97,6 +97,7 @@ export const IPC = {
   getCredentialRefStatus: 'credentialRefs:status',
   // A Jira workspace's selectable projects, read with its own credential (VERM-33).
   listWorkspaceJiraProjects: 'workspaceJira:listProjects',
+  listWorkspaceJiraStatuses: 'workspaceJira:listStatuses',
   // The boards the workspace's account can see, read with its own credential (VERM-59).
   listWorkspaceJiraBoards: 'workspaceJira:listBoards',
   // One of a Jira workspace's projects, read-only, for its board (VERM-34).
@@ -248,6 +249,12 @@ export type GetWorkspaceJiraMyAccountIdResult =
 
 export type ListWorkspaceJiraProjectsResult =
   | { ok: true; projects: Array<{ id: string; name: string; shortName: string }> }
+  | import('./jiraConnection').WorkspaceJiraFailure;
+
+// Every workflow status in the workspace's chosen projects (VERM-67).
+// `incomplete` says some could not be read, so the list may be short.
+export type ListWorkspaceJiraStatusesResult =
+  | { ok: true; statuses: string[]; incomplete: boolean }
   | import('./jiraConnection').WorkspaceJiraFailure;
 
 export type CredentialRefStatusResult = { ok: true; status: CredentialRefStatus } | { ok: false; message: string };
@@ -754,6 +761,8 @@ export interface VermilianAPI {
   // The Jira projects a Jira workspace can choose from, listed through its own
   // connection and credential reference. Read-only; nothing is written to Jira.
   listWorkspaceJiraProjects(workspaceId: string): Promise<ListWorkspaceJiraProjectsResult>;
+  // The workflow statuses of the workspace's chosen projects, read-only (VERM-67).
+  listWorkspaceJiraStatuses(workspaceId: string): Promise<ListWorkspaceJiraStatusesResult>;
   // The Jira boards the workspace's account can see, read-only (VERM-59).
   listWorkspaceJiraBoards(workspaceId: string): Promise<ListWorkspaceJiraBoardsResult>;
   // A Jira workspace project's issues and priority order, read-only (VERM-34).

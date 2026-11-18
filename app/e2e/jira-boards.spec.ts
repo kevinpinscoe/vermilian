@@ -50,7 +50,7 @@ function jira(projectIds: string[], jiraBoards?: Array<{ id: number; name: strin
 const READS = new Set([
   'detectCloudId', 'getMyself', 'probeJiraToken', 'jiraApiBase', 'searchJql', 'getIssue', 'listProjects',
   'searchProjectIssues', 'searchProjectRecentlyUpdated', 'getEditMeta', 'getIssueComments',
-  'listBoards', 'searchBoardIssues',
+  'listBoards', 'searchBoardIssues', 'listProjectStatuses',
 ]);
 
 async function launch(doc: WorkspaceDocument, { clock = false } = {}): Promise<{ app: ElectronApplication; page: Page }> {

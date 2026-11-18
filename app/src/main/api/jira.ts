@@ -328,6 +328,20 @@ export async function listProjects(
   return projects;
 }
 
+// GET /rest/api/3/project/{key}/statuses: every status of every issue type in
+// the project, each name once (VERM-67). Throws JiraError.
+export async function listProjectStatuses(base: string, email: string, token: string, projectKey: string): Promise<string[]> {
+  if (!isValidProjectKey(projectKey)) throw new Error(`Invalid Jira project key: ${JSON.stringify(projectKey)}`);
+  const res = await jiraRequest<Array<{ statuses?: Array<{ name?: string }> }>>(
+    base,
+    email,
+    token,
+    `/rest/api/3/project/${projectKey}/statuses`,
+  );
+  const names = (Array.isArray(res) ? res : []).flatMap((t) => (t.statuses ?? []).flatMap((s) => (s.name ? [s.name] : [])));
+  return [...new Set(names)];
+}
+
 // Jira project keys: an uppercase letter, then uppercase letters, digits or
 // underscores. Anything else is refused before it reaches JQL.
 const JIRA_PROJECT_KEY_RE = /^[A-Z][A-Z0-9_]*$/;
