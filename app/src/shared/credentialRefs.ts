@@ -18,6 +18,12 @@
 import type { AppConfig, CredentialSourceConfig } from './config';
 import { isCredentialRef, type CredentialRef } from './workspaceSchema';
 import {
+  SETTINGS_SCOPE_ID,
+  type OpenBaoBinding,
+  type OpenBaoFailureReason,
+  type OpenBaoScopeConfig,
+} from './openbao';
+import {
   MIGRATED_ANTHROPIC_CREDENTIAL_REF,
   MIGRATED_JIRA_CREDENTIAL_REF,
   MIGRATED_YOUTRACK_CREDENTIAL_REF,
@@ -25,7 +31,7 @@ import {
 
 export type { CredentialSourceConfig };
 
-export type CredentialSourceKind = 'command' | 'file' | 'safeStorage';
+export type CredentialSourceKind = 'command' | 'file' | 'safeStorage' | 'openbao';
 
 interface LegacyMapping {
   commandKey: 'youtrackTokenCommand' | 'claudeKeyCommand' | 'jiraTokenCommand';
@@ -76,6 +82,33 @@ export function refFromBlobFilename(name: string): CredentialRef | null {
   if (!name.startsWith(REF_BLOB_PREFIX) || !name.endsWith(REF_BLOB_SUFFIX)) return null;
   const ref = name.slice(REF_BLOB_PREFIX.length, -REF_BLOB_SUFFIX.length);
   return isCredentialRef(ref) && !isLegacyCredentialRef(ref) ? ref : null;
+}
+
+/** The legacy reference a Settings credential's blob belongs to, or null. */
+export function legacyRefForBlob(filename: string): CredentialRef | null {
+  return Object.keys(LEGACY_CREDENTIAL_REFS).find((ref) => LEGACY_CREDENTIAL_REFS[ref].blob === filename) ?? null;
+}
+
+export interface OpenBaoSource {
+  scopeId: string;
+  scope: OpenBaoScopeConfig;
+  binding: OpenBaoBinding;
+}
+
+/**
+ * The OpenBao location a reference reads from for this workspace, or null. A
+ * workspace reads only its own scope. The legacy references also follow the
+ * Settings scope, because they are by definition the Settings credentials.
+ */
+export function openBaoSourceFor(ref: CredentialRef, scopeId: string, cfg: AppConfig): OpenBaoSource | null {
+  const scopes = cfg.openbaoScopes ?? {};
+  for (const id of isLegacyCredentialRef(ref) ? [scopeId, SETTINGS_SCOPE_ID] : [scopeId]) {
+    const scope = Object.prototype.hasOwnProperty.call(scopes, id) ? scopes[id] : undefined;
+    if (scope && Object.prototype.hasOwnProperty.call(scope.credentials, ref)) {
+      return { scopeId: id, scope, binding: scope.credentials[ref] };
+    }
+  }
+  return null;
 }
 
 /** A reference's command and file sources on this host, from the right place. */
@@ -129,7 +162,8 @@ export type CredentialFailureReason =
   | 'file-unreadable'
   | 'blob-unreadable' // missing at read time, or cannot be decrypted
   | 'empty' // the source produced nothing
-  | 'invalid'; // the source produced something that is not a single credential
+  | 'invalid' // the source produced something that is not a single credential
+  | `openbao-${OpenBaoFailureReason}`;
 
 export interface CredentialFailure {
   workspaceId: string;
@@ -144,6 +178,7 @@ const SOURCE_LABEL: Record<CredentialSourceKind, string> = {
   command: 'command',
   file: 'file',
   safeStorage: 'saved (safeStorage) credential',
+  openbao: 'OpenBao credential',
 };
 
 const REASON_TEXT: Record<CredentialFailureReason, string> = {
@@ -155,6 +190,15 @@ const REASON_TEXT: Record<CredentialFailureReason, string> = {
   'blob-unreadable': 'could not be read or decrypted',
   empty: 'produced an empty value',
   invalid: 'produced a value that is not a single credential',
+  'openbao-incomplete': 'is not fully configured',
+  'openbao-unreachable': 'could not be read because the server is unreachable',
+  'openbao-sealed': 'could not be read because the server is sealed',
+  'openbao-auth-source-failed': 'could not be read because its login secret is unavailable',
+  'openbao-auth-rejected': 'could not be read because the login was rejected or has expired',
+  'openbao-forbidden': 'could not be read because policy denies access',
+  'openbao-not-found': 'was not found',
+  'openbao-conflict': 'changed while it was being read',
+  'openbao-invalid-response': 'could not be read from the server response',
 };
 
 /**

@@ -15,6 +15,7 @@ import {
   checkCredentialValue,
   credentialFailure,
   isLegacyCredentialRef,
+  openBaoSourceFor,
   selectSource,
   sourcesFor,
   type CredentialFailure,
@@ -23,6 +24,7 @@ import {
 } from '../../shared/credentialRefs';
 import type { AppConfig } from '../../shared/config';
 import type { WorkspaceCredentialCheck } from '../../shared/ipc';
+import type { OpenBaoBinding, OpenBaoConnection, OpenBaoResult } from '../../shared/openbao';
 import { isCredentialRef, type CredentialRef } from '../../shared/workspaceSchema';
 
 /** Raw reads, each reporting only whether it worked — never why in detail. */
@@ -33,6 +35,8 @@ export interface CredentialSourceIO {
   /** Whether the blob (or, for a legacy reference, its plain-text fallback) exists. */
   blobPresent(filename: string, legacy: boolean): Promise<boolean>;
   readBlob(filename: string, legacy: boolean): Promise<{ ok: true; value: string } | { ok: false }>;
+  /** Reads one field from a scope's OpenBao server (VERM-64). */
+  readOpenBao?(scopeId: string, conn: OpenBaoConnection, binding: OpenBaoBinding): Promise<OpenBaoResult<string>>;
 }
 
 export interface WorkspaceCredentialRequest {
@@ -61,6 +65,19 @@ export async function resolveWorkspaceCredential(
   const ref = req.credentialRef;
   if (ref === null) return fail(req, null, 'not-selected');
   if (!isCredentialRef(ref)) return fail(req, null, 'invalid-reference');
+
+  // A reference switched to OpenBao reads nothing else: if OpenBao fails,
+  // resolution fails rather than falling back to a local source (VERM-64).
+  const bao = openBaoSourceFor(ref, req.workspaceId, cfg);
+  if (bao) {
+    if (!io.readOpenBao) return fail(req, 'openbao', 'openbao-incomplete');
+    const r = await io.readOpenBao(bao.scopeId, bao.scope, bao.binding);
+    if (!r.ok) return fail(req, 'openbao', `openbao-${r.reason}`);
+    const value = r.value.trim();
+    const check = checkCredentialValue(value);
+    if (check !== 'ok') return fail(req, 'openbao', check);
+    return { ok: true, value, credentialRef: ref, source: 'openbao' };
+  }
 
   const legacy = isLegacyCredentialRef(ref);
   const sources = sourcesFor(ref, cfg);
@@ -115,6 +132,7 @@ export async function credentialRefStatus(
   ref: CredentialRef,
   cfg: AppConfig,
   io: Pick<CredentialSourceIO, 'blobPresent'>,
+  workspaceId = '',
 ): Promise<CredentialRefStatus> {
   const legacy = isLegacyCredentialRef(ref);
   const sources = sourcesFor(ref, cfg);
@@ -125,6 +143,6 @@ export async function credentialRefStatus(
     commandConfigured: sources.command.trim() !== '',
     fileConfigured: sources.file.trim() !== '',
     blobPresent,
-    selected: selectSource(sources, blobPresent),
+    selected: openBaoSourceFor(ref, workspaceId, cfg) ? 'openbao' : selectSource(sources, blobPresent),
   };
 }

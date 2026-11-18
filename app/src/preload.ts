@@ -38,6 +38,7 @@ import type { JiraProfile } from './shared/jiraProfile';
 import type { WorkspaceDocument } from './shared/workspaceSchema';
 import type { WorkspaceMigrationOptions } from './shared/workspaceMigration';
 import type { CredentialSourceConfig } from './shared/credentialRefs';
+import type { OpenBaoConnection, OpenBaoScope } from './shared/openbao';
 import type { VermilianConfig } from './shared/workspace';
 
 const api: VermilianAPI = {
@@ -136,6 +137,18 @@ const api: VermilianAPI = {
   checkWorkspaceCredential: (workspaceId: string, credentialRef: string | null) =>
     ipcRenderer.invoke(IPC.checkWorkspaceCredential, workspaceId, credentialRef),
   getCredentialRefStatus: (credentialRef: string) => ipcRenderer.invoke(IPC.getCredentialRefStatus, credentialRef),
+  openbaoGetState: (scope: OpenBaoScope) => ipcRenderer.invoke(IPC.openbaoGetState, scope),
+  openbaoSaveConnection: (scope: OpenBaoScope, connection: OpenBaoConnection) =>
+    ipcRenderer.invoke(IPC.openbaoSaveConnection, scope, connection),
+  openbaoTest: (scope: OpenBaoScope) => ipcRenderer.invoke(IPC.openbaoTest, scope),
+  openbaoMigrate: (scope: OpenBaoScope, credentialRefs: string[]) => ipcRenderer.invoke(IPC.openbaoMigrate, scope, credentialRefs),
+  openbaoSaveSecret: (scope: OpenBaoScope, credentialRef: string, value: string) =>
+    ipcRenderer.invoke(IPC.openbaoSaveSecret, scope, credentialRef, value),
+  openbaoDeleteSecret: (scope: OpenBaoScope, credentialRef: string, args: { confirmed: boolean }) =>
+    ipcRenderer.invoke(IPC.openbaoDeleteSecret, scope, credentialRef, args),
+  openbaoDeactivate: (scope: OpenBaoScope, credentialRef: string) => ipcRenderer.invoke(IPC.openbaoDeactivate, scope, credentialRef),
+  openbaoCleanupOriginal: (scope: OpenBaoScope, credentialRef: string, args: { confirmed: boolean }) =>
+    ipcRenderer.invoke(IPC.openbaoCleanupOriginal, scope, credentialRef, args),
   listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
   getWorkspaceJiraIssues: (args: GetWorkspaceJiraIssuesArgs) => ipcRenderer.invoke(IPC.getWorkspaceJiraIssues, args),
   getWorkspaceJiraRecentlyUpdated: (args: GetWorkspaceJiraRecentlyUpdatedArgs) =>

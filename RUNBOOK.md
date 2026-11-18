@@ -535,6 +535,113 @@ credentials. Keep them in the user-data directory; never commit them.
 
 ---
 
+## OpenBao credential storage (VERM-64)
+
+### What this is
+
+OpenBao is the fourth credential source, beside a shell command, a file and Electron
+`safeStorage`. A credential switched to OpenBao is read only from OpenBao, over its HTTP API
+(KV v2), in the main process. The renderer never receives a stored credential or an OpenBao token.
+
+**How this changes the original VERM-64 signing requirement.** macOS ties a `safeStorage` keychain
+item to the build that created it, and ad-hoc signed builds change identity on every release.
+Credentials in OpenBao never touch that keychain item, so upgrades cannot lock them out. Apple
+Developer ID signing is no longer needed for credential persistence. It remains a separate,
+optional concern for distribution (Gatekeeper and notarization).
+
+### Scopes and isolation
+
+Settings configures one **scope** at a time, and scopes share nothing:
+
+| Scope | Covers | Stored under `openbaoScopes` key |
+| --- | --- | --- |
+| This machine's Settings credentials | The YouTrack, Claude and Jira credentials from Settings. Vermilian loads the workspace list with the YouTrack one | `_settings` |
+| The active workspace | That workspace's tracker and Anthropic credential references. Needs per-workspace storage | The workspace ID |
+
+Each scope has its own server, namespace, KV mount, secret path and login, and logs in for itself.
+A workspace never reads another workspace's scope. Use a separate OpenBao instance, policy and
+AppRole for work and for personal workspaces; Vermilian assumes nothing is shared between them.
+
+`app-config.json` holds connection details and references only. The AppRole SecretID or token is
+read from your command or file at login and kept in memory.
+
+### Prerequisites
+
+- A KV **version 2** mount.
+- HTTPS for any remote server. Plain `http://` is accepted only for this machine (`127.0.0.1`,
+  `localhost`, `[::1]`, `host.docker.internal`).
+- A dedicated, least-privilege identity for each scope. Never use a root, administrative or
+  break-glass token.
+
+Policy for a scope using mount `secret` and path `vermilian/work`:
+
+```hcl
+path "secret/data/vermilian/work/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+```
+
+AppRole is the recommended login. Keep the SecretID outside OpenBao, in a `0600` file or behind a
+command such as a password manager CLI, so that OpenBao login never depends on OpenBao itself.
+A short-lived token from a command is also supported. Do not point either at a long-lived token.
+If the SecretID has a use limit, allow for one login per token lifetime and per app start.
+
+### Configure and migrate
+
+1. Open **Settings → OpenBao credential storage** and choose the scope.
+2. Enter the server address, KV mount, secret path and login, then **Use this connection**.
+3. **Test connection**. It reports connected, unreachable, sealed, login rejected, insufficient
+   permissions, secret not found, or incomplete configuration.
+4. **Move credentials to OpenBao**. Each credential is read from its current source, written,
+   read back and compared. The scope switches over only after every credential verifies.
+5. Restart Vermilian and confirm the board loads.
+6. Optional: **Remove local copy** deletes the saved keychain-encrypted copy, after confirming the
+   OpenBao copy is readable. A configured command or file is left as it is.
+
+The migration can be repeated safely. A location already holding the same value is accepted. A
+location holding a **different** value stops the migration and nothing is overwritten: choose
+another secret path, or resolve the difference in OpenBao.
+
+### First move on a Mac with an old keychain item
+
+If an ad-hoc build can no longer read its saved credential, migration stops at that credential
+because there is no readable original. Paste the value into that credential's field in the OpenBao
+section and choose **Store**. This needs no keychain repair.
+
+### Failure and recovery
+
+| Symptom | Meaning | Action |
+| --- | --- | --- |
+| Server unreachable | Network, VPN or server down | Restore access. Vermilian keeps OpenBao selected and retries on the next operation |
+| Sealed | OpenBao is sealed or uninitialized | Unseal the server |
+| Login rejected or expired | SecretID or token revoked, expired or wrong | Issue a new one, update its file or command, then **Test connection** |
+| Login secret unavailable | The command failed or the file is unreadable | Fix the command or file |
+| Insufficient permissions | Policy does not cover the path | Correct the policy |
+| Secret not found | Deleted, or the path changed | Restore the version in OpenBao, or **Store** the value again |
+
+Operations that need a credential stop while OpenBao is unavailable. There is no offline cache.
+Vermilian never switches to the keychain, a plain-text file or another workspace's server by itself.
+
+To go back to the previous source, choose **Stop using OpenBao** for that credential. The copy in
+OpenBao is kept. If you already removed the local copy, enter the credential again in Settings first.
+
+### Rotate or revoke access
+
+- **Rotate the SecretID:** issue a new one, update the file or command, **Test connection**, then
+  destroy the old SecretID.
+- **Rotate a stored credential:** paste the new value in the OpenBao section and choose **Store**.
+- **Revoke Vermilian's access:** destroy the SecretID and revoke its tokens. Vermilian then reports
+  the login as rejected.
+
+### Testing
+
+`app/src/main/services/openbaoLive.test.ts` runs against a real, disposable dev server and is skipped
+unless `VERMILIAN_OPENBAO_TEST_ADDR` and `VERMILIAN_OPENBAO_TEST_ROOT` are set. It creates policies
+and seals the server, so never point it at a real instance. When starting a dev server, set `HOME`
+to an empty directory and pass `-dev-no-store-token`, so it cannot replace a stored CLI token.
+
+---
+
 ## Rollback Procedure
 
 If `node_modules` becomes corrupt or the linker state is wrong:

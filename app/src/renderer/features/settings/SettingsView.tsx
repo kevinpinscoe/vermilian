@@ -23,6 +23,7 @@ import { DailyNotesSection } from './sections/DailyNotesSection';
 import { AppearanceSection } from './sections/AppearanceSection';
 import { AdvancedSection } from './sections/AdvancedSection';
 import { WorkspaceStorageSection } from './sections/WorkspaceStorageSection';
+import { OpenBaoSection } from './sections/OpenBaoSection';
 import { ACTIVE_WORKSPACE_QUERY_KEY } from '../workspace-nav/api';
 import styles from './SettingsView.module.css';
 
@@ -359,6 +360,7 @@ export function SettingsView({ canCancel, onClose }: Props) {
         <DailyNotesSection draft={draft} update={update} />
         <AppearanceSection />
         {canCancel && <WorkspaceStorageSection />}
+        {canCancel && <OpenBaoSection />}
         <AdvancedSection onReset={handleReset} />
       </div>
 
