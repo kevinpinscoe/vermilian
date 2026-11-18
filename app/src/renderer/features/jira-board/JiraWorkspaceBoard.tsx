@@ -12,7 +12,9 @@ import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey }
 import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
 import { JiraFocusControl } from './JiraFocusControl';
 import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
-import { AssigneePills } from '../project-board/FilterPills';
+import { AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
+import { DefaultAssigneeBar, useDefaultAssignee } from '../project-board/DefaultAssigneeBar';
+import { defaultAssigneeFilter } from '../project-board/defaultAssignee';
 import { BoardSearch } from '../search/BoardSearch';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import { boardSourceId, jiraSourceIds } from '../../../shared/jiraSource';
@@ -29,6 +31,8 @@ interface JiraWorkspaceBoardProps {
   // workspace once the Columns menu saves a new choice.
   hiddenStatuses?: string[];
   onHiddenStatusesSaved?: () => void;
+  // This workspace's Default assignee on this computer (VERM-68); '' for none.
+  defaultAssignee?: string;
   onChooseProjects: () => void;
   selectedIssueKey?: string | null;
   // Opens the read-only detail panel (VERM-35).
@@ -52,6 +56,7 @@ export function JiraWorkspaceBoard({
   boards = [],
   hiddenStatuses = [],
   onHiddenStatusesSaved = () => undefined,
+  defaultAssignee = '',
   onChooseProjects,
   selectedIssueKey = null,
   onSelectIssue,
@@ -129,11 +134,14 @@ export function JiraWorkspaceBoard({
     () => splitHiddenColumns(boardColumns, statusFilter.hidden),
     [boardColumns, statusFilter.hidden],
   );
-  const filtering = filter.search.trim() !== '' || filter.assignee.length > 0;
-  const visible = useMemo(() => new Set(applyFilter(issues, filter, myAccountId).map((i) => i.id)), [issues, filter, myAccountId]);
+  const { view: assigneeView, toggleShowAll } = useDefaultAssignee(workspaceId, defaultAssignee, issues, myAccountId);
+  const effectiveFilter = useMemo(() => defaultAssigneeFilter(filter, assigneeView), [filter, assigneeView]);
+  const filtering = effectiveFilter.search.trim() !== '' || effectiveFilter.assignee.length > 0;
+  const visible = useMemo(() => new Set(applyFilter(issues, effectiveFilter, myAccountId).map((i) => i.id)), [issues, effectiveFilter, myAccountId]);
+  // Issues the Default assignee hides do not count, so a search still finds them.
   const searchMatchCount = useMemo(
-    () => applyFilter(issues, { ...EMPTY_FILTER, search: filter.search }).length,
-    [issues, filter.search],
+    () => applyFilter(issues, defaultAssigneeFilter({ ...EMPTY_FILTER, search: filter.search }, assigneeView), myAccountId).length,
+    [issues, filter.search, assigneeView, myAccountId],
   );
   const toggleAssignee = (v: string) =>
     setFilter((f) => ({ ...f, assignee: f.assignee.includes(v) ? f.assignee.filter((a) => a !== v) : [...f.assignee, v] }));
@@ -196,12 +204,17 @@ export function JiraWorkspaceBoard({
                 saving={statusFilter.saving}
                 onToggle={statusFilter.toggle}
               />
-              <AssigneePills issues={issues} myId={myAccountId} active={filter.assignee} onToggle={toggleAssignee} />
-              {filter.assignee.length > 0 && (
+              {assigneeView.mode === 'mine' ? (
+                <DefaultAssigneePill issues={issues} value={assigneeView.value} onToggle={toggleShowAll} />
+              ) : (
+                <AssigneePills issues={issues} myId={myAccountId} active={filter.assignee} onToggle={toggleAssignee} />
+              )}
+              {assigneeView.mode !== 'mine' && filter.assignee.length > 0 && (
                 <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...f, assignee: [] }))}>Clear</button>
               )}
             </div>
           )}
+          <DefaultAssigneeBar view={assigneeView} onToggle={toggleShowAll} />
           {statusesIncomplete && (
             <div className={styles.projects} role="status" data-testid="jira-status-list-note">
               Some Jira statuses could not be listed, so the Status filter may be incomplete.

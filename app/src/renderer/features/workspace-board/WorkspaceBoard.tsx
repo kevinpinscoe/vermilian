@@ -12,7 +12,9 @@ import { usePatchIssueOnBoard } from '../project-board/api';
 import {
   ASSIGNEE_ME, EMPTY_FILTER, applyFilter, filterCount, type FilterState,
 } from '../project-board/grouping';
-import { FilterPills, AssigneePills } from '../project-board/FilterPills';
+import { FilterPills, AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
+import { DefaultAssigneeBar, useDefaultAssignee } from '../project-board/DefaultAssigneeBar';
+import { defaultAssigneeFilter } from '../project-board/defaultAssignee';
 import { BoardSearch } from '../search/BoardSearch';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import pbStyles from '../project-board/ProjectBoard.module.css';
@@ -151,6 +153,9 @@ interface WorkspaceBoardProps {
   workspaceName: string;
   projectShortNames: string[];
   youtrackLogin: string;
+  workspaceId: string;
+  // This workspace's Default assignee on this computer (VERM-68); '' for none.
+  defaultAssignee: string;
   onSelectIssue: (issueId: string) => void;
   onNewTask: () => void;
   onAiCreate: () => void;
@@ -161,7 +166,7 @@ interface WorkspaceBoardProps {
 }
 
 export function WorkspaceBoard({
-  workspaceName, projectShortNames, youtrackLogin,
+  workspaceName, projectShortNames, youtrackLogin, workspaceId, defaultAssignee,
   onSelectIssue, onNewTask, onAiCreate, onStartTimer, hasClaudeKey, aiUnavailableReason,
 }: WorkspaceBoardProps) {
   const patchMutation = usePatchIssueOnBoard(null);
@@ -195,15 +200,18 @@ export function WorkspaceBoard({
   );
 
   // The server already applied #Unresolved when showClosed=false.
+  const { view: assigneeView, toggleShowAll } = useDefaultAssignee(workspaceId, defaultAssignee, allIssues, youtrackLogin);
+  const effectiveFilter = useMemo(() => defaultAssigneeFilter(filter, assigneeView), [filter, assigneeView]);
   const filteredIssues = useMemo(
-    () => applyFilter(allIssues, filter, youtrackLogin),
-    [allIssues, filter, youtrackLogin],
+    () => applyFilter(allIssues, effectiveFilter, youtrackLogin),
+    [allIssues, effectiveFilter, youtrackLogin],
   );
   // How many loaded issues the search text alone matches — with none, the
-  // board search asks the backend without waiting for Enter (VERM-61).
+  // board search asks the backend without waiting for Enter (VERM-61). Issues
+  // the Default assignee hides do not count, so a search still finds them.
   const searchMatchCount = useMemo(
-    () => applyFilter(allIssues, { ...EMPTY_FILTER, search: filter.search }).length,
-    [allIssues, filter.search],
+    () => applyFilter(allIssues, defaultAssigneeFilter({ ...EMPTY_FILTER, search: filter.search }, assigneeView), youtrackLogin).length,
+    [allIssues, filter.search, assigneeView, youtrackLogin],
   );
 
   const groups = useMemo(() => groupByStatus(filteredIssues), [filteredIssues]);
@@ -265,7 +273,7 @@ export function WorkspaceBoard({
           </Button>
         </Tooltip>
         <div className={pbStyles.toolbarSpacer} />
-        {youtrackLogin && (
+        {youtrackLogin && assigneeView.mode !== 'mine' && (
           <button
             type="button"
             className={`${styles.assignedBtn} ${assignedToMe ? styles.assignedBtnActive : ''}`}
@@ -300,6 +308,8 @@ export function WorkspaceBoard({
         />
       </div>
 
+      <DefaultAssigneeBar view={assigneeView} onToggle={toggleShowAll} />
+
       {/* Filter bar */}
       {allIssues.length > 0 && (
         <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
@@ -309,7 +319,11 @@ export function WorkspaceBoard({
           {priorityVals.length > 0 && categoryVals.length > 0 && <span className={pbStyles.filterSep} />}
           <FilterPills label="Category" values={categoryVals.filter((v) => CATEGORY_OPTIONS.includes(v as never))} active={filter.category} colorMap={COLORS.Category} onToggle={(v) => toggle('category', v)} />
           <span className={pbStyles.filterSep} />
-          <AssigneePills issues={allIssues} myId={youtrackLogin} active={filter.assignee} onToggle={(v) => toggle('assignee', v)} />
+          {assigneeView.mode === 'mine' ? (
+            <DefaultAssigneePill issues={allIssues} value={assigneeView.value} onToggle={toggleShowAll} />
+          ) : (
+            <AssigneePills issues={allIssues} myId={youtrackLogin} active={filter.assignee} onToggle={(v) => toggle('assignee', v)} />
+          )}
           {hasFilters && (
             <button type="button" className={pbStyles.filterClear} onClick={() => setFilter((f) => ({ ...EMPTY_FILTER, search: f.search }))}>Clear</button>
           )}

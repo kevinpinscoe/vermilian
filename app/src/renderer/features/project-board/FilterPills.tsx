@@ -49,3 +49,17 @@ export function AssigneePills({
     />
   );
 }
+
+/** The one Assignee pill while the board shows only the Default assignee (VERM-68). */
+export function DefaultAssigneePill({
+  issues, value, onToggle,
+}: { issues: BoardIssue[]; value: string; onToggle: () => void }) {
+  const names = assigneeNames(issues);
+  return (
+    <FilterPills
+      label="Assignee" values={[value]} active={[value]}
+      colorMap={{ [value]: ASSIGNEE_PILL_COLOR }}
+      onToggle={onToggle} displayValue={(v) => assigneeLabel(v, names)}
+    />
+  );
+}

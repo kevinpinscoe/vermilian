@@ -28,7 +28,8 @@ yet in a release. Paths are relative to `app/src/` unless they start with `app/`
 | Create a Jira workspace, connect Jira | Jira | [Create a Jira workspace](#create-a-jira-workspace) |
 | Choose Jira projects or boards | Jira | [Choose projects and boards](#choose-jira-projects-and-boards) |
 | Filter by status, hide status columns, show Done tickets | Jira | [Jira board controls](#jira-board-controls) |
-| Filter by assignee, only my tickets | Both | [Filter by assignee](#filter-by-assignee) |
+| Filter by assignee | Both | [Filter by assignee](#filter-by-assignee) |
+| Show only my tickets by default, Default assignee | Both | [Default assignee](#set-a-default-assignee) |
 | Search for a ticket | Both | [Search](#search) |
 | Open a Jira ticket's details | Jira | [Jira detail panel](#jira-detail-panel) |
 | See my open Jira tickets across all projects | Jira | [Jira list](#jira-list) |
@@ -230,6 +231,21 @@ issue. Selected pills combine with OR, and with AND against other filters.
 - **Jira:** **Me** appears once the account is known.
 
 Filters are not saved between sessions.
+
+### Set a Default assignee
+
+**Both backends.** With a Default assignee set, **All tasks** opens showing only that person's issues.
+
+1. Switch to the workspace, then open Settings with the top-bar gear.
+2. Under **Default assignee**, click **Use my account**, or enter a YouTrack login or Jira account ID.
+3. Click **Save**.
+
+- **Show all assignees** on the board shows everyone until the next launch or workspace switch.
+  **Show only my issues** returns to the default.
+- The setting is per workspace and stays on this computer. **Clear** removes it.
+- Search still finds other people's issues.
+- If no loaded issue carries the saved identity, the board shows everyone and says so.
+- The Priority Desk, Stand-up, Daily Review and project boards are not affected.
 
 ### Search
 

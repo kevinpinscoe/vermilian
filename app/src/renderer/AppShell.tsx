@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceNav } from './features/workspace-nav/WorkspaceNav';
 import { PriorityDesk } from './features/priority-desk/PriorityDesk';
 import { ProjectBoard } from './features/project-board/ProjectBoard';
+import { CONFIG_QUERY_KEY } from './features/settings/api';
 import { WorkspaceBoard } from './features/workspace-board/WorkspaceBoard';
 import { TaskDetailPanel } from './features/task-detail/TaskDetailPanel';
 import { CreateTaskModal } from './features/create-task/CreateTaskModal';
@@ -234,7 +235,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
 
   // Queries
   const config = useQuery({
-    queryKey: ['appConfig'],
+    queryKey: CONFIG_QUERY_KEY,
     queryFn: () => window.vermilian.getConfig(),
     staleTime: 60_000,
   });
@@ -617,6 +618,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               projectKeys={activeJiraProjectKeys}
               boards={activeJiraBoards}
               hiddenStatuses={activeJiraHiddenStatuses}
+              defaultAssignee={config.data?.defaultAssignees[activeContext.data.workspaceId] ?? ''}
               onHiddenStatusesSaved={() => void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY })}
               onChooseProjects={() => setShowJiraProjects(true)}
               selectedIssueKey={openJiraIssueKey}
@@ -655,6 +657,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               workspaceName={workspaceName}
               projectShortNames={workspaceShortNames}
               youtrackLogin={config.data?.youtrackLogin ?? ''}
+              workspaceId={activeContext.data?.workspaceId ?? ''}
+              defaultAssignee={config.data?.defaultAssignees[activeContext.data?.workspaceId ?? ''] ?? ''}
               onSelectIssue={(id) => setSelectedIssue(id)}
               onNewTask={() => setShowCreateTask(true)}
               onAiCreate={() => setShowAiCreate(true)}
