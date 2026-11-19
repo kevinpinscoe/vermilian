@@ -774,6 +774,15 @@ export async function updateVermilianArticle(
   }
 }
 
+export async function deleteVermilianArticle(url: string, token: string, articleId: string): Promise<boolean> {
+  try {
+    await request<unknown>(url, token, `/api/articles/${articleId}`, { method: 'DELETE' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function getVermilianArticle(
   url: string,
   token: string,

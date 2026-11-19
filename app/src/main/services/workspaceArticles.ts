@@ -43,6 +43,7 @@ import {
 import { mergeWorkspaceEdit, stableStringify } from '../../shared/workspaceMerge';
 import {
   WORKSPACE_ARTICLE_PREFIX,
+  type DeleteWorkspaceArticleResult,
   type ListWorkspaceArticlesResult,
   type ReadWorkspaceArticleResult,
   type SaveWorkspaceArticleResult,
@@ -62,13 +63,14 @@ export type WorkspaceArticleListing =
   | { ok: true; articles: WorkspaceArticleRecord[] }
   | { ok: false; reason: 'fetch-error' | 'incomplete' };
 
-/** The four YouTrack calls this module needs. A null result means the call failed. */
+/** The five YouTrack calls this module needs. A null or false result means the call failed. */
 export interface WorkspaceArticleClient {
   /** Every article in the VERM project whose title starts with the prefix — all pages. */
   list(): Promise<WorkspaceArticleListing>;
   get(articleId: string): Promise<WorkspaceArticleRecord | null>;
   create(workspaceId: string, content: string): Promise<WorkspaceArticleRecord | null>;
   update(articleId: string, content: string): Promise<{ updated: number } | null>;
+  delete(articleId: string): Promise<boolean>;
 }
 
 export const MAX_WRITE_ATTEMPTS = 3;
@@ -340,4 +342,51 @@ export async function createWorkspaceArticle(
     created: true,
     unchanged: false,
   };
+}
+
+/**
+ * Delete the workspace's article (VERM-72). `expectedUpdated` is the version
+ * the user's decision was based on: an article that moved since then is kept,
+ * because YouTrack's delete is as unconditional as its update.
+ */
+export async function deleteWorkspaceArticle(
+  client: WorkspaceArticleClient,
+  workspaceId: string,
+  expectedUpdated: number,
+): Promise<DeleteWorkspaceArticleResult> {
+  const changed = {
+    ok: false as const,
+    reason: 'changed' as const,
+    message: `Workspace ${workspaceId} was changed elsewhere while it was being deleted. It was kept; review it and try again.`,
+  };
+
+  const found = await find(client, workspaceId);
+  if (!found.ok) return found;
+  if (!found.parsed) return notFound(workspaceId);
+  if (found.parsed.kind !== 'ok') {
+    const { entry } = found.parsed;
+    if (entry.status === 'ok') throw new Error('unreachable');
+    return { ok: false, reason: entry.status === 'ambiguous' ? 'ambiguous' : 'invalid-remote', message: entry.message };
+  }
+  const { record } = found.parsed;
+  if (record.updated !== expectedUpdated) return changed;
+
+  // Last look before the unconditional delete.
+  const latest = await client.get(record.id);
+  if (!latest) return { ok: false, reason: 'delete-failed', message: `Could not re-read workspace ${workspaceId} before deleting it.` };
+  if (latest.updated !== record.updated || !sameContent(latest.content, record.content)) return changed;
+
+  if (!(await client.delete(record.id))) {
+    return { ok: false, reason: 'delete-failed', message: `YouTrack did not delete workspace ${workspaceId}. It was kept.` };
+  }
+
+  const recheck = await find(client, workspaceId);
+  if (!recheck.ok || recheck.parsed) {
+    return {
+      ok: false,
+      reason: 'delete-unverified',
+      message: `YouTrack accepted the delete of workspace ${workspaceId}, but it could not be confirmed gone. Reload and check before trying again.`,
+    };
+  }
+  return { ok: true, articleId: record.id };
 }

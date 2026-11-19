@@ -875,8 +875,11 @@ export function WorkspaceNav({
   const [showAddProjects, setShowAddProjects] = useState(false);
 
   // ── On fresh install: auto-create default workspace config ──────────────────
+  // Legacy storage only: per-workspace storage also reports null when its
+  // articles cannot be listed, and a layout save cannot create an article.
   useEffect(() => {
     if (
+      activeContext.data?.storage === 'legacy' &&
       workspaceConfig.data !== undefined &&
       workspaceConfig.data === null &&
       projects.data &&
@@ -885,7 +888,7 @@ export function WorkspaceNav({
       const config = makeInitialConfig(projects.data.map((p) => p.id));
       saveConfig.mutate(config);
     }
-  }, [workspaceConfig.data, projects.data]);
+  }, [activeContext.data?.storage, workspaceConfig.data, projects.data]);
 
   // ── Sync activeWorkspaceId from this machine's local choice (VERM-46) ─────
   useEffect(() => {
@@ -1092,6 +1095,20 @@ export function WorkspaceNav({
     await queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
     await queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
     onRequestSwitchWorkspace(built.document.workspaceId);
+    return null;
+  }
+
+  // Per-workspace storage: the active workspace moves only after the delete
+  // has succeeded (VERM-72). Resolves to an error message, or null.
+  async function deletePerWorkspace(workspaceId: string, destinationId: string | null): Promise<string | null> {
+    const result = await window.vermilian.deleteWorkspace(workspaceId, destinationId);
+    if (!result.ok) return result.error ?? 'The workspace could not be deleted.';
+    if (config && workspaceId === (activeWorkspaceId || config.activeWorkspaceId)) {
+      const next = config.workspaces.filter((w) => w.id !== workspaceId).sort((a, b) => a.order - b.order)[0];
+      if (next) await onForceSwitchWorkspace(next.id);
+    }
+    await queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+    await queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
     return null;
   }
 
@@ -1392,6 +1409,7 @@ export function WorkspaceNav({
           storage={storage}
           onEditAiCredential={(id) => { setShowManage(false); setAiCredentialFor(id); }}
           onEditMasterPlan={(id) => { setShowManage(false); setMasterPlanFor(id); }}
+          onDeletePerWorkspace={deletePerWorkspace}
         />
       )}
       {masterPlanFor && (

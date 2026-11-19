@@ -4,12 +4,13 @@
 // layout save becomes one merge-and-verify update per workspace that changed.
 //
 // New workspaces are not created here: the rail creates them as their own
-// articles with an explicit backend (VERM-33). Removing a workspace is
-// refused: its article is configuration that only a person should delete.
+// articles with an explicit backend (VERM-33). A layout save never removes a
+// workspace, so a stale layout cannot delete one by omission: deleting is its
+// own confirmed operation, planned by planWorkspaceDelete (VERM-72).
 //
 // Pure TypeScript: no Electron, no React.
 
-import type { VermilianConfig } from './workspace';
+import { setWorkspaceProjects, type VermilianConfig } from './workspace';
 import type { WorkspaceArticleEntry } from './workspaceArticle';
 import type { WorkspaceDocument } from './workspaceSchema';
 import { stableStringify } from './workspaceMerge';
@@ -39,4 +40,67 @@ export function planLayoutWrites(config: VermilianConfig, existing: ReadonlyMap<
     if (stableStringify(edited) !== stableStringify(base)) writes.push({ base, edited });
   }
   return { ok: true, writes };
+}
+
+export type WorkspaceDeletePlan =
+  | {
+      ok: true;
+      // Written before the delete, so a failure can never lose the projects.
+      destinationWrite: { base: WorkspaceDocument; edited: WorkspaceDocument } | null;
+      // The article version this plan was made from.
+      expectedUpdated: number;
+    }
+  | { ok: false; error: string };
+
+const backendAddress = (d: WorkspaceDocument) =>
+  (d.backend.kind === 'youtrack' ? d.backend.serverUrl : d.backend.siteUrl).replace(/\/+$/, '');
+
+/** Check a workspace can be deleted and work out where its projects go. */
+export function planWorkspaceDelete(
+  workspaceId: string,
+  destinationId: string | null,
+  existing: ReadonlyMap<string, WorkspaceArticleEntry>,
+  newFolderId: string,
+): WorkspaceDeletePlan {
+  const target = existing.get(workspaceId);
+  if (!target) return { ok: false, error: `Workspace ${workspaceId} has no configuration article. Nothing was deleted.` };
+  if (target.status !== 'ok') return { ok: false, error: target.message };
+  const hasAnother = [...existing.values()].some((e) => e.workspaceId !== workspaceId && e.status === 'ok');
+  if (!hasAnother) return { ok: false, error: 'At least one workspace must exist. Nothing was deleted.' };
+
+  const source = target.document;
+  const expectedUpdated = target.updated;
+  if (destinationId === null) return { ok: true, destinationWrite: null, expectedUpdated };
+
+  const entry = existing.get(destinationId);
+  if (destinationId === workspaceId || !entry) {
+    return { ok: false, error: 'The workspace chosen for its projects is not available. Nothing was deleted.' };
+  }
+  if (entry.status !== 'ok') return { ok: false, error: entry.message };
+  const base = entry.document;
+  if (base.backend.kind !== source.backend.kind || backendAddress(base) !== backendAddress(source)) {
+    return {
+      ok: false,
+      error: `"${base.name}" uses a different server, so it cannot hold the projects from "${source.name}". Nothing was deleted.`,
+    };
+  }
+
+  const moving = source.folders.flatMap((f) => f.projectIds);
+  if (moving.length === 0) return { ok: true, destinationWrite: null, expectedUpdated };
+
+  const current = base.folders.flatMap((f) => f.projectIds);
+  const moved = setWorkspaceProjects(
+    { version: 1, activeWorkspaceId: base.workspaceId, workspaces: [{ id: base.workspaceId, name: base.name, order: base.order, folders: base.folders }] },
+    base.workspaceId,
+    [...current, ...moving.filter((id) => !current.includes(id))],
+    newFolderId,
+  );
+  // Board settings follow their project; the destination's own settings win.
+  const boards = Object.fromEntries(Object.entries(source.boards).filter(([id]) => moving.includes(id)));
+  const edited: WorkspaceDocument = {
+    ...base,
+    folders: moved.workspaces[0].folders,
+    boards: { ...boards, ...base.boards },
+  };
+  return { ok: true, destinationWrite: { base, edited }, expectedUpdated };
 }

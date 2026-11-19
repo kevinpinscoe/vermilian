@@ -17,7 +17,7 @@ import {
   type StorageGuard,
   type StorageStatusView,
 } from '../shared/storageActivation';
-import { planLayoutWrites } from '../shared/workspaceLayout';
+import { planLayoutWrites, planWorkspaceDelete } from '../shared/workspaceLayout';
 import { e2eFakeCredentialAllowed } from '../shared/e2eFakeCredentials';
 import type { ConfigSyncStatus } from '../shared/ipc';
 import {
@@ -917,6 +917,19 @@ export function registerIpc(): void {
   );
 
   ipcMain.handle(
+    IPC.deleteWorkspace,
+    async (_e, workspaceId: unknown, destinationId: unknown): Promise<{ ok: boolean; error?: string }> => {
+      if (workspaceStorageMode() !== 'per-workspace') {
+        return { ok: false, error: 'Workspaces are deleted this way only under per-workspace storage.' };
+      }
+      if (typeof workspaceId !== 'string' || workspaceId === '' || (destinationId !== null && typeof destinationId !== 'string')) {
+        return { ok: false, error: 'No workspace was given.' };
+      }
+      return deletePerWorkspace(workspaceId, destinationId as string | null);
+    },
+  );
+
+  ipcMain.handle(
     IPC.forceResyncWorkspaceConfig,
     async (): Promise<{ ok: boolean; error?: string }> => {
       if (workspaceStorageMode() === 'per-workspace') {
@@ -1711,6 +1724,24 @@ export function registerIpc(): void {
         if (!r.ok) return { ok: false, error: r.message };
       }
       return { ok: true };
+    });
+  }
+
+  /** Move the projects first, so a failed delete can never lose them (VERM-72). */
+  async function deletePerWorkspace(workspaceId: string, destinationId: string | null): Promise<WorkspaceWrite> {
+    return guardedWorkspaceWrite(async (client) => {
+      const listed = await workspaceArticles.listWorkspaceArticles(client);
+      if (!listed.ok) return { ok: false, error: listed.message };
+      const existing = new Map(listed.workspaces.map((e) => [e.workspaceId, e]));
+      const plan = planWorkspaceDelete(workspaceId, destinationId, existing, `folder-${Date.now()}`);
+      if (!plan.ok) return { ok: false, error: plan.error };
+      if (plan.destinationWrite) {
+        const { base, edited } = plan.destinationWrite;
+        const moved = await workspaceArticles.updateWorkspaceArticle(client, base, edited);
+        if (!moved.ok) return { ok: false, error: moved.message };
+      }
+      const deleted = await workspaceArticles.deleteWorkspaceArticle(client, workspaceId, plan.expectedUpdated);
+      return deleted.ok ? { ok: true } : { ok: false, error: deleted.message };
     });
   }
 

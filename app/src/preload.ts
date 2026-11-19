@@ -97,6 +97,8 @@ const api: VermilianAPI = {
   getWorkspaceConfig: () => ipcRenderer.invoke(IPC.getWorkspaceConfig),
   saveWorkspaceConfig: (config: VermilianConfig) =>
     ipcRenderer.invoke(IPC.saveWorkspaceConfig, config),
+  deleteWorkspace: (workspaceId: string, destinationId: string | null) =>
+    ipcRenderer.invoke(IPC.deleteWorkspace, workspaceId, destinationId),
   getActiveWorkspace: () => ipcRenderer.invoke(IPC.getActiveWorkspace),
   setActiveWorkspace: (workspaceId: string) => ipcRenderer.invoke(IPC.setActiveWorkspace, workspaceId),
   forceResyncWorkspaceConfig: () => ipcRenderer.invoke(IPC.forceResyncWorkspaceConfig),

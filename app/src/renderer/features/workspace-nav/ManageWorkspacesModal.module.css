@@ -181,3 +181,8 @@
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+.confirmError {
+  color: var(--negative-color, #d83a52);
+  font-size: 13px;
+}

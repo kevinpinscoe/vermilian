@@ -324,7 +324,7 @@ Everything starts at the workspace switcher in the left rail (tid `workspace-swi
 | Create | **+ New workspace**, enter a name, choose **YouTrack** or **Jira**, click **Create** |
 | Switch | Pick the workspace. The choice applies to this computer only. A running timer asks **Cancel** or **Stop timer** first |
 | Rename or reorder | **Manage workspaces…**, click a name to rename, use ↑ and ↓ to reorder, click **Done** |
-| Delete | **Manage workspaces…**, **Delete**, choose where its projects go, type its exact name, click **Delete workspace**. Refused under per-workspace storage |
+| Delete | **Manage workspaces…**, **Delete**, choose where its projects go, type its exact name, click **Delete workspace**. Under per-workspace storage this permanently deletes its configuration from YouTrack for every computer |
 | Add a folder | **+ Add folder** in the rail |
 | Change a folder | Right-click it: **Rename**, **Move up**, **Move down**, **Delete folder** (empty folders only) |
 | Move a project | Right-click it: **Move to folder** or **Move to workspace** |
@@ -455,7 +455,6 @@ These are current behaviours that can surprise a user.
 | **Stop and start new** replaces the timer even if logging the old timer's work failed, so that time can be lost | `renderer/AppShell.tsx` |
 | The app quits on **Stop timer & quit** even if logging fails | `renderer/AppShell.tsx` |
 | The **OS notifications** checkbox is saved, but the notification code never reads it | `renderer/features/timer/FocusOverlay.tsx`, `renderer/features/timer/BreakBanner.tsx` |
-| **Delete** is offered for a workspace under per-workspace storage, but the save is refused | `shared/workspaceLayout.ts`, `renderer/features/workspace-nav/ManageWorkspacesModal.tsx` |
 
 ## Keeping this file current
 

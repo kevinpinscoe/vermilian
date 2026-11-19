@@ -43,6 +43,17 @@ export type ListWorkspaceArticlesResult =
   | { ok: true; workspaces: WorkspaceArticleEntry[] }
   | WorkspaceDiscoveryFailure;
 
+export type DeleteWorkspaceArticleResult =
+  | { ok: true; articleId: string }
+  | WorkspaceDiscoveryFailure
+  | {
+      ok: false;
+      // delete-unverified: YouTrack accepted the delete but the article could
+      // not be confirmed gone, so success is not claimed.
+      reason: 'not-found' | 'ambiguous' | 'invalid-remote' | 'changed' | 'delete-failed' | 'delete-unverified';
+      message: string;
+    };
+
 export type ReadWorkspaceArticleResult =
   | { ok: true; entry: WorkspaceArticleEntry }
   | WorkspaceDiscoveryFailure

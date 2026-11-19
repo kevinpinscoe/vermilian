@@ -67,6 +67,7 @@ export const IPC = {
   getProjects: 'youtrack:getProjects',
   getWorkspaceConfig: 'workspace:getConfig',
   saveWorkspaceConfig: 'workspace:saveConfig',
+  deleteWorkspace: 'workspace:delete',
   forceResyncWorkspaceConfig: 'workspace:forceResync',
   // The per-machine active workspace (VERM-46, shared/activeWorkspace.ts).
   getActiveWorkspace: 'workspace:getActive',
@@ -706,6 +707,9 @@ export interface VermilianAPI {
   getWorkspaceConfig(): Promise<VermilianConfig | null>;
   openExternalUrl(url: string): Promise<void>;
   saveWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean; error?: string }>;
+  // Per-workspace storage only (VERM-72): moves the projects to `destinationId`
+  // when one is given, then permanently deletes the workspace's article.
+  deleteWorkspace(workspaceId: string, destinationId: string | null): Promise<{ ok: boolean; error?: string }>;
   // The per-machine active workspace (VERM-46). Stored locally, never in the
   // shared _vermilian-config article. The context carries the backend kind,
   // its non-secret address and credential reference — never a credential.

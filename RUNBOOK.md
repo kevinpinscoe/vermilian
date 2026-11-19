@@ -476,6 +476,27 @@ this machine stays on `_vermilian-config`, which stays authoritative:
 
 Workspace articles created by a failed run are kept, never deleted.
 
+### Deleting a workspace
+
+**Manage workspaces… → Delete** permanently deletes the workspace's
+`_vermilian-ws-<id>` article from YouTrack, for every machine. It cannot be
+undone from Vermilian. Its board settings and dismissals go with it, unless its
+projects are moved to another workspace, in which case their board settings
+move too. The YouTrack or Jira projects themselves are never touched.
+
+The projects are moved first, then the article is deleted. If the delete then
+fails, the projects are in both workspaces and nothing is lost: run it again.
+
+| Message (contains) | Cause | What to do |
+| --- | --- | --- |
+| uses a different server | The chosen destination is on another server or tracker | Choose a workspace on the same server, or Unassigned |
+| was changed elsewhere | Another machine edited the workspace during the delete | Review the workspace, then delete it again |
+| At least one workspace must exist | It is the only usable workspace | Create another workspace first |
+| could not be confirmed gone | YouTrack accepted the delete, but the check afterwards failed | Reload and check the workspace list before retrying |
+
+Deleting a workspace counts as a change since activation, so **Return to the
+shared configuration** is refused afterwards.
+
 ### Returning to the shared configuration (safe rollback)
 
 **Settings → Workspace storage → Return to the shared configuration…** and
