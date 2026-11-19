@@ -52,6 +52,8 @@ export interface JiraProvider extends TrackerProvider {
    * resolved ones included — the board's incremental poll (VERM-39).
    */
   getRecentlyUpdatedIssues(projectKey: string): Promise<BoardIssue[]>;
+  /** Every workflow status name in a project, for the status filter (VERM-67). */
+  getStatuses(projectKey: string): Promise<string[]>;
   /** The boards the account can see, for the workspace's picker (VERM-59). */
   getBoards(): Promise<JiraBoard[]>;
   /**
@@ -182,6 +184,10 @@ export function createJiraProvider(
       const exact = byKey && projectKeys.includes(jiraProjectKeyOf(byKey.key)) ? [byKey] : [];
       const seen = new Set(exact.map((i) => i.id));
       return [...exact, ...byText.filter((i) => !seen.has(i.id))].map(mapIssue);
+    },
+
+    async getStatuses(projectKey) {
+      return client.listProjectStatuses(base, email, token, projectKey);
     },
 
     async getBoards() {

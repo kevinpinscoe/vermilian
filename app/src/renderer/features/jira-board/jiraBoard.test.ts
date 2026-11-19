@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { BoardIssue, StatusRole } from '../../../shared/workspace';
 import { FIELD_KEYS } from '../../../shared/fields';
-import { describeHiddenColumns, jiraBoardColumns, splitHiddenColumns } from './jiraBoard';
+import {
+  describeHiddenColumns,
+  isAlwaysShownStatus,
+  jiraBoardColumns,
+  jiraStatusOptions,
+  splitHiddenColumns,
+  toggleHiddenStatus,
+  withAlwaysShownColumn,
+} from './jiraBoard';
 
 // Fictional values only.
 function issue(key: string, status: string | null, role: StatusRole | null, priority: string | null = null, dueDate: number | null = null): BoardIssue {
@@ -82,7 +90,53 @@ describe('splitHiddenColumns (VERM-60)', () => {
   });
 
   it('lists several hidden columns in board order', () => {
-    const { hidden } = splitHiddenColumns(cols, ['In Progress', 'To Do']);
-    expect(describeHiddenColumns(hidden)).toBe('2 hidden: To Do (1), In Progress (1)');
+    const { hidden } = splitHiddenColumns(cols, ['Blocked', 'To Do']);
+    expect(describeHiddenColumns(hidden)).toBe('2 hidden: To Do (1), Blocked (2)');
+  });
+});
+
+describe('the Jira status filter (VERM-67)', () => {
+  const cols = jiraBoardColumns([
+    issue('DEMO-1', 'To Do', 'todo'),
+    issue('DEMO-2', 'In Progress', 'inProgress'),
+    issue('DEMO-3', 'Blocked', 'blocked'),
+  ]);
+
+  it('treats only the status named In Progress as always shown, in any case', () => {
+    expect(isAlwaysShownStatus('In Progress')).toBe(true);
+    expect(isAlwaysShownStatus(' in progress ')).toBe(true);
+    expect(isAlwaysShownStatus('In Review')).toBe(false);
+  });
+
+  it('never hides In Progress, even from a saved choice', () => {
+    const { shown, hidden } = splitHiddenColumns(cols, ['In Progress', 'Blocked']);
+    expect(shown.map((c) => c.status)).toEqual(['To Do', 'In Progress']);
+    expect(hidden).toEqual([{ status: 'Blocked', count: 1 }]);
+  });
+
+  it('lists board statuses first, then the rest by name, without repeats', () => {
+    expect(jiraStatusOptions(cols, ['Done', 'To Do', 'Backlog'], ['Archived', 'Done'])).toEqual([
+      'To Do', 'In Progress', 'Blocked', 'Archived', 'Backlog', 'Done',
+    ]);
+  });
+
+  it('adds an empty In Progress column in workflow order when the status exists', () => {
+    const noneActive = jiraBoardColumns([issue('DEMO-1', 'To Do', 'todo'), issue('DEMO-3', 'Blocked', 'blocked')]);
+    const result = withAlwaysShownColumn(noneActive, ['To Do', 'In Progress', 'Blocked']);
+    expect(result.map((c) => c.status)).toEqual(['To Do', 'In Progress', 'Blocked']);
+    expect(result[1].issues).toEqual([]);
+  });
+
+  it('adds nothing when the column exists or the workspace has no such status', () => {
+    expect(withAlwaysShownColumn(cols, ['In Progress'])).toBe(cols);
+    const noneActive = jiraBoardColumns([issue('DEMO-1', 'To Do', 'todo')]);
+    expect(withAlwaysShownColumn(noneActive, ['To Do', 'Waiting'])).toBe(noneActive);
+  });
+
+  it('toggles a status and drops In Progress from what is saved', () => {
+    expect(toggleHiddenStatus([], 'Blocked')).toEqual(['Blocked']);
+    expect(toggleHiddenStatus(['Blocked'], 'Blocked')).toEqual([]);
+    expect(toggleHiddenStatus(['In Progress', 'Blocked'], 'To Do')).toEqual(['Blocked', 'To Do']);
+    expect(toggleHiddenStatus(['Blocked'], 'In Progress')).toEqual(['Blocked']);
   });
 });

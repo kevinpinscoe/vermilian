@@ -62,6 +62,42 @@ export function jiraBoardColumns(issues: readonly BoardIssue[], priorities: Read
   return cols.sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.status.localeCompare(b.status));
 }
 
+/** In Progress can never be filtered out (VERM-67); only that name, in any case. */
+export function isAlwaysShownStatus(status: string): boolean {
+  return status.trim().toLowerCase() === 'in progress';
+}
+
+/** Every status the filter offers: the board's columns in order, then the rest by name. */
+export function jiraStatusOptions(
+  columns: readonly JiraBoardColumn[],
+  knownStatuses: readonly string[],
+  hiddenStatuses: readonly string[],
+): string[] {
+  const onBoard = columns.map((c) => c.status);
+  const rest = [...new Set([...knownStatuses, ...hiddenStatuses])].filter((s) => !onBoard.includes(s));
+  return [...onBoard, ...rest.sort((a, b) => a.localeCompare(b))];
+}
+
+/** The columns with In Progress added, empty, when the workspace has that status but no issue is in it. */
+export function withAlwaysShownColumn(
+  columns: JiraBoardColumn[],
+  knownStatuses: readonly string[],
+): JiraBoardColumn[] {
+  if (columns.some((c) => isAlwaysShownStatus(c.status))) return columns;
+  const status = knownStatuses.find(isAlwaysShownStatus);
+  if (status === undefined) return columns;
+  return [...columns, { status, role: 'inProgress' as const, issues: [] }]
+    .sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.status.localeCompare(b.status));
+}
+
+/** The hidden list after one status is switched; In Progress is never kept in it. */
+export function toggleHiddenStatus(hiddenStatuses: readonly string[], status: string): string[] {
+  const next = hiddenStatuses.includes(status)
+    ? hiddenStatuses.filter((s) => s !== status)
+    : [...hiddenStatuses, status];
+  return next.filter((s) => !isAlwaysShownStatus(s));
+}
+
 /** A hidden column, by status name, with how many loaded issues it holds. */
 export interface HiddenJiraColumn {
   status: string;
@@ -78,7 +114,7 @@ export function splitHiddenColumns(
   columns: readonly JiraBoardColumn[],
   hiddenStatuses: readonly string[],
 ): { shown: JiraBoardColumn[]; hidden: HiddenJiraColumn[] } {
-  const hide = new Set(hiddenStatuses);
+  const hide = new Set(hiddenStatuses.filter((s) => !isAlwaysShownStatus(s)));
   const shown: JiraBoardColumn[] = [];
   const hidden: HiddenJiraColumn[] = [];
   for (const col of columns) {

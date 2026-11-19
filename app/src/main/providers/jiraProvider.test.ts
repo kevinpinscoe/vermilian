@@ -34,6 +34,7 @@ function stubClient(overrides: Partial<Record<keyof typeof JiraClient, unknown>>
     isValidBoardId,
     boardIssuesJql,
     boardRecentlyUpdatedJql,
+    listProjectStatuses: vi.fn(async () => ['To Do', 'In Progress']),
     listBoards: vi.fn(async () => [{ id: 12, name: 'Planned', type: 'scrum', projectKey: 'DEMO' }]),
     searchBoardIssues: vi.fn(async () => [ISSUE]),
     isIssueOnBoard: vi.fn(async () => false),

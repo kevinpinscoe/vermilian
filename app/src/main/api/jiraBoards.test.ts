@@ -11,6 +11,7 @@ import {
   isIssueOnBoard,
   isValidBoardId,
   listBoards,
+  listProjectStatuses,
   missingJiraScopes,
   searchBoardIssues,
 } from './jira';
@@ -50,6 +51,27 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('listProjectStatuses (VERM-67)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('returns each status name once across issue types', async () => {
+    const fetchMock = vi.fn(async () => json(200, [
+      { name: 'Task', statuses: [{ name: 'To Do' }, { name: 'In Progress' }] },
+      { name: 'Bug', statuses: [{ name: 'In Progress' }, { name: 'Done' }, {}] },
+    ]));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(listProjectStatuses(BASE, EMAIL, TOKEN, 'SRE')).resolves.toEqual(['To Do', 'In Progress', 'Done']);
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/rest/api/3/project/SRE/statuses`);
+  });
+
+  it('refuses an invalid project key before any request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(listProjectStatuses(BASE, EMAIL, TOKEN, '../x')).rejects.toThrow('Invalid Jira project key');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('listBoards', () => {

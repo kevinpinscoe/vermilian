@@ -150,6 +150,7 @@ const api: VermilianAPI = {
   openbaoCleanupOriginal: (scope: OpenBaoScope, credentialRef: string, args: { confirmed: boolean }) =>
     ipcRenderer.invoke(IPC.openbaoCleanupOriginal, scope, credentialRef, args),
   listWorkspaceJiraProjects: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraProjects, workspaceId),
+  listWorkspaceJiraStatuses: (workspaceId: string) => ipcRenderer.invoke(IPC.listWorkspaceJiraStatuses, workspaceId),
   getWorkspaceJiraIssues: (args: GetWorkspaceJiraIssuesArgs) => ipcRenderer.invoke(IPC.getWorkspaceJiraIssues, args),
   getWorkspaceJiraRecentlyUpdated: (args: GetWorkspaceJiraRecentlyUpdatedArgs) =>
     ipcRenderer.invoke(IPC.getWorkspaceJiraRecentlyUpdated, args),

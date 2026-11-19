@@ -48,7 +48,7 @@ const READS = new Set([
   'detectCloudId', 'getMyself', 'probeJiraToken', 'jiraApiBase', 'searchJql', 'getIssue', 'listProjects',
   'searchProjectIssues', 'searchProjectRecentlyUpdated', 'getEditMeta', 'getIssueComments',
   // Board reads (VERM-59), through the Agile API.
-  'listBoards', 'searchBoardIssues', 'missingJiraScopes',
+  'listBoards', 'searchBoardIssues', 'listProjectStatuses', 'missingJiraScopes',
 ]);
 
 async function expectNoJiraWrites(page: Page) {

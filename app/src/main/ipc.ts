@@ -139,6 +139,7 @@ import type {
   GetWorkspaceJiraIssuesResult,
   GetWorkspaceJiraRecentlyUpdatedResult,
   ListWorkspaceJiraProjectsResult,
+  ListWorkspaceJiraStatusesResult,
 } from '../shared/ipc';
 import {
   LEGACY_CREDENTIAL_REFS,
@@ -1389,6 +1390,21 @@ export function registerIpc(): void {
       } catch (e) {
         return jiraFailure(workspaceId, p.doc, e, 'The Jira projects could not be listed.');
       }
+    },
+  );
+
+  // A status that cannot be read only shortens the filter's list: the board
+  // keeps working from the statuses its issues carry (VERM-67).
+  ipcMain.handle(
+    IPC.listWorkspaceJiraStatuses,
+    async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraStatusesResult> => {
+      const p = await workspaceJiraProvider(workspaceId);
+      if (!p.ok) return p;
+      const projectKeys = workspaceProjectIds(p.doc);
+      const reads = await Promise.allSettled(projectKeys.map((key) => p.provider.getStatuses(key)));
+      const statuses = [...new Set(reads.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])))];
+      const boardsOnly = projectKeys.length === 0 && workspaceBoardIds(p.doc).length > 0;
+      return { ok: true, statuses, incomplete: boardsOnly || reads.some((r) => r.status === 'rejected') };
     },
   );
 

@@ -27,7 +27,7 @@ yet in a release. Paths are relative to `app/src/` unless they start with `app/`
 | AI recommendation for the desk | YouTrack | [AI recommendation](#ai-recommendation) |
 | Create a Jira workspace, connect Jira | Jira | [Create a Jira workspace](#create-a-jira-workspace) |
 | Choose Jira projects or boards | Jira | [Choose projects and boards](#choose-jira-projects-and-boards) |
-| Hide status columns, show Done tickets | Jira | [Jira board controls](#jira-board-controls) |
+| Filter by status, hide status columns, show Done tickets | Jira | [Jira board controls](#jira-board-controls) |
 | Filter by assignee, only my tickets | Both | [Filter by assignee](#filter-by-assignee) |
 | Search for a ticket | Both | [Search](#search) |
 | Open a Jira ticket's details | Jira | [Jira detail panel](#jira-detail-panel) |
@@ -168,12 +168,14 @@ projects can still be saved and the chosen boards are kept.
 
 | Control | What it does | Saved? |
 | --- | --- | --- |
-| **Columns…** | Untick statuses and click **Save** to hide those columns. A line under the board names hidden columns with their counts | Yes, with the workspace |
+| **Status** pills | Click a status to hide or show its column. Lists every status in the chosen projects, including ones with no issues. **In Progress** is always shown and cannot be turned off. A line under the board names hidden columns with their counts | Yes, with the workspace |
+| **Columns…** | The same choice as the **Status** pills, as a checklist with **Save** | Yes, with the workspace |
 | **Show done** | Adds Done issues to the board. The desk still reads open issues only | No |
 | Search box | See [Search](#search) | No |
 | **Assignee** pills | See [Filter by assignee](#filter-by-assignee) | No |
 
-**Limit:** **Columns…** lists only statuses that loaded issues are in, plus statuses already hidden.
+**Limit:** statuses on boards chosen without a project are known only from loaded issues. The board says
+so when the Status list may be incomplete, as it does when the token cannot read statuses.
 
 Issues refresh every 60 seconds while the window is visible.
 
