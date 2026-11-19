@@ -3,6 +3,7 @@ import { Button, Text } from '@vibe/core';
 import { Pause, Play } from '@vibe/icons';
 import type { PomodoroConfig } from '../../../shared/config';
 import { useTimerStore, getPhaseElapsed, fmtMs } from '../../stores/timer';
+import { fireNotification } from './notifications';
 import styles from './FocusOverlay.module.css';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -22,12 +23,6 @@ function playBeep() {
     osc.stop(ctx.currentTime + 0.6);
   } catch {
     // AudioContext not available or blocked
-  }
-}
-
-function fireNotification(title: string, body: string) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body });
   }
 }
 
@@ -54,13 +49,14 @@ function CircleProgress({ progress }: { progress: number }) {
 interface FocusOverlayProps {
   pomodoro: PomodoroConfig;
   soundEnabled: boolean;
+  osNotifications: boolean;
   onStopAndLog: () => Promise<void>;
   onCheckpoint: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoint }: FocusOverlayProps) {
+export function FocusOverlay({ pomodoro, soundEnabled, osNotifications, onStopAndLog, onCheckpoint }: FocusOverlayProps) {
   const timer = useTimerStore((s) => s.timer);
   const pauseTimer = useTimerStore((s) => s.pauseTimer);
   const resumeTimer = useTimerStore((s) => s.resumeTimer);
@@ -104,7 +100,7 @@ export function FocusOverlay({ pomodoro, soundEnabled, onStopAndLog, onCheckpoin
       const breakLabel = isLong
         ? `${pomodoro.longBreak}-minute long break`
         : `${pomodoro.shortBreak}-minute break`;
-      fireNotification('Pomodoro complete', `Time for a ${breakLabel}.`);
+      fireNotification(osNotifications, 'Pomodoro complete', `Time for a ${breakLabel}.`);
     }
   
   }, [tick]);

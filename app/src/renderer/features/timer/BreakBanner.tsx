@@ -2,20 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Text } from '@vibe/core';
 import type { PomodoroConfig } from '../../../shared/config';
 import { useTimerStore, getPhaseElapsed, fmtMs } from '../../stores/timer';
+import { fireNotification } from './notifications';
 import styles from './BreakBanner.module.css';
-
-function fireNotification(title: string, body: string) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body });
-  }
-}
 
 interface BreakBannerProps {
   pomodoro: PomodoroConfig;
+  osNotifications: boolean;
   onStopAndLog: () => Promise<void>;
 }
 
-export function BreakBanner({ pomodoro, onStopAndLog }: BreakBannerProps) {
+export function BreakBanner({ pomodoro, osNotifications, onStopAndLog }: BreakBannerProps) {
   const timer = useTimerStore((s) => s.timer);
   const advanceToWork = useTimerStore((s) => s.advanceToWork);
 
@@ -47,6 +43,7 @@ export function BreakBanner({ pomodoro, onStopAndLog }: BreakBannerProps) {
       phaseHandledRef.current = true;
       advanceToWork();
       fireNotification(
+        osNotifications,
         'Break complete',
         `Starting next 25-minute work block on '${timer.summary}'.`,
       );

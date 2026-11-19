@@ -250,6 +250,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const dailyNotesFolder = config.data?.dailyNotesFolder ?? '';
   const pomodoro = config.data?.pomodoro ?? { work: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 4 };
   const soundEnabled = config.data?.soundOnBlockEnd ?? true;
+  const osNotifications = config.data?.osNotifications ?? true;
   const defaultWorklogType = config.data?.defaultWorklogType ?? 'Development';
 
   const activeProject = projects.data?.find((p) => p.id === activeProjectId) ?? null;
@@ -589,7 +590,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
 
       {/* Break banner — shown when break phase is active */}
       {isBreak && (
-        <BreakBanner pomodoro={pomodoro} onStopAndLog={stopAndLog} />
+        <BreakBanner pomodoro={pomodoro} osNotifications={osNotifications} onStopAndLog={stopAndLog} />
       )}
 
       <div className={styles.body}>
@@ -701,6 +702,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         <FocusOverlay
           pomodoro={pomodoro}
           soundEnabled={soundEnabled}
+          osNotifications={osNotifications}
           onStopAndLog={stopAndLog}
           onCheckpoint={handleCheckpoint}
         />
