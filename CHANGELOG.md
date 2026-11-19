@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   another store. Credentials in OpenBao do not depend on the macOS keychain, so an upgrade to a
   differently signed build cannot lock them out.
 
+### Fixed
+
+- **Stop and start new no longer loses unlogged time** (VERM-70). If YouTrack refuses the worklog,
+  the current timer keeps running and the new one does not start, so the time can still be logged.
+
 ## [1.5.0] - 2026-11-16
 
 ### Added

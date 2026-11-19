@@ -771,7 +771,8 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
           onKeep={() => setConflict(null)}
           onStopAndStart={async () => {
             setConflict(null);
-            await stopAndLog();
+            // A refused worklog keeps the timer; replacing it would lose the unlogged time.
+            if (!(await stopAndLogResult())) return;
             startTimerStore(
               conflict.newIssueId,
               conflict.newReadable,

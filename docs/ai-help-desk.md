@@ -294,7 +294,8 @@ Filters are not saved between sessions.
 **Logging work:** stopping the timer is the only way to log work. Minutes round to the nearest
 minute, with a minimum of 1. Break time is not logged.
 
-- **Timer already running:** choose **Keep current running** or **Stop and start new**.
+- **Timer already running:** choose **Keep current running** or **Stop and start new**. If the
+  time cannot be logged, the current timer keeps running and the new one does not start.
 - **Quitting with a timer running:** choose **Keep working** or **Stop timer & quit**.
 - **After a crash:** 60 seconds or more of work is logged at the next launch. The timer does not
   resume.

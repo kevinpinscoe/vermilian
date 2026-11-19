@@ -132,4 +132,28 @@ test.describe('Task timer — refused worklog', () => {
     await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
     await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
   });
+
+  // VERM-70: starting the new timer replaced the one kept for retry, so the
+  // unlogged time was lost. The break banner leaves the board reachable, which
+  // is how a second timer can be requested while one is running.
+  test('Stop and start new keeps the current timer when its worklog is refused', async () => {
+    await startFirstRowTimer(page);
+    await page.locator('[data-testid="focus-skip-break-btn"]').click();
+    await expect(page.locator('[data-testid="break-banner"]')).toBeVisible();
+
+    const rows = page.locator('[data-testid="task-row"]');
+    await rows.nth(1).hover();
+    await rows.nth(1).locator('[data-testid="row-start-timer"]').click();
+    await page.getByRole('button', { name: 'Stop and start new' }).click();
+
+    await expect(page.getByText(/Failed to log worklog: Time tracking is disabled/)).toBeVisible();
+    await expect(rows.nth(0).locator('[data-testid="timer-badge"]')).toBeVisible();
+    await expect(rows.nth(1).locator('[data-testid="timer-badge"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="focus-overlay"]')).toBeHidden();
+
+    // The kept timer still logs to the original issue once the refusal clears.
+    await page.locator('[data-testid="break-stop-btn"]').click();
+    await expect(page.getByText(/Logged \d+ min to 'TEST-1'/)).toBeVisible();
+    await expect(page.locator('[data-testid="break-banner"]')).toBeHidden();
+  });
 });
