@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-19
+
 ### Added
 
 - **OpenBao credential storage** (VERM-64). **Settings → OpenBao credential storage** adds OpenBao
@@ -17,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operations that need a credential stop with a clear message: Vermilian never falls back to
   another store. Credentials in OpenBao do not depend on the macOS keychain, so an upgrade to a
   differently signed build cannot lock them out.
+- **Default assignee** (VERM-68). Settings has a per-workspace **Default assignee**. Once it is
+  set, All tasks on YouTrack and Jira opens showing only that person's issues, with a toggle to
+  show everyone for the session. Search still finds other people's issues.
+- **Filter the Jira board by every status** (VERM-67). The status pills list every workflow status
+  in the workspace's chosen projects, including statuses with no loaded issue, and share the saved
+  choice with the **Columns…** menu. In Progress cannot be hidden, and its column shows even when
+  empty.
+- **Open a Jira issue from its detail panel** (VERM-66). The key in the Jira detail panel's header
+  opens the issue on the workspace's Jira site in your default browser.
+- **AI help desk** (VERM-65). `docs/ai-help-desk.md` gives AI agents a task index, common
+  misreadings and verified steps for each Vermilian function on both backends, including OpenBao
+  credential storage.
+
+### Changed
+
+- **Jira card IDs are green** (VERM-69). The ticket ID on each Jira All tasks card is green in both
+  themes and meets WCAG AA contrast, including on a selected card.
 
 ### Fixed
 
@@ -29,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout change that could not be saved used to fail silently; it now shows the reason.
 - **Stop and start new no longer loses unlogged time** (VERM-70). If YouTrack refuses the worklog,
   the current timer keeps running and the new one does not start, so the time can still be logged.
+- **The timer honours the OS notifications setting** (VERM-71). Work-block and break notifications
+  used to fire whether the setting was on or off.
+- **A middle click on a Jira key opens your browser** (VERM-66), not a new Vermilian window.
+- **Saved settings reach the board immediately** (VERM-68). The board read the configuration under
+  its own cache key, so a saved setting did not apply until the data went stale.
 
 ## [1.5.0] - 2026-11-16
 
@@ -795,7 +819,8 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
-[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.3.0
