@@ -98,6 +98,11 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
                   e.preventDefault();
                   void window.vermilian.openExternalUrl(loaded.issueUrl);
                 }}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  void window.vermilian.openExternalUrl(loaded.issueUrl);
+                }}
                 rel="noreferrer"
                 title="Open in Jira"
                 aria-label={`Open ${loaded.issue.idReadable} in Jira`}

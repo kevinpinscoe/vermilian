@@ -284,6 +284,11 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     await key.focus();
     await page.keyboard.press('Enter');
     await expect.poll(() => app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls.length)).toBe(2);
+
+    // A middle click also goes to the browser, not to a new app window.
+    await key.click({ button: 'middle' });
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls.length)).toBe(3);
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
   });
 
   test('a Jira card opens a read-only detail panel with description and comments (VERM-35)', async () => {
