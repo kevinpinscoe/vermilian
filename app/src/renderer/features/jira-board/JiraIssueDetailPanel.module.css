@@ -38,6 +38,14 @@
   color: var(--primary-color, #0073ea);
 }
 
+.issueKeyLink {
+  text-decoration: underline;
+}
+
+.issueKeyLink:hover {
+  color: var(--primary-hover-color, #0060b9);
+}
+
 .readOnly {
   font-size: 11px;
   padding: 1px 6px;

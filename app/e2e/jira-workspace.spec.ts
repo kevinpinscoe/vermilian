@@ -258,6 +258,39 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     await expect(tid(page, 'jira-workspace-board')).toBeVisible();
   }
 
+  test('the detail panel key opens the issue in Jira and the panel stays open (VERM-66)', async () => {
+    await openJiraBoard('ws-e2ejr66', 'Jira key link', ['DEMO', 'OPS']);
+    // Record the URL instead of launching a real browser from the test.
+    await app.evaluate(({ shell }) => {
+      const g = globalThis as unknown as { openedUrls: string[] };
+      g.openedUrls = [];
+      shell.openExternal = async (url: string) => { g.openedUrls.push(url); };
+    });
+    await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-101"]').click();
+
+    const key = page.locator('a[data-testid="jira-detail-issue-key"]');
+    await expect(key).toHaveText('DEMO-101');
+    await expect(key).toHaveAttribute('href', 'https://example.atlassian.net/browse/DEMO-101');
+    await expect(key).toHaveAttribute('aria-label', 'Open DEMO-101 in Jira');
+
+    const before = page.url();
+    await key.click();
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls))
+      .toEqual(['https://example.atlassian.net/browse/DEMO-101']);
+    expect(page.url()).toBe(before);
+    await expect(tid(page, 'jira-issue-detail-panel')).toBeVisible();
+
+    // Reachable from the keyboard.
+    await key.focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls.length)).toBe(2);
+
+    // A middle click also goes to the browser, not to a new app window.
+    await key.click({ button: 'middle' });
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls.length)).toBe(3);
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  });
+
   test('a Jira card opens a read-only detail panel with description and comments (VERM-35)', async () => {
     await openJiraBoard('ws-e2ejr4', 'Jira detail', ['DEMO', 'OPS']);
     await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-101"]').click();

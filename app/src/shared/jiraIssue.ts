@@ -29,6 +29,11 @@ export interface JiraIssueRow {
   url: string; // the issue in the Jira web UI
 }
 
+/** The issue in the Jira web UI. */
+export function jiraIssueUrl(siteUrl: string, issueKey: string): string {
+  return `${siteUrl.replace(/\/+$/, '')}/browse/${encodeURIComponent(issueKey)}`;
+}
+
 export function toJiraIssueRow(issue: JiraSearchIssue, siteUrl: string): JiraIssueRow {
   const f = issue.fields ?? {};
   return {
@@ -38,6 +43,6 @@ export function toJiraIssueRow(issue: JiraSearchIssue, siteUrl: string): JiraIss
     statusCategory: f.status?.statusCategory?.key ?? '',
     priority: f.priority?.name ?? '',
     updated: f.updated ?? '',
-    url: `${siteUrl.replace(/\/+$/, '')}/browse/${encodeURIComponent(issue.key)}`,
+    url: jiraIssueUrl(siteUrl, issue.key),
   };
 }

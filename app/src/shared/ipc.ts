@@ -236,6 +236,8 @@ export type GetWorkspaceJiraIssueDetailResult =
   | {
       ok: true;
       issue: import('./workspace').IssueDetail;
+      // The issue in the Jira web UI, on this workspace's own site (VERM-66).
+      issueUrl: string;
       // Description and comments as Markdown, escaped; render without raw HTML.
       content: import('./jiraContent').JiraIssueContent;
     }

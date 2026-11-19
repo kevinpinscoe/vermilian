@@ -89,7 +89,30 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.idRow}>
-            <span className={styles.issueKey} data-testid="jira-detail-issue-key">{loaded?.issue.idReadable ?? issueKey}</span>
+            {loaded ? (
+              // Opens in the system browser rather than navigating the app window (VERM-66).
+              <a
+                className={`${styles.issueKey} ${styles.issueKeyLink}`}
+                href={loaded.issueUrl}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void window.vermilian.openExternalUrl(loaded.issueUrl);
+                }}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  void window.vermilian.openExternalUrl(loaded.issueUrl);
+                }}
+                rel="noreferrer"
+                title="Open in Jira"
+                aria-label={`Open ${loaded.issue.idReadable} in Jira`}
+                data-testid="jira-detail-issue-key"
+              >
+                {loaded.issue.idReadable}
+              </a>
+            ) : (
+              <span className={styles.issueKey} data-testid="jira-detail-issue-key">{issueKey}</span>
+            )}
             <span className={styles.readOnly} title="Nothing in this version changes Jira issues.">Jira · read-only</span>
           </div>
           {loaded && <span className={styles.projectName} data-testid="jira-detail-project">{loaded.issue.project.name}</span>}
