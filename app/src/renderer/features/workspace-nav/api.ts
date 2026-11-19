@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
 import type { ActiveWorkspaceContext } from '../../../shared/activeWorkspace';
+import { useToastStore } from '../../stores/toast';
 
 export const WORKSPACE_CONFIG_QUERY_KEY = ['workspace', 'config'] as const;
 // The per-machine active workspace and its backend context (VERM-46).
@@ -31,10 +32,20 @@ export function useActiveWorkspace() {
 export function useSaveWorkspaceConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (config: VermilianConfig) => window.vermilian.saveWorkspaceConfig(config),
+    // A refusal resolves with ok: false, so it has to be raised here or the
+    // user never learns the change was not saved (VERM-72).
+    mutationFn: async (config: VermilianConfig) => {
+      const result = await window.vermilian.saveWorkspaceConfig(config);
+      if (!result.ok) throw new Error(result.error ?? 'The workspace change could not be saved.');
+      return result;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+    },
+    onError: (error) => {
+      useToastStore.getState().show('negative', error.message);
+      void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
     },
   });
 }

@@ -462,6 +462,10 @@ export async function createWorkspaceArticle(
   return { ...addWsArticle(workspaceArticleTitle(workspaceId), content) };
 }
 
+export async function deleteVermilianArticle(_url: string, _token: string, articleId: string): Promise<boolean> {
+  return wsArticles.delete(articleId);
+}
+
 // e2e-only: every workspace article as stored, unknown fields and all.
 export function getWorkspaceArticlesForTests(): FakeWsArticle[] {
   return [...wsArticles.values()].map((a) => ({ ...a }));

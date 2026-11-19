@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deleting a workspace works under per-workspace storage** (VERM-72). **Delete** was offered but
+  always refused, and deleting the active workspace still switched you away from it. It now moves
+  the projects if you choose a destination, then permanently deletes the workspace's configuration
+  article from YouTrack for every computer. If the delete is refused, the workspace stays, you stay
+  on it, and the reason is shown.
+- **Refused workspace changes are now reported** (VERM-72). A rename, reorder or other workspace
+  layout change that could not be saved used to fail silently; it now shows the reason.
 - **Stop and start new no longer loses unlogged time** (VERM-70). If YouTrack refuses the worklog,
   the current timer keeps running and the new one does not start, so the time can still be logged.
 

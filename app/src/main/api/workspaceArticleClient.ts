@@ -16,6 +16,7 @@ export function youtrackWorkspaceArticleClient(url: string, token: string): Work
     },
     create: (workspaceId, content) => yt.createWorkspaceArticle(url, token, workspaceId, content),
     update: (articleId, content) => yt.updateVermilianArticle(url, token, articleId, content),
+    delete: (articleId) => yt.deleteVermilianArticle(url, token, articleId),
   };
 }
 

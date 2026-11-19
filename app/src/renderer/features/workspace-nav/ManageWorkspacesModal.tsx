@@ -66,18 +66,24 @@ interface ManageWorkspacesModalProps {
   onEditAiCredential?: (workspaceId: string) => void;
   // Per-workspace storage only: each workspace's own master plan (VERM-48).
   onEditMasterPlan?: (workspaceId: string) => void;
+  // Per-workspace storage only: deletes the workspace's article. Resolves to
+  // an error message, or null once it is gone (VERM-72).
+  onDeletePerWorkspace?: (workspaceId: string, destinationId: string | null) => Promise<string | null>;
 }
 
 export function ManageWorkspacesModal({
-  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential, onEditMasterPlan,
+  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential, onEditMasterPlan, onDeletePerWorkspace,
 }: ManageWorkspacesModalProps) {
   const sorted = config.workspaces.slice().sort((a, b) => a.order - b.order);
+  const perWorkspace = storage === 'per-workspace';
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
   const [confirmText, setConfirmText] = useState('');
   const [destination, setDestination] = useState<string>(UNASSIGNED);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function startRename(ws: Workspace) {
     setEditingId(ws.id);
@@ -104,16 +110,29 @@ export function ManageWorkspacesModal({
     setDeleteTarget(ws);
     setConfirmText('');
     setDestination(UNASSIGNED);
+    setDeleteError(null);
   }
 
   function cancelDelete() {
     setDeleteTarget(null);
     setConfirmText('');
     setDestination(UNASSIGNED);
+    setDeleteError(null);
   }
 
-  function confirmDelete() {
-    if (!deleteTarget || confirmText.trim() !== deleteTarget.name) return;
+  async function confirmDelete() {
+    if (!deleteTarget || deleting || confirmText.trim() !== deleteTarget.name) return;
+
+    if (perWorkspace && onDeletePerWorkspace) {
+      // Stays open on failure: nothing is switched or removed until it succeeds.
+      setDeleting(true);
+      setDeleteError(null);
+      const error = await onDeletePerWorkspace(deleteTarget.id, destination === UNASSIGNED ? null : destination);
+      setDeleting(false);
+      if (error) setDeleteError(error);
+      else cancelDelete();
+      return;
+    }
 
     const moving = projectIdsIn(deleteTarget);
     let next = config;
@@ -245,6 +264,7 @@ export function ManageWorkspacesModal({
               {projectCount(deleteTarget) > 0
                 ? ' The workspace is removed — its projects are kept.'
                 : ' This cannot be undone.'}
+              {perWorkspace && ' Its configuration is permanently deleted from YouTrack for every computer, including its board settings.'}
             </div>
             <input
               autoFocus
@@ -254,10 +274,13 @@ export function ManageWorkspacesModal({
               placeholder={deleteTarget.name}
               onChange={(e) => setConfirmText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') confirmDelete();
+                if (e.key === 'Enter') void confirmDelete();
                 if (e.key === 'Escape') cancelDelete();
               }}
             />
+            {deleteError && (
+              <div className={styles.confirmError} role="alert" data-testid="ws-delete-error">{deleteError}</div>
+            )}
             <div className={styles.confirmActions}>
               <Button kind="tertiary" size="small" onClick={cancelDelete}>
                 Cancel
@@ -265,9 +288,9 @@ export function ManageWorkspacesModal({
               <Button
                 color="negative" size="small"
                 data-testid="ws-delete-confirm"
-                disabled={confirmText.trim() !== deleteTarget.name}
-                onClick={confirmDelete}
-              >Delete workspace</Button>
+                disabled={deleting || confirmText.trim() !== deleteTarget.name}
+                onClick={() => void confirmDelete()}
+              >{deleting ? 'Deleting…' : 'Delete workspace'}</Button>
             </div>
           </div>
         )}

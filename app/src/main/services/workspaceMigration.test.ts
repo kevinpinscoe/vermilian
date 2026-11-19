@@ -23,6 +23,10 @@ class FakeYouTrack implements WorkspaceMigrationClient {
   private seq = 0;
   private clock = 1_000;
 
+  async delete(id: string) {
+    return this.articles.delete(id);
+  }
+
   put(summary: string, content: string, idReadable?: string): WorkspaceArticleRecord {
     const a = { id: `art-${++this.seq}`, ...(idReadable ? { idReadable } : {}), summary, content, updated: ++this.clock };
     this.articles.set(a.id, a);

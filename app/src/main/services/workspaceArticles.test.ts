@@ -5,6 +5,7 @@ import { workspaceArticleTitle } from '../../shared/workspaceArticle';
 import {
   MAX_WRITE_ATTEMPTS,
   createWorkspaceArticle,
+  deleteWorkspaceArticle,
   listWorkspaceArticles,
   readWorkspaceArticle,
   updateWorkspaceArticle,
@@ -18,12 +19,14 @@ import {
 // Articles API gives us. `on` lets a test act as another machine at a precise
 // moment: before the Nth call of a given kind.
 
-type CallKind = 'list' | 'get' | 'create' | 'update';
+type CallKind = 'list' | 'get' | 'create' | 'update' | 'delete';
 
 class FakeArticles implements WorkspaceArticleClient {
   articles = new Map<string, WorkspaceArticleRecord>();
-  calls: Record<CallKind, number> = { list: 0, get: 0, create: 0, update: 0 };
+  calls: Record<CallKind, number> = { list: 0, get: 0, create: 0, update: 0, delete: 0 };
   hooks: Array<{ kind: CallKind; n: number; run: () => void }> = [];
+  failDelete = false;
+  ignoreDelete = false; // YouTrack answers success but the article stays
   failList = false;
   incompleteList = false;
   private seq = 0;
@@ -74,6 +77,13 @@ class FakeArticles implements WorkspaceArticleClient {
     if (!this.articles.has(id)) return null;
     this.overwrite(id, content);
     return { updated: this.articles.get(id)!.updated };
+  }
+
+  async delete(id: string) {
+    this.enter('delete');
+    if (this.failDelete) return false;
+    if (!this.ignoreDelete) this.articles.delete(id);
+    return true;
   }
 
   json(id: string): Record<string, unknown> {
@@ -356,7 +366,7 @@ describe('stale-write detection', () => {
     const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
     const r = await readWorkspaceArticle(yt, A);
     if (!r.ok || r.entry.status !== 'ok') throw new Error('seed read failed');
-    yt.calls = { list: 0, get: 0, create: 0, update: 0 };
+    yt.calls = { list: 0, get: 0, create: 0, update: 0, delete: 0 };
     return { id: rec.id, base: r.entry.document };
   }
 
@@ -453,6 +463,55 @@ describe('duplicate and invalid articles', () => {
       ok: true,
       entry: { status: 'invalid', errors: [expect.objectContaining({ path: 'workspaceId' })] },
     });
+  });
+});
+
+// ─── Deleting ────────────────────────────────────────────────────────────────
+
+describe('deleteWorkspaceArticle', () => {
+  it('deletes the article and confirms it is gone', async () => {
+    const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    expect(await deleteWorkspaceArticle(yt, A, rec.updated)).toEqual({ ok: true, articleId: rec.id });
+    expect(yt.articles.has(rec.id)).toBe(false);
+  });
+
+  it('refuses when the article changed after the delete was planned', async () => {
+    const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    const planned = rec.updated;
+    yt.overwrite(rec.id, serialiseNewWorkspaceDocument(doc(A, { name: 'Edited elsewhere' })));
+    expect(await deleteWorkspaceArticle(yt, A, planned)).toMatchObject({ ok: false, reason: 'changed' });
+    expect(yt.calls.delete).toBe(0);
+  });
+
+  it('refuses when the article changes at the last look before deleting', async () => {
+    const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    yt.on('get', 1, () => yt.overwrite(rec.id, serialiseNewWorkspaceDocument(doc(A, { name: 'Edited elsewhere' }))));
+    expect(await deleteWorkspaceArticle(yt, A, rec.updated)).toMatchObject({ ok: false, reason: 'changed' });
+    expect(yt.calls.delete).toBe(0);
+  });
+
+  it('refuses an ambiguous workspace and deletes neither article', async () => {
+    const one = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    expect(await deleteWorkspaceArticle(yt, A, one.updated)).toMatchObject({ ok: false, reason: 'ambiguous' });
+    expect(yt.articles.size).toBe(2);
+  });
+
+  it('reports a workspace with no article', async () => {
+    expect(await deleteWorkspaceArticle(yt, A, 1)).toMatchObject({ ok: false, reason: 'not-found' });
+  });
+
+  it('reports a delete YouTrack refused', async () => {
+    const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    yt.failDelete = true;
+    expect(await deleteWorkspaceArticle(yt, A, rec.updated)).toMatchObject({ ok: false, reason: 'delete-failed' });
+    expect(yt.articles.has(rec.id)).toBe(true);
+  });
+
+  it('never claims success while the article is still there', async () => {
+    const rec = yt.put(workspaceArticleTitle(A), serialiseNewWorkspaceDocument(doc(A)));
+    yt.ignoreDelete = true;
+    expect(await deleteWorkspaceArticle(yt, A, rec.updated)).toMatchObject({ ok: false, reason: 'delete-unverified' });
   });
 });
 
