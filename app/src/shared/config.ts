@@ -65,6 +65,10 @@ export interface AppConfig {
   // Connection details and references only: never a token or a SecretID.
   openbaoScopes: Record<string, OpenBaoScopeConfig>;
 
+  // The Default assignee of each workspace on this computer, by workspace ID
+  // (VERM-68): a YouTrack login or a Jira accountId.
+  defaultAssignees: Record<string, string>;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -95,6 +99,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   jiraTokenFile: '',
   credentialSources: {},
   openbaoScopes: {},
+  defaultAssignees: {},
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',

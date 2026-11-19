@@ -13,6 +13,11 @@ function configPath(): string {
   return path.join(app.getPath('userData'), 'app-config.json');
 }
 
+function stringEntries(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null) return {};
+  return Object.fromEntries(Object.entries(value).filter((e): e is [string, string] => typeof e[1] === 'string'));
+}
+
 function merge(partial: Partial<AppConfig>): AppConfig {
   return {
     ...DEFAULT_CONFIG,
@@ -20,6 +25,7 @@ function merge(partial: Partial<AppConfig>): AppConfig {
     pomodoro: { ...DEFAULT_CONFIG.pomodoro, ...(partial.pomodoro ?? {}) },
     credentialSources: sanitiseCredentialSources(partial.credentialSources),
     openbaoScopes: sanitiseOpenBaoScopes(partial.openbaoScopes),
+    defaultAssignees: stringEntries(partial.defaultAssignees),
   };
 }
 

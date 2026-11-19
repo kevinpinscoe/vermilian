@@ -20,11 +20,13 @@ import { AISection } from './sections/AISection';
 import { JiraSection } from './sections/JiraSection';
 import { TimerPomodoroSection } from './sections/TimerPomodoroSection';
 import { DailyNotesSection } from './sections/DailyNotesSection';
+import { DefaultAssigneeSection } from './sections/DefaultAssigneeSection';
+import { withDefaultAssignee } from '../project-board/defaultAssignee';
 import { AppearanceSection } from './sections/AppearanceSection';
 import { AdvancedSection } from './sections/AdvancedSection';
 import { WorkspaceStorageSection } from './sections/WorkspaceStorageSection';
 import { OpenBaoSection } from './sections/OpenBaoSection';
-import { ACTIVE_WORKSPACE_QUERY_KEY } from '../workspace-nav/api';
+import { ACTIVE_WORKSPACE_QUERY_KEY, useActiveWorkspace } from '../workspace-nav/api';
 import styles from './SettingsView.module.css';
 
 interface Props {
@@ -101,6 +103,9 @@ export function SettingsView({ canCancel, onClose }: Props) {
   const [jiraLoaded, setJiraLoaded] = useState(false);
   const [jiraSaveError, setJiraSaveError] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const activeWorkspace = useActiveWorkspace();
+  // null until edited, so a late-arriving workspace shows its saved value (VERM-68).
+  const [assigneeDraft, setAssigneeDraft] = useState<string | null>(null);
 
   useEffect(() => {
     if (config && !draft) setDraft(draftFromConfig(config));
@@ -128,6 +133,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
       .getWorklogTypes({})
       .then((types) => setWorklogTypes(types.length ? types : ['Development']));
   }, []);
+
+  const assigneeWorkspaceId = activeWorkspace.data?.workspaceId ?? '';
 
   if (!draft || !config || !cred) {
     return (
@@ -208,6 +215,9 @@ export function SettingsView({ canCancel, onClose }: Props) {
         osNotifications: draft.osNotifications,
         defaultWorklogType: draft.defaultWorklogType,
         dailyNotesFolder: draft.dailyNotesFolder,
+        ...(assigneeDraft !== null && assigneeWorkspaceId
+          ? { defaultAssignees: withDefaultAssignee(config?.defaultAssignees ?? {}, assigneeWorkspaceId, assigneeDraft) }
+          : {}),
       });
 
       let saveFailed = false;
@@ -286,7 +296,9 @@ export function SettingsView({ canCancel, onClose }: Props) {
       defaultWorklogType: DEFAULT_CONFIG.defaultWorklogType,
       dailyNotesFolder: DEFAULT_CONFIG.dailyNotesFolder,
       theme: DEFAULT_CONFIG.theme,
+      defaultAssignees: DEFAULT_CONFIG.defaultAssignees,
     });
+    setAssigneeDraft(null);
     await qc.invalidateQueries({ queryKey: ['config'] });
     setDraft((d) =>
       d
@@ -358,6 +370,16 @@ export function SettingsView({ canCancel, onClose }: Props) {
         <JiraSection draft={draft} update={update} hasToken={cred.hasJiraToken} onTest={testJira} test={jiraTest} />
         <TimerPomodoroSection draft={draft} update={update} worklogTypes={worklogTypes} />
         <DailyNotesSection draft={draft} update={update} />
+        {canCancel && assigneeWorkspaceId && (
+          <DefaultAssigneeSection
+            workspaceId={assigneeWorkspaceId}
+            workspaceName={activeWorkspace.data?.workspaceName ?? ''}
+            isJira={activeWorkspace.data?.backend?.kind === 'jira'}
+            youtrackLogin={draft.youtrackLogin}
+            value={assigneeDraft ?? config.defaultAssignees[assigneeWorkspaceId] ?? ''}
+            onChange={setAssigneeDraft}
+          />
+        )}
         <AppearanceSection />
         {canCancel && <WorkspaceStorageSection />}
         {canCancel && <OpenBaoSection />}

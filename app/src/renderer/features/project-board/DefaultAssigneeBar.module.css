@@ -1,0 +1,22 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+}
+
+.toggle {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--primary-color, #0073ea);
+  background: none;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--primary-background-hover-color, rgba(103, 104, 121, 0.1));
+}
