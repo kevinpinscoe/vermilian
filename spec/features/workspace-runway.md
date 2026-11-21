@@ -74,6 +74,18 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [ ] Because import replaces all local Runway data, the preview **warns when this computer has
       Runway changes newer than the snapshot's export time**, naming the latest local change,
       before the user can confirm.
+- [ ] **A version 1 snapshot** predates these fields, so its preview:
+  - labels the snapshot *Version 1 — will be upgraded to version 2 on import*, and says the
+    upgrade happens in the staging copy, never in the live database;
+  - shows the exporting computer and export time as **Not recorded (version 1 snapshot)** —
+    never a guess, and never the file's modification time presented as the export time (it may
+    appear only when clearly labelled as file metadata);
+  - shows the warning *This snapshot does not record when it was exported, so Vermilian cannot
+    tell whether this computer has newer Runway changes. Importing replaces all local Runway
+    data.* in place of the newer-changes comparison, whenever this computer has any local Runway
+    data;
+  - shows the Runway order as empty (version 1 has no `runway_item` table), with the Desk entry
+    and dismissal counts as today.
 - [ ] Moving the Runway between Fedora and macOS uses manual export and import only. There is no
       automatic sync.
 
@@ -153,6 +165,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       "replaced by", are listed under **References**, unticked. Ticking one schedules it.
 - [ ] Prose paragraphs, non-ticket checklist items and fenced blocks become **note** rows at their
       position.
+- [ ] **Repeated headings and notes are preserved.** A heading or note whose text appears more
+      than once in the file — two `### Later` sections, or the same note under two headings —
+      becomes one row per occurrence, each at its original location. Matching text is never
+      merged or dropped.
 - [ ] A key on the other tracker, or one the workspace's credential cannot read, is listed as
       unmatched and becomes a note.
 - [ ] Importing a ticket never adds its project to the workspace.
@@ -160,8 +176,11 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       are offered **at the end**, in file order. Every existing ticket keeps its Runway #;
       nothing is inserted between existing rows, removed or reordered. Tickets missing from the
       file are only listed.
-- [ ] A repeat import never duplicates structure: a section or note whose kind and text already
-      exist on that Runway is not added again. Importing the same file twice leaves the Runway
+- [ ] A repeat import never duplicates structure. A section or note in the file matches an
+      existing row by **kind, text and occurrence** — the first `### Later` in the file matches
+      the first `### Later` row, the second matches the second — and a matched row stays where
+      it is. Only occurrences the Runway does not already have are new; they are appended at the
+      end with the new tickets, in file order. Importing the same file twice leaves the Runway
       unchanged.
 - [ ] **Apply** is one transaction, taken after a pre-apply snapshot in `runway-backups`.
 
@@ -221,7 +240,11 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
       adds no ticket, section or note and changes no Runway #.
 - [ ] **17. Transfer warning:** importing a snapshot older than this computer's latest Runway
       change shows the exporting computer and the newer-local-changes warning before the user
-      confirms.
+      confirms. A version 1 snapshot shows *Version 1 — will be upgraded*, the exporting computer
+      and export time as *Not recorded (version 1 snapshot)*, and the cannot-tell warning.
+- [ ] **18. Repeated headings and notes:** a file with two `### Later` sections, each holding the
+      same note, imports as two section rows and two note rows at their original locations;
+      importing it a second time adds nothing.
 
 ### Example (synthetic)
 
