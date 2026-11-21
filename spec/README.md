@@ -41,7 +41,8 @@ spec/
     ├── create-task-ai.md            ← natural-language task creation via Claude
     ├── task-timer.md                ← Pomodoro + focus mode + YouTrack worklog
     ├── standup-report.md            ← daily stand-up via Claude
-    └── settings.md                  ← connection, AI, timer, daily notes, appearance
+    ├── settings.md                  ← connection, AI, timer, daily notes, appearance
+    └── workspace-runway.md          ← per-workspace numbered ticket order, sorts, blockers, Markdown import
 ```
 
 Phase spec files (`phases/`) are written at project start and describe phase-level deliverables and exit criteria. Feature spec files (`features/`) are written during Phase 1 and remain the authoritative definition of each feature through Phases 2–4.
