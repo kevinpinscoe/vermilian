@@ -9,6 +9,7 @@ import {
   type SnapshotFs,
   defaultSnapshotFileName,
   exportRunwaySnapshot,
+  readSnapshotOrigin,
   runwayRowCounts,
 } from './runwaySnapshot';
 
@@ -46,6 +47,13 @@ function seed(target: DatabaseSync): void {
   );
   dismissal.run('ws-a', 'jira:DEMO-4', '2026-01-05');
   dismissal.run('ws-b', 'jira:DEMO-5', '2026-01-05');
+  const item = target.prepare(
+    `INSERT INTO runway_item (workspace_id, item_id, kind, position, depth, text, added_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  item.run('ws-a', 'yt:DEMO-7', 'issue', 1, 0, null, NOW, NOW);
+  item.run('ws-a', 'sec:00000000-0000-4000-8000-000000000001', 'section', 2, 0, 'Later', NOW, NOW);
+  item.run('ws-a', 'jira:DEMO-1', 'issue', 3, 1, null, NOW, NOW);
 }
 
 function pragma(target: DatabaseSync, name: string): unknown {
@@ -54,20 +62,21 @@ function pragma(target: DatabaseSync, name: string): unknown {
 }
 
 function rows(target: DatabaseSync, table: string): unknown[] {
-  return target.prepare(`SELECT * FROM ${table} ORDER BY workspace_id, issue_id`).all();
+  return target.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'runway_item' ? 'workspace_id, item_id' : 'workspace_id, issue_id'}`).all();
 }
 
 describe('exportRunwaySnapshot', () => {
   it('writes the whole database as a verified snapshot', async () => {
     seed(db);
     const dest = join(outDir, 'snapshot.sqlite');
-    const summary = await exportRunwaySnapshot(db, dest, { now: () => new Date(NOW) });
+    const summary = await exportRunwaySnapshot(db, dest, { now: () => new Date(NOW), computerName: 'laptop-example' });
 
     expect(summary).toMatchObject({
       path: dest,
       exportedAt: NOW,
+      exportedBy: 'laptop-example',
       schemaVersion: RUNWAY_SCHEMA_VERSION,
-      rowCounts: { runway_entry: 4, dismissal: 2 },
+      rowCounts: { runway_entry: 4, dismissal: 2, runway_item: 3 },
     });
     expect(summary.pages).toBeGreaterThan(0);
 
@@ -79,11 +88,21 @@ describe('exportRunwaySnapshot', () => {
       expect(runwayRowCounts(copy)).toEqual(runwayRowCounts(db));
       expect(rows(copy, 'runway_entry')).toEqual(rows(db, 'runway_entry'));
       expect(rows(copy, 'dismissal')).toEqual(rows(db, 'dismissal'));
+      expect(rows(copy, 'runway_item')).toEqual(rows(db, 'runway_item'));
       // The schema itself travels too (constraints, the rank index), so the
-      // snapshot is a database VERM-51 can restore as-is.
+      // snapshot is a database VERM-51 can restore as-is. The only addition
+      // is the snapshot-only origin table (VERM-79).
       const schema = (t: DatabaseSync) =>
-        t.prepare('SELECT type, name, sql FROM sqlite_schema ORDER BY name').all();
+        t
+          .prepare(`SELECT type, name, sql FROM sqlite_schema WHERE name <> 'runway_snapshot_info' ORDER BY name`)
+          .all();
       expect(schema(copy)).toEqual(schema(db));
+      expect(copy.prepare('SELECT * FROM runway_snapshot_info').all()).toEqual([
+        { singleton: 1, exported_by: 'laptop-example', exported_at: NOW },
+      ]);
+      expect(readSnapshotOrigin(copy)).toEqual({ exportedBy: 'laptop-example', exportedAt: NOW });
+      // The live database never gets the origin table.
+      expect(readSnapshotOrigin(db)).toEqual({ exportedBy: null, exportedAt: null });
     } finally {
       copy.close();
     }
@@ -94,7 +113,8 @@ describe('exportRunwaySnapshot', () => {
   it('exports an empty database as a valid snapshot', async () => {
     const dest = join(outDir, 'empty.sqlite');
     const summary = await exportRunwaySnapshot(db, dest);
-    expect(summary.rowCounts).toEqual({ runway_entry: 0, dismissal: 0 });
+    expect(summary.rowCounts).toEqual({ runway_entry: 0, dismissal: 0, runway_item: 0 });
+    expect(summary.exportedBy.length).toBeGreaterThan(0);
     const copy = new DatabaseSync(dest, { readOnly: true });
     expect(pragma(copy, 'integrity_check')).toBe('ok');
     copy.close();
@@ -290,7 +310,7 @@ describe('exportRunwaySnapshot publication', () => {
     ).rejects.toMatchObject({ code: 'export-failed' });
     expect(readdirSync(outDir)).toEqual([]);
     // The source is unaffected and still usable.
-    expect(runwayRowCounts(db)).toEqual({ runway_entry: 4, dismissal: 2 });
+    expect(runwayRowCounts(db)).toEqual({ runway_entry: 4, dismissal: 2, runway_item: 3 });
   });
 
   it('does not call link at all when the destination already exists', async () => {

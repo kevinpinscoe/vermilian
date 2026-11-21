@@ -6,6 +6,12 @@
 // the snapshot import (VERM-51) checks and restores, and it doubles as the
 // interim manual backup of Jira Runway metadata.
 //
+// Since schema v2 (VERM-79) the copy also gets one table the live database
+// never has, `runway_snapshot_info`, holding the computer that exported it
+// and the export time, so the import can show where a snapshot came from and
+// warn when this computer has newer Runway changes. It is written into the
+// temporary copy before verification, so a published snapshot always has it.
+//
 // How the snapshot is made consistent and safe:
 //   - SQLite's online backup API (node:sqlite `backup()`, verified in the
 //     packaged app on every platform by VERM-49) copies the database page by
@@ -32,12 +38,50 @@
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, linkSync, lstatSync, rmSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { RUNWAY_APPLICATION_ID, RUNWAY_SCHEMA_VERSION } from './runwayDb';
 
-/** The tables a schema v1 snapshot must contain, with their row counts reported. */
-export const RUNWAY_SNAPSHOT_TABLES = ['runway_entry', 'dismissal'] as const;
+/** The data tables a schema v2 snapshot contains, with their row counts reported. */
+export const RUNWAY_SNAPSHOT_TABLES = ['runway_entry', 'dismissal', 'runway_item'] as const;
+
+export type RunwaySnapshotTable = (typeof RUNWAY_SNAPSHOT_TABLES)[number];
+
+/**
+ * Snapshot-only table (never in the live database): one row naming the
+ * computer that exported the snapshot and when.
+ */
+export const RUNWAY_SNAPSHOT_INFO_DDL = `
+CREATE TABLE runway_snapshot_info (
+  singleton   INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+  exported_by TEXT    NOT NULL CHECK (length(exported_by) > 0),
+  exported_at TEXT    NOT NULL CHECK (length(exported_at) > 0)
+) STRICT;
+`;
+
+/** Who exported a snapshot and when; both null when the snapshot does not say. */
+export interface RunwaySnapshotOrigin {
+  exportedBy: string | null;
+  exportedAt: string | null;
+}
+
+/** Reads `runway_snapshot_info` from an open snapshot; nulls when absent or empty. */
+export function readSnapshotOrigin(db: DatabaseSync, schema = 'main'): RunwaySnapshotOrigin {
+  const has = db
+    .prepare(`SELECT 1 FROM ${schema}.sqlite_schema WHERE type = 'table' AND name = 'runway_snapshot_info'`)
+    .get();
+  if (!has) return { exportedBy: null, exportedAt: null };
+  const row = db.prepare(`SELECT exported_by, exported_at FROM ${schema}.runway_snapshot_info`).get() as
+    | { exported_by: string; exported_at: string }
+    | undefined;
+  return { exportedBy: row?.exported_by ?? null, exportedAt: row?.exported_at ?? null };
+}
+
+/** This computer's name as a snapshot records it. */
+export function localComputerName(): string {
+  return hostname() || 'Unknown computer';
+}
 
 /** Pages copied per backup step; the lock is released between steps. */
 const BACKUP_PAGES_PER_STEP = 64;
@@ -62,8 +106,10 @@ export class RunwaySnapshotError extends Error {
 export interface RunwaySnapshotSummary {
   /** Absolute path of the published snapshot. */
   path: string;
-  /** ISO 8601 time the export finished. */
+  /** ISO 8601 export time, as recorded in the snapshot. */
   exportedAt: string;
+  /** The computer recorded in the snapshot as having exported it. */
+  exportedBy: string;
   /** Schema version recorded in the snapshot (PRAGMA user_version). */
   schemaVersion: number;
   /** Rows per table, read back from the published copy. */
@@ -77,10 +123,13 @@ function pragmaValue(db: DatabaseSync, name: string): unknown {
   return row ? Object.values(row)[0] : undefined;
 }
 
-/** Row counts for every snapshot table, from an open database. */
-export function runwayRowCounts(db: DatabaseSync): Record<string, number> {
+/** Row counts for every snapshot table (or the given ones), from an open database. */
+export function runwayRowCounts(
+  db: DatabaseSync,
+  tables: readonly string[] = RUNWAY_SNAPSHOT_TABLES,
+): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const table of RUNWAY_SNAPSHOT_TABLES) {
+  for (const table of tables) {
     const row = db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number };
     counts[table] = Number(row.n);
   }
@@ -94,9 +143,28 @@ function removeDatabaseFiles(path: string): void {
   }
 }
 
+// Writes the snapshot-only origin row into the temporary copy.
+function stampOrigin(path: string, exportedBy: string, exportedAt: string): void {
+  const copy = new DatabaseSync(path);
+  try {
+    copy.exec('BEGIN IMMEDIATE');
+    copy.exec(RUNWAY_SNAPSHOT_INFO_DDL);
+    copy
+      .prepare('INSERT INTO runway_snapshot_info (singleton, exported_by, exported_at) VALUES (1, ?, ?)')
+      .run(exportedBy, exportedAt);
+    copy.exec('COMMIT');
+  } finally {
+    copy.close();
+  }
+}
+
 // Opens the copy read-only and checks that it is a complete, valid Runway
-// database. Returns its row counts and schema version.
-function verifySnapshot(path: string): { rowCounts: Record<string, number>; schemaVersion: number } {
+// database at the current schema with its origin recorded. Returns its row
+// counts and schema version.
+function verifySnapshot(
+  path: string,
+  origin: { exportedBy: string; exportedAt: string },
+): { rowCounts: Record<string, number>; schemaVersion: number } {
   let copy: DatabaseSync | undefined;
   try {
     copy = new DatabaseSync(path, { readOnly: true });
@@ -108,8 +176,12 @@ function verifySnapshot(path: string): { rowCounts: Record<string, number>; sche
       throw new RunwaySnapshotError('verification-failed', 'Snapshot is not a Vermilian Runway database');
     }
     const schemaVersion = Number(pragmaValue(copy, 'user_version'));
-    if (schemaVersion < 1 || schemaVersion > RUNWAY_SCHEMA_VERSION) {
+    if (schemaVersion !== RUNWAY_SCHEMA_VERSION) {
       throw new RunwaySnapshotError('verification-failed', `Snapshot has unexpected schema version ${schemaVersion}`);
+    }
+    const recorded = readSnapshotOrigin(copy);
+    if (recorded.exportedBy !== origin.exportedBy || recorded.exportedAt !== origin.exportedAt) {
+      throw new RunwaySnapshotError('verification-failed', 'Snapshot does not record its origin');
     }
     return { rowCounts: runwayRowCounts(copy), schemaVersion };
   } catch (err) {
@@ -187,12 +259,14 @@ export function defaultSnapshotFileName(now: Date = new Date()): string {
 export interface ExportRunwaySnapshotOptions {
   now?: () => Date;
   fs?: SnapshotFs;
+  /** The computer name recorded in the snapshot (default: this host's name). */
+  computerName?: string;
 }
 
 export async function exportRunwaySnapshot(
   source: DatabaseSync,
   destination: string,
-  { now = () => new Date(), fs = nodeFs }: ExportRunwaySnapshotOptions = {},
+  { now = () => new Date(), fs = nodeFs, computerName = localComputerName() }: ExportRunwaySnapshotOptions = {},
 ): Promise<RunwaySnapshotSummary> {
   if (typeof destination !== 'string' || !isAbsolute(destination) || basename(destination) === '') {
     throw new RunwaySnapshotError('invalid-destination', 'Choose a file to export the Runway snapshot to');
@@ -210,9 +284,16 @@ export async function exportRunwaySnapshot(
       const message = err instanceof Error ? err.message : String(err);
       throw new RunwaySnapshotError('export-failed', `Runway snapshot backup failed: ${message}`);
     }
-    const { rowCounts, schemaVersion } = verifySnapshot(tmp);
+    const origin = { exportedBy: computerName, exportedAt: now().toISOString() };
+    try {
+      stampOrigin(tmp, origin.exportedBy, origin.exportedAt);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new RunwaySnapshotError('export-failed', `Could not record the snapshot's origin: ${message}`);
+    }
+    const { rowCounts, schemaVersion } = verifySnapshot(tmp, origin);
     publishExclusive(fs, tmp, destination);
-    return { path: destination, exportedAt: now().toISOString(), schemaVersion, rowCounts, pages };
+    return { path: destination, ...origin, schemaVersion, rowCounts, pages };
   } finally {
     removeDatabaseFiles(tmp);
   }

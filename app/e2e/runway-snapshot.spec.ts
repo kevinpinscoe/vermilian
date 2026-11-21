@@ -93,10 +93,19 @@ test.describe('Runway snapshot export', () => {
     try {
       expect(pragma(copy, 'integrity_check')).toBe('ok');
       expect(pragma(copy, 'application_id')).toBe(RUNWAY_APPLICATION_ID);
-      expect(pragma(copy, 'user_version')).toBe(1);
+      expect(pragma(copy, 'user_version')).toBe(2);
       const count = (t: string) => (copy.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n;
       expect(count('runway_entry')).toBe(3);
       expect(count('dismissal')).toBe(0);
+      // VERM-79: v2 snapshots carry runway_item and record their origin.
+      expect(count('runway_item')).toBe(0);
+      const origin = copy.prepare('SELECT exported_by, exported_at FROM runway_snapshot_info').all() as Array<{
+        exported_by: string;
+        exported_at: string;
+      }>;
+      expect(origin).toHaveLength(1);
+      expect(origin[0].exported_by).toBe(os.hostname());
+      expect(Number.isNaN(Date.parse(origin[0].exported_at))).toBe(false);
       const workspaces = copy
         .prepare('SELECT DISTINCT workspace_id FROM runway_entry ORDER BY workspace_id')
         .all()

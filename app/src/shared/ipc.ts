@@ -363,6 +363,7 @@ export type RunwayListResult =
 export interface RunwaySnapshotInfo {
   path: string;
   exportedAt: string; // ISO 8601
+  exportedBy: string; // the computer recorded as the exporter
   schemaVersion: number;
   rowCounts: Record<string, number>; // per table, read back from the snapshot
 }
@@ -380,15 +381,36 @@ export interface RunwayImportPreview {
   fileName: string;
   path: string;
   // Filesystem modification time of the chosen file (ISO 8601). File metadata
-  // only: the snapshot does not record when it was exported.
+  // only — never presented as the export time.
   fileModifiedAt: string;
   sizeBytes: number;
+  // The chosen file's schema version. 1 means it was upgraded to version 2
+  // in the private staged copy; the live database is never migrated by import.
   schemaVersion: number;
+  // What the snapshot records (VERM-79); null when it does not (version 1).
+  exportedBy: string | null;
+  exportedAt: string | null; // ISO 8601
+  // Shown before the user can confirm, because import replaces all local
+  // Runway data. null when there is nothing to warn about.
+  warning: RunwayImportWarningInfo | null;
   snapshotRowCounts: Record<string, number>;
   liveRowCounts: Record<string, number>;
   // Where the automatic pre-import backup will be written.
   backupDir: string;
 }
+
+export type RunwayImportWarningInfo =
+  | {
+      kind: 'newer-local-changes';
+      latestLocalChange: {
+        table: 'runway_entry' | 'runway_item';
+        workspaceId: string;
+        itemId: string;
+        kind: string;
+        updatedAt: string; // ISO 8601
+      };
+    }
+  | { kind: 'cannot-tell' };
 
 export type RunwayImportPreviewResult =
   | { ok: true; canceled: true }
