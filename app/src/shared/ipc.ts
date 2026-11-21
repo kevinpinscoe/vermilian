@@ -391,8 +391,8 @@ export interface RunwayImportPreview {
   exportedBy: string | null;
   exportedAt: string | null; // ISO 8601
   // Shown before the user can confirm, because import replaces all local
-  // Runway data. null when there is nothing to warn about.
-  warning: RunwayImportWarningInfo | null;
+  // Runway data. Empty when the snapshot holds exactly this computer's data.
+  warnings: RunwayImportWarningInfo[];
   snapshotRowCounts: Record<string, number>;
   liveRowCounts: Record<string, number>;
   // Where the automatic pre-import backup will be written.
@@ -410,7 +410,14 @@ export type RunwayImportWarningInfo =
         updatedAt: string; // ISO 8601
       };
     }
-  | { kind: 'cannot-tell' };
+  | { kind: 'cannot-tell' }
+  | {
+      // Dismissals carry no timestamp and removals leave none, so for these
+      // records Vermilian cannot tell which copy is newer.
+      kind: 'undatable-differences';
+      dismissals: Array<{ workspaceId: string; issueId: string; local: string | null; snapshot: string | null }>;
+      restored: Array<{ table: 'runway_entry' | 'runway_item'; workspaceId: string; itemId: string; kind: string }>;
+    };
 
 export type RunwayImportPreviewResult =
   | { ok: true; canceled: true }

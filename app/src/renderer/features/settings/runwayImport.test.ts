@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunwayImportPreview } from '../../../shared/ipc';
-import { CANNOT_TELL_WARNING, importPreviewRows, importSuccessMessage, importWarningText } from './runwayImport';
+import { CANNOT_TELL_WARNING, importPreviewRows, importSuccessMessage, importWarningTexts } from './runwayImport';
 
 const fmt = (iso: string) => `T(${iso})`;
 
@@ -13,7 +13,7 @@ const v1Preview: RunwayImportPreview = {
   schemaVersion: 1,
   exportedBy: null,
   exportedAt: null,
-  warning: { kind: 'cannot-tell' },
+  warnings: [{ kind: 'cannot-tell' }],
   snapshotRowCounts: { runway_entry: 4, dismissal: 1, runway_item: 0 },
   liveRowCounts: { runway_entry: 1, dismissal: 0, runway_item: 2 },
   backupDir: '/home/user/.config/Vermilian/runway-backups',
@@ -24,7 +24,7 @@ const v2Preview: RunwayImportPreview = {
   schemaVersion: 2,
   exportedBy: 'laptop-example',
   exportedAt: '2026-01-04T18:00:00.000Z',
-  warning: null,
+  warnings: [],
   snapshotRowCounts: { runway_entry: 4, dismissal: 1, runway_item: 3 },
 };
 
@@ -59,11 +59,11 @@ describe('importPreviewRows: version 1 snapshot', () => {
   });
 
   it('shows the cannot-tell warning verbatim', () => {
-    expect(importWarningText(v1Preview, fmt)).toBe(
+    expect(importWarningTexts(v1Preview, fmt)).toEqual([
       'This snapshot does not record when it was exported, so Vermilian cannot tell whether this computer has ' +
         'newer Runway changes. Importing replaces all local Runway data.',
-    );
-    expect(importWarningText(v1Preview, fmt)).toBe(CANNOT_TELL_WARNING);
+    ]);
+    expect(importWarningTexts(v1Preview, fmt)).toEqual([CANNOT_TELL_WARNING]);
   });
 
   it('shows the file and backup location', () => {
@@ -83,14 +83,14 @@ describe('importPreviewRows: version 2 snapshot', () => {
   });
 
   it('shows no warning when nothing local is newer', () => {
-    expect(importWarningText(v2Preview, fmt)).toBeNull();
+    expect(importWarningTexts(v2Preview, fmt)).toEqual([]);
   });
 
   it('names the latest newer local change', () => {
-    const text = importWarningText(
+    const [text] = importWarningTexts(
       {
         ...v2Preview,
-        warning: {
+        warnings: [{
           kind: 'newer-local-changes',
           latestLocalChange: {
             table: 'runway_item',
@@ -99,7 +99,7 @@ describe('importPreviewRows: version 2 snapshot', () => {
             kind: 'issue',
             updatedAt: '2026-01-05T08:00:00.000Z',
           },
-        },
+        }],
       },
       fmt,
     );
@@ -111,10 +111,10 @@ describe('importPreviewRows: version 2 snapshot', () => {
   });
 
   it('names a Desk entry change as such', () => {
-    const text = importWarningText(
+    const [text] = importWarningTexts(
       {
         ...v2Preview,
-        warning: {
+        warnings: [{
           kind: 'newer-local-changes',
           latestLocalChange: {
             table: 'runway_entry',
@@ -123,11 +123,58 @@ describe('importPreviewRows: version 2 snapshot', () => {
             kind: 'issue',
             updatedAt: '2026-01-05T08:00:00.000Z',
           },
-        },
+        }],
       },
       fmt,
     );
     expect(text).toMatch(/^This computer has Runway changes newer than this snapshot\. The latest is the Priority Desk entry for jira:DEMO-1 in workspace ws-a/);
+  });
+});
+
+describe('importWarningTexts: undatable differences', () => {
+  it('names a dismissal-only difference', () => {
+    expect(
+      importWarningTexts(
+        {
+          ...v2Preview,
+          warnings: [
+            {
+              kind: 'undatable-differences',
+              dismissals: [{ workspaceId: 'ws-a', issueId: 'jira:DEMO-6', local: '2026-01-12', snapshot: null }],
+              restored: [],
+            },
+          ],
+        },
+        fmt,
+      ),
+    ).toEqual([
+      "Vermilian cannot tell whether this computer's copy or the snapshot's is newer for some records: it would " +
+        'change a dismissal (jira:DEMO-6 in workspace ws-a: dismissed for the week of 2026-01-12 here, not ' +
+        'dismissed in the snapshot). Importing replaces all local Runway data.',
+    ]);
+  });
+
+  it('names a removed Runway ticket the snapshot would restore, and caps long lists', () => {
+    const restored = ['yt:DEMO-1', 'yt:DEMO-2', 'yt:DEMO-3', 'yt:DEMO-4'].map((itemId) => ({
+      table: 'runway_item' as const,
+      workspaceId: 'ws-a',
+      itemId,
+      kind: 'issue',
+    }));
+    const [one] = importWarningTexts(
+      { ...v2Preview, warnings: [{ kind: 'undatable-differences', dismissals: [], restored: restored.slice(0, 1) }] },
+      fmt,
+    );
+    expect(one).toBe(
+      "Vermilian cannot tell whether this computer's copy or the snapshot's is newer for some records: it would " +
+        'restore a record not on this computer, perhaps removed here after the export (Runway ticket yt:DEMO-1 ' +
+        'in workspace ws-a). Importing replaces all local Runway data.',
+    );
+    const [many] = importWarningTexts(
+      { ...v2Preview, warnings: [{ kind: 'undatable-differences', dismissals: [], restored }] },
+      fmt,
+    );
+    expect(many).toMatch(/restore 4 records not on this computer.*yt:DEMO-3 in workspace ws-a; and 1 more\)/);
   });
 });
 

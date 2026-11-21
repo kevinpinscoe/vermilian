@@ -796,7 +796,35 @@ export interface LocalRunwayChange {
  */
 export type RunwayImportWarning =
   | { kind: 'newer-local-changes'; latestLocalChange: LocalRunwayChange }
-  | { kind: 'cannot-tell' };
+  | { kind: 'cannot-tell' }
+  | UndatableDifferences;
+
+/** A dismissal the import would add, remove or change (week of: null = none). */
+export interface DismissalDifference {
+  workspaceId: string;
+  issueId: string;
+  local: string | null;
+  snapshot: string | null;
+}
+
+/** A record the snapshot holds that this computer does not: the import restores it. */
+export interface RestoredRecord {
+  table: 'runway_entry' | 'runway_item';
+  workspaceId: string;
+  itemId: string;
+  kind: string;
+}
+
+/**
+ * Differences the export time cannot date: dismissals carry no timestamp and
+ * a removal leaves none, so Vermilian cannot tell whether this computer's copy
+ * or the snapshot's is newer. Found by comparing the records themselves.
+ */
+export interface UndatableDifferences {
+  kind: 'undatable-differences';
+  dismissals: DismissalDifference[];
+  restored: RestoredRecord[];
+}
 
 /** The latest timestamped local change, or null when there is none. */
 export function latestLocalRunwayChange(live: DatabaseSync): LocalRunwayChange | null {
@@ -814,7 +842,79 @@ export function latestLocalRunwayChange(live: DatabaseSync): LocalRunwayChange |
   return { table: row.tbl, workspaceId: row.workspace_id, itemId: row.item_id, kind: row.kind, updatedAt: row.updated_at };
 }
 
-/** Decides the preview's replacement warning for `staged` against the live database. */
+// Dismissals the import would change, and records it would restore, found by
+// comparing the staged snapshot's records with the live ones. Both lists are
+// empty when the data is identical.
+function undatableDifferences(live: DatabaseSync, stagedPath: string): UndatableDifferences | null {
+  const snap = new DatabaseSync(stagedPath, { readOnly: true });
+  try {
+    const key = (ws: string, id: string) => `${ws}\u0000${id}`;
+    const weeks = (db: DatabaseSync) =>
+      new Map(
+        (db.prepare('SELECT workspace_id, issue_id, dismissed_week_of FROM dismissal').all() as Array<{
+          workspace_id: string;
+          issue_id: string;
+          dismissed_week_of: string;
+        }>).map((r) => [key(r.workspace_id, r.issue_id), r]),
+      );
+    const liveWeeks = weeks(live);
+    const snapWeeks = weeks(snap);
+    const dismissals: DismissalDifference[] = [];
+    for (const k of new Set([...liveWeeks.keys(), ...snapWeeks.keys()])) {
+      const l = liveWeeks.get(k);
+      const n = snapWeeks.get(k);
+      if (l?.dismissed_week_of === n?.dismissed_week_of) continue;
+      const r = (l ?? n)!;
+      dismissals.push({
+        workspaceId: r.workspace_id,
+        issueId: r.issue_id,
+        local: l?.dismissed_week_of ?? null,
+        snapshot: n?.dismissed_week_of ?? null,
+      });
+    }
+    dismissals.sort((a, b) => key(a.workspaceId, a.issueId).localeCompare(key(b.workspaceId, b.issueId)));
+
+    const restored: RestoredRecord[] = [];
+    const sources = [
+      { table: 'runway_entry', sql: `SELECT workspace_id, issue_id AS item_id, 'issue' AS kind FROM runway_entry` },
+      { table: 'runway_item', sql: 'SELECT workspace_id, item_id, kind FROM runway_item' },
+    ] as const;
+    for (const { table, sql } of sources) {
+      type R = { workspace_id: string; item_id: string; kind: string };
+      const here = new Set((live.prepare(sql).all() as R[]).map((r) => key(r.workspace_id, r.item_id)));
+      const missing = (snap.prepare(`${sql} ORDER BY workspace_id, item_id`).all() as R[]).filter(
+        (r) => !here.has(key(r.workspace_id, r.item_id)),
+      );
+      for (const r of missing) restored.push({ table, workspaceId: r.workspace_id, itemId: r.item_id, kind: r.kind });
+    }
+    return dismissals.length || restored.length ? { kind: 'undatable-differences', dismissals, restored } : null;
+  } finally {
+    snap.close();
+  }
+}
+
+/**
+ * Every warning the import preview shows before the user can confirm, in
+ * display order. A version 1 snapshot records no export time, so it gets the
+ * single cannot-tell warning when this computer holds Runway data. A version
+ * 2 snapshot gets the newer-local-changes warning when a timestamped local
+ * record is newer than the export, and the undatable-differences warning when
+ * the import would change a dismissal or restore a record missing here.
+ * Empty when the snapshot holds exactly this computer's data.
+ */
+export function runwayImportWarnings(
+  live: DatabaseSync,
+  staged: Pick<RunwaySnapshotInspection, 'exportedAt'> & { stagedPath: string },
+): RunwayImportWarning[] {
+  const first = runwayImportWarning(live, staged);
+  if (staged.exportedAt === null) return first ? [first] : [];
+  const warnings: RunwayImportWarning[] = first ? [first] : [];
+  const undatable = undatableDifferences(live, staged.stagedPath);
+  if (undatable) warnings.push(undatable);
+  return warnings;
+}
+
+/** Decides the preview's timestamp-based replacement warning for `staged` against the live database. */
 export function runwayImportWarning(
   live: DatabaseSync,
   staged: Pick<RunwaySnapshotInspection, 'exportedAt'>,

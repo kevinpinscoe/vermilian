@@ -477,4 +477,115 @@ test.describe('Runway snapshot import', () => {
       fs.rmSync(otherDir, { recursive: true, force: true });
     }
   });
+  // ─── Undatable differences (VERM-79): no timestamp can date these ──────────
+
+  // Runs `change` on this profile's Runway database while the app is closed.
+  // Vermilian has no write path yet for dismissals in the Runway database or
+  // for the Runway order (VERM-80), so the tests write those rows directly.
+  async function withAppClosed(change: (db: DatabaseSync) => void): Promise<Page> {
+    await app?.close();
+    const db = new DatabaseSync(path.join(userDataDir, 'runway-metadata.sqlite'));
+    try {
+      change(db);
+    } finally {
+      db.close();
+    }
+    app = await launchAppWithUserDataDir(userDataDir);
+    return ready(app);
+  }
+
+  async function exportTo(page: Page, appRef: ElectronApplication, file: string): Promise<void> {
+    await stubSaveDialog(appRef, file);
+    const exported = await page.evaluate(() => window.vermilian.runwayExportSnapshot());
+    expect(exported.ok && !exported.canceled).toBe(true);
+  }
+
+  async function openPreview(page: Page, appRef: ElectronApplication, file: string): Promise<void> {
+    await stubOpenDialog(appRef, file);
+    await openAdvanced(page);
+    await page.locator('[data-testid="runway-import-btn"]').click();
+    await expect(page.getByText('Replace all Runway metadata?')).toBeVisible();
+  }
+
+  test('warns before confirmation on a dismissal-only difference, and stays quiet for identical data', async () => {
+    app = await launchAppWithUserDataDir(userDataDir);
+    let page = await ready(app);
+    await write(page, SNAPSHOT_STATE);
+    page = await withAppClosed((db) => {
+      db.prepare('INSERT INTO dismissal (workspace_id, issue_id, dismissed_week_of) VALUES (?, ?, ?)').run(
+        'workspace-default',
+        'jira:DEMO-150',
+        '2026-01-05',
+      );
+    });
+    const snapshot = path.join(outDir, 'dismissal.sqlite');
+    await exportTo(page, app!, snapshot);
+
+    // Identical data: the preview has nothing to warn about.
+    await openPreview(page, app!, snapshot);
+    await expect(page.getByTestId('runway-import-snapshot-counts')).toHaveText('3 entries, 1 dismissal; Runway order empty');
+    await expect(page.getByTestId('runway-import-replace-warning')).toHaveCount(0);
+    await page.getByTestId('runway-import-cancel').click();
+    await expect(page.getByTestId('runway-import-modal')).toHaveCount(0);
+
+    // Only a dismissal differs: moved to a later week here, after the export.
+    page = await withAppClosed((db) => {
+      db.prepare(`UPDATE dismissal SET dismissed_week_of = '2026-01-12' WHERE issue_id = 'jira:DEMO-150'`).run();
+    });
+    await openPreview(page, app!, snapshot);
+    const warning = page.getByTestId('runway-import-replace-warning');
+    await expect(warning).toHaveText(
+      "Local Runway changes may be lostVermilian cannot tell whether this computer's copy or the snapshot's is " +
+        'newer for some records: it would change a dismissal (jira:DEMO-150 in workspace workspace-default: ' +
+        'dismissed for the week of 2026-01-12 here, dismissed for the week of 2026-01-05 in the snapshot). ' +
+        'Importing replaces all local Runway data.',
+    );
+    // Shown before confirmation: the confirm button is there, not yet pressed.
+    await expect(page.getByTestId('runway-import-confirm')).toBeEnabled();
+    await warning.screenshot({ path: path.join(evidenceDir(), 'dismissal-only-warning.png') });
+    await page.getByTestId('runway-import-cancel').click();
+    // Cancelling changed nothing.
+    await withAppClosed((db) => {
+      expect(db.prepare(`SELECT dismissed_week_of FROM dismissal WHERE issue_id = 'jira:DEMO-150'`).get()).toEqual({
+        dismissed_week_of: '2026-01-12',
+      });
+    });
+  });
+
+  test('warns before confirmation when the snapshot would restore the Runway ticket removed after export', async () => {
+    app = await launchAppWithUserDataDir(userDataDir);
+    let page = await ready(app);
+    await write(page, SNAPSHOT_STATE);
+    page = await withAppClosed((db) => {
+      const item = db.prepare(
+        `INSERT INTO runway_item (workspace_id, item_id, kind, position, depth, text, added_at, updated_at)
+         VALUES (?, ?, 'issue', ?, 0, NULL, '2026-01-05T09:00:00.000Z', '2026-01-05T09:00:00.000Z')`,
+      );
+      item.run('workspace-default', 'yt:DEMO-7', 1);
+      item.run('workspace-default', 'jira:DEMO-101', 2);
+      item.run('workspace-default', 'jira:DEMO-102', 3);
+    });
+    const snapshot = path.join(outDir, 'runway.sqlite');
+    await exportTo(page, app!, snapshot);
+
+    // Remove the Runway's last ticket after the export.
+    page = await withAppClosed((db) => {
+      db.prepare(`DELETE FROM runway_item WHERE workspace_id = 'workspace-default' AND position = 3`).run();
+    });
+    await openPreview(page, app!, snapshot);
+    await expect(page.getByTestId('runway-import-snapshot-counts')).toHaveText('3 entries, 0 dismissals; Runway order 3 rows');
+    await expect(page.getByTestId('runway-import-live-counts')).toHaveText('3 entries, 0 dismissals; Runway order 2 rows');
+    const warning = page.getByTestId('runway-import-replace-warning');
+    await expect(warning).toHaveText(
+      "Local Runway changes may be lostVermilian cannot tell whether this computer's copy or the snapshot's is " +
+        'newer for some records: it would restore a record not on this computer, perhaps removed here after the ' +
+        'export (Runway ticket jira:DEMO-102 in workspace workspace-default). Importing replaces all local Runway data.',
+    );
+    await expect(page.getByTestId('runway-import-confirm')).toBeEnabled();
+    await warning.screenshot({ path: path.join(evidenceDir(), 'removed-last-ticket-warning.png') });
+    await page.getByTestId('runway-import-cancel').click();
+    await withAppClosed((db) => {
+      expect(db.prepare('SELECT count(*) AS n FROM runway_item').get()).toEqual({ n: 2 });
+    });
+  });
 });

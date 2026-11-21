@@ -17,7 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runway snapshots record where they came from** (VERM-79). An exported snapshot is version 2,
   includes the Runway order, and records the computer that exported it and when. The import
   preview shows both, and warns before you confirm when this computer has Runway changes newer
-  than the snapshot, naming the latest one.
+  than the snapshot, naming the latest one. It also compares records where no timestamp can tell
+  which copy is newer: it warns when the import would change a dismissal, or restore a Desk entry
+  or Runway row that is not on this computer (perhaps removed after the export). A snapshot that
+  holds exactly this computer's data shows no warning.
 
 ### Changed
 

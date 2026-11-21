@@ -3,7 +3,7 @@ import { Heading, Button, AttentionBox, Modal, ModalContent, ModalHeader } from 
 import { useQueryClient } from '@tanstack/react-query';
 import { useToastStore } from '../../../stores/toast';
 import type { RunwayImportPreview } from '../../../../shared/ipc';
-import { importPreviewRows, importSuccessMessage, importWarningText } from '../runwayImport';
+import { importPreviewRows, importSuccessMessage, importWarningTexts } from '../runwayImport';
 import styles from '../SettingsView.module.css';
 
 interface Props {
@@ -201,13 +201,11 @@ export function AdvancedSection({ onReset }: Props) {
               title="This replaces Runway data for every workspace"
               text="The Runway order of every workspace, and Focus, rank, Why now and dismissals for Jira issues in all workspaces on this computer, will be replaced by the snapshot. Records not in the snapshot are removed."
             />
-            {importWarningText(importPreview) && (
+            {importPreview.warnings.length > 0 && (
               <div data-testid="runway-import-replace-warning">
-                <AttentionBox
-                  type="negative"
-                  title="Local Runway changes may be lost"
-                  text={importWarningText(importPreview) ?? ''}
-                />
+                {importWarningTexts(importPreview).map((text) => (
+                  <AttentionBox key={text} type="negative" title="Local Runway changes may be lost" text={text} />
+                ))}
               </div>
             )}
             <dl className={styles.importPreview}>

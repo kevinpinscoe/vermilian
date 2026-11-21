@@ -27,6 +27,7 @@ import {
   pruneRunwayBackups,
   runwayFingerprint,
   runwayImportWarning,
+  runwayImportWarnings,
   stageRunwaySnapshot,
 } from './runwayImport';
 import { exportRunwaySnapshot, runwayRowCounts } from './runwaySnapshot';
@@ -805,5 +806,104 @@ describe('runwayImportWarning (VERM-79)', () => {
   it('warns rather than guess when a time cannot be read', () => {
     insertEntries(live, [['ws-a', 'jira:LIVE-1', 1, 1, null, 0]]);
     expect(runwayImportWarning(live, { exportedAt: 'not a time' })?.kind).toBe('newer-local-changes');
+  });
+});
+
+// ─── Undatable differences (VERM-79, Kevin 2026-11-21) ──────────────────────
+//
+// Dismissals carry no timestamp and a removal leaves none, so for these the
+// export time cannot say which copy is newer. The preview compares the
+// affected records instead and warns when the import would change them.
+
+describe('runwayImportWarnings: undatable differences', () => {
+  // Exports `live` as it stands, at `at`, and stages that snapshot.
+  async function exportLive(at: string, name: string) {
+    const dest = join(outDir, name);
+    await exportRunwaySnapshot(live, dest, { now: () => new Date(at), computerName: 'laptop-example' });
+    return stageRunwaySnapshot(dest, staging);
+  }
+
+  function seedRunway(): void {
+    insertEntries(live, [['ws-a', 'jira:DEMO-1', 1, 1, 'Due Friday', 0]]);
+    insertDismissal(live, 'ws-a', 'jira:DEMO-5', '2026-01-05');
+    insertItems(live, [
+      ['ws-a', 'yt:DEMO-7', 'issue', 1, 0, null],
+      ['ws-a', 'jira:DEMO-1', 'issue', 2, 0, null],
+    ]);
+  }
+
+  it('stays quiet when the snapshot holds exactly this computer\'s data', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'same.sqlite');
+    expect(runwayImportWarnings(live, staged)).toEqual([]);
+  });
+
+  it('warns on a dismissal-only difference, naming it', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'dismissal.sqlite');
+    // After the export, only a dismissal changes here: one added, one moved week.
+    insertDismissal(live, 'ws-a', 'jira:DEMO-6', '2026-01-12');
+    live.prepare(`UPDATE dismissal SET dismissed_week_of = '2026-01-12' WHERE issue_id = 'jira:DEMO-5'`).run();
+    // No timestamped record changed, so the export time alone sees nothing.
+    expect(runwayImportWarning(live, staged)).toBeNull();
+
+    const warnings = runwayImportWarnings(live, staged);
+    expect(warnings).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [
+          { workspaceId: 'ws-a', issueId: 'jira:DEMO-5', local: '2026-01-12', snapshot: '2026-01-05' },
+          { workspaceId: 'ws-a', issueId: 'jira:DEMO-6', local: '2026-01-12', snapshot: null },
+        ],
+        restored: [],
+      },
+    ]);
+  });
+
+  it('warns when the snapshot would restore a Runway ticket removed here', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'removed.sqlite');
+    // Remove the Runway's last ticket after the export. A removal leaves no
+    // timestamp, so only comparing records can see it.
+    live.prepare(`DELETE FROM runway_item WHERE workspace_id = 'ws-a' AND position = 2`).run();
+    expect(runwayImportWarning(live, staged)).toBeNull();
+
+    expect(runwayImportWarnings(live, staged)).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [],
+        restored: [{ table: 'runway_item', workspaceId: 'ws-a', itemId: 'jira:DEMO-1', kind: 'issue' }],
+      },
+    ]);
+  });
+
+  it('warns when the snapshot would restore a Desk entry removed here', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'desk-removed.sqlite');
+    live.prepare(`DELETE FROM runway_entry WHERE issue_id = 'jira:DEMO-1'`).run();
+    expect(runwayImportWarnings(live, staged)).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [],
+        restored: [{ table: 'runway_entry', workspaceId: 'ws-a', itemId: 'jira:DEMO-1', kind: 'issue' }],
+      },
+    ]);
+  });
+
+  it('reports a newer local change and undatable differences together', async () => {
+    seedRunway();
+    const staged = await exportLive(NOW, 'both.sqlite');
+    live.prepare(`DELETE FROM runway_item WHERE position = 2`).run();
+    insertItems(live, [['ws-b', 'yt:LIVE-9', 'issue', 1, 0, null]], LATER);
+    expect(runwayImportWarnings(live, staged).map((w) => w.kind)).toEqual([
+      'newer-local-changes',
+      'undatable-differences',
+    ]);
+  });
+
+  it('a version 1 snapshot keeps the single cannot-tell warning', () => {
+    insertDismissal(live, 'ws-a', 'jira:LIVE-3', '2026-01-05');
+    const staged = stageRunwaySnapshot(v1Snapshot(), staging);
+    expect(runwayImportWarnings(live, staged)).toEqual([{ kind: 'cannot-tell' }]);
   });
 });

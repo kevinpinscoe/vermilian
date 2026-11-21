@@ -196,7 +196,7 @@ import {
   RunwayImportError,
   RunwayWriteGate,
   importRunwaySnapshot,
-  runwayImportWarning,
+  runwayImportWarnings,
 } from './services/runwayImport';
 import { RunwayImportSession } from './services/runwayImportSession';
 import {
@@ -374,10 +374,10 @@ async function localActiveWorkspace(wsConfig: VermilianConfig | null) {
   return wsConfig.workspaces.find((w) => w.id === id);
 }
 
-// The import preview's replacement warning (VERM-79), computed through the
-// write gate so it sees the live data as it stands after any queued write.
-function previewWarning(db: DatabaseSync, staged: { exportedAt: string | null }) {
-  return runwayGate.run(() => runwayImportWarning(db, staged));
+// The import preview's replacement warnings (VERM-79), computed through the
+// write gate so they see the live data as it stands after any queued write.
+function previewWarnings(db: DatabaseSync, staged: { exportedAt: string | null; stagedPath: string }) {
+  return runwayGate.run(() => runwayImportWarnings(db, staged));
 }
 
 function notifySyncStatus(status: ConfigSyncStatus): void {
@@ -2264,7 +2264,7 @@ export function registerIpc(): void {
           schemaVersion: staged.originalSchemaVersion,
           exportedBy: staged.exportedBy,
           exportedAt: staged.exportedAt,
-          warning: await previewWarning(db, staged),
+          warnings: await previewWarnings(db, staged),
           snapshotRowCounts: staged.rowCounts,
           liveRowCounts: runwayRowCounts(db),
           backupDir: path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME),
