@@ -17,6 +17,7 @@ ADRs capture significant design decisions, their context, and their consequences
 | [0009](0009-priority-desk-rank-controls.md) | Priority Desk ranks use explicit controls, not drag-and-drop | Accepted |
 | [0010](0010-human-directed-operational-console.md) | Vermilian is a human-directed operational console | Proposed |
 | [0011](0011-workspace-isolation-and-tracker-providers.md) | Workspaces as the isolation boundary, with per-workspace tracker and AI account | Proposed |
+| [0012](0012-workspace-runways.md) | Workspace Runways — a numbered ticket order per workspace | Accepted |
 
 ## Process
 
