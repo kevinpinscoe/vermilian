@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { RUNWAY_APPLICATION_ID, openRunwayDb } from './runwayDb';
+import { RUNWAY_APPLICATION_ID, RUNWAY_SCHEMA_V1, openRunwayDb } from './runwayDb';
 import {
   RUNWAY_BACKUP_KEEP,
   RunwayImportError,
@@ -23,8 +23,11 @@ import {
   discardStagedSnapshot,
   importRunwaySnapshot,
   inspectRunwaySnapshot,
+  latestLocalRunwayChange,
   pruneRunwayBackups,
   runwayFingerprint,
+  runwayImportWarning,
+  runwayImportWarnings,
   stageRunwaySnapshot,
 } from './runwayImport';
 import { exportRunwaySnapshot, runwayRowCounts } from './runwaySnapshot';
@@ -144,11 +147,15 @@ describe('stageRunwaySnapshot / inspectRunwaySnapshot', () => {
     const mtime = new Date('2025-12-31T23:00:00.000Z');
     utimesSync(src, mtime, mtime);
     const staged = stageRunwaySnapshot(src, staging);
-    expect(staged.schemaVersion).toBe(1);
-    expect(staged.rowCounts).toEqual({ runway_entry: 4, dismissal: 1 });
+    expect(staged.schemaVersion).toBe(2);
+    expect(staged.originalSchemaVersion).toBe(2);
+    expect(staged.rowCounts).toEqual({ runway_entry: 4, dismissal: 1, runway_item: 0 });
     // File metadata only: it is reported as the file's mtime, never as an export time.
     expect(staged.fileModifiedAt).toBe(mtime.toISOString());
-    expect(staged).not.toHaveProperty('exportedAt');
+    // The export time is the one the snapshot records, not the file's mtime.
+    expect(staged.exportedBy).toEqual(expect.any(String));
+    expect(staged.exportedAt).not.toBe(mtime.toISOString());
+    expect(Number.isNaN(Date.parse(staged.exportedAt ?? ''))).toBe(false);
     expect(staged.stagedPath.startsWith(staging)).toBe(true);
     expect(readFileSync(staged.stagedPath)).toEqual(readFileSync(src));
     // The chosen file is never opened by SQLite: no side files appear beside it.
@@ -194,7 +201,7 @@ describe('stageRunwaySnapshot / inspectRunwaySnapshot', () => {
   it('refuses a newer schema version', async () => {
     const src = await makeSnapshot();
     const db = new DatabaseSync(src);
-    db.exec('PRAGMA user_version = 2');
+    db.exec('PRAGMA user_version = 3');
     db.close();
     const err = await expectCode(() => stageRunwaySnapshot(src, staging), 'newer-schema');
     expect(err.message).toMatch(/newer/);
@@ -265,8 +272,8 @@ describe('importRunwaySnapshot', () => {
       snap.close();
     }
     expect(rows(live, 'runway_entry').some((r) => (r as { issue_id: string }).issue_id === 'jira:LIVE-1')).toBe(false);
-    expect(result.rowCounts).toEqual({ runway_entry: 4, dismissal: 1 });
-    expect(result.previousRowCounts).toEqual({ runway_entry: 2, dismissal: 1 });
+    expect(result.rowCounts).toEqual({ runway_entry: 4, dismissal: 1, runway_item: 0 });
+    expect(result.previousRowCounts).toEqual({ runway_entry: 2, dismissal: 1, runway_item: 0 });
     expect(result.backupPath).toBe(join(backups, backupFileName(FIXED)));
     expect(result.pruneWarning).toBeUndefined();
     // The live database is still the same, usable file and connection.
@@ -377,7 +384,7 @@ describe('importRunwaySnapshot', () => {
     expect(err.backupPath).toBeDefined();
     // The late write survives; nothing was replaced.
     expect(rows(live, 'runway_entry').map((r) => (r as { issue_id: string }).issue_id)).toContain('jira:RACE-1');
-    expect(runwayRowCounts(live)).toEqual({ runway_entry: 3, dismissal: 1 });
+    expect(runwayRowCounts(live)).toEqual({ runway_entry: 3, dismissal: 1, runway_item: 0 });
   });
 
   it('reports busy and changes nothing when another connection holds the write lock', async () => {
@@ -427,7 +434,7 @@ describe('importRunwaySnapshot', () => {
     const result = await importRunwaySnapshot(live, staged, importOptions({
       pruneBackups: () => { throw new Error('EACCES: permission denied'); },
     }));
-    expect(result.rowCounts).toEqual({ runway_entry: 4, dismissal: 1 });
+    expect(result.rowCounts).toEqual({ runway_entry: 4, dismissal: 1, runway_item: 0 });
     expect(result.pruneWarning).toMatch(/could not be cleaned up: EACCES/);
     expect(existsSync(result.backupPath)).toBe(true);
   });
@@ -540,12 +547,363 @@ describe('RunwayWriteGate', () => {
     await writing;
     expect(order).toEqual(['import:start', 'import:end', 'write']);
     // The import replaced live with the snapshot; the queued write landed after it.
-    expect(runwayRowCounts(live)).toEqual({ runway_entry: 5, dismissal: 1 });
+    expect(runwayRowCounts(live)).toEqual({ runway_entry: 5, dismissal: 1, runway_item: 0 });
   });
 
   it('keeps running later operations after one fails', async () => {
     const gate = new RunwayWriteGate();
     await expect(gate.run(() => { throw new Error('first'); })).rejects.toThrow('first');
     await expect(gate.run(() => 'second')).resolves.toBe('second');
+  });
+});
+
+// ─── VERM-79: version 1 and version 2 snapshots ─────────────────────────────
+
+const LATER = '2026-01-06T10:00:00.000Z';
+
+type Item = [string, string, string, number, number, string | null];
+
+function insertItems(db: DatabaseSync, items: Item[], at = NOW): void {
+  const stmt = db.prepare(
+    `INSERT INTO runway_item (workspace_id, item_id, kind, position, depth, text, added_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const i of items) stmt.run(...i, at, at);
+}
+
+function itemRows(db: DatabaseSync): unknown[] {
+  return db.prepare('SELECT * FROM runway_item ORDER BY workspace_id, position').all();
+}
+
+// A version 1 snapshot exactly as Vermilian v1 exported it: a whole-file copy
+// of a v1 database (schema v1, user_version 1, no origin table).
+function v1Snapshot(name = 'v1-snapshot.sqlite'): string {
+  return rawSnapshot(name, (db) => {
+    db.exec(RUNWAY_SCHEMA_V1);
+    db.exec(`PRAGMA application_id = ${RUNWAY_APPLICATION_ID}`);
+    db.exec('PRAGMA user_version = 1');
+    insertEntries(db, [
+      ['ws-a', 'jira:OLD-1', 1, 1, 'From the v1 machine', 0],
+      ['ws-b', 'jira:OLD-2', 0, null, 'kept why now', 1],
+    ]);
+    insertDismissal(db, 'ws-a', 'jira:OLD-3', '2026-01-05');
+  });
+}
+
+// A populated version 2 snapshot from "another computer", exported at `at`.
+async function v2Snapshot(at: string, name = 'v2-snapshot.sqlite'): Promise<string> {
+  const otherDir = mkdtempSync(join(tmpdir(), 'vermilian-import-v2-'));
+  const other = openRunwayDb(join(otherDir, 'runway-metadata.sqlite'));
+  try {
+    insertEntries(other, [['ws-a', 'jira:DEMO-1', 1, 1, 'Due Friday', 0]]);
+    insertDismissal(other, 'ws-a', 'jira:DEMO-5', '2026-01-05');
+    insertItems(other, [
+      ['ws-a', 'yt:DEMO-7', 'issue', 1, 0, null],
+      ['ws-a', 'sec:00000000-0000-4000-8000-000000000001', 'section', 2, 0, 'Later'],
+      ['ws-a', 'note:00000000-0000-4000-8000-000000000002', 'note', 3, 1, 'Ask about the release'],
+      ['ws-a', 'jira:DEMO-1', 'issue', 4, 1, null],
+      ['ws-b', 'jira:DEMO-1', 'issue', 1, 0, null],
+    ]);
+    const dest = join(outDir, name);
+    await exportRunwaySnapshot(other, dest, { now: () => new Date(at), computerName: 'laptop-example' });
+    return dest;
+  } finally {
+    other.close();
+    rmSync(otherDir, { recursive: true, force: true });
+  }
+}
+
+describe('version 1 snapshots (VERM-79)', () => {
+  it('stages a v1 snapshot by upgrading the staged copy only', () => {
+    const src = v1Snapshot();
+    const original = readFileSync(src);
+    const staged = stageRunwaySnapshot(src, staging);
+
+    expect(staged.originalSchemaVersion).toBe(1);
+    expect(staged.schemaVersion).toBe(2);
+    expect(staged.exportedBy).toBeNull();
+    expect(staged.exportedAt).toBeNull();
+    expect(staged.rowCounts).toEqual({ runway_entry: 2, dismissal: 1, runway_item: 0 });
+    // The chosen file is untouched and still v1.
+    expect(readFileSync(src).equals(original)).toBe(true);
+    // The staged copy is a v2 database that records no origin.
+    const copy = new DatabaseSync(staged.stagedPath, { readOnly: true });
+    try {
+      expect(copy.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+      expect(copy.prepare('SELECT count(*) AS n FROM runway_item').get()).toEqual({ n: 0 });
+      expect(copy.prepare('SELECT count(*) AS n FROM runway_snapshot_info').get()).toEqual({ n: 0 });
+    } finally {
+      copy.close();
+    }
+    // Staging never touches the live database's version or content.
+    expect(live.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+  });
+
+  it('imports a v1 snapshot: Desk rows restored, Runway order emptied, backup first', async () => {
+    seedLive();
+    insertItems(live, [['ws-a', 'yt:LIVE-9', 'issue', 1, 0, null]]);
+    const before = runwayFingerprint(live);
+    const src = v1Snapshot();
+    const result = await importRunwaySnapshot(live, stageRunwaySnapshot(src, staging), importOptions());
+
+    const snap = new DatabaseSync(src, { readOnly: true });
+    try {
+      expect(rows(live, 'runway_entry')).toEqual(rows(snap, 'runway_entry'));
+      expect(rows(live, 'dismissal')).toEqual(rows(snap, 'dismissal'));
+    } finally {
+      snap.close();
+    }
+    expect(itemRows(live)).toEqual([]);
+    expect(result.previousRowCounts).toEqual({ runway_entry: 2, dismissal: 1, runway_item: 1 });
+    // The pre-import backup holds the state that was replaced, Runway order included.
+    const backup = new DatabaseSync(result.backupPath, { readOnly: true });
+    try {
+      expect(runwayFingerprint(backup)).toBe(before);
+      expect(itemRows(backup)).toHaveLength(1);
+    } finally {
+      backup.close();
+    }
+  });
+
+  it('still refuses a v1 snapshot whose schema differs from v1', () => {
+    const src = rawSnapshot('v1-extra.sqlite', (db) => {
+      db.exec(RUNWAY_SCHEMA_V1);
+      db.exec('CREATE TABLE extra (x)');
+      db.exec(`PRAGMA application_id = ${RUNWAY_APPLICATION_ID}`);
+      db.exec('PRAGMA user_version = 1');
+    });
+    expect(codeOf(() => stageRunwaySnapshot(src, staging))).toBe('schema-mismatch');
+    expect(readdirSync(staging)).toEqual([]);
+  });
+
+  it('refuses schema version 0', () => {
+    const src = rawSnapshot('v0.sqlite', (db) => {
+      db.exec(RUNWAY_SCHEMA_V1);
+      db.exec(`PRAGMA application_id = ${RUNWAY_APPLICATION_ID}`);
+    });
+    expect(codeOf(() => stageRunwaySnapshot(src, staging))).toBe('unsupported-schema');
+  });
+});
+
+describe('version 2 snapshots (VERM-79)', () => {
+  it('records the exporting computer and export time, and restores the Runway order exactly', async () => {
+    seedLive();
+    insertItems(live, [['ws-a', 'yt:LIVE-9', 'issue', 1, 0, null]]);
+    const src = await v2Snapshot(NOW);
+    const staged = stageRunwaySnapshot(src, staging);
+    expect(staged.originalSchemaVersion).toBe(2);
+    expect(staged.exportedBy).toBe('laptop-example');
+    expect(staged.exportedAt).toBe(NOW);
+    expect(staged.rowCounts).toEqual({ runway_entry: 1, dismissal: 1, runway_item: 5 });
+
+    const result = await importRunwaySnapshot(live, staged, importOptions());
+    const snap = new DatabaseSync(src, { readOnly: true });
+    try {
+      expect(itemRows(live)).toEqual(itemRows(snap));
+      expect(rows(live, 'runway_entry')).toEqual(rows(snap, 'runway_entry'));
+      expect(rows(live, 'dismissal')).toEqual(rows(snap, 'dismissal'));
+    } finally {
+      snap.close();
+    }
+    expect(result.rowCounts).toEqual({ runway_entry: 1, dismissal: 1, runway_item: 5 });
+    // The live database never takes the snapshot-only origin table.
+    const liveTables = live
+      .prepare(`SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name`)
+      .all()
+      .map((r) => (r as { name: string }).name);
+    expect(liveTables).toEqual(['dismissal', 'runway_entry', 'runway_item']);
+  });
+
+  it('a pre-import backup is itself a v2 snapshot that restores the replaced order', async () => {
+    insertItems(live, [
+      ['ws-a', 'yt:LIVE-1', 'issue', 1, 0, null],
+      ['ws-a', 'yt:LIVE-2', 'issue', 2, 0, null],
+    ]);
+    const original = itemRows(live);
+    const first = await importRunwaySnapshot(live, stageRunwaySnapshot(await v2Snapshot(NOW), staging), importOptions());
+    expect(itemRows(live)).not.toEqual(original);
+
+    const restore = stageRunwaySnapshot(first.backupPath, staging);
+    expect(restore.originalSchemaVersion).toBe(2);
+    await importRunwaySnapshot(live, restore, importOptions({ now: () => new Date(2026, 0, 5, 9, 31, 0) }));
+    expect(itemRows(live)).toEqual(original);
+  });
+
+  it('refuses a v2 snapshot without the origin table', () => {
+    const src = rawSnapshot('v2-no-origin.sqlite', (db) => {
+      db.exec(RUNWAY_SCHEMA_V1);
+      db.exec(`PRAGMA application_id = ${RUNWAY_APPLICATION_ID}`);
+      db.exec('PRAGMA user_version = 1');
+    });
+    // Built at v1, then upgraded like a live file: v2 tables, no origin table.
+    const upgraded = openRunwayDb(src, { backupDir: join(outDir, 'pre-migration') });
+    upgraded.close();
+    expect(codeOf(() => stageRunwaySnapshot(src, staging))).toBe('schema-mismatch');
+  });
+
+  async function forged(mutate: (db: DatabaseSync) => void): Promise<string> {
+    const src = await v2Snapshot(NOW, `forged-${Math.random().toString(16).slice(2)}.sqlite`);
+    const db = new DatabaseSync(src);
+    try {
+      mutate(db);
+    } finally {
+      db.close();
+    }
+    return src;
+  }
+
+  it('refuses Runway order rows that break the rules', async () => {
+    const gap = await forged((db) => db.exec(`UPDATE runway_item SET position = 9 WHERE item_id = 'jira:DEMO-1' AND workspace_id = 'ws-a'`));
+    expect(codeOf(() => stageRunwaySnapshot(gap, staging))).toBe('invalid-data');
+    const badId = await forged((db) => db.exec(`UPDATE runway_item SET item_id = 'DEMO-7' WHERE item_id = 'yt:DEMO-7'`));
+    expect(codeOf(() => stageRunwaySnapshot(badId, staging))).toBe('invalid-data');
+    const textOnTicket = await forged((db) => db.exec(`UPDATE runway_item SET text = 'x' WHERE item_id = 'yt:DEMO-7'`));
+    expect(codeOf(() => stageRunwaySnapshot(textOnTicket, staging))).toBe('invalid-data');
+    const wrongPrefix = await forged((db) =>
+      db.exec(`UPDATE runway_item SET kind = 'note' WHERE item_id LIKE 'sec:%'`),
+    );
+    expect(codeOf(() => stageRunwaySnapshot(wrongPrefix, staging))).toBe('invalid-data');
+    expect(readdirSync(staging)).toEqual([]);
+  });
+});
+
+describe('runwayImportWarning (VERM-79)', () => {
+  it('v1 snapshot: cannot tell when this computer has Runway data, nothing when it has none', () => {
+    expect(runwayImportWarning(live, { exportedAt: null })).toBeNull();
+    insertDismissal(live, 'ws-a', 'jira:LIVE-3', '2026-01-05');
+    expect(runwayImportWarning(live, { exportedAt: null })).toEqual({ kind: 'cannot-tell' });
+  });
+
+  it('v2 snapshot: warns, naming the latest change, only when local data is newer than the export', () => {
+    insertEntries(live, [['ws-a', 'jira:LIVE-1', 1, 1, null, 0]]); // at NOW
+    expect(runwayImportWarning(live, { exportedAt: NOW })).toBeNull();
+    expect(runwayImportWarning(live, { exportedAt: LATER })).toBeNull();
+
+    insertItems(live, [['ws-b', 'yt:LIVE-9', 'issue', 1, 0, null]], LATER);
+    expect(runwayImportWarning(live, { exportedAt: NOW })).toEqual({
+      kind: 'newer-local-changes',
+      latestLocalChange: {
+        table: 'runway_item',
+        workspaceId: 'ws-b',
+        itemId: 'yt:LIVE-9',
+        kind: 'issue',
+        updatedAt: LATER,
+      },
+    });
+  });
+
+  it('names a Desk entry when it is the latest change', () => {
+    insertItems(live, [['ws-b', 'yt:LIVE-9', 'issue', 1, 0, null]], NOW);
+    live
+      .prepare(
+        `INSERT INTO runway_entry (workspace_id, issue_id, focus, focus_rank, why_now, deferred, updated_at)
+         VALUES ('ws-a', 'jira:LIVE-1', 1, NULL, NULL, 0, ?)`,
+      )
+      .run(LATER);
+    expect(latestLocalRunwayChange(live)).toMatchObject({ table: 'runway_entry', itemId: 'jira:LIVE-1' });
+  });
+
+  it('warns rather than guess when a time cannot be read', () => {
+    insertEntries(live, [['ws-a', 'jira:LIVE-1', 1, 1, null, 0]]);
+    expect(runwayImportWarning(live, { exportedAt: 'not a time' })?.kind).toBe('newer-local-changes');
+  });
+});
+
+// ─── Undatable differences (VERM-79, Kevin 2026-11-21) ──────────────────────
+//
+// Dismissals carry no timestamp and a removal leaves none, so for these the
+// export time cannot say which copy is newer. The preview compares the
+// affected records instead and warns when the import would change them.
+
+describe('runwayImportWarnings: undatable differences', () => {
+  // Exports `live` as it stands, at `at`, and stages that snapshot.
+  async function exportLive(at: string, name: string) {
+    const dest = join(outDir, name);
+    await exportRunwaySnapshot(live, dest, { now: () => new Date(at), computerName: 'laptop-example' });
+    return stageRunwaySnapshot(dest, staging);
+  }
+
+  function seedRunway(): void {
+    insertEntries(live, [['ws-a', 'jira:DEMO-1', 1, 1, 'Due Friday', 0]]);
+    insertDismissal(live, 'ws-a', 'jira:DEMO-5', '2026-01-05');
+    insertItems(live, [
+      ['ws-a', 'yt:DEMO-7', 'issue', 1, 0, null],
+      ['ws-a', 'jira:DEMO-1', 'issue', 2, 0, null],
+    ]);
+  }
+
+  it('stays quiet when the snapshot holds exactly this computer\'s data', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'same.sqlite');
+    expect(runwayImportWarnings(live, staged)).toEqual([]);
+  });
+
+  it('warns on a dismissal-only difference, naming it', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'dismissal.sqlite');
+    // After the export, only a dismissal changes here: one added, one moved week.
+    insertDismissal(live, 'ws-a', 'jira:DEMO-6', '2026-01-12');
+    live.prepare(`UPDATE dismissal SET dismissed_week_of = '2026-01-12' WHERE issue_id = 'jira:DEMO-5'`).run();
+    // No timestamped record changed, so the export time alone sees nothing.
+    expect(runwayImportWarning(live, staged)).toBeNull();
+
+    const warnings = runwayImportWarnings(live, staged);
+    expect(warnings).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [
+          { workspaceId: 'ws-a', issueId: 'jira:DEMO-5', local: '2026-01-12', snapshot: '2026-01-05' },
+          { workspaceId: 'ws-a', issueId: 'jira:DEMO-6', local: '2026-01-12', snapshot: null },
+        ],
+        restored: [],
+      },
+    ]);
+  });
+
+  it('warns when the snapshot would restore a Runway ticket removed here', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'removed.sqlite');
+    // Remove the Runway's last ticket after the export. A removal leaves no
+    // timestamp, so only comparing records can see it.
+    live.prepare(`DELETE FROM runway_item WHERE workspace_id = 'ws-a' AND position = 2`).run();
+    expect(runwayImportWarning(live, staged)).toBeNull();
+
+    expect(runwayImportWarnings(live, staged)).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [],
+        restored: [{ table: 'runway_item', workspaceId: 'ws-a', itemId: 'jira:DEMO-1', kind: 'issue' }],
+      },
+    ]);
+  });
+
+  it('warns when the snapshot would restore a Desk entry removed here', async () => {
+    seedRunway();
+    const staged = await exportLive(LATER, 'desk-removed.sqlite');
+    live.prepare(`DELETE FROM runway_entry WHERE issue_id = 'jira:DEMO-1'`).run();
+    expect(runwayImportWarnings(live, staged)).toEqual([
+      {
+        kind: 'undatable-differences',
+        dismissals: [],
+        restored: [{ table: 'runway_entry', workspaceId: 'ws-a', itemId: 'jira:DEMO-1', kind: 'issue' }],
+      },
+    ]);
+  });
+
+  it('reports a newer local change and undatable differences together', async () => {
+    seedRunway();
+    const staged = await exportLive(NOW, 'both.sqlite');
+    live.prepare(`DELETE FROM runway_item WHERE position = 2`).run();
+    insertItems(live, [['ws-b', 'yt:LIVE-9', 'issue', 1, 0, null]], LATER);
+    expect(runwayImportWarnings(live, staged).map((w) => w.kind)).toEqual([
+      'newer-local-changes',
+      'undatable-differences',
+    ]);
+  });
+
+  it('a version 1 snapshot keeps the single cannot-tell warning', () => {
+    insertDismissal(live, 'ws-a', 'jira:LIVE-3', '2026-01-05');
+    const staged = stageRunwaySnapshot(v1Snapshot(), staging);
+    expect(runwayImportWarnings(live, staged)).toEqual([{ kind: 'cannot-tell' }]);
   });
 });

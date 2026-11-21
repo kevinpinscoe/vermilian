@@ -12,11 +12,15 @@
 //      reach the live database. The user's file is never opened by SQLite,
 //      so not even a journal is created beside it.
 //   2. Validate the staged copy (read-only): integrity_check, the Runway
-//      application_id, a schema version this build reads (exactly the
-//      current one — nothing is migrated or reinterpreted), a schema identical
-//      to the one this build creates, Jira-only issue IDs, and a dry run that
-//      inserts every row into an empty in-memory database with the live
-//      schema, so every CHECK and the one-issue-per-rank index are proven.
+//      application_id, a schema version this build reads (1 or 2), a schema
+//      identical to the one that version created (v2 snapshots also carry
+//      `runway_snapshot_info`), Jira-only Desk issue IDs, well-formed Runway
+//      order rows (dense 1..N per workspace), and a dry run that inserts every
+//      row into an empty in-memory database with the live schema, so every
+//      CHECK and both unique indexes are proven. A version 1 snapshot is then
+//      upgraded to version 2 IN THE STAGED COPY ONLY (VERM-79) — the same
+//      additive migration the live database gets — and validated again as
+//      version 2. The live database is never migrated by an import.
 //   3. The user sees a preview and confirms (renderer).
 //   4. Revalidate: the chosen file must still hash to what was previewed and
 //      the staged copy must still validate to the same content.
@@ -43,25 +47,49 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writ
 import { basename, isAbsolute, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { decodeIssueId } from '../../shared/tracker';
-import { RUNWAY_APPLICATION_ID, RUNWAY_SCHEMA_V1, RUNWAY_SCHEMA_VERSION } from './runwayDb';
 import {
+  RUNWAY_APPLICATION_ID,
+  RUNWAY_BACKUP_DIRNAME,
+  RUNWAY_SCHEMA_V1,
+  RUNWAY_SCHEMA_V2,
+  RUNWAY_SCHEMA_V2_ADDITIONS,
+  RUNWAY_SCHEMA_VERSION,
+  RUNWAY_V1_TABLES,
+} from './runwayDb';
+import {
+  RUNWAY_SNAPSHOT_INFO_DDL,
   RUNWAY_SNAPSHOT_TABLES,
   RunwaySnapshotError,
   exportRunwaySnapshot,
+  readSnapshotOrigin,
   runwayRowCounts,
   type RunwaySnapshotSummary,
+  type RunwaySnapshotTable,
 } from './runwaySnapshot';
 
-type RunwayTable = (typeof RUNWAY_SNAPSHOT_TABLES)[number];
+type RunwayTable = RunwaySnapshotTable;
 
 /** Every column of each table, in a fixed order, for copying and fingerprints. */
 const TABLE_COLUMNS: Record<RunwayTable, readonly string[]> = {
   runway_entry: ['workspace_id', 'issue_id', 'focus', 'focus_rank', 'why_now', 'deferred', 'updated_at'],
   dismissal: ['workspace_id', 'issue_id', 'dismissed_week_of'],
+  runway_item: ['workspace_id', 'item_id', 'kind', 'position', 'depth', 'text', 'added_at', 'updated_at'],
 };
 
+/** Primary-key order of each table, for fingerprints. */
+const TABLE_ORDER: Record<RunwayTable, string> = {
+  runway_entry: 'workspace_id, issue_id',
+  dismissal: 'workspace_id, issue_id',
+  runway_item: 'workspace_id, item_id',
+};
+
+/** The data tables a snapshot of each schema version holds. */
+function tablesFor(version: number): readonly RunwayTable[] {
+  return version === 1 ? RUNWAY_V1_TABLES : RUNWAY_SNAPSHOT_TABLES;
+}
+
 /** Directory in userData holding the automatic pre-import backups. */
-export const RUNWAY_BACKUP_DIRNAME = 'runway-backups';
+export { RUNWAY_BACKUP_DIRNAME };
 /** Directory in userData holding the private copy of a previewed snapshot. */
 export const RUNWAY_IMPORT_STAGING_DIRNAME = 'runway-import-staging';
 /** Automatic pre-import backups kept after a successful import. */
@@ -78,7 +106,7 @@ export type RunwayImportErrorCode =
   | 'integrity-failed' // PRAGMA integrity_check did not return ok
   | 'foreign-database' // SQLite, but not a Vermilian Runway database
   | 'newer-schema' // written by a newer Vermilian
-  | 'unsupported-schema' // an older or missing schema version this build does not import
+  | 'unsupported-schema' // a missing or unknown schema version this build does not import
   | 'schema-mismatch' // right version, but tables/indexes differ from this build's schema
   | 'invalid-data' // a row breaks a Runway rule (non-Jira ID, rank, date, ...)
   | 'no-preview' // confirm without a matching preview
@@ -107,9 +135,18 @@ export interface RunwaySnapshotInspection {
   rowCounts: Record<string, number>;
   /** SHA-256 over every row of every table, in primary-key order. */
   fingerprint: string;
+  /** The computer the snapshot records as its exporter; null when not recorded. */
+  exportedBy: string | null;
+  /** The export time the snapshot records (ISO 8601); null when not recorded. */
+  exportedAt: string | null;
 }
 
 export interface StagedRunwaySnapshot extends RunwaySnapshotInspection {
+  /**
+   * The schema version of the file the user chose. 1 means it was upgraded
+   * to version 2 in the staged copy; `schemaVersion` is then 2.
+   */
+  originalSchemaVersion: number;
   /** Identifies this preview; the confirm must present it. */
   token: string;
   /** The file the user chose. */
@@ -150,13 +187,17 @@ function pragmaValues(db: DatabaseSync, pragma: string): unknown[] {
  * attached name), in primary-key order. Two databases with the same
  * fingerprint hold exactly the same Runway metadata.
  */
-export function runwayFingerprint(db: DatabaseSync, schema = 'main'): string {
+export function runwayFingerprint(
+  db: DatabaseSync,
+  schema = 'main',
+  tables: readonly RunwayTable[] = RUNWAY_SNAPSHOT_TABLES,
+): string {
   const hash = createHash('sha256');
-  for (const table of RUNWAY_SNAPSHOT_TABLES) {
+  for (const table of tables) {
     const columns = TABLE_COLUMNS[table];
     hash.update(`${table}\n`);
     const rows = db
-      .prepare(`SELECT ${columns.join(', ')} FROM ${schema}.${table} ORDER BY workspace_id, issue_id`)
+      .prepare(`SELECT ${columns.join(', ')} FROM ${schema}.${table} ORDER BY ${TABLE_ORDER[table]}`)
       .all() as Record<string, unknown>[];
     for (const row of rows) hash.update(`${JSON.stringify(columns.map((c) => row[c]))}\n`);
   }
@@ -188,18 +229,27 @@ function schemaObjects(db: DatabaseSync, schema = 'main'): string[] {
   return rows.map((r) => `${r.type} ${r.name} ON ${r.tbl_name}: ${(r.sql ?? '').replace(/\s+/g, ' ').trim()}`);
 }
 
-let expectedSchemaCache: string[] | undefined;
-function expectedSchema(): string[] {
-  if (!expectedSchemaCache) {
+// The exact schema a snapshot of each version has: v1 as Vermilian v1
+// exported it, v2 as this build exports it (live v2 plus the snapshot-only
+// origin table).
+const SNAPSHOT_DDL: Record<number, string> = {
+  1: RUNWAY_SCHEMA_V1,
+  2: RUNWAY_SCHEMA_V2 + RUNWAY_SNAPSHOT_INFO_DDL,
+};
+const expectedSchemaCache = new Map<number, string[]>();
+function expectedSchema(version: number): string[] {
+  let objects = expectedSchemaCache.get(version);
+  if (!objects) {
     const mem = new DatabaseSync(':memory:');
     try {
-      mem.exec(RUNWAY_SCHEMA_V1);
-      expectedSchemaCache = schemaObjects(mem);
+      mem.exec(SNAPSHOT_DDL[version]);
+      objects = schemaObjects(mem);
     } finally {
       mem.close();
     }
+    expectedSchemaCache.set(version, objects);
   }
-  return expectedSchemaCache;
+  return objects;
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -207,13 +257,13 @@ function expectedSchema(): string[] {
 // Inserts every snapshot row into an empty in-memory database with the live
 // schema, so the live CHECKs, STRICT types and the rank index judge the data
 // before the live database is touched.
-function dryRunInsert(path: string): void {
+function dryRunInsert(path: string, tables: readonly RunwayTable[]): void {
   const mem = new DatabaseSync(':memory:');
   try {
-    mem.exec(RUNWAY_SCHEMA_V1);
+    mem.exec(RUNWAY_SCHEMA_V2);
     mem.prepare(`ATTACH DATABASE ? AS ${ATTACHED}`).run(path);
     try {
-      for (const table of RUNWAY_SNAPSHOT_TABLES) {
+      for (const table of tables) {
         const cols = TABLE_COLUMNS[table].join(', ');
         mem.exec(`INSERT INTO main.${table} (${cols}) SELECT ${cols} FROM ${ATTACHED}.${table}`);
       }
@@ -254,25 +304,26 @@ export function inspectRunwaySnapshot(path: string): RunwaySnapshotInspection {
           `(v${RUNWAY_SCHEMA_VERSION}); update Vermilian to import it`,
       );
     }
-    if (schemaVersion !== RUNWAY_SCHEMA_VERSION) {
+    if (!(schemaVersion in SNAPSHOT_DDL)) {
       throw new RunwayImportError(
         'unsupported-schema',
         `Snapshot schema v${schemaVersion} cannot be imported by this version (v${RUNWAY_SCHEMA_VERSION})`,
       );
     }
     const actual = schemaObjects(db);
-    const expected = expectedSchema();
+    const expected = expectedSchema(schemaVersion);
     if (actual.length !== expected.length || actual.some((obj, i) => obj !== expected[i])) {
       const extra = actual.filter((o) => !expected.includes(o)).map((o) => o.split(':')[0]);
       const missing = expected.filter((o) => !actual.includes(o)).map((o) => o.split(':')[0]);
       throw new RunwayImportError(
         'schema-mismatch',
-        `Snapshot schema does not match Runway schema v${RUNWAY_SCHEMA_VERSION}` +
+        `Snapshot schema does not match Runway schema v${schemaVersion}` +
           (missing.length ? `; missing or different: ${missing.join(', ')}` : '') +
           (extra.length ? `; unexpected: ${extra.join(', ')}` : ''),
       );
     }
-    for (const table of RUNWAY_SNAPSHOT_TABLES) {
+    const tables = tablesFor(schemaVersion);
+    for (const table of RUNWAY_V1_TABLES) {
       const ids = db.prepare(`SELECT issue_id FROM ${table}`).all() as Array<{ issue_id: unknown }>;
       const bad = ids.find((r) => decodeIssueId(r.issue_id)?.kind !== 'jira');
       if (bad) {
@@ -282,8 +333,20 @@ export function inspectRunwaySnapshot(path: string): RunwaySnapshotInspection {
         );
       }
     }
-    dryRunInsert(path);
-    return { schemaVersion, rowCounts: runwayRowCounts(db), fingerprint: runwayFingerprint(db) };
+    if (schemaVersion >= 2) {
+      validateRunwayItems(db);
+      const infoRows = (db.prepare('SELECT count(*) AS n FROM runway_snapshot_info').get() as { n: number }).n;
+      if (Number(infoRows) > 1) {
+        throw new RunwayImportError('invalid-data', 'Snapshot records more than one origin');
+      }
+    }
+    dryRunInsert(path, tables);
+    return {
+      schemaVersion,
+      rowCounts: runwayRowCounts(db, tables),
+      fingerprint: runwayFingerprint(db, 'main', tables),
+      ...readSnapshotOrigin(db),
+    };
   } catch (err) {
     if (err instanceof RunwayImportError) throw err;
     const message = messageOf(err);
@@ -293,6 +356,67 @@ export function inspectRunwaySnapshot(path: string): RunwaySnapshotInspection {
     throw new RunwayImportError('invalid-source', `Snapshot could not be read: ${message}`);
   } finally {
     db?.close();
+  }
+}
+
+// Runway order rows: a ticket row holds a namespaced YouTrack or Jira ID and
+// no text; section and note rows hold a sec:/note: ID; positions are dense
+// 1..N in each workspace, which the store (VERM-80) relies on.
+function validateRunwayItems(db: DatabaseSync): void {
+  const rows = db
+    .prepare('SELECT workspace_id, item_id, kind, position, text FROM runway_item ORDER BY workspace_id, position')
+    .all() as Array<{ workspace_id: string; item_id: unknown; kind: string; position: number; text: unknown }>;
+  let workspace: string | undefined;
+  let expectedPosition = 1;
+  for (const row of rows) {
+    const id = JSON.stringify(row.item_id);
+    if (row.kind === 'issue') {
+      const kind = decodeIssueId(row.item_id)?.kind;
+      if (kind !== 'jira' && kind !== 'youtrack') {
+        throw new RunwayImportError('invalid-data', `Snapshot runway_item holds an invalid ticket ID ${id}`);
+      }
+      if (row.text !== null) {
+        throw new RunwayImportError('invalid-data', `Snapshot runway_item ticket ${id} carries text`);
+      }
+    } else {
+      const prefix = row.kind === 'section' ? 'sec:' : 'note:';
+      if (typeof row.item_id !== 'string' || !row.item_id.startsWith(prefix) || row.item_id.length <= prefix.length) {
+        throw new RunwayImportError('invalid-data', `Snapshot runway_item ${row.kind} has an invalid ID ${id}`);
+      }
+    }
+    if (row.workspace_id !== workspace) {
+      workspace = row.workspace_id;
+      expectedPosition = 1;
+    }
+    if (Number(row.position) !== expectedPosition) {
+      throw new RunwayImportError(
+        'invalid-data',
+        `Snapshot Runway order for workspace ${JSON.stringify(workspace)} is not numbered 1..N`,
+      );
+    }
+    expectedPosition++;
+  }
+}
+
+// Upgrades a validated version 1 STAGED copy to version 2 in place: the same
+// additive migration openRunwayDb applies to a live v1 file, plus the empty
+// snapshot-only origin table, so the copy validates as a v2 snapshot that
+// records no origin. Only ever called on the private staged copy.
+function upgradeStagedCopy(stagedPath: string): void {
+  const db = new DatabaseSync(stagedPath);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(RUNWAY_SCHEMA_V2_ADDITIONS);
+      db.exec(RUNWAY_SNAPSHOT_INFO_DDL);
+      db.exec(`PRAGMA user_version = ${RUNWAY_SCHEMA_VERSION}`);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  } finally {
+    db.close();
   }
 }
 
@@ -329,9 +453,19 @@ export function stageRunwaySnapshot(sourcePath: string, stagingDir: string): Sta
   const stagedPath = join(stagingDir, `${token}.sqlite`);
   writeFileSync(stagedPath, bytes, { flag: 'wx', mode: 0o600 });
   try {
-    const inspection = inspectRunwaySnapshot(stagedPath);
+    let inspection = inspectRunwaySnapshot(stagedPath);
+    const originalSchemaVersion = inspection.schemaVersion;
+    if (originalSchemaVersion === 1) {
+      try {
+        upgradeStagedCopy(stagedPath);
+      } catch (err) {
+        throw new RunwayImportError('invalid-source', `The version 1 snapshot could not be upgraded: ${messageOf(err)}`);
+      }
+      inspection = inspectRunwaySnapshot(stagedPath);
+    }
     return {
       ...inspection,
+      originalSchemaVersion,
       token,
       sourcePath,
       stagedPath,
@@ -634,4 +768,167 @@ export class RunwayWriteGate {
     this.tail = result.catch(() => undefined);
     return result;
   }
+}
+
+// ─── Replacement warning (VERM-79) ──────────────────────────────────────────
+
+/** The most recent local Runway change: a Desk entry or a Runway order row. */
+export interface LocalRunwayChange {
+  table: 'runway_entry' | 'runway_item';
+  workspaceId: string;
+  /** Namespaced ticket ID, or a sec:/note: ID for a Runway order row. */
+  itemId: string;
+  /** 'issue', 'section' or 'note' for a Runway order row; 'issue' for a Desk entry. */
+  kind: string;
+  /** ISO 8601. */
+  updatedAt: string;
+}
+
+/**
+ * What the import preview must warn about before the user can confirm,
+ * because an import replaces all local Runway data:
+ *   - 'newer-local-changes': this computer changed Runway data after the
+ *     snapshot was exported; names the latest change;
+ *   - 'cannot-tell': the snapshot records no export time (a version 1
+ *     snapshot), and this computer holds Runway data, so Vermilian cannot
+ *     tell whether anything newer would be lost.
+ * null when there is nothing to warn about.
+ */
+export type RunwayImportWarning =
+  | { kind: 'newer-local-changes'; latestLocalChange: LocalRunwayChange }
+  | { kind: 'cannot-tell' }
+  | UndatableDifferences;
+
+/** A dismissal the import would add, remove or change (week of: null = none). */
+export interface DismissalDifference {
+  workspaceId: string;
+  issueId: string;
+  local: string | null;
+  snapshot: string | null;
+}
+
+/** A record the snapshot holds that this computer does not: the import restores it. */
+export interface RestoredRecord {
+  table: 'runway_entry' | 'runway_item';
+  workspaceId: string;
+  itemId: string;
+  kind: string;
+}
+
+/**
+ * Differences the export time cannot date: dismissals carry no timestamp and
+ * a removal leaves none, so Vermilian cannot tell whether this computer's copy
+ * or the snapshot's is newer. Found by comparing the records themselves.
+ */
+export interface UndatableDifferences {
+  kind: 'undatable-differences';
+  dismissals: DismissalDifference[];
+  restored: RestoredRecord[];
+}
+
+/** The latest timestamped local change, or null when there is none. */
+export function latestLocalRunwayChange(live: DatabaseSync): LocalRunwayChange | null {
+  const row = live
+    .prepare(
+      `SELECT * FROM (
+         SELECT 'runway_entry' AS tbl, workspace_id, issue_id AS item_id, 'issue' AS kind, updated_at
+           FROM main.runway_entry
+         UNION ALL
+         SELECT 'runway_item', workspace_id, item_id, kind, updated_at FROM main.runway_item
+       ) ORDER BY updated_at DESC, tbl, workspace_id, item_id LIMIT 1`,
+    )
+    .get() as { tbl: LocalRunwayChange['table']; workspace_id: string; item_id: string; kind: string; updated_at: string } | undefined;
+  if (!row) return null;
+  return { table: row.tbl, workspaceId: row.workspace_id, itemId: row.item_id, kind: row.kind, updatedAt: row.updated_at };
+}
+
+// Dismissals the import would change, and records it would restore, found by
+// comparing the staged snapshot's records with the live ones. Both lists are
+// empty when the data is identical.
+function undatableDifferences(live: DatabaseSync, stagedPath: string): UndatableDifferences | null {
+  const snap = new DatabaseSync(stagedPath, { readOnly: true });
+  try {
+    const key = (ws: string, id: string) => `${ws}\u0000${id}`;
+    const weeks = (db: DatabaseSync) =>
+      new Map(
+        (db.prepare('SELECT workspace_id, issue_id, dismissed_week_of FROM dismissal').all() as Array<{
+          workspace_id: string;
+          issue_id: string;
+          dismissed_week_of: string;
+        }>).map((r) => [key(r.workspace_id, r.issue_id), r]),
+      );
+    const liveWeeks = weeks(live);
+    const snapWeeks = weeks(snap);
+    const dismissals: DismissalDifference[] = [];
+    for (const k of new Set([...liveWeeks.keys(), ...snapWeeks.keys()])) {
+      const l = liveWeeks.get(k);
+      const n = snapWeeks.get(k);
+      if (l?.dismissed_week_of === n?.dismissed_week_of) continue;
+      const r = (l ?? n)!;
+      dismissals.push({
+        workspaceId: r.workspace_id,
+        issueId: r.issue_id,
+        local: l?.dismissed_week_of ?? null,
+        snapshot: n?.dismissed_week_of ?? null,
+      });
+    }
+    dismissals.sort((a, b) => key(a.workspaceId, a.issueId).localeCompare(key(b.workspaceId, b.issueId)));
+
+    const restored: RestoredRecord[] = [];
+    const sources = [
+      { table: 'runway_entry', sql: `SELECT workspace_id, issue_id AS item_id, 'issue' AS kind FROM runway_entry` },
+      { table: 'runway_item', sql: 'SELECT workspace_id, item_id, kind FROM runway_item' },
+    ] as const;
+    for (const { table, sql } of sources) {
+      type R = { workspace_id: string; item_id: string; kind: string };
+      const here = new Set((live.prepare(sql).all() as R[]).map((r) => key(r.workspace_id, r.item_id)));
+      const missing = (snap.prepare(`${sql} ORDER BY workspace_id, item_id`).all() as R[]).filter(
+        (r) => !here.has(key(r.workspace_id, r.item_id)),
+      );
+      for (const r of missing) restored.push({ table, workspaceId: r.workspace_id, itemId: r.item_id, kind: r.kind });
+    }
+    return dismissals.length || restored.length ? { kind: 'undatable-differences', dismissals, restored } : null;
+  } finally {
+    snap.close();
+  }
+}
+
+/**
+ * Every warning the import preview shows before the user can confirm, in
+ * display order. A version 1 snapshot records no export time, so it gets the
+ * single cannot-tell warning when this computer holds Runway data. A version
+ * 2 snapshot gets the newer-local-changes warning when a timestamped local
+ * record is newer than the export, and the undatable-differences warning when
+ * the import would change a dismissal or restore a record missing here.
+ * Empty when the snapshot holds exactly this computer's data.
+ */
+export function runwayImportWarnings(
+  live: DatabaseSync,
+  staged: Pick<RunwaySnapshotInspection, 'exportedAt'> & { stagedPath: string },
+): RunwayImportWarning[] {
+  const first = runwayImportWarning(live, staged);
+  if (staged.exportedAt === null) return first ? [first] : [];
+  const warnings: RunwayImportWarning[] = first ? [first] : [];
+  const undatable = undatableDifferences(live, staged.stagedPath);
+  if (undatable) warnings.push(undatable);
+  return warnings;
+}
+
+/** Decides the preview's timestamp-based replacement warning for `staged` against the live database. */
+export function runwayImportWarning(
+  live: DatabaseSync,
+  staged: Pick<RunwaySnapshotInspection, 'exportedAt'>,
+): RunwayImportWarning | null {
+  const counts = runwayRowCounts(live);
+  const hasLocalData = Object.values(counts).some((n) => n > 0);
+  if (staged.exportedAt === null) return hasLocalData ? { kind: 'cannot-tell' } : null;
+  const latest = latestLocalRunwayChange(live);
+  if (!latest) return null;
+  const local = Date.parse(latest.updatedAt);
+  const exported = Date.parse(staged.exportedAt);
+  // An unparseable time cannot prove the local data is older: warn.
+  if (Number.isNaN(local) || Number.isNaN(exported) || local > exported) {
+    return { kind: 'newer-local-changes', latestLocalChange: latest };
+  }
+  return null;
 }

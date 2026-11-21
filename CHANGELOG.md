@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Runway database schema version 2** (VERM-78), the storage for Workspace Runways: a new
+  `runway_item` table holds each workspace's numbered Runway order. An existing version 1
+  `runway-metadata.sqlite` is upgraded on first open, additively, after a verified copy of it is
+  written to `runway-backups/runway-pre-v2-migration-<time>.sqlite`. If that copy cannot be
+  written the file is left at version 1, unchanged. Priority Desk data is not altered.
+- **Runway snapshots record where they came from** (VERM-79). An exported snapshot is version 2,
+  includes the Runway order, and records the computer that exported it and when. The import
+  preview shows both, and warns before you confirm when this computer has Runway changes newer
+  than the snapshot, naming the latest one. It also compares records where no timestamp can tell
+  which copy is newer: it warns when the import would change a dismissal, or restore a Desk entry
+  or Runway row that is not on this computer (perhaps removed after the export). A snapshot that
+  holds exactly this computer's data shows no warning.
+
+### Changed
+
+- **Snapshot import accepts version 1 and version 2 snapshots** (VERM-79). A version 1 snapshot
+  is upgraded in the private staging copy, never in the live database. Its preview says so,
+  shows the exporting computer and export time as *Not recorded (version 1 snapshot)*, and warns
+  that Vermilian cannot tell whether this computer has newer Runway changes.
+
 ## [1.6.0] - 2026-11-19
 
 ### Added

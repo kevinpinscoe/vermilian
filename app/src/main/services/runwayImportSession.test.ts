@@ -130,7 +130,7 @@ describe('RunwayImportSession — the original race', () => {
 
     hold.release();
     const result = await importing;
-    expect(result.rowCounts).toEqual({ runway_entry: 2, dismissal: 0 });
+    expect(result.rowCounts).toEqual({ runway_entry: 2, dismissal: 0, runway_item: 0 });
     expect(runwayFingerprint(live)).toBe(staged!.fingerprint);
     // Staging is cleaned up only now that the import has finished.
     expect(session.importing).toBe(false);
@@ -237,7 +237,7 @@ describe('RunwayImportSession — failure while active', () => {
     expect(err.code).toBe('import-failed');
     // Rolled back: live data unchanged.
     expect(runwayFingerprint(live)).toBe(before);
-    expect(runwayRowCounts(live)).toEqual({ runway_entry: 1, dismissal: 0 });
+    expect(runwayRowCounts(live)).toEqual({ runway_entry: 1, dismissal: 0, runway_item: 0 });
     // The recovery backup is preserved and holds the pre-import state.
     expect(err.backupPath && existsSync(err.backupPath)).toBe(true);
     const backup = new DatabaseSync(err.backupPath!, { readOnly: true });
