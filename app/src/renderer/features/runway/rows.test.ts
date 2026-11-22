@@ -3,7 +3,7 @@ import type { RunwayItem } from '../../../shared/runwayItem';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
 import { RUNWAY_ITEMS_QUERY_KEY, RUNWAY_TICKETS_QUERY_KEY } from './api';
-import { buildRunwayRows, jiraRunwayKeys, parseRunwayNumber, ticketStateBadge } from './rows';
+import { buildRunwayRows, dropPosition, jiraRunwayKeys, movedItems, parseRunwayNumber, removePrompt, ticketStateBadge } from './rows';
 
 // Synthetic keys and names only.
 const WS = 'ws-3f9a1c2b7d01';
@@ -165,5 +165,57 @@ describe('parseRunwayNumber (Add box "at #", VERM-86)', () => {
   });
   it.each(['0', '-1', '1.5', 'two', '1e2'])('refuses %s', (text) => {
     expect(parseRunwayNumber(text)).toBeNull();
+  });
+});
+
+describe('removePrompt (VERM-87)', () => {
+  it('names a ticket by the key shown on its row', () => {
+    const [row] = buildRunwayRows([item('yt:2-45', 'issue', 1)], [{ itemId: 'yt:2-45', state: 'resolved', issue: issue('READ-12', 'Cache') }]);
+    expect(removePrompt(row)).toBe('Remove READ-12 from this Runway?');
+  });
+  it('shows a heading’s or note’s own text, clipped when long', () => {
+    const [section, note] = buildRunwayRows([item('sec:a', 'section', 1, 'Week 1'), item('note:b', 'note', 2, `Check ${'x'.repeat(100)}`)], []);
+    expect(removePrompt(section)).toBe('Remove the heading “Week 1” from this Runway?');
+    const p = removePrompt(note);
+    expect(p.startsWith('Remove the note “Check xxx')).toBe(true);
+    expect(p).toContain('…” from this Runway?');
+    expect(p.length).toBeLessThan(130);
+  });
+});
+
+describe('dropPosition (VERM-87)', () => {
+  const rows = ['a', 'b', 'c', 'd'].map((itemId) => ({ itemId }));
+  it('puts the dragged row where the row it was dropped on was', () => {
+    expect(dropPosition(rows, 'a', 'c')).toBe(3);
+    expect(dropPosition(rows, 'd', 'a')).toBe(1);
+  });
+  it('is null when nothing changes or a row is unknown', () => {
+    expect(dropPosition(rows, 'b', 'b')).toBeNull();
+    expect(dropPosition(rows, 'b', null)).toBeNull();
+    expect(dropPosition(rows, 'x', 'a')).toBeNull();
+    expect(dropPosition(rows, 'a', 'x')).toBeNull();
+  });
+});
+
+describe('movedItems (VERM-87)', () => {
+  const items = [item('yt:A-1', 'issue', 1), item('sec:s', 'section', 2, 'S'), item('yt:A-2', 'issue', 3), item('yt:A-3', 'issue', 4)];
+  const shape = (xs: RunwayItem[]) => xs.map((x) => [x.itemId, x.position, x.runwayNumber]);
+  it('moves a row and keeps positions and Runway # dense', () => {
+    expect(shape(movedItems(items, 'yt:A-3', 1))).toEqual([
+      ['yt:A-3', 1, 1],
+      ['yt:A-1', 2, 2],
+      ['sec:s', 3, null],
+      ['yt:A-2', 4, 3],
+    ]);
+    expect(shape(movedItems(items, 'sec:s', 4))).toEqual([
+      ['yt:A-1', 1, 1],
+      ['yt:A-2', 2, 2],
+      ['yt:A-3', 3, 3],
+      ['sec:s', 4, null],
+    ]);
+  });
+  it('clamps past the end and leaves an unknown row alone', () => {
+    expect(shape(movedItems(items, 'yt:A-1', 99)).at(-1)).toEqual(['yt:A-1', 4, 3]);
+    expect(shape(movedItems(items, 'yt:X-9', 1))).toEqual(shape(items));
   });
 });

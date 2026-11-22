@@ -121,8 +121,8 @@ test.describe('Runway view', () => {
     await expect(row(page, 'yt:TEST-1').getByTestId('runway-number')).toHaveText('2');
     await expect(row(page, 'yt:GONE-1').getByTestId('runway-number')).toHaveText('3');
     await expect(row(page, 'yt:TEST-4').getByTestId('runway-number')).toHaveText('4');
-    await expect(rows(page).nth(0)).toHaveText('Ship the offline reader first.');
-    await expect(rows(page).nth(3)).toHaveText('Later');
+    await expect(rows(page).nth(0).getByTestId('runway-row-text')).toHaveText('Ship the offline reader first.');
+    await expect(rows(page).nth(3).getByTestId('runway-row-text')).toHaveText('Later');
 
     // A ticket the tracker answers 404 for stays in place, with its reason.
     await expect(row(page, 'yt:TEST-2')).toHaveAttribute('data-state', 'resolved');
