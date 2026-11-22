@@ -35,25 +35,9 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { decodeIssueId, type NamespacedIssueId } from '../../shared/tracker';
 
-export type RunwayItemKind = 'issue' | 'section' | 'note';
-
-export interface RunwayItem {
-  workspaceId: string;
-  /** Namespaced ticket ID (`yt:…`, `jira:…`), or `sec:`/`note:` + ID. */
-  itemId: string;
-  kind: RunwayItemKind;
-  /** Stored row position, 1..N within the workspace, sections and notes included. */
-  position: number;
-  /** Runway #: 1..T counting ticket rows only; null for a section or note. */
-  runwayNumber: number | null;
-  depth: number;
-  /** Section title or note body; null for a ticket. */
-  text: string | null;
-  /** ISO 8601. */
-  addedAt: string;
-  /** ISO 8601. */
-  updatedAt: string;
-}
+// The row shape crosses the IPC boundary (VERM-82), so it lives in shared/.
+import type { RunwayItem, RunwayItemKind } from '../../shared/runwayItem';
+export type { RunwayItem, RunwayItemKind };
 
 export type RunwayItemStoreErrorCode =
   | 'already-on-runway' // add: the ticket is already on this workspace's Runway

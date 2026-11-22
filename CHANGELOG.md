@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   #N now; moving a ticket to #N moves it in among the tickets while sections and notes stay where
   they are. A number past the last ticket puts it right after the last ticket. Nothing in the app
   uses this yet; the IPC contract follows in VERM-82.
+- **Runway IPC and preload contract** (VERM-82). The renderer can now list a workspace's Runway
+  and add, remove and move its tickets, sections and notes through `window.vermilian.runwayItems*`.
+  The main process looks up the workspace in the workspace configuration and refuses an unknown
+  one. Changes are accepted for the active workspace only. A ticket must come from the
+  workspace's own tracker, from any project on it. A workspace with no tracker setting (older
+  shared storage) counts as YouTrack. Every refusal happens before anything is written. Listing
+  is read-only. Every change waits its turn behind the Runway write gate, so it cannot land in
+  the middle of a snapshot import. No screen uses this yet.
 
 ### Changed
 
