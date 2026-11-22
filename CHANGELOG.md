@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reorder and remove on the Runway** (VERM-87). Every Runway view row has a drag handle, **↑**
+  and **↓**, and **Remove**; ticket rows also have **Move to #** and a **#** field you can click
+  and type a number into. ↑ and ↓ swap the row with the one immediately beside it: crossing a
+  heading or note keeps the Runway #, crossing a ticket changes it by one. A typed # past the end
+  moves the ticket last; one that is not a whole number of 1 or more is refused and nothing moves.
+  Remove asks first, on the row (*Remove READ-12 from this Runway?*, or a heading's or note's own
+  text), and takes that row off the active workspace's Runway only — the tracker ticket and any
+  other workspace's Runway are untouched. Each action is one write through the Runway write gate,
+  positions and Runway # stay dense, and the order survives a restart.
 - **Add a ticket to the Runway** (VERM-86). The Runway view has an **Add** box that takes a ticket
   key, a ticket link, or search text, with an optional **at #N** (the end by default). A link must
   be on the workspace's own tracker; a link to any other host, the other tracker included, is
@@ -27,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   projects. A ticket that could not be read stays in place with its number, its state and the
   reason. Clicking a resolved ticket opens the workspace's detail panel, and closing it keeps the
   list's order and scroll position. A Jira ticket that is only on the Runway now opens in the Jira
-  panel too. Adding, removing and reordering in the view come with VERM-86 and VERM-87.
+  panel too. Adding (VERM-86), removing and reordering (VERM-87) followed.
 - **Runway tickets are read from their tracker** (VERM-84). A new main-process read,
   `runwayItemsResolve`, fetches every ticket on a workspace's Runway in batches, on that
   workspace's own connection, and nothing falls back to another credential. Under per-workspace

@@ -105,6 +105,15 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       after every action.
 - [ ] The Runway view supports **Add**, **Remove**, **Move up**, **Move down**, **Move to #N**,
       typing a number in the row's **#** field, and drag. Each action is one transaction.
+      Every row — ticket, section or note — has a drag handle, **↑**, **↓** and **Remove**;
+      ticket rows also have **Move to #N** and the **#** field (VERM-87). ↑ and ↓ swap the row
+      with the one immediately beside it, so crossing a heading or note keeps the Runway # and
+      crossing a ticket changes it by one. A # past the end moves the ticket last; a # that is not
+      a whole number of 1 or more is refused and nothing moves.
+- [ ] **Remove** asks first, on the row: *Remove READ-12 from this Runway?*, or for a heading or
+      note its own text, with **Remove** and **Cancel**. Confirming removes only that row from the
+      active workspace's Runway; the tracker ticket and its rows on other workspaces' Runways are
+      untouched.
 - [ ] All tasks and the ticket detail panel have a **Runway #** control. Empty, it offers
       *Add at end* and *Add at #N*; filled, it offers *Move to #N* and *Remove*.
 - [ ] **Section** and **note** rows keep the structure of an imported schedule. They appear in the

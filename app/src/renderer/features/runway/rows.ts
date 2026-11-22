@@ -129,3 +129,55 @@ export function parseRunwayNumber(text: string): number | undefined | null {
   if (t === '') return undefined;
   return /^[0-9]+$/.test(t) && Number(t) >= 1 ? Number(t) : null;
 }
+
+// ── Row actions (VERM-87) ──────────────────────────────────────────────────
+
+const PROMPT_TEXT_MAX = 80;
+
+function clip(text: string): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length > PROMPT_TEXT_MAX ? `${t.slice(0, PROMPT_TEXT_MAX - 1)}…` : t;
+}
+
+/**
+ * The inline Remove confirmation for a row: the ticket's key, or a heading's
+ * or note's own text, so the row being removed is unmistakable.
+ */
+export function removePrompt(row: RunwayRow): string {
+  if (row.kind === 'ticket') return `Remove ${row.ticketId} from this Runway?`;
+  const what = row.kind === 'section' ? 'heading' : 'note';
+  return `Remove the ${what} “${clip(row.text)}” from this Runway?`;
+}
+
+/**
+ * Where a drag of `activeId` dropped on `overId` puts it: the 1-based row
+ * position (sections and notes included) for runwayItemsMove, which takes
+ * the row out and puts it back at that position — so it lands where `overId`
+ * was. Null when the drop changes nothing or names a row that is not there.
+ */
+export function dropPosition(rows: readonly Pick<RunwayRow, 'itemId'>[], activeId: string, overId: string | null): number | null {
+  if (overId === null || overId === activeId) return null;
+  const from = rows.findIndex((r) => r.itemId === activeId);
+  const to = rows.findIndex((r) => r.itemId === overId);
+  return from < 0 || to < 0 ? null : to + 1;
+}
+
+/**
+ * The stored rows with `itemId` moved to row `position` (as the store does
+ * it), renumbered 1..N and, over tickets only, 1..T. Shown while the move is
+ * being written, so a dropped row does not jump back for a moment; the
+ * store's answer then replaces it.
+ */
+export function movedItems(items: readonly RunwayItem[], itemId: string, position: number): RunwayItem[] {
+  const ordered = [...items].sort((a, b) => a.position - b.position);
+  const from = ordered.findIndex((i) => i.itemId === itemId);
+  if (from < 0) return ordered;
+  const [moved] = ordered.splice(from, 1);
+  ordered.splice(Math.min(Math.max(position, 1), ordered.length + 1) - 1, 0, moved);
+  let runwayNumber = 0;
+  return ordered.map((item, i) => ({
+    ...item,
+    position: i + 1,
+    runwayNumber: item.kind === 'issue' ? ++runwayNumber : null,
+  }));
+}
