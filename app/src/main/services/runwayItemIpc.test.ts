@@ -17,8 +17,8 @@ const yt = (id: string) => encodeIssueId('youtrack', id);
 
 // YouTrack workspace from legacy shared storage: no backend setting at all.
 const YT_LEGACY = 'ws-yt-legacy';
-// Jira workspace explicitly configured as Jira while storage is still shared.
-const JIRA_SHARED = 'ws-jira-shared';
+// A workspace explicitly configured as Jira.
+const JIRA_SHARED = 'ws-jira';
 // A second YouTrack workspace, configured explicitly, never active.
 const YT_OTHER = 'ws-yt-other';
 
@@ -119,14 +119,14 @@ describe('adding tickets', () => {
     expect(items(result).map((i) => i.runwayNumber)).toEqual([1, 2]);
   });
 
-  it('a Jira workspace configured explicitly on shared storage takes Jira tickets from any project', async () => {
+  it('an explicitly configured Jira workspace takes Jira tickets from any project', async () => {
     config.activeId = JIRA_SHARED;
     await handlers.addIssue({ workspaceId: JIRA_SHARED, issueId: jira('OPS-956') });
     const result = await handlers.addIssueAtNumber({ workspaceId: JIRA_SHARED, issueId: jira('PLAT-40'), runwayNumber: 1 });
     expect(ids(result)).toEqual([jira('PLAT-40'), jira('OPS-956')]);
   });
 
-  it('a Jira workspace configured explicitly on shared storage refuses a YouTrack ticket before any write', async () => {
+  it('an explicitly configured Jira workspace refuses a YouTrack ticket before any write', async () => {
     config.activeId = JIRA_SHARED;
     await handlers.addIssue({ workspaceId: JIRA_SHARED, issueId: jira('OPS-956') });
     const before = snapshot();
@@ -281,6 +281,69 @@ describe('writes', () => {
     release();
     await held;
     expect(ids(await pending)).toEqual([yt('2-1'), yt('2-2')]);
+  });
+
+  it('a write queued for A while the active workspace switches to B is refused, and both Runways keep their rows', async () => {
+    const A = YT_LEGACY;
+    const B = YT_OTHER;
+    store.addIssue(A, yt('2-1'));
+    store.addNote(A, 'a note');
+    store.addIssue(B, yt('3-1'));
+    const before = snapshot();
+    const beforeA = ids(await handlers.list({ workspaceId: A }));
+    const beforeB = ids(await handlers.list({ workspaceId: B }));
+
+    // Something else (the snapshot import) holds the gate.
+    let release!: () => void;
+    const held = gate.run(() => new Promise<void>((resolve) => (release = resolve)));
+
+    // A is active on arrival, so the early checks pass and the edit queues.
+    const pending = Promise.all([
+      handlers.addIssue({ workspaceId: A, issueId: yt('2-2') }),
+      handlers.moveDown({ workspaceId: A, itemId: yt('2-1') }),
+      handlers.remove({ workspaceId: A, itemId: yt('2-1') }),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    config.activeId = B; // the user switches workspace while the edits wait
+    release();
+    await held;
+
+    for (const result of await pending) expectRefused(result, 'not-active-workspace');
+    expect(ids(await handlers.list({ workspaceId: A }))).toEqual(beforeA);
+    expect(ids(await handlers.list({ workspaceId: B }))).toEqual(beforeB);
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("a ticket addition queued before the workspace's tracker changes is refused as wrong-tracker", async () => {
+    const before = snapshot();
+    let release!: () => void;
+    const held = gate.run(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const pending = handlers.addIssue({ workspaceId: YT_LEGACY, issueId: yt('2-1') });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    config.workspaces = config.workspaces.map((w) => (w.id === YT_LEGACY ? { ...w, backend: { kind: 'jira' } } : w));
+    release();
+    await held;
+
+    expectRefused(await pending, 'wrong-tracker');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('a workspace removed while a write is queued is refused as unknown-workspace', async () => {
+    store.addIssue(YT_LEGACY, yt('2-1'));
+    const before = snapshot();
+    let release!: () => void;
+    const held = gate.run(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const pending = handlers.remove({ workspaceId: YT_LEGACY, itemId: yt('2-1') });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    config.workspaces = config.workspaces.filter((w) => w.id !== YT_LEGACY);
+    release();
+    await held;
+
+    expectRefused(await pending, 'unknown-workspace');
+    expect(snapshot()).toEqual(before);
   });
 
   it('a failed write does not jam the gate for the next one', async () => {

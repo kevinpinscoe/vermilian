@@ -15,7 +15,9 @@
 //      project on it — as its configuration names it; a workspace with no
 //      backend setting (legacy shared storage) is YouTrack.
 //   5. The store call runs inside RunwayWriteGate, so it is serialized with
-//      the snapshot import and every other Runway write.
+//      the snapshot import and every other Runway write. Rules 2–4 are
+//      checked again inside the gate, immediately before the write: a write
+//      queued for workspace A that finds B active by then is refused.
 
 import type {
   RunwayItemsAddIssueArgs,
@@ -128,17 +130,29 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
     }
   }
 
-  /** Resolves the workspace for a write, runs `check`, then `write` inside the gate. */
+  /**
+   * Resolves the workspace for a write and runs `check` twice: once on
+   * arrival, so a bad request is refused without waiting for the gate, and
+   * again inside the gate immediately before the write, because a write can
+   * wait there behind the import or other writes while the active workspace
+   * is switched or the workspace's tracker changes.
+   */
   function write<A>(
     check: ((tracker: TrackerKind, workspaceId: string, args: A) => void) | null,
     op: (store: RunwayItemStore, workspaceId: string, args: A) => RunwayItem[],
   ) {
+    const validate = async (workspaceId: string, args: A) => {
+      const tracker = await resolve(workspaceId, true);
+      check?.(tracker, workspaceId, args);
+    };
     return async (args: A): Promise<RunwayItemsResult> => {
       try {
         const workspaceId = workspaceIdOf(args);
-        const tracker = await resolve(workspaceId, true);
-        check?.(tracker, workspaceId, args);
-        const items = await deps.gate.run(() => op(deps.store(), workspaceId, args));
+        await validate(workspaceId, args);
+        const items = await deps.gate.run(async () => {
+          await validate(workspaceId, args);
+          return op(deps.store(), workspaceId, args);
+        });
         return { ok: true, items };
       } catch (err) {
         return failure(err);

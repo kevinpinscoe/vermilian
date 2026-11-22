@@ -43,7 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   workspace's own tracker, from any project on it. A workspace with no tracker setting (older
   shared storage) counts as YouTrack. Every refusal happens before anything is written. Listing
   is read-only. Every change waits its turn behind the Runway write gate, so it cannot land in
-  the middle of a snapshot import. No screen uses this yet.
+  the middle of a snapshot import. The workspace and its tracker are checked again inside the
+  gate, just before the write, so a change made for one workspace is refused if you switch to
+  another while it waits. No screen uses this yet.
 
 ### Changed
 
