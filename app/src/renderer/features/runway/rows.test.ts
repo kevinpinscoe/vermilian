@@ -9,6 +9,7 @@ import {
   jiraRunwayKeys,
   movedItems,
   panelRunwayRow,
+  panelRunwayStatus,
   panelTicketIds,
   parseRunwayNumber,
   removePrompt,
@@ -273,5 +274,48 @@ describe('panelRunwayRow (detail panel Runway #, VERM-88)', () => {
   it('panelTicketIds namespaces every valid ID once and drops invalid ones', () => {
     expect(panelTicketIds(yt(['READ-12', 'READ-12'], '2-45'))).toEqual(['yt:READ-12', 'yt:2-45']);
     expect(panelTicketIds({ tracker: 'jira', keys: ['OPS-7', ''], entityId: '10042' })).toEqual(['jira:OPS-7']);
+  });
+});
+
+describe('panelRunwayStatus (detail panel Add safety, PR 199 review)', () => {
+  const jiraTicket = { tracker: 'jira' as const, keys: ['DEMO-150'], entityId: null };
+  const items = [item('jira:OPS-7', 'issue', 1), item('jira:DEMO-101', 'issue', 2)];
+  const moved: BoardIssue = { ...issue('DEMO-150', 'Moved'), id: '10042' };
+  const done = (reads: RunwayTicketRead[], refetching = false) => ({ state: 'done' as const, reads, refetching });
+
+  it('a failed lookup leaves a ticket saved under its old Jira key unverified, never off', () => {
+    expect(panelRunwayStatus(items, { state: 'failed' }, jiraTicket)).toEqual({ kind: 'unverified' });
+  });
+
+  it('is checking while the lookup is in flight', () => {
+    expect(panelRunwayStatus(items, { state: 'pending' }, jiraTicket)).toEqual({ kind: 'checking' });
+  });
+
+  it('a successful lookup finds the old-key row', () => {
+    const reads: RunwayTicketRead[] = [
+      { itemId: 'jira:OPS-7', state: 'resolved', issue: issue('OPS-7', 'x') },
+      { itemId: 'jira:DEMO-101', state: 'resolved', issue: moved },
+    ];
+    expect(panelRunwayStatus(items, done(reads), jiraTicket)).toEqual({ kind: 'on', row: { itemId: 'jira:DEMO-101', runwayNumber: 2 } });
+  });
+
+  it('is off only once every other ticket row has answered', () => {
+    const reads: RunwayTicketRead[] = [
+      { itemId: 'jira:OPS-7', state: 'resolved', issue: issue('OPS-7', 'x') },
+      { itemId: 'jira:DEMO-101', state: 'missing-or-unreadable' },
+    ];
+    expect(panelRunwayStatus(items, done(reads), jiraTicket)).toEqual({ kind: 'off' });
+    // A row with no read yet: checking while a refetch runs, unverified otherwise.
+    const partial = [reads[0]];
+    expect(panelRunwayStatus(items, done(partial, true), jiraTicket)).toEqual({ kind: 'checking' });
+    expect(panelRunwayStatus(items, done(partial), jiraTicket)).toEqual({ kind: 'unverified' });
+  });
+
+  it('needs no lookup when an ID matches, or when no other ticket row could be it', () => {
+    const byId = { tracker: 'jira' as const, keys: ['DEMO-101'], entityId: null };
+    expect(panelRunwayStatus(items, { state: 'failed' }, byId)).toEqual({ kind: 'on', row: { itemId: 'jira:DEMO-101', runwayNumber: 2 } });
+    const structural = [item('sec:a', 'section', 1, 'A'), item('note:b', 'note', 2, 'B')];
+    expect(panelRunwayStatus(structural, { state: 'failed' }, jiraTicket)).toEqual({ kind: 'off' });
+    expect(panelRunwayStatus([], { state: 'pending' }, jiraTicket)).toEqual({ kind: 'off' });
   });
 });

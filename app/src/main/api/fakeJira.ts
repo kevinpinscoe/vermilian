@@ -78,6 +78,10 @@ const unindexed = new Set<string>();
 // Keys issues were moved from (VERM-88): like Jira, a read by an old key
 // still answers with the moved issue, under its new key.
 const movedFrom = new Map<string, string>();
+// VERM-88 test hooks: failing key-list reads, and a held getIssue.
+let keyReadsFail = false;
+let getIssueHold: Promise<void> | null = null;
+let releaseGetIssueHold: (() => void) | null = null;
 
 /** The issue a key names now: by its own key, or by a key it was moved from. */
 function issueByKey(key: string): JiraSearchIssue | undefined {
@@ -201,6 +205,7 @@ export async function searchJql(
   // `key in ("A", "B")` (VERM-84): like Jira, one unknown key fails the whole query.
   const keyList = /^key in \(([^)]*)\)$/.exec(_jql);
   if (keyList) {
+    if (keyReadsFail) throw { status: 503, message: 'Service Unavailable' };
     const keys = [...keyList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     const hits = keys.map((k) => issueByKey(k));
     if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
@@ -241,6 +246,7 @@ export async function getIssue(
 ): Promise<JiraSearchIssue> {
   logCall('getIssue', { key });
   if (getIssueDelayMs > 0) await new Promise((r) => setTimeout(r, getIssueDelayMs));
+  if (getIssueHold) await getIssueHold;
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   const issue = issueByKey(key);
@@ -415,7 +421,14 @@ export type FakeJiraChange =
   // Search-index lag: the issue stays readable by key but no search lists it.
   | { op: 'unindex'; key: string }
   // A token that cannot read workflow statuses (VERM-67).
-  | { op: 'failStatusReads' };
+  | { op: 'failStatusReads' }
+  // Reads by key list (`key in (…)`, the Runway's batch read) answer 503
+  // until restored (VERM-88).
+  | { op: 'failKeyReads' }
+  | { op: 'restoreKeyReads' }
+  // getIssue waits until released: a check held mid-flight (VERM-88).
+  | { op: 'holdGetIssue' }
+  | { op: 'releaseGetIssue' };
 
 function stampNow(): string {
   return new Date().toISOString();
@@ -424,6 +437,20 @@ function stampNow(): string {
 export function applyChangeForTests(change: FakeJiraChange): boolean {
   if (change.op === 'failStatusReads') {
     statusReadsFail = true;
+    return true;
+  }
+  if (change.op === 'failKeyReads' || change.op === 'restoreKeyReads') {
+    keyReadsFail = change.op === 'failKeyReads';
+    return true;
+  }
+  if (change.op === 'holdGetIssue') {
+    if (!getIssueHold) getIssueHold = new Promise<void>((resolve) => (releaseGetIssueHold = resolve));
+    return true;
+  }
+  if (change.op === 'releaseGetIssue') {
+    releaseGetIssueHold?.();
+    getIssueHold = null;
+    releaseGetIssueHold = null;
     return true;
   }
   if (change.op === 'create') {

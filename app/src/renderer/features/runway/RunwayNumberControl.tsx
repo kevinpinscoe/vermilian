@@ -8,6 +8,10 @@
 // The ticket is matched to its saved row by every ID it goes by, and by the
 // row's tracker read (a Jira ticket saved under a key it has since moved
 // from) — panelRunwayRow. Move and Remove then use that row's stored ID.
+// Add is offered only once it is established that no saved row holds the
+// ticket (panelRunwayStatus): while the tracker reads are in flight it waits,
+// and if they failed the control says "Unable to verify Runway position"
+// with a Retry — the Add handler applies the same check as the buttons.
 //
 // Adds go through runwayItemsAddByReference, the Runway view Add box's own
 // gated add: the main process checks the key on the workspace's connection,
@@ -17,14 +21,17 @@
 //
 // The control is independent of the Priority Desk: a ticket can be on the
 // Runway with no Desk slot. Callers key it on the workspace, so a switch
-// remounts it and an answer for the old workspace is never shown.
+// remounts it and an answer for the old workspace is never shown — but an
+// add's result always updates the shared Runway cache of the workspace it
+// was made on, even if the panel closed meanwhile, so an open Runway view
+// shows it. Only the panel's own feedback waits on it being mounted.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@vibe/core';
 import { useQueryClient } from '@tanstack/react-query';
 import type { RunwayAddResult } from '../../../shared/runwayAdd';
 import { RUNWAY_ITEMS_QUERY_KEY, RUNWAY_TICKETS_QUERY_KEY, useRunwayEdit, useRunwayItems, useRunwayTickets } from './api';
-import { panelRunwayRow, parseRunwayNumber, type PanelTicket } from './rows';
+import { panelRunwayStatus, parseRunwayNumber, type PanelTicket } from './rows';
 import styles from './RunwayNumberControl.module.css';
 
 export interface RunwayNumberControlProps {
@@ -54,11 +61,18 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
     };
   }, []);
 
-  const reads = tickets.data?.ok ? tickets.data.tickets : null;
-  const row = items.data?.ok ? panelRunwayRow(items.data.items, reads, ticket) : null;
-  // Until the tracker reads answer, a row saved under a moved key cannot be
-  // recognised yet, so Add waits — it would otherwise add the ticket twice.
-  const readsPending = tickets.isPending;
+  // Whether the ticket is on the Runway. A row saved under an ID the panel
+  // does not know (a Jira key the ticket moved from) is recognised only by
+  // the tracker reads, so until they have answered Add is not offered — and
+  // if they failed, the position is reported as unverified, with a retry.
+  const readState = tickets.isPending
+    ? ({ state: 'pending' } as const)
+    : tickets.isError || !tickets.data?.ok
+      ? ({ state: 'failed' } as const)
+      : ({ state: 'done', reads: tickets.data.tickets, refetching: tickets.isFetching } as const);
+  const status = items.data?.ok ? panelRunwayStatus(items.data.items, readState, ticket) : null;
+  const row = status?.kind === 'on' ? status.row : null;
+  const canAdd = status?.kind === 'off';
   const busy = adding || edit.pending;
 
   function invalidate() {
@@ -76,6 +90,9 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
   }
 
   async function add(runwayNumber: number | undefined) {
+    // The same check as the buttons: never add unless it is established
+    // that no saved row already holds this ticket.
+    if (!canAdd || busy) return;
     setAdding(true);
     setMessage(null);
     edit.clearError();
@@ -89,17 +106,20 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
     } catch (e) {
       r = { ok: false, code: 'refresh-failed', error: String((e as { message?: unknown })?.message ?? e), retryable: true };
     }
+    // The shared Runway cache of the workspace the add was made on is
+    // updated whatever happened to the panel meanwhile: a Runway view open
+    // now must show the write. Only the panel's own feedback needs it mounted.
+    if (r.ok) queryClient.setQueryData(RUNWAY_ITEMS_QUERY_KEY(workspaceId), { ok: true, items: r.items });
+    invalidate();
     if (!mounted.current) return;
     setAdding(false);
     if (r.ok) {
       const added = r.items.find((i) => i.itemId === r.itemId);
       setNumberText('');
       setMessage({ error: false, text: `Added ${displayKey}${added?.runwayNumber ? ` as #${added.runwayNumber}` : ''}.` });
-      queryClient.setQueryData(RUNWAY_ITEMS_QUERY_KEY(workspaceId), { ok: true, items: r.items });
     } else {
       setMessage({ error: true, text: r.error });
     }
-    invalidate();
   }
 
   async function moveTo() {
@@ -126,8 +146,20 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
       <div className={styles.headerRow}>
         <span className={styles.label}>Runway #</span>
         <span className={styles.value} data-testid="detail-runway-number">
-          {items.isPending ? 'Loading…' : row ? `#${row.runwayNumber}` : 'Not on this Runway'}
+          {items.isPending || status?.kind === 'checking'
+            ? 'Loading…'
+            : row
+              ? `#${row.runwayNumber}`
+              : status?.kind === 'unverified'
+                ? 'Unable to verify Runway position'
+                : 'Not on this Runway'}
         </span>
+        {status?.kind === 'unverified' && (
+          <Button size="small" kind="tertiary" disabled={tickets.isFetching} data-testid="detail-runway-retry"
+            onClick={() => void tickets.refetch()}>
+            Retry
+          </Button>
+        )}
       </div>
 
       {items.data && !items.data.ok && (
@@ -157,14 +189,14 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
             e.preventDefault();
             if (busy) return;
             if (row) void moveTo();
-            else {
+            else if (canAdd) {
               const n = readNumber(true);
               if (typeof n === 'number') void add(n);
             }
           }}
         >
           {!row && (
-            <Button size="small" kind="secondary" disabled={busy || readsPending} data-testid="detail-runway-add-end"
+            <Button size="small" kind="secondary" disabled={busy || !canAdd} data-testid="detail-runway-add-end"
               onClick={() => void add(undefined)}>
               Add at end
             </Button>
@@ -179,7 +211,7 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
             disabled={busy}
             onChange={(e) => setNumberText(e.target.value)}
           />
-          <Button type="submit" size="small" kind="secondary" disabled={busy || (!row && readsPending) || numberText.trim() === ''}
+          <Button type="submit" size="small" kind="secondary" disabled={busy || (!row && !canAdd) || numberText.trim() === ''}
             data-testid={row ? 'detail-runway-move' : 'detail-runway-add-at'}>
             {row ? 'Move to #' : 'Add at #'}
           </Button>

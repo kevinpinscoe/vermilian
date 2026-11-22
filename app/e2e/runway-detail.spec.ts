@@ -188,3 +188,90 @@ test.describe('Runway # in the ticket detail panel', () => {
     await expectStored(page, jira.workspaceId, ['jira:OPS-7', 'jira:DEMO-150']);
   });
 });
+
+// ── Review regressions (PR 199) ──────────────────────────────────────────────
+
+test.describe('Runway # in the detail panel: lookup failure and a closed panel', () => {
+  let app: ElectronApplication | undefined;
+
+  test.afterEach(async () => {
+    await app?.close();
+    app = undefined;
+  });
+
+  /** A Jira workspace on project DEMO, active, its Runway seeded with `seeded`. */
+  async function jiraRunway(seeded: string[]): Promise<{ page: Page; ws: string }> {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), { VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace' });
+    const page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+    // Fictional values only (ADR-0011 §10).
+    const doc: WorkspaceDocument = {
+      schema: WORKSPACE_SCHEMA_VERSION,
+      workspaceId: 'ws-e2ejr88r',
+      name: 'Jira Runway Review',
+      order: 0,
+      backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
+      ai: { credentialRef: null },
+      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+      boards: {},
+      dismissals: {},
+    };
+    expect((await page.evaluate((d) => window.vermilian.createWorkspaceArticle(d), doc)).ok).toBe(true);
+    await page.reload();
+    await tid(page, 'workspace-switcher').click();
+    await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Jira Runway Review' }).click();
+    await expect(tid(page, 'jira-workspace-board')).toBeVisible();
+    await seed(page, doc.workspaceId, seeded);
+    return { page, ws: doc.workspaceId };
+  }
+
+  const jiraChange = async (page: Page, c: FakeJiraChange) =>
+    expect(await page.evaluate((x) => window.vermilian.debugJiraChange!(x), c)).toBe(true);
+
+  test('a failed Runway lookup never offers Add for a ticket saved under its old Jira key', async () => {
+    const { page, ws } = await jiraRunway(['jira:OPS-7', 'jira:DEMO-101']);
+    await jiraChange(page, { op: 'move', key: 'DEMO-101', toKey: 'DEMO-150', touch: true });
+    // The Runway's batch read now fails, so jira:DEMO-101 cannot be identified as DEMO-150.
+    await jiraChange(page, { op: 'failKeyReads' });
+    await page.reload();
+    await expect(tid(page, 'jira-workspace-board')).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-150"]').click();
+    await expect(tid(page, 'jira-issue-detail-panel')).toBeVisible();
+    await expect(panelNumber(page)).toHaveText('Unable to verify Runway position');
+    await expect(tid(page, 'detail-runway-add-end')).toBeDisabled();
+    await expect(tid(page, 'detail-runway-add-at')).toBeDisabled();
+    // Enter in the # field is the Add handler's path: it refuses too.
+    await typeNumber(page, '1');
+    await tid(page, 'detail-runway-number-input').press('Enter');
+    await page.waitForTimeout(500);
+    await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-101']);
+
+    // Once the lookup works again, Retry finds the saved row; still one row.
+    await jiraChange(page, { op: 'restoreKeyReads' });
+    await tid(page, 'detail-runway-retry').click();
+    await expect(panelNumber(page)).toHaveText('#2');
+    await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-101']);
+  });
+
+  test('an add that finishes after the panel closed still shows in the Runway view, without a refresh', async () => {
+    const { page, ws } = await jiraRunway(['jira:OPS-7']);
+    await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-102"]').click();
+    await expect(panelNumber(page)).toHaveText('Not on this Runway');
+    await expect(tid(page, 'detail-runway-add-end')).toBeEnabled();
+
+    // Hold the add's check, close the panel, and open the Runway view meanwhile.
+    await jiraChange(page, { op: 'holdGetIssue' });
+    await tid(page, 'detail-runway-add-end').click();
+    await tid(page, 'jira-detail-close').click();
+    await expect(tid(page, 'jira-issue-detail-panel')).toHaveCount(0);
+    await tid(page, 'nav-runway').click();
+    await expect(tid(page, 'runway-view')).toBeVisible();
+    await expectViewOrder(page, ['jira:OPS-7']);
+
+    // Release: the add is written, and the view shows it with no refresh.
+    await jiraChange(page, { op: 'releaseGetIssue' });
+    await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-102']);
+    await expectViewOrder(page, ['jira:OPS-7', 'jira:DEMO-102']);
+  });
+});

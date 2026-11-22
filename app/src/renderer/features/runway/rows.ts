@@ -236,3 +236,39 @@ export function panelRunwayRow(
   }
   return null;
 }
+
+/**
+ * Where the panel's ticket stands on the Runway, as far as can be known:
+ *   on          its row was found (by ID, or by that row's tracker read);
+ *   off         no row holds it, established: no ID matches, and every other
+ *               ticket row's read answered;
+ *   checking    the tracker reads that could identify a row are still in flight;
+ *   unverified  they failed, or a ticket row has no read yet and none is on
+ *               the way, so a row saved under an ID the panel does not know
+ *               (a Jira key the ticket moved from) cannot be ruled out.
+ * Add is offered only for 'off'; anything else could add the ticket twice.
+ */
+export type PanelRunwayStatus =
+  | { kind: 'on'; row: PanelRunwayRow }
+  | { kind: 'off' }
+  | { kind: 'checking' }
+  | { kind: 'unverified' };
+
+export function panelRunwayStatus(
+  items: readonly RunwayItem[],
+  reads: { state: 'pending' } | { state: 'failed' } | { state: 'done'; reads: readonly RunwayTicketRead[]; refetching: boolean },
+  ticket: PanelTicket,
+): PanelRunwayStatus {
+  const known = reads.state === 'done' ? reads.reads : null;
+  const row = panelRunwayRow(items, known, ticket);
+  if (row) return { kind: 'on', row };
+  // Every ticket row whose stored ID is not one of the panel ticket's.
+  const ids = new Set(panelTicketIds(ticket));
+  const others = items.filter((i) => i.kind === 'issue' && !ids.has(i.itemId));
+  if (others.length === 0) return { kind: 'off' };
+  if (reads.state === 'pending') return { kind: 'checking' };
+  if (reads.state === 'failed') return { kind: 'unverified' };
+  const answered = new Set(reads.reads.map((r) => r.itemId));
+  if (others.every((i) => answered.has(i.itemId))) return { kind: 'off' };
+  return reads.refetching ? { kind: 'checking' } : { kind: 'unverified' };
+}
