@@ -14,18 +14,25 @@
 //      search or detail admission rules (VERM-83), which are unchanged.
 //      It is bounded by a timeout; a timeout, no answer, 429 or 5xx is a
 //      retryable error.
-//   6. If the active workspace changed while the read was in flight, the add
-//      is cancelled.
+//   6. If the active workspace was switched while the read was in flight,
+//      the add is cancelled. "Switched" is the switch generation
+//      (activeWorkspaceGeneration, VERM-47), captured when the request
+//      began, not the active ID: a round trip A → B → A ends on the same ID
+//      but still cancels.
 //   7. The ticket is added once, under the key the tracker answered with,
-//      through the Runway write handlers — which check the workspace again
-//      inside RunwayWriteGate, immediately before the write.
+//      through the Runway write handlers' addIssueOnce. Inside
+//      RunwayWriteGate, immediately before the write, it checks the
+//      generation again (the request may have waited for the gate), and
+//      refuses the add if a row already holds the ticket under any ID it
+//      goes by: the readable key, and for YouTrack the entity ID the read
+//      returned. That row keeps its place and its number.
 
-import { encodeIssueId, type TrackerKind } from '../../shared/tracker';
+import { encodeIssueId, isValidLocalId, type TrackerKind } from '../../shared/tracker';
 import { runwayWorkspaceTracker, type RunwayItem } from '../../shared/runwayItem';
 import { parseRunwayReference, runwayKeyOf } from '../../shared/runwayReference';
 import { RUNWAY_ADD_MISSING_MESSAGE, type RunwayAddResult } from '../../shared/runwayAdd';
 import type { RunwayItemsResult } from '../../shared/ipc';
-import type { RunwayWorkspaces } from './runwayItemIpc';
+import type { RunwayItemsAddOnceArgs, RunwayWorkspaces } from './runwayItemIpc';
 import { classifyTicketReadError, type RunwayReaderResult } from './runwayTicketFetch';
 
 /** How long the exact-key check waits for the tracker. */
@@ -37,13 +44,15 @@ export interface RunwayAddByReferenceDeps {
   trackerBaseUrl: (workspaceId: string, tracker: TrackerKind) => Promise<string>;
   items: (workspaceId: string) => RunwayItem[];
   reader: (workspaceId: string, tracker: TrackerKind) => Promise<RunwayReaderResult>;
-  addIssue: (args: { workspaceId: string; issueId: string }) => Promise<RunwayItemsResult>;
-  addIssueAtNumber: (args: { workspaceId: string; issueId: string; runwayNumber: number }) => Promise<RunwayItemsResult>;
+  /** The active-workspace switch generation: bumped on every switch. */
+  generation: () => number;
+  /** The gated add (runwayItemIpc addIssueOnce). */
+  addIssueOnce: (args: RunwayItemsAddOnceArgs) => Promise<RunwayItemsResult>;
   /** Defaults to RUNWAY_ADD_CHECK_TIMEOUT_MS. */
   timeoutMs?: number;
 }
 
-const CANCELLED = 'The add was cancelled because the active workspace changed while the ticket was being checked.';
+const CANCELLED = 'The add was cancelled because the active workspace was switched while the ticket was being checked.';
 
 const fail = (code: Extract<RunwayAddResult, { ok: false }>['code'], error: string, retryable?: boolean): RunwayAddResult =>
   retryable === undefined ? { ok: false, code, error } : { ok: false, code, error, retryable };
@@ -59,11 +68,11 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 export function createRunwayAddByReference(deps: RunwayAddByReferenceDeps) {
   const timeoutMs = deps.timeoutMs ?? RUNWAY_ADD_CHECK_TIMEOUT_MS;
 
-  async function activeId(): Promise<string> {
-    return (await deps.workspaces()).activeId;
-  }
-
   return async function addByReference(args: unknown): Promise<RunwayAddResult> {
+    // Any switch from here on cancels this add.
+    const startGeneration = deps.generation();
+    const stillCurrent = () => deps.generation() === startGeneration;
+
     // 1. Arguments.
     if (typeof args !== 'object' || args === null) return fail('invalid-args', 'Runway request arguments are missing');
     const { workspaceId, reference, runwayNumber } = args as { workspaceId?: unknown; reference?: unknown; runwayNumber?: unknown };
@@ -92,17 +101,21 @@ export function createRunwayAddByReference(deps: RunwayAddByReferenceDeps) {
       if (!parsed.ok) return fail(parsed.code, parsed.message);
 
       // 4. Already on this Runway: no request.
-      const onRunway = (key: string) =>
-        deps.items(workspaceId).some((item) => item.kind === 'issue' && item.itemId === encodeIssueId(tracker, key));
-      if (onRunway(parsed.localId)) return fail('already-on-runway', `${parsed.localId} is already on this Runway.`);
+      const existing = deps
+        .items(workspaceId)
+        .find((item) => item.kind === 'issue' && item.itemId === encodeIssueId(tracker, parsed.localId));
+      if (existing) return fail('already-on-runway', `${parsed.localId} is already on this Runway as #${existing.runwayNumber}.`);
 
       // 5. The exact key, on the workspace's own connection only.
       const opened = await deps.reader(workspaceId, tracker);
       if (!opened.ok) return fail(opened.code, opened.error, opened.code === 'refresh-failed' ? true : undefined);
       let answered: string;
+      let entityId: string | null = null;
       try {
         const issue = await withTimeout(opened.reader.one(parsed.localId), timeoutMs);
         answered = runwayKeyOf(tracker, issue.idReadable) ?? parsed.localId;
+        // A YouTrack row may be stored under the entity ID (2-45) rather than the key.
+        if (tracker === 'youtrack' && isValidLocalId('youtrack', issue.id)) entityId = issue.id;
       } catch (err) {
         const failure = classifyTicketReadError(err);
         if (failure.scope === 'workspace') {
@@ -118,18 +131,20 @@ export function createRunwayAddByReference(deps: RunwayAddByReferenceDeps) {
       }
 
       // 6. A switch while the check was in flight cancels the add.
-      if ((await activeId()) !== workspaceId) return fail('cancelled', CANCELLED);
-      // A moved ticket answers under its new key, which may already be here.
-      if (answered !== parsed.localId && onRunway(answered)) return fail('already-on-runway', `${answered} is already on this Runway.`);
+      if (!stillCurrent()) return fail('cancelled', CANCELLED);
 
-      // 7. Once, through the write handlers and their gate.
+      // 7. Once, through the gated write: generation and every alias checked again inside the gate.
       const issueId = encodeIssueId(tracker, answered);
-      const r =
-        runwayNumber === undefined
-          ? await deps.addIssue({ workspaceId, issueId })
-          : await deps.addIssueAtNumber({ workspaceId, issueId, runwayNumber: runwayNumber as number });
+      const aliases = [...new Set([issueId, encodeIssueId(tracker, parsed.localId), ...(entityId ? [encodeIssueId(tracker, entityId)] : [])])];
+      const r = await deps.addIssueOnce({
+        workspaceId,
+        issueId,
+        aliases,
+        stillCurrent,
+        ...(runwayNumber === undefined ? {} : { runwayNumber: runwayNumber as number }),
+      });
       if (r.ok) return { ok: true, items: r.items, itemId: issueId };
-      if (r.code === 'not-active-workspace') return fail('cancelled', CANCELLED);
+      if (r.code === 'not-active-workspace' || r.code === 'cancelled') return fail('cancelled', CANCELLED);
       return fail(r.code ?? 'invalid-args', r.error);
     } catch (err) {
       const message = (err as { message?: unknown } | null)?.message;

@@ -29,8 +29,27 @@ describe('parseRunwayReference', () => {
     [`${YT}/issue/READ-12/cache-articles-locally`, 'READ-12'],
     [`${YT}/issue/READ-12?tab=comments`, 'READ-12'],
     ['HTTPS://YT.EXAMPLE.TEST/issue/READ-12', 'READ-12'],
+    // The project view's links (review of PR 197).
+    [`${YT}/projects/READ/issues/READ-12`, 'READ-12'],
+    [`${YT}/projects/READ/issues/READ-12/cache-articles-locally`, 'READ-12'],
+    [`${YT}/projects/0-7/issues/READ-12?tab=history`, 'READ-12'],
   ])('a YouTrack link %s', (url, key) => {
     expect(parseRunwayReference(url, 'youtrack', YT)).toEqual({ ok: true, localId: key, from: 'url' });
+  });
+
+  it('a project-view link on another host is refused before any request', () => {
+    expect(parseRunwayReference('https://other.example.test/projects/READ/issues/READ-12', 'youtrack', YT)).toMatchObject({ ok: false, code: 'foreign-host' });
+  });
+
+  it('a project-view link that names no ticket is refused', () => {
+    expect(parseRunwayReference(`${YT}/projects/READ/issues`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+    expect(parseRunwayReference(`${YT}/projects/READ/issues/not-a-key`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+    // A Jira link shape on the YouTrack host is not a YouTrack ticket link.
+    expect(parseRunwayReference(`${YT}/browse/READ-12`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+  });
+
+  it('a project-view link under the configured server path', () => {
+    expect(parseRunwayReference('https://tools.example.test/youtrack/projects/READ/issues/READ-12', 'youtrack', YT_SUBPATH)).toMatchObject({ ok: true, localId: 'READ-12' });
   });
 
   it('a YouTrack link under the configured server path, and not outside it', () => {

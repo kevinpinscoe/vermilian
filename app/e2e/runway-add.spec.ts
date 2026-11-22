@@ -4,8 +4,10 @@
  * once on the workspace's own connection when Add is submitted; a link is
  * checked against the workspace's own tracker host before any request; a
  * typo, a foreign-host link and the other tracker's link are refused with a
- * clear message and leave the order as it was; a workspace switch while the
- * check is in flight cancels the add; and no project ever moves.
+ * clear message and leave the order as it was; a duplicate keeps its row and
+ * number; a workspace switch while the check is in flight — A → B, or a round
+ * trip A → B → A — cancels the add and leaves both Runways untouched; and no
+ * project ever moves.
  *
  * The Jira workspace has no projects and no boards, so its very first add is
  * of a ticket nothing else in the workspace admits.
@@ -44,7 +46,7 @@ test.describe('Runway view: add a ticket', () => {
     app = undefined;
   });
 
-  test('a Jira workspace with no projects or boards: key, link, #N, typo, foreign host, switch during the check', async () => {
+  test('a Jira workspace with no projects or boards: key, link, #N, typo, foreign host, duplicate, switches during the check', async () => {
     app = await launchAppWithUserDataDir(freshUserDataDir(), { VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace' });
     const page = await app.firstWindow();
     await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
@@ -121,7 +123,9 @@ test.describe('Runway view: add a ticket', () => {
     expect(await jiraGets('DEMO-102')).toBe(before102);
 
     // 5. Already on this Runway.
-    await expectRefused(page, 'OPS-7', 'OPS-7 is already on this Runway.', order);
+    // A duplicate keeps its original row and number.
+    await expectRefused(page, 'OPS-7', 'OPS-7 is already on this Runway as #2.', order);
+    await expect(row(page, 'jira:OPS-7').getByTestId('runway-number')).toHaveText('2');
 
     // 6. A switch while the check is in flight cancels the add.
     await page.evaluate(() => window.vermilian.debugSetJiraGetIssueDelay!(2_000));
@@ -139,11 +143,38 @@ test.describe('Runway view: add a ticket', () => {
     await expect.poll(() => itemOrder(page)).toEqual(order);
     await expect(tid(page, 'runway-add-error')).toHaveCount(0);
 
+    // 7. A → B → A while the check is in flight: back on the same workspace, the add is still
+    //    cancelled (by switch generation), and neither workspace's Runway changes.
+    const ytRunway = async () => {
+      const r = await page.evaluate(() => window.vermilian.runwayItemsList({ workspaceId: 'ws-e2eyt86' }));
+      return r.ok ? r.items.map((i) => [i.itemId, i.runwayNumber]) : r;
+    };
+    const jiraRunway = async () => {
+      const r = await page.evaluate(() => window.vermilian.runwayItemsList({ workspaceId: 'ws-e2ejr86' }));
+      return r.ok ? r.items.map((i) => [i.itemId, i.runwayNumber]) : r;
+    };
+    const bothBefore = { a: await jiraRunway(), b: await ytRunway() };
+    expect(bothBefore).toEqual({ a: [['jira:DEMO-101', 1], ['jira:OPS-7', 2]], b: [] });
+    const roundTripGets = await jiraGets('DEMO-102');
+    await page.evaluate(() => window.vermilian.debugSetJiraGetIssueDelay!(2_000));
+    await add(page, 'DEMO-102');
+    await expect(tid(page, 'runway-add-checking')).toHaveText('Checking DEMO-102…');
+    await expect.poll(() => jiraGets('DEMO-102'), { timeout: 5_000 }).toBeGreaterThan(roundTripGets);
+    await switchTo('Workspace A');
+    await switchTo('Jira Runway');
+    await expect(tid(page, 'runway-view')).toBeVisible();
+    await page.waitForTimeout(2_500);
+    await page.evaluate(() => window.vermilian.debugSetJiraGetIssueDelay!(0));
+    expect({ a: await jiraRunway(), b: await ytRunway() }).toEqual(bothBefore);
+    await expect.poll(() => itemOrder(page)).toEqual(order);
+    await expect(tid(page, 'runway-add-added')).toHaveCount(0);
+    await expect(tid(page, 'runway-add-error')).toHaveCount(0);
+
     // No project or board moved, in any workspace.
     expect(await sources()).toEqual(sourcesBefore);
   });
 
-  test('a YouTrack workspace: key, link at #1, a search pick at #2, and a Jira link refused', async () => {
+  test('a YouTrack workspace: key, link at #1, a search pick at #2, a project-view link, a duplicate, and foreign links refused', async () => {
     app = await launchAppWithUserDataDir(freshUserDataDir());
     const page = await app.firstWindow();
     await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
@@ -168,7 +199,17 @@ test.describe('Runway view: add a ticket', () => {
     await expect.poll(() => itemOrder(page)).toEqual(['yt:TEST-3', 'yt:TEST-5', 'yt:TEST-2']);
     for (const id of ['yt:TEST-3', 'yt:TEST-5', 'yt:TEST-2']) await expect(row(page, id)).toHaveAttribute('data-state', 'resolved');
 
+    // A project-view link on the same host (PR 197 review).
+    await add(page, 'http://e2e.local/projects/TEST/issues/TEST-6');
+    await expect(tid(page, 'runway-add-added')).toHaveText('Added TEST-6 as #4.');
+    await expect.poll(() => itemOrder(page)).toEqual(['yt:TEST-3', 'yt:TEST-5', 'yt:TEST-2', 'yt:TEST-6']);
+
     const order = await itemOrder(page);
+    // The same ticket again, by its project-view link: refused, and TEST-5 keeps #2.
+    await expectRefused(page, 'http://e2e.local/projects/TEST/issues/TEST-5', 'TEST-5 is already on this Runway as #2.', order);
+    await expect(row(page, 'yt:TEST-5').getByTestId('runway-number')).toHaveText('2');
+    // A project-view link on another host is refused before any request.
+    await expectRefused(page, 'https://other.example.test/projects/TEST/issues/TEST-1', /not on this workspace’s tracker.*e2e\.local/, order);
     await expectRefused(page, 'https://example.atlassian.net/browse/OPS-7', /not on this workspace’s tracker.*e2e\.local/, order);
     await expectRefused(page, 'TEST-999', 'Ticket missing or not readable with this workspace’s credential.', order);
 

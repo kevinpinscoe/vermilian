@@ -2306,8 +2306,8 @@ export function registerIpc(): void {
     },
     items: (workspaceId) => openRunwayItemStore().list(workspaceId),
     reader: runwayReader,
-    addIssue: (args) => runwayItems.addIssue(args),
-    addIssueAtNumber: (args) => runwayItems.addIssueAtNumber(args),
+    generation: activeWorkspaceGeneration,
+    addIssueOnce: (args) => runwayItems.addIssueOnce(args),
   });
   ipcMain.handle(IPC.runwayItemsAddByReference, (_e, args) => addRunwayByReference(args));
 

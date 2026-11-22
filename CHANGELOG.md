@@ -16,8 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connection, and adds it through the Runway write gate. That works for a Jira workspace with no
   projects or boards too, without widening search or detail reads. A key the tracker answers 404
   for is refused with *Ticket missing or not readable with this workspace's credential.*, a
-  timeout can be retried, and switching workspace during the check cancels the add. The order is
-  unchanged by every refusal, and no project ever moves.
+  timeout can be retried, and a ticket already on the Runway — under its key, or for YouTrack its
+  entity ID — is refused and keeps its number. Any workspace switch while the add is pending,
+  including a round trip back to the same workspace, cancels it. YouTrack project-view links
+  (`…/projects/PROJECT/issues/KEY`) are accepted too. The order is unchanged by every refusal, and
+  no project ever moves.
 - **Runway view** (VERM-85). A new **Runway** entry in the left rail, between Priority Desk and
   All tasks, shows the active workspace's Runway in its saved order: numbered tickets, section
   headings and notes. It works for YouTrack and Jira workspaces, including one with no board

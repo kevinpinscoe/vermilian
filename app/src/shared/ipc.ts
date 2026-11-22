@@ -428,7 +428,8 @@ export type RunwayItemsErrorCode =
   | 'unknown-workspace' // no workspace with this ID in the configuration
   | 'not-active-workspace' // a write to a workspace other than the active one
   | 'wrong-tracker' // the ticket is on the other tracker from the workspace's
-  | 'workspace-unavailable'; // the workspace configuration could not be read
+  | 'workspace-unavailable' // the workspace configuration could not be read
+  | 'cancelled'; // addIssueOnce: the active workspace was switched since the request began
 
 export type RunwayItemsResult =
   | { ok: true; items: import('./runwayItem').RunwayItem[] }

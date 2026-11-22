@@ -9,9 +9,10 @@
 // the workspace's ordinary scoped search (VERM-61): its projects, and a Jira
 // workspace's boards. A pick from it is added the same way, by its key.
 //
-// The box belongs to one workspace: it is remounted when the workspace
-// changes, and an answer that arrives for a workspace it no longer shows is
-// ignored. The main process cancels such an add as well.
+// The box belongs to one visit to one workspace: it is remounted on every
+// workspace switch, and an answer that arrives after it was unmounted is
+// ignored — so after A → B → A the new box on A does not show the old box's
+// answer. The main process cancels such an add as well, by switch generation.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@vibe/core';
@@ -44,8 +45,14 @@ export function RunwayAddBox({ workspaceId, tracker, searchScope }: RunwayAddBox
   const [numberText, setNumberText] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [debounced, setDebounced] = useState('');
-  const current = useRef(workspaceId);
-  current.current = workspaceId;
+  // False once this box is unmounted (a workspace switch remounts it).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(text), 250);
@@ -65,8 +72,8 @@ export function RunwayAddBox({ workspaceId, tracker, searchScope }: RunwayAddBox
     } catch (e) {
       r = { ok: false, code: 'refresh-failed', error: String((e as { message?: unknown })?.message ?? e), retryable: true };
     }
-    // The workspace changed while the check ran: this answer is not for the box on screen.
-    if (current.current !== args.workspaceId) return;
+    // The workspace was switched while the check ran: this answer is not for the box on screen.
+    if (!mounted.current) return;
     if (r.ok) {
       const added = r.items.find((i) => i.itemId === r.itemId);
       const key = r.itemId.slice(r.itemId.indexOf(':') + 1);

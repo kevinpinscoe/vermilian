@@ -7,7 +7,9 @@
 //   key       READ-12. A YouTrack key as typed; a Jira key uppercased, as
 //             Jira compares keys.
 //   YouTrack  <workspace server>/issue/READ-12, optionally with the title
-//             slug YouTrack appends (/issue/READ-12/cache-articles-locally).
+//             slug YouTrack appends (/issue/READ-12/cache-articles-locally),
+//             or the project view's <workspace server>/projects/READ/issues/
+//             READ-12 (also with an optional slug).
 //   Jira      <workspace site>/browse/OPS-7, or any page on the site with
 //             ?selectedIssue=OPS-7 (a board with the issue open).
 // The URL's host must be the workspace's configured tracker host, and its
@@ -76,7 +78,10 @@ export function parseRunwayReference(text: string, tracker: TrackerKind, tracker
   let candidate: string | null = null;
   if (underBase) {
     if (tracker === 'youtrack') {
-      candidate = /^\/issue\/([^/]+)(?:\/[^/]*)?\/?$/.exec(rest)?.[1] ?? null;
+      candidate =
+        /^\/issue\/([^/]+)(?:\/[^/]*)?\/?$/.exec(rest)?.[1] ??
+        /^\/projects\/[^/]+\/issues\/([^/]+)(?:\/[^/]*)?\/?$/.exec(rest)?.[1] ??
+        null;
     } else {
       candidate = /^\/browse\/([^/]+)\/?$/.exec(rest)?.[1] ?? url.searchParams.get('selectedIssue');
     }
