@@ -75,6 +75,17 @@ let searchDelayMs = 0;
 let getIssueDelayMs = 0;
 // Issue ids no search lists (simulated index lag); getIssue still finds them.
 const unindexed = new Set<string>();
+// Keys issues were moved from (VERM-88): like Jira, a read by an old key
+// still answers with the moved issue, under its new key.
+const movedFrom = new Map<string, string>();
+
+/** The issue a key names now: by its own key, or by a key it was moved from. */
+function issueByKey(key: string): JiraSearchIssue | undefined {
+  const direct = FAKE_JIRA_ISSUES.find((i) => i.key === key);
+  if (direct) return direct;
+  const id = movedFrom.get(key);
+  return id === undefined ? undefined : FAKE_JIRA_ISSUES.find((i) => i.id === id);
+}
 
 function logCall(fn: string, detail: Omit<FakeJiraCall, 'fn' | 'at'> = {}): void {
   calls.push({ fn, ...detail, at: Date.now() });
@@ -191,7 +202,7 @@ export async function searchJql(
   const keyList = /^key in \(([^)]*)\)$/.exec(_jql);
   if (keyList) {
     const keys = [...keyList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    const hits = keys.map((k) => FAKE_JIRA_ISSUES.find((i) => i.key === k));
+    const hits = keys.map((k) => issueByKey(k));
     if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
     return (hits as JiraSearchIssue[]).map((i) => ({ ...i, fields: { ...i.fields } }));
   }
@@ -232,11 +243,11 @@ export async function getIssue(
   if (getIssueDelayMs > 0) await new Promise((r) => setTimeout(r, getIssueDelayMs));
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
-  const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
+  const issue = issueByKey(key);
   if (!issue) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
   // The detail panel's extra fields (VERM-35): project, due date, description.
-  const project = FAKE_JIRA_PROJECTS.find((p) => key.startsWith(`${p.key}-`));
-  const extra: Record<string, unknown> = { ...FAKE_JIRA_DETAIL_FIELDS[key] };
+  const project = FAKE_JIRA_PROJECTS.find((p) => issue.key.startsWith(`${p.key}-`));
+  const extra: Record<string, unknown> = { ...(FAKE_JIRA_DETAIL_FIELDS[issue.key] ?? FAKE_JIRA_DETAIL_FIELDS[key]) };
   if (project) extra.project = { ...project };
   return { ...issue, fields: { ...issue.fields, ...extra } as JiraSearchIssue['fields'] };
 }
@@ -434,6 +445,7 @@ export function applyChangeForTests(change: FakeJiraChange): boolean {
   } else if (change.op === 'move') {
     // Jira gives a moved issue a new key and keeps its id. A move it does not
     // touch leaves `updated` alone, so only a full read can notice it.
+    movedFrom.set(issue.key, issue.id);
     FAKE_JIRA_ISSUES[at] = { ...issue, key: change.toKey, fields: { ...issue.fields, ...(change.touch ? { updated: stampNow() } : {}) } };
   } else {
     const fields = { ...issue.fields, updated: stampNow() };

@@ -8,6 +8,7 @@ import { commentTimeLabel, jiraDetailRows } from './jiraDetail';
 import { needsJiraReconnect } from '../../../shared/jiraConnection';
 import { applyJiraDirectRead, boardIssueOf } from './jiraBoardSync';
 import { JiraRunwaySection } from './JiraRunwaySection';
+import { RunwayNumberControl } from '../runway/RunwayNumberControl';
 import styles from './JiraIssueDetailPanel.module.css';
 
 interface JiraIssueDetailPanelProps {
@@ -149,6 +150,16 @@ export function JiraIssueDetailPanel({ workspaceId, issueKey, onClose }: JiraIss
               </div>
             ))}
           </dl>
+
+          {/* The Runway # (VERM-88): independent of the Priority Desk below — a
+              ticket can be on the Runway with no Desk slot. Matched by the key
+              it was opened with as well as the key Jira answered with. */}
+          <RunwayNumberControl
+            key={workspaceId}
+            workspaceId={workspaceId}
+            ticket={{ tracker: 'jira', keys: [loaded.issue.idReadable, issueKey], entityId: null }}
+            displayKey={loaded.issue.idReadable}
+          />
 
           <JiraRunwaySection workspaceId={workspaceId} issueKey={loaded.issue.idReadable} />
 

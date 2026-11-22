@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Runway # in the ticket detail panel** (VERM-88). The YouTrack and Jira detail panels show the
+  ticket's **Runway #** on the active workspace's Runway. A ticket not on it offers **Add at end**
+  and **Add at #**; one on it offers **Move to #** and **Remove**, which asks first
+  (*Remove READ-12 from this Runway?*). The Runway view follows each change at once. The control
+  does not depend on the Priority Desk, so a Jira ticket with no Desk slot has it too. The panel
+  finds the ticket's row under any ID it goes by — including a YouTrack entity ID, or a Jira key
+  the ticket has since moved from — and moves or removes that row as stored, rather than adding
+  the ticket a second time. Adds use the Runway view's own checked, gated add; nothing is written
+  to the tracker.
 - **Reorder and remove on the Runway** (VERM-87). Every Runway view row has a drag handle, **↑**
   and **↓**, and **Remove**; ticket rows also have **Move to #** and a **#** field you can click
   and type a number into. ↑ and ↓ swap the row with the one immediately beside it: crossing a

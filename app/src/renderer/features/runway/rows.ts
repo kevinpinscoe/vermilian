@@ -6,7 +6,7 @@
 // sections and notes as they were saved, and a ticket that did not resolve
 // in its place with its Runway # and the reason it shows no details.
 
-import { decodeIssueId } from '../../../shared/tracker';
+import { decodeIssueId, encodeIssueId, isValidLocalId, type TrackerKind } from '../../../shared/tracker';
 import type { RunwayItem } from '../../../shared/runwayItem';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
@@ -180,4 +180,59 @@ export function movedItems(items: readonly RunwayItem[], itemId: string, positio
     position: i + 1,
     runwayNumber: item.kind === 'issue' ? ++runwayNumber : null,
   }));
+}
+
+// ── The ticket detail panel's Runway # control (VERM-88) ────────────────────
+
+/** A ticket as the detail panel knows it: every ID it goes by. */
+export interface PanelTicket {
+  tracker: TrackerKind;
+  /**
+   * Its readable keys: the key the tracker answered with and, for Jira, the
+   * key the panel was opened by (a moved ticket's old key).
+   */
+  keys: readonly string[];
+  /** The YouTrack entity ID (2-45); null when unknown or for Jira. */
+  entityId: string | null;
+}
+
+/** Every namespaced ID the panel's ticket goes by, invalid ones dropped. */
+export function panelTicketIds(ticket: PanelTicket): string[] {
+  const local = [...ticket.keys, ...(ticket.entityId ? [ticket.entityId] : [])];
+  return [...new Set(local.filter((id) => id && isValidLocalId(ticket.tracker, id)).map((id) => encodeIssueId(ticket.tracker, id)))];
+}
+
+/** The panel ticket's Runway row: its stored ID, which Move and Remove use. */
+export interface PanelRunwayRow {
+  itemId: string;
+  runwayNumber: number;
+}
+
+/**
+ * The saved Runway row that holds the panel's ticket, or null when none
+ * does. A row matches when its stored ID is any ID the ticket goes by (a
+ * YouTrack ticket saved under its entity ID included), or when the tracker
+ * read of that row resolved to this ticket — which is how a Jira ticket
+ * saved under a key it has since moved from is found.
+ */
+export function panelRunwayRow(
+  items: readonly RunwayItem[],
+  reads: readonly RunwayTicketRead[] | null,
+  ticket: PanelTicket,
+): PanelRunwayRow | null {
+  const ids = new Set(panelTicketIds(ticket));
+  const keys = new Set(ticket.keys);
+  const resolvedHere = new Set(
+    (reads ?? []).flatMap((r) =>
+      r.state === 'resolved' && (keys.has(r.issue.idReadable) || (ticket.entityId !== null && r.issue.id === ticket.entityId))
+        ? [r.itemId]
+        : [],
+    ),
+  );
+  for (const row of buildRunwayRows(items, null)) {
+    if (row.kind === 'ticket' && (ids.has(row.itemId) || resolvedHere.has(row.itemId))) {
+      return { itemId: row.itemId, runwayNumber: row.runwayNumber };
+    }
+  }
+  return null;
 }

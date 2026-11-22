@@ -3,7 +3,17 @@ import type { RunwayItem } from '../../../shared/runwayItem';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
 import { RUNWAY_ITEMS_QUERY_KEY, RUNWAY_TICKETS_QUERY_KEY } from './api';
-import { buildRunwayRows, dropPosition, jiraRunwayKeys, movedItems, parseRunwayNumber, removePrompt, ticketStateBadge } from './rows';
+import {
+  buildRunwayRows,
+  dropPosition,
+  jiraRunwayKeys,
+  movedItems,
+  panelRunwayRow,
+  panelTicketIds,
+  parseRunwayNumber,
+  removePrompt,
+  ticketStateBadge,
+} from './rows';
 
 // Synthetic keys and names only.
 const WS = 'ws-3f9a1c2b7d01';
@@ -217,5 +227,51 @@ describe('movedItems (VERM-87)', () => {
   it('clamps past the end and leaves an unknown row alone', () => {
     expect(shape(movedItems(items, 'yt:A-1', 99)).at(-1)).toEqual(['yt:A-1', 4, 3]);
     expect(shape(movedItems(items, 'yt:X-9', 1))).toEqual(shape(items));
+  });
+});
+
+describe('panelRunwayRow (detail panel Runway #, VERM-88)', () => {
+  const yt = (keys: string[], entityId: string | null = null) => ({ tracker: 'youtrack' as const, keys, entityId });
+
+  it('finds the row by the readable key and gives its stored ID and Runway #', () => {
+    expect(panelRunwayRow(ITEMS, null, yt(['READ-14'], '2-77'))).toEqual({ itemId: 'yt:READ-14', runwayNumber: 3 });
+  });
+
+  it('finds a YouTrack ticket saved under its entity ID, and returns that stored ID', () => {
+    const items = [item('yt:READ-12', 'issue', 1), item('yt:2-45', 'issue', 2)];
+    expect(panelRunwayRow(items, null, yt(['READ-30'], '2-45'))).toEqual({ itemId: 'yt:2-45', runwayNumber: 2 });
+  });
+
+  it('finds a Jira ticket saved under a key it has since moved from, by the row’s tracker read', () => {
+    const items = [item('jira:OPS-7', 'issue', 1), item('note:n', 'note', 2, 'x'), item('jira:OLD-3', 'issue', 3)];
+    const moved: BoardIssue = { ...issue('OPS-956', 'Moved'), id: '10042' };
+    const reads: RunwayTicketRead[] = [{ itemId: 'jira:OLD-3', state: 'resolved', issue: moved }];
+    const ticket = { tracker: 'jira' as const, keys: ['OPS-956'], entityId: null };
+    expect(panelRunwayRow(items, null, ticket)).toBeNull();
+    expect(panelRunwayRow(items, reads, ticket)).toEqual({ itemId: 'jira:OLD-3', runwayNumber: 2 });
+  });
+
+  it('finds a Jira row by the old key the panel was opened with', () => {
+    const items = [item('jira:OLD-3', 'issue', 1)];
+    const ticket = { tracker: 'jira' as const, keys: ['OPS-956', 'OLD-3'], entityId: null };
+    expect(panelRunwayRow(items, null, ticket)).toEqual({ itemId: 'jira:OLD-3', runwayNumber: 1 });
+  });
+
+  it('is null for a ticket not on the Runway, and never matches a section or note', () => {
+    expect(panelRunwayRow(ITEMS, null, yt(['READ-9']))).toBeNull();
+    expect(panelRunwayRow([item('sec:later', 'section', 1, 'Later')], null, yt(['READ-9']))).toBeNull();
+  });
+
+  it('ignores a resolved read for another ticket and unresolved reads', () => {
+    const reads: RunwayTicketRead[] = [
+      { itemId: 'yt:READ-12', state: 'resolved', issue: issue('READ-12', 'x') },
+      { itemId: 'yt:SYNC-3', state: 'missing' },
+    ];
+    expect(panelRunwayRow(ITEMS, reads, yt(['READ-9']))).toBeNull();
+  });
+
+  it('panelTicketIds namespaces every valid ID once and drops invalid ones', () => {
+    expect(panelTicketIds(yt(['READ-12', 'READ-12'], '2-45'))).toEqual(['yt:READ-12', 'yt:2-45']);
+    expect(panelTicketIds({ tracker: 'jira', keys: ['OPS-7', ''], entityId: '10042' })).toEqual(['jira:OPS-7']);
   });
 });
