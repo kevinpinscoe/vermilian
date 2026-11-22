@@ -1,0 +1,126 @@
+.runway {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--board-background-color, var(--primary-background-color));
+}
+
+.header {
+  padding: 16px 24px 12px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.title {
+  font-size: 22px !important;
+}
+
+.subtitle {
+  color: var(--secondary-text-color, #676879);
+}
+
+.banner {
+  padding: 12px 24px 0;
+  flex-shrink: 0;
+}
+
+/* The scroll container: the list keeps its scroll position while a detail
+   panel opens and closes beside it. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 0 24px;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.section {
+  padding-top: 16px;
+  padding-bottom: 4px;
+  padding-right: 24px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+
+.note {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-right: 24px;
+  font-style: italic;
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: var(--secondary-text-color, #676879);
+}
+
+.ticket {
+  display: grid;
+  grid-template-columns: 32px max-content minmax(0, 1fr) max-content;
+  align-items: baseline;
+  column-gap: 12px;
+  width: 100%;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  padding-right: 24px;
+  border: none;
+  border-bottom: 1px solid var(--layout-border-color, #eeeeee);
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--primary-text-color, #323338);
+}
+
+.ticketOpenable {
+  cursor: pointer;
+}
+
+.ticketOpenable:hover,
+.ticketOpenable:focus-visible {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.number {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ticketId {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 13px;
+}
+
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--warning-color-selected, #fceba1);
+  color: var(--primary-text-color, #323338);
+}
+
+.badgeQuiet {
+  background: none;
+  font-weight: 400;
+  color: var(--secondary-text-color, #676879);
+}
+
+.reason {
+  grid-column: 3 / -1;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}

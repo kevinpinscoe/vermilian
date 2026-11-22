@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Runway view** (VERM-85). A new **Runway** entry in the left rail, between Priority Desk and
+  All tasks, shows the active workspace's Runway in its saved order: numbered tickets, section
+  headings and notes. It works for YouTrack and Jira workspaces, including one with no board
+  projects. A ticket that could not be read stays in place with its number, its state and the
+  reason. Clicking a resolved ticket opens the workspace's detail panel, and closing it keeps the
+  list's order and scroll position. A Jira ticket that is only on the Runway now opens in the Jira
+  panel too. Adding, removing and reordering in the view come with VERM-86 and VERM-87.
 - **Runway tickets are read from their tracker** (VERM-84). A new main-process read,
   `runwayItemsResolve`, fetches every ticket on a workspace's Runway in batches, on that
   workspace's own connection, and nothing falls back to another credential. Under per-workspace

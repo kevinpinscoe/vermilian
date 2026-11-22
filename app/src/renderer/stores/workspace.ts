@@ -30,6 +30,7 @@ interface WorkspaceState {
   activeProjectId: string | null; // YouTrack project ID
   selectedIssueId: string | null; // issue open in the detail panel
   priorityDeskActive: boolean; // Priority Desk (VERM-5) showing instead of a project/workspace board
+  runwayActive: boolean; // Runway view (VERM-85) showing instead of a board or the Desk
   railCollapsed: boolean;
   expandedFolderIds: Set<string>;
   expandedHydrated: boolean; // true once expand state came from storage or a user action
@@ -38,6 +39,7 @@ interface WorkspaceState {
   setActiveProject(projectId: string | null, shortName: string | null): void;
   setSelectedIssue(id: string | null): void;
   openPriorityDesk(): void;
+  openRunway(): void;
   toggleRail(): void;
   toggleFolder(folderId: string): void;
   expandFolder(folderId: string): void;
@@ -51,6 +53,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeProjectId: null,
   selectedIssueId: null,
   priorityDeskActive: false,
+  runwayActive: false,
   railCollapsed: loadRail(),
   expandedFolderIds: persistedExpanded ?? new Set<string>(),
   expandedHydrated: persistedExpanded !== null,
@@ -65,12 +68,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       activeProjectShortName: shortName,
       selectedIssueId: null,
       priorityDeskActive: false,
+      runwayActive: false,
     });
   },
 
   openPriorityDesk() {
     set({
       priorityDeskActive: true,
+      runwayActive: false,
+      activeProjectId: null,
+      activeProjectShortName: null,
+      selectedIssueId: null,
+    });
+  },
+
+  // The active workspace's Runway (VERM-85). Like the Desk, it replaces the
+  // board; a project or All tasks selection, or the Desk, leaves it.
+  openRunway() {
+    set({
+      runwayActive: true,
+      priorityDeskActive: false,
       activeProjectId: null,
       activeProjectShortName: null,
       selectedIssueId: null,
