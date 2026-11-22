@@ -348,12 +348,27 @@ describe('createJiraProvider boards', () => {
 
     const offBoard = stubClient({ getIssue: vi.fn(async () => OPS), searchJql: vi.fn(async () => []), searchBoardIssues: vi.fn(async () => []) });
     expect(await createJiraProvider(offBoard, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [12] }, 'OPS-4')).toEqual([]);
+    // Refused as typed, so it is never looked up.
+    expect(offBoard.getIssue).not.toHaveBeenCalled();
+  });
+
+  it('searchWorkspace checks a moved issue again under the key Jira answers with', async () => {
+    const moved = { ...OPS, key: 'PLAT-40' };
+    const outside = stubClient({ getIssue: vi.fn(async () => moved), searchJql: vi.fn(async () => []) });
+    expect(await createJiraProvider(outside, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [] }, 'DEMO-7')).toEqual([]);
+    expect(outside.getIssue).toHaveBeenCalledTimes(1);
+
+    const onRunway = stubClient({ getIssue: vi.fn(async () => moved), searchJql: vi.fn(async () => []) });
+    const found = await createJiraProvider(onRunway, CONN).searchWorkspace(
+      { projectKeys: ['DEMO'], boardIds: [], isOnRunway: (key) => key === 'PLAT-40' }, 'DEMO-7');
+    expect(found.map((i) => i.idReadable)).toEqual(['PLAT-40']);
   });
 
   it('searchWorkspace with no boards never looks a key up beyond the projects', async () => {
     const client = stubClient({ getIssue: vi.fn(async () => OPS), searchJql: vi.fn(async () => []) });
     expect(await createJiraProvider(client, CONN).searchWorkspace({ projectKeys: ['DEMO'], boardIds: [] }, 'OPS-4')).toEqual([]);
     expect(client.isIssueOnBoard).not.toHaveBeenCalled();
+    expect(client.getIssue).not.toHaveBeenCalled();
   });
 
   it('searchWorkspace finds an exact key on the Runway with no projects or boards, and asks nothing otherwise', async () => {

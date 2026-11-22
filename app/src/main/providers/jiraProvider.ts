@@ -76,10 +76,11 @@ export interface JiraProvider extends TrackerProvider {
   isOnBoard(boardId: number, key: string): Promise<boolean>;
   /**
    * Key or text search over a workspace's chosen projects and boards, Done
-   * included (VERM-61, VERM-59). An exact key is returned only when the
-   * workspace admits it (jiraWorkspaceAdmits): in one of the projects, on the
-   * workspace's own Runway (VERM-83), or on one of the boards. Text search
-   * stays over the projects and boards only.
+   * included (VERM-61, VERM-59). An exact key is looked up in Jira only when
+   * the workspace admits it as typed (jiraWorkspaceAdmits): in one of the
+   * projects, on the workspace's own Runway (VERM-83), or on one of the
+   * boards; a moved issue's new key is admitted again. Text search stays over
+   * the projects and boards only.
    */
   searchWorkspace(scope: JiraSearchScope, query: string): Promise<BoardIssue[]>;
   /** The connection's own accountId: what "Me" means on this workspace's board (VERM-62). */
@@ -235,36 +236,33 @@ export function createJiraProvider(
       }
       const term = query.trim();
       if (!term) return [];
-      const isOnRunway = scope.isOnRunway ?? (() => false);
-      // A key-shaped term is looked up directly, then kept only if the
-      // workspace admits the key Jira answers with — which, for a moved
-      // issue, is its new key.
+      const admission = {
+        projectKeys: scope.projectKeys,
+        boardIds: scope.boardIds,
+        isOnBoard: (id: number, key: string) => client.isIssueOnBoard(base, email, token, id, key),
+        isOnRunway: scope.isOnRunway ?? (() => false),
+      };
+      // A key-shaped term is looked up only if the workspace admits the key as
+      // typed, so a key it may not read is never sent to Jira. The key Jira
+      // answers with is checked again when it differs: a moved issue comes
+      // back under its new key and project.
       const asKey = term.toUpperCase();
       const keyLike = jiraSearchKey([jiraProjectKeyOf(asKey)], term);
-      // With no projects and no boards, only a key on the Runway can match.
-      if (scope.projectKeys.length === 0 && scope.boardIds.length === 0 && !(keyLike && isOnRunway(keyLike))) return [];
+      const lookUpKey = async (key: string) => {
+        if (!(await jiraWorkspaceAdmits(admission, key))) return null;
+        const issue = await client.getIssue(base, email, token, key, anyProjectFields()).catch((e: unknown) => {
+          if ((e as { status?: unknown } | null)?.status === 404) return null;
+          throw e;
+        });
+        if (issue && issue.key !== key && !(await jiraWorkspaceAdmits(admission, issue.key))) return null;
+        return issue;
+      };
+      // Text search stays over the projects and boards only.
       const [byKey, byText] = await Promise.all([
-        keyLike
-          ? client.getIssue(base, email, token, keyLike, anyProjectFields()).catch((e: unknown) => {
-              if ((e as { status?: unknown } | null)?.status === 404) return null;
-              throw e;
-            })
-          : Promise.resolve(null),
+        keyLike ? lookUpKey(keyLike) : Promise.resolve(null),
         searchByText(scope, term),
       ]);
-      let exact: typeof byText = [];
-      if (byKey) {
-        const admitted = await jiraWorkspaceAdmits(
-          {
-            projectKeys: scope.projectKeys,
-            boardIds: scope.boardIds,
-            isOnBoard: (id, key) => client.isIssueOnBoard(base, email, token, id, key),
-            isOnRunway,
-          },
-          byKey.key,
-        );
-        if (admitted) exact = [byKey];
-      }
+      const exact: typeof byText = byKey ? [byKey] : [];
       const seen = new Set<string>();
       return [...exact, ...byText].filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true))).map(mapIssue);
     },

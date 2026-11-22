@@ -160,9 +160,16 @@ describe('Runway admission against a real Runway store', () => {
       store.addIssue('ws-a', 'jira:OPS-4089');
     });
 
-    it('is found by its exact key in A and refused in B', async () => {
+    it('is found by its exact key in A and refused in B, which never looks it up', async () => {
       expect((await open('A').search('ops-4089')).map((i) => i.idReadable)).toEqual(['OPS-4089']);
-      expect(await open('B').search('OPS-4089')).toEqual([]);
+
+      const b = open('B');
+      expect(await b.search('OPS-4089')).toEqual([]);
+      // B has projects and a board, and still never sends A's ticket to Jira.
+      expect(b.client.getIssue).not.toHaveBeenCalled();
+      // B's scoped text search still runs, over B's own project and board.
+      expect(vi.mocked(b.client.searchJql).mock.calls[0][3]).toContain('project in ("SYNC")');
+      expect(vi.mocked(b.client.searchBoardIssues).mock.calls.map((c) => c[3])).toEqual([14]);
     });
 
     it('opens in A and is refused in B', async () => {
