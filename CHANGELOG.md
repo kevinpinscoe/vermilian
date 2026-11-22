@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sit at different positions in different workspaces. Adding a ticket never changes a
   workspace's projects or folders, and never writes to the tracker. Nothing in the app uses this
   yet; the IPC contract follows in VERM-82.
+- **Runway section and note rows, and a ticket-only Runway #** (VERM-81). A Runway can hold
+  section headings and notes, each with its text and an indent of 0 to 4, at any row. The
+  Runway # counts tickets only: it is worked out each time the Runway is read, so a section or
+  note never uses up a number. Adding a ticket at #N puts it just before the ticket that holds
+  #N now; moving a ticket to #N moves it in among the tickets while sections and notes stay where
+  they are. A number past the last ticket puts it right after the last ticket. Nothing in the app
+  uses this yet; the IPC contract follows in VERM-82.
 
 ### Changed
 
