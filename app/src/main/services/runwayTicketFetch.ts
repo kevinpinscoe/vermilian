@@ -9,11 +9,18 @@
 //      process; an unknown one is refused. Like runwayItemsList, any
 //      configured workspace may be read — it is read-only.
 //   2. Its ticket rows come from its own Runway. Sections and notes are not
-//      tickets and are not read.
+//      tickets and are not read. A ticket row on the other tracker (or with
+//      an ID that is not a ticket ID) is kept as 'wrong-tracker' and not
+//      read; when no row is left to read, no connection is opened.
 //   3. One reader is opened for the workspace, on its own connection. A
 //      reader that cannot be opened (no credential, refused) fails the whole
-//      read; nothing falls back to the Settings token or another workspace's
-//      credential.
+//      read, and nothing falls back to a different credential. Which
+//      connection is "its own" depends on the storage mode (main/ipc.ts):
+//      under per-workspace storage, the workspace's own server and credential
+//      reference (YouTrack) or its own Jira provider, never the Settings
+//      YouTrack token; under legacy shared storage, where no workspace has a
+//      credential of its own, the Settings YouTrack connection every
+//      workspace already uses.
 //   4. The tickets are read in batches. A batch that fails for any reason but
 //      authentication or the network (YouTrack answers 400 for a whole query
 //      if one ID in it does not exist) is not an answer about any ticket: its
@@ -22,8 +29,10 @@
 //   5. One ticket's answer: 404 → missing-or-unreadable (deleted and
 //      unreadable look the same); 403 → not-readable; 410 → missing.
 //   6. A 401 — on a batch or a single read — is one workspace-level
-//      'unauthorized' error, and the remaining single reads are skipped. A
-//      network failure or a server error is one 'refresh-failed' error.
+//      'unauthorized' error, and the remaining single reads are skipped.
+//      Anything else that is not about one ticket — no answer at all
+//      (offline, a timeout), 408, 429, 5xx, an unexpected status — is one
+//      'refresh-failed' error. The table below the types is the full rule.
 //
 // Nothing here writes runway_item: every row keeps its place whatever its
 // tracker says, so a later refresh can restore its details.
@@ -89,28 +98,56 @@ function messageOf(err: unknown, fallback: string): string {
   return typeof message === 'string' && message ? message : fallback;
 }
 
-/** A failure that is about the whole connection, never about one ticket. */
-function workspaceFailureOf(err: unknown): WorkspaceFailure | null {
-  const status = statusOf(err);
-  if (status === 401) {
+// How the tracker's answer is classified. Only three statuses say something
+// about one ticket; 401 is about the connection; everything else — a fetch
+// that never got an answer (offline, DNS, TLS, a timeout), 408, 429, 5xx, or
+// any other status — says nothing about any ticket and is a refresh error.
+//
+//   status   on a batch                on a single read
+//   401      unauthorized (workspace)  unauthorized (workspace)
+//   400      read each one on its own  refresh error
+//   403      read each one on its own  not-readable
+//   404      read each one on its own  missing-or-unreadable
+//   410      refresh error             missing
+//   other    refresh error             refresh error
+//   none     refresh error             refresh error
+const BATCH_FALLBACK_STATUSES = new Set([400, 403, 404]);
+
+function isTimeout(err: unknown): boolean {
+  const e = err as { name?: unknown; code?: unknown; cause?: { name?: unknown; code?: unknown } } | null;
+  const names = [e?.name, e?.code, e?.cause?.name, e?.cause?.code].filter((v): v is string => typeof v === 'string');
+  return statusOf(err) === 408 || statusOf(err) === 504 || names.some((n) => n === 'TimeoutError' || n === 'AbortError' || n.includes('TIMEOUT'));
+}
+
+/** The workspace-level failure for an answer that is not about one ticket. */
+function workspaceFailure(err: unknown): WorkspaceFailure {
+  if (statusOf(err) === 401) {
     return new WorkspaceFailure('unauthorized', `The tracker refused this workspace's credential: ${messageOf(err, 'HTTP 401')}`);
   }
-  // No status: fetch itself failed (offline, DNS, TLS). 5xx and 429: the
-  // tracker could not answer. Neither says anything about a ticket.
-  if (status === undefined || status >= 500 || status === 429) {
-    return new WorkspaceFailure('refresh-failed', `The Runway could not be refreshed: ${messageOf(err, 'the tracker could not be reached')}`);
-  }
-  return null;
+  const why = isTimeout(err)
+    ? 'the tracker did not answer in time'
+    : messageOf(err, statusOf(err) === undefined ? 'the tracker could not be reached' : `HTTP ${statusOf(err)}`);
+  return new WorkspaceFailure('refresh-failed', `The Runway could not be refreshed: ${why}`);
+}
+
+/** A failed batch: null when its tickets should be read one at a time. */
+function batchFailure(err: unknown): WorkspaceFailure | null {
+  const status = statusOf(err);
+  return status !== undefined && BATCH_FALLBACK_STATUSES.has(status) ? null : workspaceFailure(err);
 }
 
 /** One ticket's state from its single-read error; throws a workspace failure. */
 function singleReadState(itemId: string, err: unknown): RunwayTicketRead {
-  const failure = workspaceFailureOf(err);
-  if (failure) throw failure;
-  const status = statusOf(err);
-  if (status === 403) return { itemId, state: 'not-readable', reason: messageOf(err, 'HTTP 403') };
-  if (status === 410) return { itemId, state: 'missing' };
-  return { itemId, state: 'missing-or-unreadable' };
+  switch (statusOf(err)) {
+    case 403:
+      return { itemId, state: 'not-readable', reason: messageOf(err, 'HTTP 403') };
+    case 404:
+      return { itemId, state: 'missing-or-unreadable' };
+    case 410:
+      return { itemId, state: 'missing' };
+    default:
+      throw workspaceFailure(err);
+  }
 }
 
 /**
@@ -119,6 +156,19 @@ function singleReadState(itemId: string, err: unknown): RunwayTicketRead {
  * a moved issue does not match, so it is read again on its own.
  */
 const answeredIdOf = (issue: BoardIssue): string => issue.idReadable;
+
+/** The kept, unread state of a row that is not a ticket on `tracker`; null when it is. */
+export function trackerMismatch(tracker: TrackerKind, itemId: string): RunwayTicketRead | null {
+  const decoded = decodeIssueId(itemId);
+  if (!decoded) return { itemId, state: 'wrong-tracker', reason: `${itemId} is not a YouTrack or Jira ticket ID.` };
+  if (decoded.kind === tracker) return null;
+  const name = (kind: TrackerKind) => (kind === 'jira' ? 'Jira' : 'YouTrack');
+  return {
+    itemId,
+    state: 'wrong-tracker',
+    reason: `${decoded.localId} is a ${name(decoded.kind)} ticket; this workspace reads ${name(tracker)} only.`,
+  };
+}
 
 /**
  * Reads the given ticket rows with one reader. Returns a state for every
@@ -130,11 +180,12 @@ export async function readRunwayTickets(
   itemIds: readonly string[],
 ): Promise<RunwayTicketRead[]> {
   const localIds = new Map<string, string>(); // local ID → item ID
-  for (const itemId of itemIds) {
-    const decoded = decodeIssueId(itemId);
-    if (decoded && decoded.kind === tracker) localIds.set(decoded.localId, itemId);
-  }
   const reads = new Map<string, RunwayTicketRead>();
+  for (const itemId of itemIds) {
+    const mismatch = trackerMismatch(tracker, itemId);
+    if (mismatch) reads.set(itemId, mismatch);
+    else localIds.set((decodeIssueId(itemId) as { localId: string }).localId, itemId);
+  }
 
   const pending = [...localIds.keys()];
   for (let i = 0; i < pending.length; i += RUNWAY_BATCH_SIZE) {
@@ -143,7 +194,7 @@ export async function readRunwayTickets(
     try {
       issues = await reader.batch(chunk);
     } catch (err) {
-      const failure = workspaceFailureOf(err);
+      const failure = batchFailure(err);
       if (failure) throw failure;
       continue; // retried one at a time below
     }
@@ -213,7 +264,10 @@ export function createRunwayTicketFetch(deps: RunwayTicketFetchDeps) {
       const tracker = runwayWorkspaceTracker(workspace);
 
       const itemIds = deps.items(workspaceId).filter((item) => item.kind === 'issue').map((item) => item.itemId);
-      if (itemIds.length === 0) return { ok: true, tickets: [] };
+      // Rows on the other tracker are answered without opening a connection.
+      if (itemIds.every((id) => trackerMismatch(tracker, id))) {
+        return { ok: true, tickets: itemIds.map((id) => trackerMismatch(tracker, id) as RunwayTicketRead) };
+      }
 
       const opened = await deps.reader(workspaceId, tracker);
       if (!opened.ok) return { ok: false, error: opened.error, code: opened.code };

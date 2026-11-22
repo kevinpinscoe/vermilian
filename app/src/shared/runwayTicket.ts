@@ -13,19 +13,24 @@
 //                          this ticket, or (Jira) the ticket moved to a key
 //                          this workspace may not read.
 //   missing                the tracker confirmed the ticket is gone (410).
+//   wrong-tracker          the row names a ticket on the other tracker (for
+//                          example after the workspace's backend changed), or
+//                          an ID that is not a ticket ID. It is not read, and
+//                          no credential is resolved for it.
 //
 // Whatever the state, the Runway row and its number are kept: a read never
 // writes runway_item, so a later refresh can restore the ticket's details.
 
 import type { BoardIssue } from './workspace';
 
-export type RunwayTicketState = 'resolved' | 'missing-or-unreadable' | 'not-readable' | 'missing';
+export type RunwayTicketState = 'resolved' | 'missing-or-unreadable' | 'not-readable' | 'missing' | 'wrong-tracker';
 
 export type RunwayTicketRead =
   | { itemId: string; state: 'resolved'; issue: BoardIssue }
   | { itemId: string; state: 'missing-or-unreadable' }
   | { itemId: string; state: 'not-readable'; reason?: string }
-  | { itemId: string; state: 'missing' };
+  | { itemId: string; state: 'missing' }
+  | { itemId: string; state: 'wrong-tracker'; reason: string };
 
 /**
  * Why a whole Runway read failed, with no per-ticket states:

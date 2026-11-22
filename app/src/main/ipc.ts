@@ -2253,12 +2253,18 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.runwayItemsMoveUp, (_e, args) => runwayItems.moveUp(args));
   ipcMain.handle(IPC.runwayItemsMoveDown, (_e, args) => runwayItems.moveDown(args));
 
-  // Runway tickets' tracker data (VERM-84): read on the workspace's own
-  // connection only — its YouTrack server and credential reference, or its
-  // own Jira provider; under legacy storage every workspace shares the
-  // Settings YouTrack connection, which is then its own. No fallback to
-  // another workspace's credential. The rules live in
-  // services/runwayTicketFetch.ts, where they are unit-tested.
+  // Runway tickets' tracker data (VERM-84), read on the workspace's own
+  // connection only:
+  //   - a Jira workspace: its own Jira provider (workspaceJiraProvider);
+  //   - a YouTrack workspace under per-workspace storage: its own server and
+  //     credential reference, resolved with no fallback — the Settings
+  //     YouTrack token is never used;
+  //   - a YouTrack workspace under legacy shared storage: the Settings
+  //     YouTrack connection. In that mode no workspace has a credential of
+  //     its own; every board, search and detail read already uses the
+  //     Settings connection, so it is the workspace's own, not a fallback.
+  // A connection that fails is the read's error; no other credential is
+  // tried. The rules live in services/runwayTicketFetch.ts (unit-tested).
   const resolveRunwayTickets = createRunwayTicketFetch({
     workspaces: runwayWorkspaces,
     items: (workspaceId) => openRunwayItemStore().list(workspaceId),

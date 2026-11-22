@@ -138,10 +138,82 @@ describe('readRunwayTickets', () => {
     expect(f.batch.mock.calls.map((c) => c[0].length)).toEqual([RUNWAY_BATCH_SIZE, 1]);
   });
 
-  it('ignores rows that are not tickets on this tracker', async () => {
+  it('keeps a row from the other tracker in place, unread, and reads the rest', async () => {
     const f = fakeReader(KNOWN);
-    const reads = await readRunwayTickets('youtrack', f.reader, ['yt:READ-12', 'jira:READ-20', 'sec:abc']);
-    expect(reads.map((r) => r.itemId)).toEqual(['yt:READ-12']);
+    const reads = await readRunwayTickets('youtrack', f.reader, ['yt:READ-12', 'jira:PLAT-40', 'yt:READ-20']);
+    expect(reads).toEqual([
+      { itemId: 'yt:READ-12', state: 'resolved', issue: KNOWN['READ-12'] },
+      { itemId: 'jira:PLAT-40', state: 'wrong-tracker', reason: 'PLAT-40 is a Jira ticket; this workspace reads YouTrack only.' },
+      { itemId: 'yt:READ-20', state: 'resolved', issue: KNOWN['READ-20'] },
+    ]);
+    expect(f.batch.mock.calls).toEqual([[['READ-12', 'READ-20']]]);
+    expect(f.one).not.toHaveBeenCalled();
+  });
+
+  it('keeps a YouTrack row on a Jira workspace, and a row whose ID is not a ticket ID', async () => {
+    const f = fakeReader({});
+    const reads = await readRunwayTickets('jira', f.reader, ['yt:READ-12', 'sec:abc']);
+    expect(reads).toEqual([
+      { itemId: 'yt:READ-12', state: 'wrong-tracker', reason: 'READ-12 is a YouTrack ticket; this workspace reads Jira only.' },
+      { itemId: 'sec:abc', state: 'wrong-tracker', reason: 'sec:abc is not a YouTrack or Jira ticket ID.' },
+    ]);
+    expect(f.batch).not.toHaveBeenCalled();
+    expect(f.one).not.toHaveBeenCalled();
+  });
+});
+
+describe('error classification: only 403, 404 and 410 are ticket states', () => {
+  it.each([[400], [403], [404]])('a batch answered %i is retried one ticket at a time', async (status) => {
+    const f = fakeReader(KNOWN, { batchError: err(status) });
+    const reads = await readRunwayTickets('youtrack', f.reader, ['yt:READ-12']);
+    expect(reads.map((r) => r.state)).toEqual(['resolved']);
+    expect(f.one).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([[408], [410], [409], [502], [504]])('a batch answered %i is a refresh error, with no single reads', async (status) => {
+    const f = fakeReader(KNOWN, { batchError: err(status) });
+    await expect(readRunwayTickets('youtrack', f.reader, ['yt:READ-12'])).rejects.toMatchObject({ code: 'refresh-failed' });
+    expect(f.one).not.toHaveBeenCalled();
+  });
+
+  it.each([[400], [408], [409], [422], [429], [500], [504], [undefined]])(
+    'a single read answered %s is a refresh error, never a ticket state',
+    async (status) => {
+      const f = fakeReader(KNOWN, { batchError: err(400), singleErrors: { 'READ-20': err(status) } });
+      await expect(readRunwayTickets('youtrack', f.reader, ['yt:READ-12', 'yt:READ-20'])).rejects.toMatchObject({ code: 'refresh-failed' });
+    },
+  );
+
+  it.each([
+    ['a TimeoutError', { name: 'TimeoutError', message: 'The operation was aborted due to timeout' }],
+    ['an AbortError', { name: 'AbortError', message: 'This operation was aborted' }],
+    ['a connect timeout', { name: 'TypeError', message: 'fetch failed', cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } }],
+    ['a 408', { status: 408, message: 'Request Timeout' }],
+    ['a 504', { status: 504, message: 'Gateway Timeout' }],
+  ])('%s is a refresh error that says the tracker did not answer in time', async (_label, timeout) => {
+    const batchTimeout = fakeReader(KNOWN, { batchError: timeout });
+    await expect(readRunwayTickets('youtrack', batchTimeout.reader, ['yt:READ-12'])).rejects.toMatchObject({
+      code: 'refresh-failed',
+      message: 'The Runway could not be refreshed: the tracker did not answer in time',
+    });
+    const singleTimeout = fakeReader(KNOWN, { batchError: err(400), singleErrors: { 'READ-12': timeout } });
+    await expect(readRunwayTickets('youtrack', singleTimeout.reader, ['yt:READ-12'])).rejects.toMatchObject({
+      code: 'refresh-failed',
+      message: 'The Runway could not be refreshed: the tracker did not answer in time',
+    });
+  });
+
+  it('a network failure without a timeout says the tracker could not be reached', async () => {
+    const f = fakeReader(KNOWN, { batchError: { name: 'TypeError', message: '' } });
+    await expect(readRunwayTickets('youtrack', f.reader, ['yt:READ-12'])).rejects.toMatchObject({
+      code: 'refresh-failed',
+      message: 'The Runway could not be refreshed: the tracker could not be reached',
+    });
+  });
+
+  it('401 wins over refresh errors: it is reported as unauthorized', async () => {
+    const f = fakeReader(KNOWN, { batchError: err(400), singleErrors: { 'READ-12': err(401, 'Unauthorized') } });
+    await expect(readRunwayTickets('youtrack', f.reader, ['yt:READ-12'])).rejects.toMatchObject({ code: 'unauthorized' });
   });
 });
 
@@ -226,6 +298,16 @@ describe('createRunwayTicketFetch', () => {
       error: 'YouTrack is unavailable for this workspace: youtrack-home did not resolve',
     });
     expect(d.spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a Runway of only other-tracker rows keeps them and opens no connection', async () => {
+    const d = deps(async () => { throw new Error('must not be called'); });
+    ITEMS[OTHER_WS] = [row(OTHER_WS, 'jira:PLAT-40', 'issue', 1), row(OTHER_WS, 'sec:s1', 'section', 2)];
+    await expect(d.fetch({ workspaceId: OTHER_WS })).resolves.toEqual({
+      ok: true,
+      tickets: [{ itemId: 'jira:PLAT-40', state: 'wrong-tracker', reason: 'PLAT-40 is a Jira ticket; this workspace reads YouTrack only.' }],
+    });
+    expect(d.spy).not.toHaveBeenCalled();
   });
 
   it('an empty Runway opens no connection', async () => {
