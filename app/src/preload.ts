@@ -109,6 +109,7 @@ const api: VermilianAPI = {
   runwayItemsMoveToNumber: (args: RunwayItemsMoveToNumberArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveToNumber, args),
   runwayItemsMoveUp: (args: RunwayItemsItemArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveUp, args),
   runwayItemsMoveDown: (args: RunwayItemsItemArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveDown, args),
+  runwayItemsResolve: (args: RunwayItemsListArgs) => ipcRenderer.invoke(IPC.runwayItemsResolve, args),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   openUserData: () => ipcRenderer.invoke(IPC.openUserData),
   getProjects: () => ipcRenderer.invoke(IPC.getProjects),

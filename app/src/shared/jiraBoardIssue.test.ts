@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isJiraIssueKey,
+  jiraIssueKeysJql,
   jiraBoardFields,
   jiraDateToEpochMs,
   jiraDetailFields,
@@ -330,5 +331,15 @@ describe('mapJiraIssue assignee', () => {
     const i = mapJiraIssue({ id: '1', key: 'DEMO-1', fields: { assignee: null } });
     expect(i.fields.assignee).toBeNull();
     expect(i.assigneeName).toBeNull();
+  });
+});
+
+describe('jiraIssueKeysJql (VERM-84)', () => {
+  it('quotes every key in one key in (...) clause', () => {
+    expect(jiraIssueKeysJql(['PLAT-40', 'OPS-7'])).toBe('key in ("PLAT-40", "OPS-7")');
+  });
+  it('drops anything that is not a Jira key', () => {
+    expect(jiraIssueKeysJql(['PLAT-40', 'x") OR project = "SECRET', 'plat-1'])).toBe('key in ("PLAT-40")');
+    expect(jiraIssueKeysJql([])).toBeNull();
   });
 });

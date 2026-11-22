@@ -72,6 +72,7 @@ export const IPC = {
   runwayItemsMoveToNumber: 'runway-items:move-to-number',
   runwayItemsMoveUp: 'runway-items:move-up',
   runwayItemsMoveDown: 'runway-items:move-down',
+  runwayItemsResolve: 'runway-items:resolve',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -816,6 +817,10 @@ export interface VermilianAPI {
   runwayItemsMoveToNumber(args: RunwayItemsMoveToNumberArgs): Promise<RunwayItemsResult>;
   runwayItemsMoveUp(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   runwayItemsMoveDown(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
+  // Each Runway ticket's tracker data, read on the workspace's own connection
+  // only (VERM-84). Read-only: any configured workspace. See
+  // shared/runwayTicket.ts for the states and errors.
+  runwayItemsResolve(args: RunwayItemsListArgs): Promise<import('./runwayTicket').RunwayTicketsResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

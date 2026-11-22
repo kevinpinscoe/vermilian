@@ -18,6 +18,7 @@ import type { TrackerProject, TrackerProvider } from '../../shared/tracker';
 import {
   jiraBoardFields,
   jiraDetailFields,
+  jiraIssueKeysJql,
   jiraProjectKeyOf,
   jiraSearchJql,
   jiraSearchKey,
@@ -85,6 +86,13 @@ export interface JiraProvider extends TrackerProvider {
   searchWorkspace(scope: JiraSearchScope, query: string): Promise<BoardIssue[]>;
   /** The connection's own accountId: what "Me" means on this workspace's board (VERM-62). */
   getMyAccountId(): Promise<string>;
+  /**
+   * Runway tickets by key, one search (VERM-84). The whole read fails with a
+   * 400 when one key does not exist; a moved issue comes back under its new key.
+   */
+  getIssuesByKeys(keys: readonly string[]): Promise<BoardIssue[]>;
+  /** One issue as a board row (VERM-84); follows a move to the new key. */
+  getBoardIssue(key: string): Promise<BoardIssue>;
 }
 
 export function createJiraProvider(
@@ -278,6 +286,16 @@ export function createJiraProvider(
         pending.catch(() => priorityCache.delete(projectKey));
       }
       return pending.then((values) => [...values]);
+    },
+
+    async getIssuesByKeys(keys) {
+      const jql = jiraIssueKeysJql(keys);
+      if (!jql) return [];
+      return (await client.searchJql(base, email, token, jql, anyProjectFields(), 1)).map(mapIssue);
+    },
+
+    async getBoardIssue(key) {
+      return mapIssue(await client.getIssue(base, email, token, key, anyProjectFields()));
     },
 
     async getIssueContent(key) {

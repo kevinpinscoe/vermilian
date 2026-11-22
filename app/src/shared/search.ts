@@ -2,6 +2,8 @@
 // projects. Kept in shared/ (no Electron, no fetch) so both the main-process
 // REST client and unit tests can import it.
 
+import { isValidLocalId } from './tracker';
+
 /**
  * Build a YouTrack search query that restricts results to the given projects
  * and applies the user's free-text terms.
@@ -31,4 +33,15 @@ export function buildIssueSearchQuery(
   if (!terms) return null;
   const projectPart = projects.map((s) => `{${s}}`).join(',');
   return `project: ${projectPart} ${terms}`;
+}
+
+/**
+ * The YouTrack query for a batch of Runway tickets by ID (VERM-84):
+ * `issue id: READ-12, READ-20`. Only IDs that pass isValidLocalId are used,
+ * so nothing reaches the query that could change its meaning. Null when none
+ * are left.
+ */
+export function buildIssueIdsQuery(issueIds: readonly string[]): string | null {
+  const ids = issueIds.filter((id) => isValidLocalId('youtrack', id));
+  return ids.length ? `issue id: ${ids.join(', ')}` : null;
 }

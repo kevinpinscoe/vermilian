@@ -10,6 +10,8 @@ import {
   findMasterPlanArticle,
   getIssuesForRecommendation,
   postComment,
+  getIssuesByIds,
+  getBoardIssue,
 } from './youtrack';
 
 const URL = 'https://yt.example.com/';
@@ -791,5 +793,32 @@ describe('postComment', () => {
     expect(url).toContain('/api/issues/p-1/comments');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ text: 'Priority Desk recommendation\n\nRanked:\n1. TEST-1' });
+  });
+});
+
+// ─── Runway tickets by ID (VERM-84) ─────────────────────────────────────────
+
+describe('getIssuesByIds / getBoardIssue', () => {
+  it('reads a batch with one issue id: query', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes([{ id: '2-1', idReadable: 'READ-12', summary: 'Cache articles locally', customFields: [] }]));
+    const issues = await getIssuesByIds(URL, TOKEN, ['READ-12', 'SYNC-3']);
+    const [calledUrl] = lastCall();
+    expect(decodeURIComponent(calledUrl)).toContain('query=issue id: READ-12, SYNC-3');
+    expect(issues.map((i) => i.idReadable)).toEqual(['READ-12']);
+  });
+
+  it('makes no request when no valid ID is left', async () => {
+    await expect(getIssuesByIds(URL, TOKEN, ['not an id'])).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a single read 404 with its status', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ error: 'Not Found', error_description: 'Entity with id GONE-1 not found' }, { ok: false, status: 404, statusText: 'Not Found' }));
+    await expect(getBoardIssue(URL, TOKEN, 'GONE-1')).rejects.toEqual({ status: 404, message: 'Entity with id GONE-1 not found' });
+  });
+
+  it('refuses an invalid ID without a request', async () => {
+    await expect(getBoardIssue(URL, TOKEN, '../admin')).rejects.toMatchObject({ message: expect.stringMatching(/Invalid YouTrack issue ID/) });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

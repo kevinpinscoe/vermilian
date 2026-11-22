@@ -37,9 +37,21 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [ ] A Runway holds tickets from its own workspace's tracker only. It may span several projects on
       that tracker. Mixed-tracker Runways are not possible.
 - [ ] A workspace with **no** board projects is valid and has a working Runway.
-- [ ] A Runway ticket is read with its own workspace's credential only. If that credential cannot
-      read it, the row shows **Not readable with this workspace's credential**, and no other
-      credential is tried.
+- [ ] A Runway ticket is read with its own workspace's credential only, and no other credential
+      is ever tried. Each ticket row shows one of these states (VERM-84):
+      - **Missing or not readable** — the tracker answered 404 for the ticket. YouTrack and Jira
+        both answer 404 whether a ticket was deleted or this credential cannot see it, so the two
+        cannot be told apart.
+      - **Not readable with this workspace's credential** — an explicit access refusal (403), or a
+        Jira ticket that moved to a key this workspace may not read.
+      - **Missing** — only when the tracker confirms the ticket is gone (410).
+- [ ] Tickets are read in batches. A batch that fails because one ticket is unavailable (YouTrack
+      answers 400 for a whole `issue id:` query if one ID does not exist; Jira does the same for
+      `key in (…)`) is retried one ticket at a time on the same workspace connection, so the
+      readable tickets still load.
+- [ ] If authentication fails for the whole connection (401), or the workspace's credential cannot
+      be resolved, the Runway shows one workspace-level error and no individual retries are made.
+      A network failure or server error is a refresh error, not a ticket state.
 - [ ] Jira: the workspace ownership check that gates detail and link reads also admits a ticket
       that is on that workspace's Runway, on that workspace's own connection.
 
@@ -56,7 +68,9 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       a number.
 - [ ] Every change is committed to `runway-metadata.sqlite` immediately. Order, sections and notes
       survive a restart unchanged.
-- [ ] A ticket that disappears from the tracker keeps its row and position, marked **Missing**.
+- [ ] A ticket the tracker no longer returns keeps its row and position, marked **Missing or not
+      readable** (or **Missing** when the tracker confirms it is gone), so a later refresh can
+      restore its details. Reading the tracker never writes the Runway order.
 
 ### Storage and snapshots
 
@@ -224,8 +238,9 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
       without a click.
 - [ ] **10. Desk unchanged:** the existing Desk e2e specs pass unmodified, and promoting a ticket
       never changes its position.
-- [ ] **11. Credentials:** a ticket the workspace's credential cannot read shows as
-      *Not readable*, and no other credential is used.
+- [ ] **11. Credentials:** a ticket the workspace's credential is refused shows as
+      *Not readable*, one it gets a 404 for shows as *Missing or not readable*, and no other
+      credential is used.
 - [ ] **12. Restart:** the order, sections, notes and remembered sort are identical after quit
       and relaunch.
 - [ ] **13. Snapshot restore:** an exported snapshot restores the order exactly, a version 1

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Runway tickets are read from their tracker** (VERM-84). A new main-process read,
+  `runwayItemsResolve`, fetches every ticket on a workspace's Runway in batches, on that
+  workspace's own YouTrack or Jira connection and never another credential. Each ticket row reads
+  as resolved, **Missing or not readable** (the tracker answered 404, which means either),
+  **Not readable** (an explicit refusal), or **Missing** (the tracker confirmed it is gone); the
+  row and its number are always kept. If a batch fails because one ticket is unavailable, the
+  tickets are read one at a time so the readable ones still load. A rejected credential is one
+  workspace-level error with no further reads, and a network failure is a refresh error. The
+  Runway view that shows these states comes with VERM-85.
 - **Runway database schema version 2** (VERM-78), the storage for Workspace Runways: a new
   `runway_item` table holds each workspace's numbered Runway order. An existing version 1
   `runway-metadata.sqlite` is upgraded on first open, additively, after a verified copy of it is

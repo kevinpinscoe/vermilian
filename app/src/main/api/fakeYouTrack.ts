@@ -187,6 +187,20 @@ export async function searchIssues(
     .map(toBoardIssue);
 }
 
+// Runway tickets by ID (VERM-84). Like the real server, one unknown ID fails
+// the whole batch query with 400.
+export async function getIssuesByIds(_url: string, _token: string, issueIds: readonly string[]): Promise<BoardIssue[]> {
+  const found = issueIds.map((id) => issues.find((x) => x.idReadable === id || x.id === id));
+  if (found.some((i) => !i)) throw { status: 400, message: "Can't parse search query, please check and update query syntax" };
+  return (found as FakeIssue[]).map(toBoardIssue);
+}
+
+export async function getBoardIssue(_url: string, _token: string, issueId: string): Promise<BoardIssue> {
+  const i = issues.find((x) => x.id === issueId || x.idReadable === issueId);
+  if (!i) throw { status: 404, message: `Entity with id ${issueId} not found` };
+  return toBoardIssue(i);
+}
+
 export async function getIssueDetail(_url: string, _token: string, issueId: string): Promise<IssueDetail> {
   const i = issues.find((x) => x.id === issueId || x.idReadable === issueId);
   if (!i) throw { status: 404, message: 'Issue not found' };

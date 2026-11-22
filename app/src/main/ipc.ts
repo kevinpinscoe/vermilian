@@ -208,6 +208,12 @@ import {
 } from './services/runwayStore';
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
+import {
+  createRunwayTicketFetch,
+  jiraRunwayReader,
+  youtrackRunwayReader,
+  type RunwayReaderResult,
+} from './services/runwayTicketFetch';
 import { jiraRunwayLookup, readAdmittedJiraIssue, type JiraAdmissionScope } from './providers/jiraAdmission';
 import type { NamespacedIssueId } from '../shared/tracker';
 import { defaultBoardConfig, dismissalKey, type BoardConfig, type Dismissals, type NotThisWeekDismissal } from '../shared/boardConfig';
@@ -2224,16 +2230,17 @@ export function registerIpc(): void {
   // the configuration, writes for the active workspace only, a ticket on the
   // workspace's own tracker, every write through runwayGate — live in
   // services/runwayItemIpc.ts, where they are unit-tested.
+  async function runwayWorkspaces() {
+    const { choices, legacyHint } = await workspaceChoices();
+    return {
+      activeId: resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint),
+      workspaces: choices,
+    };
+  }
   const runwayItems = createRunwayItemHandlers({
     store: openRunwayItemStore,
     gate: runwayGate,
-    async workspaces() {
-      const { choices, legacyHint } = await workspaceChoices();
-      return {
-        activeId: resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint),
-        workspaces: choices,
-      };
-    },
+    workspaces: runwayWorkspaces,
   });
   ipcMain.handle(IPC.runwayItemsList, (_e, args) => runwayItems.list(args));
   ipcMain.handle(IPC.runwayItemsAddIssue, (_e, args) => runwayItems.addIssue(args));
@@ -2245,6 +2252,32 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.runwayItemsMoveToNumber, (_e, args) => runwayItems.moveToNumber(args));
   ipcMain.handle(IPC.runwayItemsMoveUp, (_e, args) => runwayItems.moveUp(args));
   ipcMain.handle(IPC.runwayItemsMoveDown, (_e, args) => runwayItems.moveDown(args));
+
+  // Runway tickets' tracker data (VERM-84): read on the workspace's own
+  // connection only — its YouTrack server and credential reference, or its
+  // own Jira provider; under legacy storage every workspace shares the
+  // Settings YouTrack connection, which is then its own. No fallback to
+  // another workspace's credential. The rules live in
+  // services/runwayTicketFetch.ts, where they are unit-tested.
+  const resolveRunwayTickets = createRunwayTicketFetch({
+    workspaces: runwayWorkspaces,
+    items: (workspaceId) => openRunwayItemStore().list(workspaceId),
+    async reader(workspaceId, tracker): Promise<RunwayReaderResult> {
+      if (tracker === 'jira') {
+        const r = await workspaceJiraProvider(workspaceId);
+        if (!r.ok) return { ok: false, code: r.reason === 'error' ? 'refresh-failed' : r.reason, error: r.message };
+        return { ok: true, reader: jiraRunwayReader(r.provider, workspaceAdmission(r.provider, r.doc)) };
+      }
+      const cfg = await readConfig();
+      const yt =
+        workspaceStorageMode() === 'per-workspace'
+          ? await resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(workspaceId), cfg, credentialSourceIO, IS_E2E)
+          : await trackerConnection(cfg);
+      if (!yt.ok) return { ok: false, code: 'credential', error: yt.error };
+      return { ok: true, reader: youtrackRunwayReader(youtrackTracker(yt.url, yt.token)) };
+    },
+  });
+  ipcMain.handle(IPC.runwayItemsResolve, (_e, args) => resolveRunwayTickets(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {
