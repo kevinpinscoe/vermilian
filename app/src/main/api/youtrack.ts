@@ -161,7 +161,8 @@ interface RawIssue {
 
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
-import { buildIssueSearchQuery } from '../../shared/search';
+import { buildIssueIdsQuery, buildIssueSearchQuery } from '../../shared/search';
+import { isValidLocalId } from '../../shared/tracker';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
@@ -311,6 +312,31 @@ export async function searchIssues(
     `/api/issues?fields=${ISSUE_FIELDS}&query=${query}&$top=50`,
   );
   return raw.map(rawToBoardIssue);
+}
+
+// --- Runway tickets by ID (VERM-84) ---
+
+// One query for a batch of IDs (shared/search.ts buildIssueIdsQuery). YouTrack
+// answers 400 for the whole query when one ID does not exist; the caller then
+// reads each one on its own.
+export async function getIssuesByIds(url: string, token: string, issueIds: readonly string[]): Promise<BoardIssue[]> {
+  const q = buildIssueIdsQuery(issueIds);
+  if (!q) return [];
+  const raw = await request<RawIssue[]>(
+    url,
+    token,
+    `/api/issues?fields=${ISSUE_FIELDS}&query=${encodeURIComponent(q)}&$top=${issueIds.length}`,
+  );
+  return raw.map(rawToBoardIssue);
+}
+
+// One issue as a board row. Rejects with { status: 404 } for an ID the
+// credential cannot see or that does not exist.
+export async function getBoardIssue(url: string, token: string, issueId: string): Promise<BoardIssue> {
+  if (!isValidLocalId('youtrack', issueId)) {
+    throw { message: `Invalid YouTrack issue ID: ${JSON.stringify(issueId)}` } satisfies YouTrackError;
+  }
+  return rawToBoardIssue(await request<RawIssue>(url, token, `/api/issues/${issueId}?fields=${ISSUE_FIELDS}`));
 }
 
 // --- Issue detail (all fields including Notes, Date time entered) ---

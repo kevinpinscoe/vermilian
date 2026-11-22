@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildIssueSearchQuery } from './search';
+import { buildIssueIdsQuery, buildIssueSearchQuery } from './search';
 
 describe('buildIssueSearchQuery', () => {
   it('scopes a single project and appends the free-text terms', () => {
@@ -34,5 +34,16 @@ describe('buildIssueSearchQuery', () => {
   it('returns null when the query is empty after trimming', () => {
     expect(buildIssueSearchQuery(['TEST'], '')).toBeNull();
     expect(buildIssueSearchQuery(['TEST'], '   ')).toBeNull();
+  });
+});
+
+describe('buildIssueIdsQuery (VERM-84)', () => {
+  it('lists the IDs in one issue id: clause', () => {
+    expect(buildIssueIdsQuery(['READ-12', 'SYNC-3'])).toBe('issue id: READ-12, SYNC-3');
+  });
+  it('drops anything that is not a YouTrack ID, so nothing can change the query', () => {
+    expect(buildIssueIdsQuery(['READ-12', 'READ-1 or project: OPS', ''])).toBe('issue id: READ-12');
+    expect(buildIssueIdsQuery(['not an id'])).toBeNull();
+    expect(buildIssueIdsQuery([])).toBeNull();
   });
 });

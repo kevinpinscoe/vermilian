@@ -184,6 +184,14 @@ export async function searchJql(
 ): Promise<JiraSearchIssue[]> {
   logCall('searchJql', { jql: _jql });
   if (token === FAKE_JIRA_BAD_TOKEN) throw { status: 401, message: 'Client must be authenticated' };
+  // `key in ("A", "B")` (VERM-84): like Jira, one unknown key fails the whole query.
+  const keyList = /^key in \(([^)]*)\)$/.exec(_jql);
+  if (keyList) {
+    const keys = [...keyList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const hits = keys.map((k) => FAKE_JIRA_ISSUES.find((i) => i.key === k));
+    if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
+    return (hits as JiraSearchIssue[]).map((i) => ({ ...i, fields: { ...i.fields } }));
+  }
   const found = fakeTextSearch(_jql) ?? FAKE_JIRA_ISSUES.filter((i) => i.fields?.status?.statusCategory?.key !== 'done');
   return found.map((i) => ({ ...i, fields: { ...i.fields } }));
 }

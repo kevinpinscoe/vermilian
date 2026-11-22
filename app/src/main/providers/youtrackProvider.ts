@@ -11,7 +11,7 @@
 
 import type * as YouTrackClient from '../api/youtrack';
 import type { WritableTrackerProvider } from '../../shared/tracker';
-import { PRIORITY_OPTIONS } from '../../shared/workspace';
+import { PRIORITY_OPTIONS, type BoardIssue } from '../../shared/workspace';
 
 export interface YouTrackProvider extends WritableTrackerProvider {
   readonly kind: 'youtrack';
@@ -19,6 +19,10 @@ export interface YouTrackProvider extends WritableTrackerProvider {
   createIssue(payload: YouTrackClient.CreateIssuePayload): Promise<YouTrackClient.CreateIssueResult>;
   getIssuesForRecommendation(issueIds: string[]): Promise<YouTrackClient.RecommendationIssue[]>;
   getIssuesForStandup(projectShortNames: string[], cutoffMs: number): Promise<YouTrackClient.StandupIssues>;
+  /** Runway tickets by ID, one query (VERM-84); fails whole if one ID is unknown. */
+  getIssuesByIds(issueIds: readonly string[]): Promise<BoardIssue[]>;
+  /** One issue as a board row (VERM-84). */
+  getBoardIssue(issueId: string): Promise<BoardIssue>;
 }
 
 export function createYouTrackProvider(
@@ -47,5 +51,7 @@ export function createYouTrackProvider(
     getIssuesForRecommendation: (issueIds) => client.getIssuesForRecommendation(url, token, issueIds),
     getIssuesForStandup: (projectShortNames, cutoffMs) =>
       client.getIssuesForStandup(url, token, projectShortNames, cutoffMs),
+    getIssuesByIds: (issueIds) => client.getIssuesByIds(url, token, issueIds),
+    getBoardIssue: (issueId) => client.getBoardIssue(url, token, issueId),
   };
 }

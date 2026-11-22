@@ -224,6 +224,17 @@ export function jiraSearchJql(projectKeys: readonly string[], term: string): str
 }
 
 /**
+ * The JQL for a batch of Runway tickets by key (VERM-84):
+ * `key in ("READ-12", "READ-20")`. Keys that are not Jira keys are dropped.
+ * Like `key = "X"`, the whole query fails with a 400 when one key does not
+ * exist; the caller then reads each key on its own.
+ */
+export function jiraIssueKeysJql(keys: readonly string[]): string | null {
+  const valid = keys.filter((k) => isJiraIssueKey(k));
+  return valid.length ? `key in (${valid.map((k) => jqlString(k)).join(', ')})` : null;
+}
+
+/**
  * The issue key a search term names, uppercased as Jira compares keys, when
  * it is one and belongs to one of the given projects; otherwise null. Keys
  * outside the workspace are never looked up (credential isolation, VERM-61).
