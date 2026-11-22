@@ -620,8 +620,13 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
             // The Runway view (VERM-85), for either tracker and with or
             // without board projects; it needs no board to be available.
             <RunwayView
+              key={activeContext.data.workspaceId}
               workspaceId={activeContext.data.workspaceId}
               workspaceName={activeContext.data.workspaceName}
+              tracker={activeContext.data.backend?.kind ?? 'youtrack'}
+              searchScope={isJiraWorkspace
+                ? { kind: 'jira', workspaceId: activeContext.data.workspaceId }
+                : { kind: 'youtrack', projectShortNames: workspaceShortNames }}
               onOpenTicket={(issue) => {
                 const ctx = activeContext.data!;
                 if (isJiraWorkspace) setSelectedJiraIssue({ workspaceId: ctx.workspaceId, issueKey: issue.idReadable });

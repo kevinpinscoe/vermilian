@@ -73,6 +73,7 @@ export const IPC = {
   runwayItemsMoveUp: 'runway-items:move-up',
   runwayItemsMoveDown: 'runway-items:move-down',
   runwayItemsResolve: 'runway-items:resolve',
+  runwayItemsAddByReference: 'runway-items:add-by-reference',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -821,6 +822,10 @@ export interface VermilianAPI {
   // only (VERM-84). Read-only: any configured workspace. See
   // shared/runwayTicket.ts for the states and errors.
   runwayItemsResolve(args: RunwayItemsListArgs): Promise<import('./runwayTicket').RunwayTicketsResult>;
+  // Add a ticket by key or link to the active workspace's Runway (VERM-86):
+  // checked once on the workspace's own connection, then added through the
+  // write gate. See shared/runwayAdd.ts.
+  runwayItemsAddByReference(args: import('./runwayAdd').RunwayAddByReferenceArgs): Promise<import('./runwayAdd').RunwayAddResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board
@@ -923,6 +928,7 @@ export interface VermilianAPI {
   debugJiraChange?(change: unknown): Promise<boolean>;
   debugGetJiraCalls?(): Promise<Array<{ fn: string; projectKey?: string; key?: string; jql?: string; boardId?: number; at: number }>>;
   debugSetJiraSearchDelay?(ms: number): Promise<void>;
+  debugSetJiraGetIssueDelay?(ms: number): Promise<void>;
   // e2e-only (VERM-47): the credential reference each fake Claude call used.
   debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;
   // e2e-only (VERM-48): see main/api/fakeYouTrack.ts.

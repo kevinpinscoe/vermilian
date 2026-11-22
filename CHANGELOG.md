@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Add a ticket to the Runway** (VERM-86). The Runway view has an **Add** box that takes a ticket
+  key, a ticket link, or search text, with an optional **at #N** (the end by default). A link must
+  be on the workspace's own tracker; a link to any other host, the other tracker included, is
+  refused before any request. Add or Enter checks that exact key once, on the workspace's own
+  connection, and adds it through the Runway write gate. That works for a Jira workspace with no
+  projects or boards too, without widening search or detail reads. A key the tracker answers 404
+  for is refused with *Ticket missing or not readable with this workspace's credential.*, a
+  timeout can be retried, and switching workspace during the check cancels the add. The order is
+  unchanged by every refusal, and no project ever moves.
 - **Runway view** (VERM-85). A new **Runway** entry in the left rail, between Priority Desk and
   All tasks, shows the active workspace's Runway in its saved order: numbered tickets, section
   headings and notes. It works for YouTrack and Jira workspaces, including one with no board

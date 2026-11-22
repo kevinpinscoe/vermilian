@@ -137,6 +137,31 @@ function batchFailure(err: unknown): WorkspaceFailure | null {
 }
 
 /** One ticket's state from its single-read error; throws a workspace failure. */
+/**
+ * How one ticket's read failed, by the same rule as the Runway refresh: a
+ * ticket state (403, 404, 410), or a failure of the whole connection (401,
+ * or anything else — no answer, a timeout, 408, 429, 5xx). The Runway add's
+ * exact-key check (VERM-86) uses it too, so the two never disagree.
+ */
+export type TicketReadFailure =
+  | { scope: 'ticket'; state: 'not-readable' | 'missing-or-unreadable' | 'missing'; reason: string | null }
+  | { scope: 'workspace'; code: 'unauthorized' | 'refresh-failed'; message: string; timeout: boolean };
+
+export function classifyTicketReadError(err: unknown): TicketReadFailure {
+  switch (statusOf(err)) {
+    case 403:
+      return { scope: 'ticket', state: 'not-readable', reason: messageOf(err, 'HTTP 403') };
+    case 404:
+      return { scope: 'ticket', state: 'missing-or-unreadable', reason: null };
+    case 410:
+      return { scope: 'ticket', state: 'missing', reason: null };
+    default: {
+      const failure = workspaceFailure(err);
+      return { scope: 'workspace', code: failure.code as 'unauthorized' | 'refresh-failed', message: failure.message, timeout: isTimeout(err) };
+    }
+  }
+}
+
 function singleReadState(itemId: string, err: unknown): RunwayTicketRead {
   switch (statusOf(err)) {
     case 403:

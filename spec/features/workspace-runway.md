@@ -76,6 +76,24 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       YouTrack panel, or the Jira panel for a Jira workspace, including a Jira ticket that is only
       on the Runway. Closing the panel leaves the Runway's order and scroll position unchanged.
 
+### Adding a ticket
+
+- [ ] The Runway view's **Add** box takes a ticket key, a ticket link, or search text, and an
+      optional **at #N**; without one the ticket goes at the end (VERM-86).
+- [ ] A link must be on the workspace's own tracker host (its YouTrack server, or its Jira site),
+      checked before any request. A link to any other host — the other tracker's included — is
+      refused with a message naming the workspace's host.
+- [ ] Submitting Add, or pressing Enter, reads that exact key once on the workspace's own
+      connection, and on no other. This check does not widen search or detail admission: the Add
+      box's search covers only the workspace's own projects and Jira boards (VERM-61, VERM-83).
+- [ ] A ticket that passes is added once, through the Runway write gate, under the key the tracker
+      answered with. A 404 is refused with *Ticket missing or not readable with this workspace's
+      credential.*; a timeout, no answer, a rate limit or a server error is a retryable error; a
+      ticket already on the Runway is refused with no request. The order is unchanged by any
+      refusal.
+- [ ] Switching workspace while the check is in flight cancels the add.
+- [ ] Adding never moves a project or board in any workspace.
+
 ### Runway order
 
 - [ ] Ticket positions are numbered 1..N per workspace and stay **dense** — no gaps, no duplicates —
