@@ -25,7 +25,12 @@ export type RunwayRow =
       depth: number;
       /** Runway #: 1..T over ticket rows only. */
       runwayNumber: number;
-      /** The ticket's ID as the tracker shows it (READ-12), or the stored ID if it cannot be decoded. */
+      /**
+       * The ID shown: once resolved, the key the tracker answered with
+       * (issue.idReadable — READ-12, even for a row stored under a YouTrack
+       * entity ID such as 2-45, or a moved Jira ticket's new key); until then,
+       * the stored ID, which is all there is.
+       */
       ticketId: string;
       state: RunwayTicketDisplayState;
       /** Present only when state is 'resolved'. */
@@ -77,7 +82,8 @@ export function buildRunwayRows(
     }
     const read = byItem.get(item.itemId);
     if (!read) return { ...base, state: 'loading', issue: null, reason: null };
-    return { ...base, state: read.state, issue: read.state === 'resolved' ? read.issue : null, reason: readReason(read) };
+    if (read.state === 'resolved') return { ...base, ticketId: read.issue.idReadable, state: 'resolved', issue: read.issue, reason: null };
+    return { ...base, state: read.state, issue: null, reason: readReason(read) };
   });
 }
 

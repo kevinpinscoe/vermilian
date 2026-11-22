@@ -102,7 +102,9 @@ function RunwayRowView({ row, onOpenTicket }: { row: RunwayRow; onOpenTicket(iss
       <span className={styles.number} data-testid="runway-number">
         {row.runwayNumber}
       </span>
-      <span className={styles.ticketId}>{row.ticketId}</span>
+      <span className={styles.ticketId} data-testid="runway-ticket-id">
+        {row.ticketId}
+      </span>
       <span className={styles.summary}>{issue?.summary ?? ''}</span>
       {badge && (
         <span className={`${styles.badge} ${row.state === 'loading' ? styles.badgeQuiet : ''}`} data-testid="runway-state">

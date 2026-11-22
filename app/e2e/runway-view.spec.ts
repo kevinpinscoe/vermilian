@@ -4,7 +4,8 @@
  * YouTrack and a Jira workspace alike. A resolved ticket opens the
  * workspace's existing detail panel, and closing it leaves the order and the
  * list's scroll position as they were. The order is the same after a
- * relaunch of the same profile.
+ * relaunch of the same profile. The Jira workspace has no projects and no
+ * boards, so its tickets are admitted by their Runway rows alone.
  *
  * The Runway is seeded through the real IPC channels (runwayItems*, VERM-82);
  * tickets are read from the fake YouTrack and fake Jira (runwayItemsResolve,
@@ -52,7 +53,13 @@ const scrollTopOf = (page: Page) => tid(page, 'runway-list').evaluate((el) => el
  * Scrolls the list until `itemId` is in view, then opens it, closes the
  * panel with `close`, and checks that the order and scroll position held.
  */
-async function openAndCloseKeepsPlace(page: Page, itemId: string, panelId: string, closeTestId: string | null) {
+async function openAndCloseKeepsPlace(
+  page: Page,
+  itemId: string,
+  panelId: string,
+  closeTestId: string | null,
+  whileOpen: () => Promise<void> = async () => {},
+) {
   const before = await itemOrder(page);
   await row(page, itemId).scrollIntoViewIfNeeded();
   const scrolled = await scrollTopOf(page);
@@ -60,6 +67,7 @@ async function openAndCloseKeepsPlace(page: Page, itemId: string, panelId: strin
 
   await row(page, itemId).click();
   await expect(tid(page, panelId)).toBeVisible();
+  await whileOpen();
   if (closeTestId) await tid(page, closeTestId).click();
   else await tid(page, panelId).getByRole('button', { name: 'Close panel' }).click();
   await expect(tid(page, panelId)).toHaveCount(0);
@@ -94,8 +102,11 @@ test.describe('Runway view', () => {
       { issue: 'yt:TEST-4' },
     ]);
 
+    await expect(tid(page, 'nav-runway')).toBeVisible();
+    await expect(tid(page, 'nav-runway')).toHaveText('Runway');
     await tid(page, 'nav-runway').click();
     await expect(tid(page, 'nav-runway')).toHaveAttribute('aria-current', 'true');
+    await expect(tid(page, 'runway-view')).toBeVisible();
     await expect(rows(page)).toHaveCount(5 + FILLER + 1);
 
     const order = await itemOrder(page);
@@ -115,6 +126,7 @@ test.describe('Runway view', () => {
 
     // A ticket the tracker answers 404 for stays in place, with its reason.
     await expect(row(page, 'yt:TEST-2')).toHaveAttribute('data-state', 'resolved');
+    await expect(row(page, 'yt:TEST-2').getByTestId('runway-ticket-id')).toHaveText('TEST-2');
     await expect(row(page, 'yt:GONE-1')).toHaveAttribute('data-state', 'missing-or-unreadable');
     await expect(row(page, 'yt:GONE-1').getByTestId('runway-state')).toHaveText('Missing or not readable');
     await expect(row(page, 'yt:GONE-1').getByTestId('runway-reason')).toContainText('the tracker answered 404');
@@ -122,7 +134,9 @@ test.describe('Runway view', () => {
     // A resolved ticket far down the list opens the YouTrack detail panel;
     // closing it keeps the order and the scroll position.
     await expect(row(page, 'yt:TEST-4')).toHaveAttribute('data-state', 'resolved');
-    await openAndCloseKeepsPlace(page, 'yt:TEST-4', 'task-detail-panel', null);
+    await openAndCloseKeepsPlace(page, 'yt:TEST-4', 'task-detail-panel', null, async () => {
+      await expect(tid(page, 'task-detail-panel')).toContainText('TEST-4');
+    });
 
     // An unresolved ticket does not open a panel.
     await row(page, 'yt:GONE-1').click();
@@ -137,7 +151,7 @@ test.describe('Runway view', () => {
     expect(await itemOrder(page)).toEqual(order);
   });
 
-  test('a Jira Runway: a ticket from outside the projects opens the Jira panel and keeps the place', async () => {
+  test('a Jira workspace with no projects or boards: its Runway opens tickets in the Jira panel and keeps the place', async () => {
     app = await launchAppWithUserDataDir(freshUserDataDir(), { VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace' });
     const page = await app.firstWindow();
     await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
@@ -160,8 +174,10 @@ test.describe('Runway view', () => {
       name: 'Jira Runway',
       order: 1,
       backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
-      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+      // No projects and no boards: every ticket below is admitted by its Runway row alone.
+      folders: [],
     };
+    expect(jira.jiraBoards ?? []).toEqual([]);
     for (const doc of [base, jira]) {
       const r = await page.evaluate((d) => window.vermilian.createWorkspaceArticle(d), doc);
       expect(r.ok).toBe(true);
@@ -169,9 +185,9 @@ test.describe('Runway view', () => {
     await page.reload();
     await tid(page, 'workspace-switcher').click();
     await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Jira Runway' }).click();
-    await expect(tid(page, 'jira-workspace-board')).toBeVisible();
+    await expect(tid(page, 'jira-workspace-projects')).toHaveText('No Jira projects or boards chosen yet.');
 
-    // OPS-7 is in no project or board of this workspace: only its Runway row admits it.
+    // The workspace has no projects or boards, so only the Runway rows admit these tickets.
     await seed(page, 'ws-e2ejr85', [
       { issue: 'jira:DEMO-101' },
       { section: 'Operations' },
@@ -180,15 +196,24 @@ test.describe('Runway view', () => {
       { issue: 'jira:DEMO-999' },
     ]);
 
+    // Reachable from the rail even with nothing else in it.
+    await expect(tid(page, 'nav-runway')).toBeVisible();
     await tid(page, 'nav-runway').click();
+    await expect(tid(page, 'nav-runway')).toHaveAttribute('aria-current', 'true');
+    await expect(tid(page, 'runway-view')).toBeVisible();
     await expect(rows(page)).toHaveCount(2 + FILLER + 2);
     const order = await itemOrder(page);
     expect(order[0]).toBe('jira:DEMO-101');
     expect(order.slice(-2)).toEqual(['jira:OPS-7', 'jira:DEMO-999']);
     await expect(row(page, 'jira:OPS-7').getByTestId('runway-number')).toHaveText('2');
+    await expect(row(page, 'jira:DEMO-101')).toHaveAttribute('data-state', 'resolved');
+    await expect(row(page, 'jira:DEMO-101').getByTestId('runway-ticket-id')).toHaveText('DEMO-101');
     await expect(row(page, 'jira:OPS-7')).toHaveAttribute('data-state', 'resolved');
+    await expect(row(page, 'jira:OPS-7').getByTestId('runway-ticket-id')).toHaveText('OPS-7');
     await expect(row(page, 'jira:DEMO-999')).toHaveAttribute('data-state', 'missing-or-unreadable');
 
-    await openAndCloseKeepsPlace(page, 'jira:OPS-7', 'jira-issue-detail-panel', 'jira-detail-close');
+    await openAndCloseKeepsPlace(page, 'jira:OPS-7', 'jira-issue-detail-panel', 'jira-detail-close', async () => {
+      await expect(tid(page, 'jira-detail-issue-key')).toHaveText('OPS-7');
+    });
   });
 });

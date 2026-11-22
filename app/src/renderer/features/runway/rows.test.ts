@@ -82,6 +82,27 @@ describe('buildRunwayRows', () => {
     ]);
   });
 
+  it('a resolved row shows the tracker key, not the stored ID', () => {
+    // Stored under the YouTrack entity ID; the tracker answers with the readable key.
+    const resolved = { ...issue('READ-12', 'Cache articles locally'), id: '2-45' };
+    const rows = buildRunwayRows([item('yt:2-45', 'issue', 1), item('yt:2-46', 'issue', 2)], [
+      { itemId: 'yt:2-45', state: 'resolved', issue: resolved },
+      { itemId: 'yt:2-46', state: 'missing-or-unreadable' },
+    ]);
+    expect(rows.map((r) => (r.kind === 'ticket' ? [r.itemId, r.ticketId, r.state] : null))).toEqual([
+      ['yt:2-45', 'READ-12', 'resolved'],
+      // Unresolved, there is no key to show: the stored ID is all there is.
+      ['yt:2-46', '2-46', 'missing-or-unreadable'],
+    ]);
+  });
+
+  it('a moved Jira ticket shows the key the tracker answered with', () => {
+    const rows = buildRunwayRows([item('jira:DEMO-5', 'issue', 1)], [
+      { itemId: 'jira:DEMO-5', state: 'resolved', issue: issue('PLAT-40', 'Moved ticket') },
+    ]);
+    expect(rows[0]).toMatchObject({ itemId: 'jira:DEMO-5', ticketId: 'PLAT-40' });
+  });
+
   it('a failed read keeps every row, marked not refreshed with the error', () => {
     const rows = buildRunwayRows(ITEMS, null, 'The tracker refused this workspace’s credential: HTTP 401');
     expect(rows).toHaveLength(ITEMS.length);
