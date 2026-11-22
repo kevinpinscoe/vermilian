@@ -208,6 +208,7 @@ import {
 } from './services/runwayStore';
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
+import { jiraRunwayLookup, readAdmittedJiraIssue, type JiraAdmissionScope } from './providers/jiraAdmission';
 import type { NamespacedIssueId } from '../shared/tracker';
 import { defaultBoardConfig, dismissalKey, type BoardConfig, type Dismissals, type NotThisWeekDismissal } from '../shared/boardConfig';
 
@@ -1401,14 +1402,18 @@ export function registerIpc(): void {
     return { kind: 'project', projectKey, label: projectKey };
   }
 
-  // Whether an issue belongs to the workspace: in one of its projects, or on
-  // one of its boards by that board's own filter (VERM-59).
-  async function workspaceOwnsIssue(provider: JiraProvider, doc: WorkspaceDocument, issueKey: string): Promise<boolean> {
-    if (workspaceProjectIds(doc).includes(jiraProjectKeyOf(issueKey))) return true;
-    for (const id of workspaceBoardIds(doc)) {
-      if (await provider.isOnBoard(id, issueKey)) return true;
-    }
-    return false;
+  // Which single tickets the workspace may read (VERM-59, VERM-83): in one of
+  // its projects, on its own Runway, or on one of its boards — checked in that
+  // order by providers/jiraAdmission.ts, where it is unit-tested. Boards are
+  // asked through the workspace's own provider, and the Runway lookup sees
+  // this workspace's rows only.
+  function workspaceAdmission(provider: JiraProvider, doc: WorkspaceDocument): JiraAdmissionScope {
+    return {
+      projectKeys: workspaceProjectIds(doc),
+      boardIds: workspaceBoardIds(doc),
+      isOnBoard: (id, key) => provider.isOnBoard(id, key),
+      isOnRunway: jiraRunwayLookup(openRunwayItemStore, doc.workspaceId),
+    };
   }
 
   ipcMain.handle(
@@ -1518,21 +1523,17 @@ export function registerIpc(): void {
       if (!isJiraIssueKey(issueKey)) return { ok: false, message: 'That is not a Jira issue key.', reason: 'error', credentialRef: null };
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
-      // Only issues in the workspace's own projects or on its own boards, as
-      // for the board.
+      // Only issues the workspace admits — its projects, its Runway, its
+      // boards — rechecked under the key Jira answers with if the issue moved.
       try {
-        if (!(await workspaceOwnsIssue(p.provider, p.doc, issueKey))) {
-          return refused(`${issueKey} is not in one of this workspace's Jira projects or boards.`, p.doc);
-        }
-        const [issue, content] = await Promise.all([
-          p.provider.getIssueDetail(issueKey),
-          p.provider.getIssueContent(issueKey),
-        ]);
-        // Jira answers a moved issue's old key with the issue under its new
-        // key and project, which may be outside the workspace.
-        if (issue.idReadable !== issueKey && !(await workspaceOwnsIssue(p.provider, p.doc, issue.idReadable))) {
-          return refused(`${issueKey} has moved to ${issue.idReadable}, outside this workspace's Jira projects and boards.`, p.doc);
-        }
+        const read = await readAdmittedJiraIssue(
+          workspaceAdmission(p.provider, p.doc),
+          issueKey,
+          (key) => Promise.all([p.provider.getIssueDetail(key), p.provider.getIssueContent(key)]),
+          ([issue]) => issue.idReadable,
+        );
+        if (!read.ok) return refused(read.message, p.doc);
+        const [issue, content] = read.value;
         const siteUrl = p.doc.backend.kind === 'jira' ? p.doc.backend.siteUrl : '';
         return { ok: true, issue, issueUrl: jiraIssueUrl(siteUrl, issue.idReadable), content };
       } catch (e) {
@@ -1541,9 +1542,10 @@ export function registerIpc(): void {
     },
   );
 
-  // Board search (VERM-61): read-only, through the workspace's own provider,
-  // and never wider than the workspace's own projects — a key from any other
-  // project is not looked up. There is no fallback to another credential.
+  // Board search (VERM-61): read-only, through the workspace's own provider.
+  // Text search covers the workspace's projects and boards; an exact key is
+  // returned only when the workspace admits it, which includes a ticket on its
+  // own Runway (VERM-83). There is no fallback to another credential.
   ipcMain.handle(
     IPC.searchWorkspaceJiraIssues,
     async (_e, args: unknown): Promise<SearchWorkspaceJiraIssuesResult> => {
@@ -1552,7 +1554,8 @@ export function registerIpc(): void {
       const p = await workspaceJiraProvider(a.workspaceId);
       if (!p.ok) return p;
       try {
-        const scope = { projectKeys: workspaceProjectIds(p.doc), boardIds: workspaceBoardIds(p.doc) };
+        const { projectKeys, boardIds, isOnRunway } = workspaceAdmission(p.provider, p.doc);
+        const scope = { projectKeys, boardIds, isOnRunway };
         return { ok: true, issues: await p.provider.searchWorkspace(scope, query) };
       } catch (e) {
         return jiraFailure(a.workspaceId, p.doc, e, 'The Jira search failed.');
