@@ -30,6 +30,7 @@ import { jiraPriorityOrder } from '../../shared/priority';
 import { mapJiraIssueContent, type JiraIssueContent } from '../../shared/jiraContent';
 import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
 import type { BoardIssue } from '../../shared/workspace';
+import { jiraWorkspaceAdmits } from './jiraAdmission';
 
 // How many of a project's open issues to try for editmeta before giving up.
 // Normally the first answers; a later one helps only when the user cannot
@@ -41,6 +42,13 @@ export interface JiraConnection {
   base: string;
   email: string;
   token: string;
+}
+
+export interface JiraSearchScope {
+  projectKeys: readonly string[];
+  boardIds: readonly number[];
+  /** Whether a key is on this workspace's own Runway; absent means none is. */
+  isOnRunway?: (key: string) => boolean;
 }
 
 export interface JiraProvider extends TrackerProvider {
@@ -68,10 +76,12 @@ export interface JiraProvider extends TrackerProvider {
   isOnBoard(boardId: number, key: string): Promise<boolean>;
   /**
    * Key or text search over a workspace's chosen projects and boards, Done
-   * included (VERM-61, VERM-59). An exact key is returned only when it is in
-   * one of the projects or on one of the boards.
+   * included (VERM-61, VERM-59). An exact key is returned only when the
+   * workspace admits it (jiraWorkspaceAdmits): in one of the projects, on the
+   * workspace's own Runway (VERM-83), or on one of the boards. Text search
+   * stays over the projects and boards only.
    */
-  searchWorkspace(scope: { projectKeys: readonly string[]; boardIds: readonly number[] }, query: string): Promise<BoardIssue[]>;
+  searchWorkspace(scope: JiraSearchScope, query: string): Promise<BoardIssue[]>;
   /** The connection's own accountId: what "Me" means on this workspace's board (VERM-62). */
   getMyAccountId(): Promise<string>;
 }
@@ -224,11 +234,15 @@ export function createJiraProvider(
         if (!client.isValidBoardId(id)) throw { message: `Invalid Jira board ID: ${JSON.stringify(id)}` };
       }
       const term = query.trim();
-      if (!term || (scope.projectKeys.length === 0 && scope.boardIds.length === 0)) return [];
-      // A key-shaped term is looked up directly, then kept only if it is in
-      // one of the projects or on one of the boards.
+      if (!term) return [];
+      const isOnRunway = scope.isOnRunway ?? (() => false);
+      // A key-shaped term is looked up directly, then kept only if the
+      // workspace admits the key Jira answers with — which, for a moved
+      // issue, is its new key.
       const asKey = term.toUpperCase();
       const keyLike = jiraSearchKey([jiraProjectKeyOf(asKey)], term);
+      // With no projects and no boards, only a key on the Runway can match.
+      if (scope.projectKeys.length === 0 && scope.boardIds.length === 0 && !(keyLike && isOnRunway(keyLike))) return [];
       const [byKey, byText] = await Promise.all([
         keyLike
           ? client.getIssue(base, email, token, keyLike, anyProjectFields()).catch((e: unknown) => {
@@ -240,9 +254,16 @@ export function createJiraProvider(
       ]);
       let exact: typeof byText = [];
       if (byKey) {
-        const inProject = scope.projectKeys.includes(jiraProjectKeyOf(byKey.key));
-        const onBoard = inProject ? false : (await Promise.all(scope.boardIds.map((id) => client.isIssueOnBoard(base, email, token, id, byKey.key)))).some(Boolean);
-        if (inProject || onBoard) exact = [byKey];
+        const admitted = await jiraWorkspaceAdmits(
+          {
+            projectKeys: scope.projectKeys,
+            boardIds: scope.boardIds,
+            isOnBoard: (id, key) => client.isIssueOnBoard(base, email, token, id, key),
+            isOnRunway,
+          },
+          byKey.key,
+        );
+        if (admitted) exact = [byKey];
       }
       const seen = new Set<string>();
       return [...exact, ...byText].filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true))).map(mapIssue);

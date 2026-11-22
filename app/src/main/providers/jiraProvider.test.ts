@@ -356,6 +356,19 @@ describe('createJiraProvider boards', () => {
     expect(client.isIssueOnBoard).not.toHaveBeenCalled();
   });
 
+  it('searchWorkspace finds an exact key on the Runway with no projects or boards, and asks nothing otherwise', async () => {
+    const client = stubClient({ getIssue: vi.fn(async () => OPS) });
+    const onRunway = (key: string) => key === 'OPS-4';
+    const found = await createJiraProvider(client, CONN).searchWorkspace({ projectKeys: [], boardIds: [], isOnRunway: onRunway }, 'ops-4');
+    expect(found.map((i) => i.idReadable)).toEqual(['OPS-4']);
+    // Text search stays over the (empty) projects and boards.
+    expect(client.searchJql).not.toHaveBeenCalled();
+
+    const other = stubClient({ getIssue: vi.fn(async () => OPS) });
+    expect(await createJiraProvider(other, CONN).searchWorkspace({ projectKeys: [], boardIds: [], isOnRunway: onRunway }, 'OPS-5')).toEqual([]);
+    expect(other.getIssue).not.toHaveBeenCalled();
+  });
+
   it('searchWorkspace refuses an invalid board ID and asks nothing for an empty term', async () => {
     const client = stubClient();
     const p = createJiraProvider(client, CONN);
