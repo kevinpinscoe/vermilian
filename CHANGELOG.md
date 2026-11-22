@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which copy is newer: it warns when the import would change a dismissal, or restore a Desk entry
   or Runway row that is not on this computer (perhaps removed after the export). A snapshot that
   holds exactly this computer's data shows no warning.
+- **Runway order store** (VERM-80), the main-process operations behind a Workspace Runway: add a
+  ticket at the end or at #N, remove a row, move a row to #N, and move it up or down. Each
+  operation is one database transaction that renumbers the workspace, so positions are always
+  1..N with no gaps. A number past the end means last. Only rows whose position actually changes
+  get a new change time, so a move that changes nothing records no change. The same ticket can
+  sit at different positions in different workspaces. Adding a ticket never changes a
+  workspace's projects or folders, and never writes to the tracker. Nothing in the app uses this
+  yet; the IPC contract follows in VERM-82.
 
 ### Changed
 
