@@ -61,6 +61,21 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [ ] Jira: the workspace ownership check that gates detail and link reads also admits a ticket
       that is on that workspace's Runway, on that workspace's own connection.
 
+### Runway view
+
+- [ ] A **Runway** entry in the left rail, between Priority Desk and All tasks, opens the active
+      workspace's Runway in place of the board (VERM-85). It is there for YouTrack and Jira
+      workspaces, including a workspace with no board projects.
+- [ ] The view shows every saved row in its stored order: numbered tickets, section headings and
+      notes, with their depth. The order comes from the local store; each ticket's details come
+      from its tracker on the workspace's own connection.
+- [ ] A ticket that did not resolve stays in place with its Runway #, its state and the reason
+      (*Missing or not readable*, *Not readable*, *Missing*, *Wrong tracker*). If the whole read
+      fails, every row stays, marked *Not refreshed*, under one warning.
+- [ ] Clicking a resolved ticket opens the active workspace's existing detail panel — the
+      YouTrack panel, or the Jira panel for a Jira workspace, including a Jira ticket that is only
+      on the Runway. Closing the panel leaves the Runway's order and scroll position unchanged.
+
 ### Runway order
 
 - [ ] Ticket positions are numbered 1..N per workspace and stay **dense** — no gaps, no duplicates —

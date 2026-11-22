@@ -31,6 +31,9 @@ import {
 import { JiraProjectsModal } from './features/workspace-nav/JiraProjectsModal';
 import { JiraWorkspaceBoard } from './features/jira-board/JiraWorkspaceBoard';
 import { JiraPriorityDesk } from './features/jira-board/JiraPriorityDesk';
+import { RunwayView } from './features/runway/RunwayView';
+import { useRunwayItems } from './features/runway/api';
+import { jiraRunwayKeys } from './features/runway/rows';
 import { JiraIssueDetailPanel } from './features/jira-board/JiraIssueDetailPanel';
 import { jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
@@ -164,6 +167,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   const activeProjectShortName = useWorkspaceStore((s) => s.activeProjectShortName);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const priorityDeskActive = useWorkspaceStore((s) => s.priorityDeskActive);
+  const runwayActive = useWorkspaceStore((s) => s.runwayActive);
   const selectedIssueId = useWorkspaceStore((s) => s.selectedIssueId);
   const setSelectedIssue = useWorkspaceStore((s) => s.setSelectedIssue);
   const projects = useProjects();
@@ -207,6 +211,14 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   // only while its workspace is the active Jira board and its project is still
   // one of that workspace's, so a switch or a project change closes it.
   const [selectedJiraIssue, setSelectedJiraIssue] = useState<{ workspaceId: string; issueKey: string } | null>(null);
+  // The active Jira workspace's Runway keys (VERM-85): a Runway ticket from
+  // outside its projects and boards opens too, as the main process admits it
+  // (VERM-83). The rows' order is shared with the Runway view's own query.
+  const activeRunwayItems = useRunwayItems(isJiraWorkspace ? (activeContext.data?.workspaceId ?? null) : null);
+  const activeJiraRunwayKeys = useMemo(
+    () => jiraRunwayKeys(activeRunwayItems.data?.ok ? activeRunwayItems.data.items : []),
+    [activeRunwayItems.data],
+  );
   const openJiraIssueKey =
     selectedJiraIssue &&
     activeContext.data?.backend?.kind === 'jira' &&
@@ -214,7 +226,9 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
     activeContext.data.workspaceId === selectedJiraIssue.workspaceId &&
     // An issue on one of the chosen boards can come from any project; the
     // main process checks its board membership when the panel reads it.
-    (activeJiraBoards.length > 0 || activeJiraProjectKeys.includes(jiraProjectKeyOf(selectedJiraIssue.issueKey)))
+    (activeJiraBoards.length > 0 ||
+      activeJiraProjectKeys.includes(jiraProjectKeyOf(selectedJiraIssue.issueKey)) ||
+      activeJiraRunwayKeys.includes(selectedJiraIssue.issueKey))
       ? selectedJiraIssue.issueKey
       : null;
   const closeJiraIssue = useCallback(() => setSelectedJiraIssue(null), []);
@@ -602,7 +616,19 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
         />
 
         <main className={styles.content}>
-          {activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' && priorityDeskActive ? (
+          {runwayActive && activeContext.data ? (
+            // The Runway view (VERM-85), for either tracker and with or
+            // without board projects; it needs no board to be available.
+            <RunwayView
+              workspaceId={activeContext.data.workspaceId}
+              workspaceName={activeContext.data.workspaceName}
+              onOpenTicket={(issue) => {
+                const ctx = activeContext.data!;
+                if (isJiraWorkspace) setSelectedJiraIssue({ workspaceId: ctx.workspaceId, issueKey: issue.idReadable });
+                else setSelectedIssue(issue.id);
+              }}
+            />
+          ) : activeContext.data?.backend?.kind === 'jira' && activeContext.data.storage === 'per-workspace' && priorityDeskActive ? (
             // The Jira Priority Desk (VERM-38): ranks from the local Runway store.
             <JiraPriorityDesk
               workspaceId={activeContext.data.workspaceId}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IconButton, Loader, Text, Divider, AttentionBox } from '@vibe/core';
-import { Settings, Inbox, Menu as MenuIcon, Favorite } from '@vibe/icons';
+import { Settings, Inbox, Menu as MenuIcon, Favorite, Numbers } from '@vibe/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -851,12 +851,14 @@ export function WorkspaceNav({
     activeWorkspaceId,
     activeProjectId,
     priorityDeskActive,
+    runwayActive,
     railCollapsed,
     expandedFolderIds,
     expandedHydrated,
     setActiveWorkspace,
     setActiveProject,
     openPriorityDesk,
+    openRunway,
     toggleRail,
     toggleFolder,
     expandFolder,
@@ -1182,6 +1184,23 @@ export function WorkspaceNav({
               <Favorite size={14} />
               {!contentCollapsed && (
                 <Text type="text2" className={styles.allTasksLabel}>Priority Desk</Text>
+              )}
+            </button>
+
+            {/* Runway — the workspace's ordered plan, between the Desk and
+                All tasks (VERM-85). Every workspace has one, with or without
+                board projects. */}
+            <button
+              type="button"
+              data-testid="nav-runway"
+              aria-current={runwayActive ? 'true' : undefined}
+              className={`${styles.allTasksRow} ${runwayActive ? styles.allTasksRowActive : ''}`}
+              onClick={openRunway}
+              title={contentCollapsed ? 'Runway' : undefined}
+            >
+              <Numbers size={14} />
+              {!contentCollapsed && (
+                <Text type="text2" className={styles.allTasksLabel}>Runway</Text>
               )}
             </button>
 
