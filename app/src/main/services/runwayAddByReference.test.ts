@@ -68,7 +68,7 @@ function harness(opts: { answers?: Record<string, Answer>; reader?: RunwayReader
     throw a;
   });
   const reader = vi.fn(async (_workspaceId: string, _tracker: string) => opts.reader ?? ({ ok: true, reader: { batch: vi.fn(), one } } as RunwayReaderResult));
-  const handlers = createRunwayItemHandlers({ store: () => store, gate, workspaces });
+  const handlers = createRunwayItemHandlers({ store: () => store, gate, workspaces, generation: () => generation });
   const addIssueOnce = vi.fn(handlers.addIssueOnce);
   const add = createRunwayAddByReference({
     workspaces,

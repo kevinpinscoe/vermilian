@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Remove asks first, on the row (*Remove READ-12 from this Runway?*, or a heading's or note's own
   text), and takes that row off the active workspace's Runway only — the tracker ticket and any
   other workspace's Runway are untouched. Each action is one write through the Runway write gate,
-  positions and Runway # stay dense, and the order survives a restart.
+  positions and Runway # stay dense, and the order survives a restart. Any workspace switch while
+  an edit waits for the write gate cancels it — a round trip back to the same workspace included —
+  and leaves both Runways as they were.
 - **Add a ticket to the Runway** (VERM-86). The Runway view has an **Add** box that takes a ticket
   key, a ticket link, or search text, with an optional **at #N** (the end by default). A link must
   be on the workspace's own tracker; a link to any other host, the other tracker included, is

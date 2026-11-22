@@ -114,6 +114,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       note its own text, with **Remove** and **Cancel**. Confirming removes only that row from the
       active workspace's Runway; the tracker ticket and its rows on other workspaces' Runways are
       untouched.
+- [ ] Remove and every Move capture the workspace-switch generation when the main process
+      receives the request, and check it inside the Runway write gate after the last awaited
+      validation, immediately before the write. Any switch while the edit waits — including a round
+      trip A → B → A — cancels it, and neither workspace's Runway changes.
 - [ ] All tasks and the ticket detail panel have a **Runway #** control. Empty, it offers
       *Add at end* and *Add at #N*; filled, it offers *Move to #N* and *Remove*.
 - [ ] **Section** and **note** rows keep the structure of an imported schedule. They appear in the

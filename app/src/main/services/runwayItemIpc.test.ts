@@ -32,9 +32,20 @@ let config: RunwayWorkspaces;
 let configError: Error | null;
 let handlers: RunwayItemHandlers;
 let tick: number;
+/** The workspace-switch generation; switchTo() bumps it as writeStoredActiveWorkspaceId does. */
+let generation: number;
+/** Runs during every workspace-configuration read, when set. */
+let onWorkspacesRead: (() => void) | null;
+
+function switchTo(id: string): void {
+  config.activeId = id;
+  generation++;
+}
 
 beforeEach(() => {
   tick = 0;
+  generation = 0;
+  onWorkspacesRead = null;
   dir = mkdtempSync(join(tmpdir(), 'vermilian-runway-ipc-'));
   db = openRunwayDb(join(dir, 'runway-metadata.sqlite'));
   store = createRunwayItemStore(db, () => new Date(Date.UTC(2026, 0, 1) + tick++ * 1000));
@@ -63,8 +74,10 @@ beforeEach(() => {
     },
     workspaces: async () => {
       if (configError) throw configError;
+      onWorkspacesRead?.();
       return config;
     },
+    generation: () => generation,
   });
 });
 afterEach(() => {
@@ -313,6 +326,103 @@ describe('writes', () => {
     expect(ids(await handlers.list({ workspaceId: A }))).toEqual(beforeA);
     expect(ids(await handlers.list({ workspaceId: B }))).toEqual(beforeB);
     expect(snapshot()).toEqual(before);
+  });
+
+  describe('Remove and every Move: the workspace-switch generation (VERM-87)', () => {
+    const A = YT_LEGACY;
+    const B = YT_OTHER;
+    let noteId: string;
+
+    beforeEach(() => {
+      store.addIssue(A, yt('2-1'));
+      noteId = store.addNote(A, 'a note').find((i) => i.kind === 'note')!.itemId;
+      store.addIssue(A, yt('2-2'));
+      store.addIssue(A, yt('2-3'));
+      store.addIssue(B, yt('3-1'));
+      store.addIssue(B, yt('3-2'));
+    });
+
+    /** Remove and all four Moves for A, queued in this order. */
+    const edits = () => [
+      handlers.moveDown({ workspaceId: A, itemId: yt('2-1') }),
+      handlers.moveUp({ workspaceId: A, itemId: yt('2-3') }),
+      handlers.moveToNumber({ workspaceId: A, itemId: yt('2-2'), runwayNumber: 1 }),
+      handlers.move({ workspaceId: A, itemId: noteId, position: 4 }),
+      handlers.remove({ workspaceId: A, itemId: yt('2-1') }),
+    ];
+
+    function holdGate() {
+      let release!: () => void;
+      const held = gate.run(() => new Promise<void>((resolve) => (release = resolve)));
+      return { held, release: () => release() };
+    }
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    it('A → B → A while the edits wait behind a held gate cancels every one; both Runways keep their rows and order', async () => {
+      const before = snapshot();
+      const beforeA = ids(await handlers.list({ workspaceId: A }));
+      const beforeB = ids(await handlers.list({ workspaceId: B }));
+      expect(beforeA).toEqual([yt('2-1'), noteId, yt('2-2'), yt('2-3')]);
+
+      const gateHeld = holdGate();
+      // A is active on arrival: the early checks pass and every edit queues.
+      const pending = Promise.all(edits());
+      await settle();
+      expect(snapshot()).toEqual(before);
+
+      switchTo(B);
+      switchTo(A); // back to A: the active ID alone would let the edits through
+      gateHeld.release();
+      await gateHeld.held;
+
+      const results = await pending;
+      expect(results).toHaveLength(5);
+      for (const result of results) expectRefused(result, 'cancelled');
+      expect(ids(await handlers.list({ workspaceId: A }))).toEqual(beforeA);
+      expect(ids(await handlers.list({ workspaceId: B }))).toEqual(beforeB);
+      expect(snapshot()).toEqual(before);
+    });
+
+    it('control: staying in A, the same queued edits all go through once the gate frees', async () => {
+      const beforeB = ids(await handlers.list({ workspaceId: B }));
+      const gateHeld = holdGate();
+      const pending = Promise.all(edits());
+      await settle();
+      gateHeld.release();
+      await gateHeld.held;
+
+      const results = await pending;
+      for (const result of results) expect(result.ok, JSON.stringify(result)).toBe(true);
+      // moveDown 2-1, moveUp 2-3, 2-2 to #1, the note to row 4, remove 2-1 — in queue order.
+      const after = items(await handlers.list({ workspaceId: A }));
+      expect(after.map((i) => i.itemId)).toEqual([yt('2-2'), yt('2-3'), noteId]);
+      expect(after.map((i) => i.position)).toEqual([1, 2, 3]);
+      expect(after.map((i) => i.runwayNumber)).toEqual([1, 2, null]);
+      expect(ids(await handlers.list({ workspaceId: B }))).toEqual(beforeB);
+    });
+
+    it('a round trip during the in-gate validation itself is caught: the check runs after the last await', async () => {
+      const before = snapshot();
+      const gateHeld = holdGate();
+      const pending = handlers.moveDown({ workspaceId: A, itemId: yt('2-1') });
+      await settle();
+      // The next configuration read is the one inside the gate.
+      onWorkspacesRead = () => {
+        onWorkspacesRead = null;
+        switchTo(B);
+        switchTo(A);
+      };
+      gateHeld.release();
+      await gateHeld.held;
+      expectRefused(await pending, 'cancelled');
+      expect(snapshot()).toEqual(before);
+    });
+
+    it('a switch before the request arrives does not cancel it', async () => {
+      switchTo(B);
+      switchTo(A);
+      expect(ids(await handlers.moveDown({ workspaceId: A, itemId: yt('2-1') }))).toEqual([noteId, yt('2-1'), yt('2-2'), yt('2-3')]);
+    });
   });
 
   it("a ticket addition queued before the workspace's tracker changes is refused as wrong-tracker", async () => {

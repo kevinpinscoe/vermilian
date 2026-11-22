@@ -18,6 +18,12 @@
 //      the snapshot import and every other Runway write. Rules 2–4 are
 //      checked again inside the gate, immediately before the write: a write
 //      queued for workspace A that finds B active by then is refused.
+//   6. Remove and every Move (VERM-87) also capture the workspace-switch
+//      generation when the request arrives. Inside the gate, after the last
+//      awaited validation and immediately before the write — with no await
+//      in between — a changed generation cancels the edit. Any switch counts,
+//      so a round trip A → B → A while the edit waits cancels it too, where
+//      rule 3 alone would let it through.
 
 import type {
   RunwayItemsAddIssueArgs,
@@ -55,6 +61,11 @@ export interface RunwayItemIpcDeps {
   gate: { run<T>(operation: () => T | Promise<T>): Promise<T> };
   /** Reads the workspace configuration (legacy or per-workspace storage). */
   workspaces: () => Promise<RunwayWorkspaces>;
+  /**
+   * The workspace-switch generation (activeWorkspaceGeneration): bumped on
+   * every switch of the active workspace, including back to the same one.
+   */
+  generation: () => number;
 }
 
 export interface RunwayItemHandlers {
@@ -162,17 +173,25 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
   function write<A>(
     check: ((tracker: TrackerKind, workspaceId: string, args: A) => void) | null,
     op: (store: RunwayItemStore, workspaceId: string, args: A) => RunwayItem[],
+    { cancelOnSwitch = false }: { cancelOnSwitch?: boolean } = {},
   ) {
     const validate = async (workspaceId: string, args: A) => {
       const tracker = await resolve(workspaceId, true);
       check?.(tracker, workspaceId, args);
     };
     return async (args: A): Promise<RunwayItemsResult> => {
+      // Captured on arrival, before anything is awaited (rule 6).
+      const startGeneration = deps.generation();
       try {
         const workspaceId = workspaceIdOf(args);
         await validate(workspaceId, args);
         const items = await deps.gate.run(async () => {
           await validate(workspaceId, args);
+          // After the last await, immediately before the write: nothing can
+          // switch the workspace between this check and the store call.
+          if (cancelOnSwitch && deps.generation() !== startGeneration) {
+            throw new Refusal('cancelled', 'The edit was cancelled because the active workspace was switched while it was waiting.');
+          }
           return op(deps.store(), workspaceId, args);
         });
         return { ok: true, items };
@@ -181,6 +200,9 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
       }
     };
   }
+
+  /** Remove and the Moves: cancelled by any workspace switch while they wait (rule 6). */
+  const edit = { cancelOnSwitch: true };
 
   const ticketCheck = (tracker: TrackerKind, workspaceId: string, args: { issueId: unknown }) =>
     refuseTicket(tracker, workspaceId, args.issueId);
@@ -205,11 +227,11 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
     addNote: write<RunwayItemsAddStructuralArgs>(null, (s, ws, a) =>
       s.addNote(ws, a.text, { depth: a.depth, position: a.position }),
     ),
-    remove: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.remove(ws, a.itemId)),
-    move: write<RunwayItemsMoveArgs>(null, (s, ws, a) => s.move(ws, a.itemId, a.position)),
-    moveToNumber: write<RunwayItemsMoveToNumberArgs>(null, (s, ws, a) => s.moveToNumber(ws, a.itemId, a.runwayNumber)),
-    moveUp: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveUp(ws, a.itemId)),
-    moveDown: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveDown(ws, a.itemId)),
+    remove: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.remove(ws, a.itemId), edit),
+    move: write<RunwayItemsMoveArgs>(null, (s, ws, a) => s.move(ws, a.itemId, a.position), edit),
+    moveToNumber: write<RunwayItemsMoveToNumberArgs>(null, (s, ws, a) => s.moveToNumber(ws, a.itemId, a.runwayNumber), edit),
+    moveUp: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveUp(ws, a.itemId), edit),
+    moveDown: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveDown(ws, a.itemId), edit),
 
     async addIssueOnce(args) {
       const cancelled = () => new Refusal('cancelled', 'The add was cancelled because the active workspace was switched while the ticket was being checked.');

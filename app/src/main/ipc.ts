@@ -2243,6 +2243,7 @@ export function registerIpc(): void {
     store: openRunwayItemStore,
     gate: runwayGate,
     workspaces: runwayWorkspaces,
+    generation: activeWorkspaceGeneration,
   });
   ipcMain.handle(IPC.runwayItemsList, (_e, args) => runwayItems.list(args));
   ipcMain.handle(IPC.runwayItemsAddIssue, (_e, args) => runwayItems.addIssue(args));
