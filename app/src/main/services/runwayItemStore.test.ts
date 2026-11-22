@@ -94,6 +94,7 @@ describe('list', () => {
         itemId: 'jira:DEMO-1',
         kind: 'issue',
         position: 1,
+        runwayNumber: 1,
         depth: 0,
         text: null,
         addedAt: '2026-01-01T00:00:00.000Z',
@@ -104,6 +105,7 @@ describe('list', () => {
         itemId: 'yt:2-7',
         kind: 'issue',
         position: 2,
+        runwayNumber: 2,
         depth: 0,
         text: null,
         addedAt: '2026-01-01T00:00:01.000Z',
@@ -397,6 +399,257 @@ describe('imported sections and notes', () => {
     store.remove('ws-a', 'sec:cccc');
     expect(ids(store.list('ws-a'))).not.toContain('sec:cccc');
     expectDense('ws-a');
+  });
+});
+
+describe('section and note rows (VERM-81)', () => {
+  let n: number;
+  const numbered = () => {
+    n = 0;
+    return createRunwayItemStore(db, clock, () => `id${++n}`);
+  };
+  /** [itemId, Runway #] per row, in row order. */
+  const numbers = (workspaceId: string, s: RunwayItemStore = store) =>
+    s.list(workspaceId).map((i) => [i.itemId, i.runwayNumber]);
+
+  it('adds a section and a note with text and depth at the end', () => {
+    const s = numbered();
+    s.addIssue('ws-a', jira('DEMO-1'));
+    s.addSection('ws-a', 'Later', { depth: 1 });
+    s.addNote('ws-a', 'Look at DEMO-9 again', { depth: 2 });
+    expect(s.list('ws-a').map(({ itemId, kind, position, depth, text }) => ({ itemId, kind, position, depth, text })))
+      .toEqual([
+        { itemId: 'jira:DEMO-1', kind: 'issue', position: 1, depth: 0, text: null },
+        { itemId: 'sec:id1', kind: 'section', position: 2, depth: 1, text: 'Later' },
+        { itemId: 'note:id2', kind: 'note', position: 3, depth: 2, text: 'Look at DEMO-9 again' },
+      ]);
+    expectDense('ws-a');
+  });
+
+  it('generates distinct sec: and note: IDs by default', () => {
+    store.addSection('ws-a', 'Later');
+    store.addSection('ws-a', 'Later');
+    store.addNote('ws-a', 'Same text');
+    store.addNote('ws-a', 'Same text');
+    const got = ids(store.list('ws-a'));
+    expect(new Set(got).size).toBe(4);
+    expect(got.filter((id) => /^sec:[0-9a-f-]{36}$/.test(id))).toHaveLength(2);
+    expect(got.filter((id) => /^note:[0-9a-f-]{36}$/.test(id))).toHaveLength(2);
+  });
+
+  it('adds a section or note at a row position, shifting later rows', () => {
+    const s = numbered();
+    seed('ws-a', ['DEMO-1', 'DEMO-2']);
+    s.addSection('ws-a', 'Phase two', { position: 2 });
+    s.addNote('ws-a', 'Intro', { position: 1 });
+    s.addNote('ws-a', 'Tail', { position: 99 });
+    expect(ids(s.list('ws-a'))).toEqual(['note:id2', 'jira:DEMO-1', 'sec:id1', 'jira:DEMO-2', 'note:id3']);
+    expectDense('ws-a');
+  });
+
+  it('refuses bad text, depth and position and writes nothing', () => {
+    seed('ws-a', ['DEMO-1']);
+    const before = rawRows('ws-a');
+    expectStoreError(() => store.addSection('ws-a', ''), 'invalid-text');
+    expectStoreError(() => store.addNote('ws-a', '   \n'), 'invalid-text');
+    for (const depth of [-1, 5, 1.5, Number.NaN]) {
+      expectStoreError(() => store.addSection('ws-a', 'X', { depth }), 'invalid-depth');
+    }
+    for (const position of [0, -2, 2.5]) {
+      expectStoreError(() => store.addNote('ws-a', 'X', { position }), 'invalid-position');
+    }
+    expectStoreError(() => store.addSection('', 'X'), 'invalid-workspace');
+    expect(rawRows('ws-a')).toEqual(before);
+  });
+
+  it('section and note rows keep their position and depth as tickets come and go', () => {
+    const s = numbered();
+    s.addSection('ws-a', 'Phase one');
+    seed('ws-a', ['DEMO-1', 'DEMO-2']);
+    s.addNote('ws-a', 'Indented', { depth: 3 });
+    s.addIssue('ws-a', jira('DEMO-3'));
+    s.addIssueAtNumber('ws-a', jira('DEMO-10'), 1);
+    s.remove('ws-a', jira('DEMO-2'));
+    s.moveToNumber('ws-a', jira('DEMO-3'), 1);
+    const structural = s.list('ws-a').filter((i) => i.kind !== 'issue');
+    expect(structural.map(({ itemId, depth, text }) => ({ itemId, depth, text }))).toEqual([
+      { itemId: 'sec:id1', depth: 0, text: 'Phase one' },
+      { itemId: 'note:id2', depth: 3, text: 'Indented' },
+    ]);
+    expect(ids(s.list('ws-a'))).toEqual(['sec:id1', 'jira:DEMO-3', 'jira:DEMO-10', 'jira:DEMO-1', 'note:id2']);
+    expectDense('ws-a');
+  });
+
+  it('Runway # counts ticket rows only, and is null on sections and notes', () => {
+    // The synthetic worked example in spec/features/workspace-runway.md.
+    const s = numbered();
+    s.addNote('ws-a', 'Readers lose their place on the train.');
+    for (const id of ['2-12', '3-3', '2-14', '3-7', '2-20']) s.addIssue('ws-a', yt(id));
+    s.addSection('ws-a', 'Later');
+    s.addNote('ws-a', 'Look at READ-9 again', { depth: 1 });
+    expect(numbers('ws-a', s)).toEqual([
+      ['note:id1', null],
+      ['yt:2-12', 1],
+      ['yt:3-3', 2],
+      ['yt:2-14', 3],
+      ['yt:3-7', 4],
+      ['yt:2-20', 5],
+      ['sec:id2', null],
+      ['note:id3', null],
+    ]);
+    // Stored positions still count every row.
+    expect(s.list('ws-a').map((i) => i.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it('Runway # is per workspace', () => {
+    seed('ws-a', ['DEMO-1', 'DEMO-2']);
+    store.addSection('ws-b', 'Top');
+    seed('ws-b', ['DEMO-2']);
+    expect(numbers('ws-a').map(([, k]) => k)).toEqual([1, 2]);
+    expect(numbers('ws-b').map(([, k]) => k)).toEqual([null, 1]);
+  });
+
+  it('Runway # is never stored: the table has no column for it', () => {
+    const columns = (db.prepare(`PRAGMA table_info(runway_item)`).all() as Array<{ name: string }>).map((c) => c.name);
+    expect(columns).not.toContain('runway_number');
+  });
+
+  describe('addIssueAtNumber', () => {
+    // Row order: S1, DEMO-1 (#1), N1, DEMO-2 (#2), S2
+    beforeEach(() => {
+      const s = numbered();
+      s.addSection('ws-a', 'S1');
+      s.addIssue('ws-a', jira('DEMO-1'));
+      s.addNote('ws-a', 'N1');
+      s.addIssue('ws-a', jira('DEMO-2'));
+      s.addSection('ws-a', 'S2');
+    });
+
+    it('goes immediately before the ticket that holds the number', () => {
+      store.addIssueAtNumber('ws-a', jira('NEW-1'), 2);
+      expect(numbers('ws-a')).toEqual([
+        ['sec:id1', null],
+        ['jira:DEMO-1', 1],
+        ['note:id2', null],
+        ['jira:NEW-1', 2],
+        ['jira:DEMO-2', 3],
+        ['sec:id3', null],
+      ]);
+      expectDense('ws-a');
+    });
+
+    it('#1 goes before the first ticket, after a leading section', () => {
+      store.addIssueAtNumber('ws-a', jira('NEW-1'), 1);
+      expect(ids(store.list('ws-a')).slice(0, 2)).toEqual(['sec:id1', 'jira:NEW-1']);
+    });
+
+    it('past the last ticket goes immediately after it, before trailing structure', () => {
+      store.addIssueAtNumber('ws-a', jira('NEW-1'), 99);
+      expect(numbers('ws-a').slice(-2)).toEqual([
+        ['jira:NEW-1', 3],
+        ['sec:id3', null],
+      ]);
+    });
+
+    it('with no number goes at the very end', () => {
+      store.addIssueAtNumber('ws-a', jira('NEW-1'));
+      expect(numbers('ws-a').at(-1)).toEqual(['jira:NEW-1', 3]);
+    });
+
+    it('on a Runway with no tickets goes at the end', () => {
+      store.addSection('ws-b', 'Only');
+      store.addIssueAtNumber('ws-b', jira('NEW-1'), 3);
+      expect(numbers('ws-b')).toEqual([
+        [expect.stringMatching(/^sec:/), null],
+        ['jira:NEW-1', 1],
+      ]);
+    });
+
+    it('refuses a duplicate, a bad ID and a bad number', () => {
+      const before = rawRows('ws-a');
+      expectStoreError(() => store.addIssueAtNumber('ws-a', jira('DEMO-1'), 1), 'already-on-runway');
+      expectStoreError(() => store.addIssueAtNumber('ws-a', 'sec:x', 1), 'invalid-issue-id');
+      expectStoreError(() => store.addIssueAtNumber('ws-a', jira('NEW-1'), 0), 'invalid-position');
+      expect(rawRows('ws-a')).toEqual(before);
+    });
+  });
+
+  describe('moveToNumber', () => {
+    // Row order: DEMO-1 (#1), S1, DEMO-2 (#2), N1, DEMO-3 (#3), S2
+    beforeEach(() => {
+      const s = numbered();
+      s.addIssue('ws-a', jira('DEMO-1'));
+      s.addSection('ws-a', 'S1');
+      s.addIssue('ws-a', jira('DEMO-2'));
+      s.addNote('ws-a', 'N1');
+      s.addIssue('ws-a', jira('DEMO-3'));
+      s.addSection('ws-a', 'S2');
+    });
+
+    it('moving up goes immediately before the ticket that held the number', () => {
+      store.moveToNumber('ws-a', jira('DEMO-3'), 2);
+      expect(numbers('ws-a')).toEqual([
+        ['jira:DEMO-1', 1],
+        ['sec:id1', null],
+        ['jira:DEMO-3', 2],
+        ['jira:DEMO-2', 3],
+        ['note:id2', null],
+        ['sec:id3', null],
+      ]);
+      expectDense('ws-a');
+    });
+
+    it('moving down goes immediately after the ticket that will precede it', () => {
+      store.moveToNumber('ws-a', jira('DEMO-1'), 2);
+      expect(numbers('ws-a')).toEqual([
+        ['sec:id1', null],
+        ['jira:DEMO-2', 1],
+        ['jira:DEMO-1', 2],
+        ['note:id2', null],
+        ['jira:DEMO-3', 3],
+        ['sec:id3', null],
+      ]);
+      expectDense('ws-a');
+    });
+
+    it('past the end means last, still before trailing structure', () => {
+      store.moveToNumber('ws-a', jira('DEMO-1'), 99);
+      expect(numbers('ws-a').slice(-2)).toEqual([
+        ['jira:DEMO-1', 3],
+        ['sec:id3', null],
+      ]);
+    });
+
+    it('to its own number writes nothing', () => {
+      const before = timestamps('ws-a');
+      store.moveToNumber('ws-a', jira('DEMO-2'), 2);
+      store.moveToNumber('ws-a', jira('DEMO-3'), 99);
+      expect(timestamps('ws-a')).toEqual(before);
+    });
+
+    it('every target number lands the ticket on that number', () => {
+      for (const from of ['DEMO-1', 'DEMO-2', 'DEMO-3']) {
+        for (const to of [1, 2, 3]) {
+          store.moveToNumber('ws-a', jira(from), to);
+          expect(store.list('ws-a').find((i) => i.itemId === jira(from))?.runwayNumber).toBe(to);
+          expect(store.list('ws-a').filter((i) => i.kind !== 'issue').map((i) => i.itemId)).toEqual([
+            'sec:id1',
+            'note:id2',
+            'sec:id3',
+          ]);
+          expectDense('ws-a');
+        }
+      }
+    });
+
+    it('refuses a section or note, a missing row and a bad number', () => {
+      const before = rawRows('ws-a');
+      expectStoreError(() => store.moveToNumber('ws-a', 'sec:id1', 1), 'not-a-ticket');
+      expectStoreError(() => store.moveToNumber('ws-a', 'note:id2', 1), 'not-a-ticket');
+      expectStoreError(() => store.moveToNumber('ws-a', jira('NOPE-1'), 1), 'not-on-runway');
+      expectStoreError(() => store.moveToNumber('ws-a', jira('DEMO-1'), 0), 'invalid-position');
+      expect(rawRows('ws-a')).toEqual(before);
+    });
   });
 });
 
