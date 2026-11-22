@@ -70,6 +70,9 @@ export interface FakeJiraCall {
 
 const calls: FakeJiraCall[] = [];
 let searchDelayMs = 0;
+// Holds back a single-issue read (getIssue), so a test can act while one is
+// in flight — the Runway add's exact-key check (VERM-86).
+let getIssueDelayMs = 0;
 // Issue ids no search lists (simulated index lag); getIssue still finds them.
 const unindexed = new Set<string>();
 
@@ -226,6 +229,7 @@ export async function getIssue(
   _fields?: readonly string[],
 ): Promise<JiraSearchIssue> {
   logCall('getIssue', { key });
+  if (getIssueDelayMs > 0) await new Promise((r) => setTimeout(r, getIssueDelayMs));
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
   const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
@@ -446,6 +450,10 @@ export function getCallsForTests(): FakeJiraCall[] {
 
 export function setSearchDelayForTests(ms: number): void {
   searchDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+}
+
+export function setGetIssueDelayForTests(ms: number): void {
+  getIssueDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
 }
 
 // ── Boards (VERM-59) ─────────────────────────────────────────────────────────

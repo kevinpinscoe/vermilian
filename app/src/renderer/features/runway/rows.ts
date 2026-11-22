@@ -119,3 +119,13 @@ export function jiraRunwayKeys(items: readonly RunwayItem[] | null | undefined):
     return decoded?.kind === 'jira' ? [decoded.localId] : [];
   });
 }
+
+/**
+ * The Runway # typed in the Add box's "at #" field (VERM-86): undefined when
+ * empty (add at the end), null when it is not a whole number of 1 or more.
+ */
+export function parseRunwayNumber(text: string): number | undefined | null {
+  const t = text.trim();
+  if (t === '') return undefined;
+  return /^[0-9]+$/.test(t) && Number(t) >= 1 ? Number(t) : null;
+}

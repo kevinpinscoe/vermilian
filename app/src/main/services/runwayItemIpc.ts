@@ -68,6 +68,28 @@ export interface RunwayItemHandlers {
   moveToNumber(args: RunwayItemsMoveToNumberArgs): Promise<RunwayItemsResult>;
   moveUp(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   moveDown(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
+  /**
+   * Adds a ticket once (VERM-86), for an add that checked the ticket first:
+   * not an IPC channel of its own. Inside the write gate, immediately before
+   * the write, it refuses the add if `stillCurrent()` is false (the active
+   * workspace was switched since the request began — any switch, including
+   * a round trip back to the same workspace), or if a row already holds any
+   * of `aliases` — every namespaced ID the ticket goes by (its readable key
+   * and its YouTrack entity ID) — which keeps that row and its number.
+   */
+  addIssueOnce(args: RunwayItemsAddOnceArgs): Promise<RunwayItemsResult>;
+}
+
+export interface RunwayItemsAddOnceArgs {
+  workspaceId: string;
+  /** The ID the new row is stored under. */
+  issueId: string;
+  /** Every namespaced ID the ticket goes by, `issueId` included. */
+  aliases: readonly string[];
+  /** Add at this Runway #; absent means the end. */
+  runwayNumber?: number;
+  /** False once the request is stale: the active workspace was switched. */
+  stillCurrent(): boolean;
 }
 
 class Refusal extends Error {
@@ -188,5 +210,35 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
     moveToNumber: write<RunwayItemsMoveToNumberArgs>(null, (s, ws, a) => s.moveToNumber(ws, a.itemId, a.runwayNumber)),
     moveUp: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveUp(ws, a.itemId)),
     moveDown: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveDown(ws, a.itemId)),
+
+    async addIssueOnce(args) {
+      const cancelled = () => new Refusal('cancelled', 'The add was cancelled because the active workspace was switched while the ticket was being checked.');
+      try {
+        const workspaceId = workspaceIdOf(args);
+        const check = async () => {
+          if (!args.stillCurrent()) throw cancelled();
+          refuseTicket(await resolve(workspaceId, true), workspaceId, args.issueId);
+        };
+        await check();
+        const items = await deps.gate.run(async () => {
+          // Inside the gate, immediately before the write: the request may
+          // have waited here behind the import or other writes.
+          await check();
+          const store = deps.store();
+          const aliases = new Set(args.aliases);
+          const existing = store.list(workspaceId).find((item) => item.kind === 'issue' && aliases.has(item.itemId));
+          if (existing) {
+            const key = args.issueId.slice(args.issueId.indexOf(':') + 1);
+            throw new Refusal('already-on-runway', `${key} is already on this Runway as #${existing.runwayNumber}.`);
+          }
+          return args.runwayNumber === undefined
+            ? store.addIssue(workspaceId, args.issueId)
+            : store.addIssueAtNumber(workspaceId, args.issueId, args.runwayNumber);
+        });
+        return { ok: true, items };
+      } catch (err) {
+        return failure(err);
+      }
+    },
   };
 }

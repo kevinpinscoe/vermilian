@@ -3,6 +3,7 @@
 // object is leaked to the renderer, and plaintext secrets never cross this line
 // in the renderer→main direction beyond the save calls.
 
+import type { RunwayAddByReferenceArgs } from './shared/runwayAdd';
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
@@ -110,6 +111,7 @@ const api: VermilianAPI = {
   runwayItemsMoveUp: (args: RunwayItemsItemArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveUp, args),
   runwayItemsMoveDown: (args: RunwayItemsItemArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveDown, args),
   runwayItemsResolve: (args: RunwayItemsListArgs) => ipcRenderer.invoke(IPC.runwayItemsResolve, args),
+  runwayItemsAddByReference: (args: RunwayAddByReferenceArgs) => ipcRenderer.invoke(IPC.runwayItemsAddByReference, args),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   openUserData: () => ipcRenderer.invoke(IPC.openUserData),
   getProjects: () => ipcRenderer.invoke(IPC.getProjects),
@@ -188,6 +190,7 @@ const api: VermilianAPI = {
   debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),
+  debugSetJiraGetIssueDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraGetIssueDelay', ms),
   debugGetClaudeCalls: () => ipcRenderer.invoke('e2e:claudeCalls'),
   debugGetStandupQueries: () => ipcRenderer.invoke('e2e:standupQueries'),
   debugGetStandupCredentialRefs: () => ipcRenderer.invoke('e2e:standupCredentialRefs'),

@@ -3,7 +3,7 @@ import type { RunwayItem } from '../../../shared/runwayItem';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
 import { RUNWAY_ITEMS_QUERY_KEY, RUNWAY_TICKETS_QUERY_KEY } from './api';
-import { buildRunwayRows, jiraRunwayKeys, ticketStateBadge } from './rows';
+import { buildRunwayRows, jiraRunwayKeys, parseRunwayNumber, ticketStateBadge } from './rows';
 
 // Synthetic keys and names only.
 const WS = 'ws-3f9a1c2b7d01';
@@ -153,5 +153,17 @@ describe('Runway query keys', () => {
   it('are per workspace', () => {
     expect(RUNWAY_ITEMS_QUERY_KEY(WS)).toEqual(['runway-items', WS]);
     expect(RUNWAY_TICKETS_QUERY_KEY(WS)).toEqual(['runway-tickets', WS]);
+  });
+});
+
+describe('parseRunwayNumber (Add box "at #", VERM-86)', () => {
+  it('empty means the end; a whole number of 1 or more is a position', () => {
+    expect(parseRunwayNumber('')).toBeUndefined();
+    expect(parseRunwayNumber('  ')).toBeUndefined();
+    expect(parseRunwayNumber('1')).toBe(1);
+    expect(parseRunwayNumber(' 12 ')).toBe(12);
+  });
+  it.each(['0', '-1', '1.5', 'two', '1e2'])('refuses %s', (text) => {
+    expect(parseRunwayNumber(text)).toBeNull();
   });
 });

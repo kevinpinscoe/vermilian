@@ -7,23 +7,31 @@
 //
 // Every saved row stays in place whatever the tracker says. A resolved ticket
 // opens the workspace's existing detail panel; one that did not resolve shows
-// its state and the reason. Adding, removing and reordering are VERM-86/87.
+// its state and the reason. Tickets are added from the Add box (VERM-86);
+// removing and reordering are VERM-87.
 
 import React, { useMemo } from 'react';
 import { AttentionBox, Heading, Text } from '@vibe/core';
 import type { BoardIssue } from '../../../shared/workspace';
+import type { TrackerKind } from '../../../shared/tracker';
+import type { SearchScope } from '../search/api';
 import { useRunwayItems, useRunwayTickets } from './api';
+import { RunwayAddBox } from './RunwayAddBox';
 import { buildRunwayRows, ticketStateBadge, type RunwayRow } from './rows';
 import styles from './RunwayView.module.css';
 
 export interface RunwayViewProps {
   workspaceId: string;
   workspaceName: string;
+  /** The workspace's tracker: what its Add box accepts keys and links for. */
+  tracker: TrackerKind;
+  /** The workspace's ordinary search scope, for the Add box (VERM-61). */
+  searchScope: SearchScope;
   /** Opens a resolved ticket in the active workspace's detail panel. */
   onOpenTicket(issue: BoardIssue): void;
 }
 
-export function RunwayView({ workspaceId, workspaceName, onOpenTicket }: RunwayViewProps) {
+export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, onOpenTicket }: RunwayViewProps) {
   const items = useRunwayItems(workspaceId);
   const tickets = useRunwayTickets(workspaceId);
 
@@ -49,6 +57,8 @@ export function RunwayView({ workspaceId, workspaceName, onOpenTicket }: RunwayV
           {workspaceName}
         </Text>
       </div>
+
+      <RunwayAddBox key={workspaceId} workspaceId={workspaceId} tracker={tracker} searchScope={searchScope} />
 
       {itemsError && (
         <div className={styles.banner}>

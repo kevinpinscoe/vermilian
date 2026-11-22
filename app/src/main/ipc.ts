@@ -208,6 +208,7 @@ import {
 } from './services/runwayStore';
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
+import { createRunwayAddByReference } from './services/runwayAddByReference';
 import {
   createRunwayTicketFetch,
   jiraRunwayReader,
@@ -215,7 +216,7 @@ import {
   type RunwayReaderResult,
 } from './services/runwayTicketFetch';
 import { jiraRunwayLookup, readAdmittedJiraIssue, type JiraAdmissionScope } from './providers/jiraAdmission';
-import type { NamespacedIssueId } from '../shared/tracker';
+import type { NamespacedIssueId, TrackerKind } from '../shared/tracker';
 import { defaultBoardConfig, dismissalKey, type BoardConfig, type Dismissals, type NotThisWeekDismissal } from '../shared/boardConfig';
 
 // Quit-protection state (set by renderer when timer is running).
@@ -1226,6 +1227,7 @@ export function registerIpc(): void {
     );
     ipcMain.handle('e2e:jiraCalls', () => fakeJiraForE2E.getCallsForTests());
     ipcMain.handle('e2e:jiraSearchDelay', (_e, ms: number) => fakeJiraForE2E.setSearchDelayForTests(ms));
+    ipcMain.handle('e2e:jiraGetIssueDelay', (_e, ms: number) => fakeJiraForE2E.setGetIssueDelayForTests(ms));
     // Which credential reference each fake Claude call used (VERM-47).
     ipcMain.handle('e2e:claudeCalls', () => fakeClaudeForE2E.getCallsForTests());
     // The fake YouTrack (VERM-48): stand-up project queries, a stand-up hold,
@@ -2265,25 +2267,49 @@ export function registerIpc(): void {
   //     Settings connection, so it is the workspace's own, not a fallback.
   // A connection that fails is the read's error; no other credential is
   // tried. The rules live in services/runwayTicketFetch.ts (unit-tested).
+  async function runwayReader(workspaceId: string, tracker: TrackerKind): Promise<RunwayReaderResult> {
+    if (tracker === 'jira') {
+      const r = await workspaceJiraProvider(workspaceId);
+      if (!r.ok) return { ok: false, code: r.reason === 'error' ? 'refresh-failed' : r.reason, error: r.message };
+      return { ok: true, reader: jiraRunwayReader(r.provider, workspaceAdmission(r.provider, r.doc)) };
+    }
+    const cfg = await readConfig();
+    const yt =
+      workspaceStorageMode() === 'per-workspace'
+        ? await resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(workspaceId), cfg, credentialSourceIO, IS_E2E)
+        : await trackerConnection(cfg);
+    if (!yt.ok) return { ok: false, code: 'credential', error: yt.error };
+    return { ok: true, reader: youtrackRunwayReader(youtrackTracker(yt.url, yt.token)) };
+  }
   const resolveRunwayTickets = createRunwayTicketFetch({
     workspaces: runwayWorkspaces,
     items: (workspaceId) => openRunwayItemStore().list(workspaceId),
-    async reader(workspaceId, tracker): Promise<RunwayReaderResult> {
-      if (tracker === 'jira') {
-        const r = await workspaceJiraProvider(workspaceId);
-        if (!r.ok) return { ok: false, code: r.reason === 'error' ? 'refresh-failed' : r.reason, error: r.message };
-        return { ok: true, reader: jiraRunwayReader(r.provider, workspaceAdmission(r.provider, r.doc)) };
-      }
-      const cfg = await readConfig();
-      const yt =
-        workspaceStorageMode() === 'per-workspace'
-          ? await resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(workspaceId), cfg, credentialSourceIO, IS_E2E)
-          : await trackerConnection(cfg);
-      if (!yt.ok) return { ok: false, code: 'credential', error: yt.error };
-      return { ok: true, reader: youtrackRunwayReader(youtrackTracker(yt.url, yt.token)) };
-    },
+    reader: runwayReader,
   });
   ipcMain.handle(IPC.runwayItemsResolve, (_e, args) => resolveRunwayTickets(args));
+
+  // Adding a ticket by key or link (VERM-86): the link must be on the
+  // workspace's own tracker host, the exact key is read once on the same
+  // connection as the refresh (runwayReader), and the add goes through the
+  // Runway write handlers above. Search and detail admission are unchanged.
+  // The rules live in services/runwayAddByReference.ts (unit-tested).
+  const addRunwayByReference = createRunwayAddByReference({
+    workspaces: runwayWorkspaces,
+    async trackerBaseUrl(workspaceId, tracker) {
+      if (tracker === 'jira' || workspaceStorageMode() === 'per-workspace') {
+        const backend = (await perWorkspaceDocument(workspaceId))?.backend;
+        if (backend?.kind === 'jira') return tracker === 'jira' ? backend.siteUrl : '';
+        if (backend?.kind === 'youtrack') return tracker === 'youtrack' ? backend.serverUrl : '';
+        return '';
+      }
+      return (await readConfig()).youtrackUrl ?? '';
+    },
+    items: (workspaceId) => openRunwayItemStore().list(workspaceId),
+    reader: runwayReader,
+    generation: activeWorkspaceGeneration,
+    addIssueOnce: (args) => runwayItems.addIssueOnce(args),
+  });
+  ipcMain.handle(IPC.runwayItemsAddByReference, (_e, args) => addRunwayByReference(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {
