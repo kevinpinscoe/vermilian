@@ -61,6 +61,17 @@ export const IPC = {
   runwayImportPreview: 'runway:import-preview',
   runwayImportConfirm: 'runway:import-confirm',
   runwayImportCancel: 'runway:import-cancel',
+  // Workspace Runway order (VERM-82): the runway_item rows, sections and notes.
+  runwayItemsList: 'runway-items:list',
+  runwayItemsAddIssue: 'runway-items:add-issue',
+  runwayItemsAddIssueAtNumber: 'runway-items:add-issue-at-number',
+  runwayItemsAddSection: 'runway-items:add-section',
+  runwayItemsAddNote: 'runway-items:add-note',
+  runwayItemsRemove: 'runway-items:remove',
+  runwayItemsMove: 'runway-items:move',
+  runwayItemsMoveToNumber: 'runway-items:move-to-number',
+  runwayItemsMoveUp: 'runway-items:move-up',
+  runwayItemsMoveDown: 'runway-items:move-down',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -357,6 +368,69 @@ export interface RunwayListArgs {
 export type RunwayListResult =
   | { ok: true; entries: import('./runway').RunwayEntry[] }
   | { ok: false; error: string; code?: string };
+
+// Workspace Runway order (VERM-82). Every call names the workspace; the main
+// process resolves it from the workspace configuration and refuses an unknown
+// one. Writes are accepted for the active workspace only, and a ticket must be
+// on that workspace's own tracker (any project). Listing is read-only; every
+// write runs through the Runway write gate, one at a time with the snapshot
+// import. Each successful call returns the workspace's whole order.
+export interface RunwayItemsListArgs {
+  workspaceId: string;
+}
+
+export interface RunwayItemsAddIssueArgs {
+  workspaceId: string;
+  issueId: string; // namespaced: yt:<id> or jira:<KEY>
+  position?: number; // stored row position; default: the end
+}
+
+export interface RunwayItemsAddIssueAtNumberArgs {
+  workspaceId: string;
+  issueId: string;
+  runwayNumber?: number; // Runway #, tickets only; default: the end
+}
+
+export interface RunwayItemsAddStructuralArgs {
+  workspaceId: string;
+  text: string;
+  depth?: number; // 0..4, default 0
+  position?: number; // stored row position; default: the end
+}
+
+export interface RunwayItemsItemArgs {
+  workspaceId: string;
+  itemId: string; // a ticket's namespaced ID, or a sec:/note: ID
+}
+
+export interface RunwayItemsMoveArgs extends RunwayItemsItemArgs {
+  position: number;
+}
+
+export interface RunwayItemsMoveToNumberArgs extends RunwayItemsItemArgs {
+  runwayNumber: number;
+}
+
+export type RunwayItemsErrorCode =
+  // From the store (main/services/runwayItemStore.ts).
+  | 'already-on-runway'
+  | 'not-on-runway'
+  | 'invalid-position'
+  | 'invalid-issue-id'
+  | 'invalid-workspace'
+  | 'invalid-depth'
+  | 'invalid-text'
+  | 'not-a-ticket'
+  // From the handlers (main/services/runwayItemIpc.ts).
+  | 'invalid-args' // not an argument object
+  | 'unknown-workspace' // no workspace with this ID in the configuration
+  | 'not-active-workspace' // a write to a workspace other than the active one
+  | 'wrong-tracker' // the ticket is on the other tracker from the workspace's
+  | 'workspace-unavailable'; // the workspace configuration could not be read
+
+export type RunwayItemsResult =
+  | { ok: true; items: import('./runwayItem').RunwayItem[] }
+  | { ok: false; error: string; code?: RunwayItemsErrorCode };
 
 // Whole-database Runway snapshot export (VERM-50). `canceled` means the user
 // closed the save dialog and nothing was written.
@@ -729,6 +803,19 @@ export interface VermilianAPI {
   runwayImportPreview(): Promise<RunwayImportPreviewResult>;
   runwayImportConfirm(args: RunwayImportConfirmArgs): Promise<RunwayImportConfirmResult>;
   runwayImportCancel(args: RunwayImportConfirmArgs): Promise<{ ok: true }>;
+  // Workspace Runway order (VERM-82): list, add, remove and move rows on a
+  // workspace's Runway (local SQLite only; never writes to the tracker or the
+  // workspace's projects). See RunwayItemsResult for the rules.
+  runwayItemsList(args: RunwayItemsListArgs): Promise<RunwayItemsResult>;
+  runwayItemsAddIssue(args: RunwayItemsAddIssueArgs): Promise<RunwayItemsResult>;
+  runwayItemsAddIssueAtNumber(args: RunwayItemsAddIssueAtNumberArgs): Promise<RunwayItemsResult>;
+  runwayItemsAddSection(args: RunwayItemsAddStructuralArgs): Promise<RunwayItemsResult>;
+  runwayItemsAddNote(args: RunwayItemsAddStructuralArgs): Promise<RunwayItemsResult>;
+  runwayItemsRemove(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
+  runwayItemsMove(args: RunwayItemsMoveArgs): Promise<RunwayItemsResult>;
+  runwayItemsMoveToNumber(args: RunwayItemsMoveToNumberArgs): Promise<RunwayItemsResult>;
+  runwayItemsMoveUp(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
+  runwayItemsMoveDown(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

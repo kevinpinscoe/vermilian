@@ -206,6 +206,8 @@ import {
   type JiraRunwayMetadataStore,
   type RunwayStores,
 } from './services/runwayStore';
+import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
+import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import type { NamespacedIssueId } from '../shared/tracker';
 import { defaultBoardConfig, dismissalKey, type BoardConfig, type Dismissals, type NotThisWeekDismissal } from '../shared/boardConfig';
 
@@ -330,11 +332,20 @@ function e2eImportHoldMs(): number {
   return Number.isFinite(ms) && ms > 0 ? ms : 0;
 }
 
+// The Runway order store (VERM-80/81) on the same connection, so the
+// snapshot export and import see exactly the rows it writes.
+let runwayItemStore: RunwayItemStore | null = null;
+function openRunwayItemStore(): RunwayItemStore {
+  runwayItemStore ??= createRunwayItemStore(openJiraRunwayStore().db);
+  return runwayItemStore;
+}
+
 function closeRunwayDb(): void {
   runwayImportSession?.shutdown();
   runwayDb?.close();
   runwayDb = null;
   jiraRunwayStore = null;
+  runwayItemStore = null;
 }
 
 function runwayFailure(e: unknown): { ok: false; error: string; code?: string } {
@@ -2205,6 +2216,32 @@ export function registerIpc(): void {
       return runwayFailure(e);
     }
   });
+
+  // Workspace Runway order (VERM-82). The rules — workspace resolved here from
+  // the configuration, writes for the active workspace only, a ticket on the
+  // workspace's own tracker, every write through runwayGate — live in
+  // services/runwayItemIpc.ts, where they are unit-tested.
+  const runwayItems = createRunwayItemHandlers({
+    store: openRunwayItemStore,
+    gate: runwayGate,
+    async workspaces() {
+      const { choices, legacyHint } = await workspaceChoices();
+      return {
+        activeId: resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint),
+        workspaces: choices,
+      };
+    },
+  });
+  ipcMain.handle(IPC.runwayItemsList, (_e, args) => runwayItems.list(args));
+  ipcMain.handle(IPC.runwayItemsAddIssue, (_e, args) => runwayItems.addIssue(args));
+  ipcMain.handle(IPC.runwayItemsAddIssueAtNumber, (_e, args) => runwayItems.addIssueAtNumber(args));
+  ipcMain.handle(IPC.runwayItemsAddSection, (_e, args) => runwayItems.addSection(args));
+  ipcMain.handle(IPC.runwayItemsAddNote, (_e, args) => runwayItems.addNote(args));
+  ipcMain.handle(IPC.runwayItemsRemove, (_e, args) => runwayItems.remove(args));
+  ipcMain.handle(IPC.runwayItemsMove, (_e, args) => runwayItems.move(args));
+  ipcMain.handle(IPC.runwayItemsMoveToNumber, (_e, args) => runwayItems.moveToNumber(args));
+  ipcMain.handle(IPC.runwayItemsMoveUp, (_e, args) => runwayItems.moveUp(args));
+  ipcMain.handle(IPC.runwayItemsMoveDown, (_e, args) => runwayItems.moveDown(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {
