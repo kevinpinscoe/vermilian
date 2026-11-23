@@ -120,7 +120,11 @@ export function createJiraProvider(
     return [];
   }
 
-  const mapIssue = (issue: Parameters<typeof mapJiraIssue>[0]) => mapJiraIssue(issue, settingsFor(jiraProjectKeyOf(issue.key)));
+  // Each issue maps with its own project's settings; a linked issue's
+  // done-ness follows its own project's status mapping (VERM-95).
+  const linkedStatusRoles = (projectKey: string) => settingsFor(projectKey).statusRoles;
+  const mapIssue = (issue: Parameters<typeof mapJiraIssue>[0]) =>
+    mapJiraIssue(issue, settingsFor(jiraProjectKeyOf(issue.key)), linkedStatusRoles);
   // A board's issues can come from any project, so its reads request every
   // configured project's fields; each issue still maps with its own.
   const anyProjectFields = (): string[] =>
@@ -310,7 +314,7 @@ export function createJiraProvider(
     async getIssueDetail(key) {
       const options = settingsFor(jiraProjectKeyOf(key));
       const issue = await client.getIssue(base, email, token, key, jiraDetailFields(options));
-      return mapJiraIssueDetail(issue, settingsFor(jiraProjectKeyOf(issue.key ?? key)));
+      return mapJiraIssueDetail(issue, settingsFor(jiraProjectKeyOf(issue.key ?? key)), linkedStatusRoles);
     },
   };
 }

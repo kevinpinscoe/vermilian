@@ -128,6 +128,8 @@ export async function probeJiraToken(profile: JiraProfile, token: string): Promi
 
 // Deterministic issues for the read-only list (VERM-21). One has no priority
 // field, as on a project whose scheme omits it.
+const JIRA_RUNWAY_FIXTURES = process.env.VERMILIAN_E2E_JIRA_RUNWAY_FIXTURES === '1';
+
 export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
   {
     id: '10001',
@@ -174,7 +176,75 @@ export const FAKE_JIRA_ISSUES: JiraSearchIssue[] = [
       updated: '2026-11-01T10:00:00.000+0000',
     },
   },
+  // The spec's Jira keys (VERM-95), behind VERMILIAN_E2E_JIRA_RUNWAY_FIXTURES.
+  ...(JIRA_RUNWAY_FIXTURES
+    ? [
+        {
+          id: '10956',
+          key: 'OPS-956',
+          fields: {
+            summary: 'Background export worker',
+            status: { name: 'To Do', statusCategory: { key: 'new' } },
+            priority: null,
+            updated: '2026-11-15T09:00:00.000+0000',
+          },
+        },
+        {
+          id: '14089',
+          key: 'OPS-4089',
+          fields: {
+            summary: 'Export storage quota',
+            status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } },
+            priority: null,
+            updated: '2026-11-16T09:00:00.000+0000',
+          },
+        },
+      ]
+    : []),
 ];
+
+// ── Links (VERM-95) ──────────────────────────────────────────────────────────
+// VERMILIAN_E2E_JIRA_RUNWAY_FIXTURES=1 adds OPS-956 and OPS-4089 and the links
+// below; off, no issue carries `issuelinks` and every other spec sees the fake
+// exactly as before. Link types worded as Jira Cloud's defaults.
+const FAKE_JIRA_LINK_TYPES = {
+  Blocks: { id: '10000', name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+  Relates: { id: '10003', name: 'Relates', inward: 'relates to', outward: 'relates to' },
+} as const;
+
+/** `outward` <type's outward wording> `inward`: OPS-4089 "blocks" OPS-956. */
+const FAKE_JIRA_LINKS: Array<{ type: keyof typeof FAKE_JIRA_LINK_TYPES; outward: string; inward: string }> = JIRA_RUNWAY_FIXTURES
+  ? [
+      { type: 'Blocks', outward: 'OPS-4089', inward: 'OPS-956' }, // OPS-956 is blocked by OPS-4089
+      { type: 'Relates', outward: 'OPS-956', inward: 'DEMO-102' }, // never a blocker
+    ]
+  : [];
+
+/**
+ * An issue's `issuelinks` as Jira returns them: each link once, from this
+ * issue's side, the other issue under inwardIssue or outwardIssue with its
+ * status read now — so resolving a blocker shows on the next read.
+ */
+function issueLinksOf(key: string): unknown[] {
+  const out: unknown[] = [];
+  for (const l of FAKE_JIRA_LINKS) {
+    const isOutwardEnd = l.outward === key;
+    if (!isOutwardEnd && l.inward !== key) continue;
+    const other = FAKE_JIRA_ISSUES.find((i) => i.key === (isOutwardEnd ? l.inward : l.outward));
+    if (!other) continue;
+    const linked = { id: other.id, key: other.key, fields: { summary: other.fields?.summary ?? '', status: other.fields?.status ?? null } };
+    // The outward end sees "blocks" the other issue: Jira names it outwardIssue.
+    out.push({ type: { ...FAKE_JIRA_LINK_TYPES[l.type] }, ...(isOutwardEnd ? { outwardIssue: linked } : { inwardIssue: linked }) });
+  }
+  return out;
+}
+
+/** A copy of an issue as a read returns it, with its links when the fixtures are on. */
+function answer(i: JiraSearchIssue): JiraSearchIssue {
+  const fields: Record<string, unknown> = { ...i.fields };
+  if (JIRA_RUNWAY_FIXTURES) fields.issuelinks = issueLinksOf(i.key);
+  return { ...i, fields: fields as JiraSearchIssue['fields'] };
+}
 
 // The board search's text JQL (shared/jiraBoardIssue.ts jiraSearchJql):
 // `project in ("A", "B") AND text ~ "term" ORDER BY …`. The fake honours just
@@ -210,7 +280,7 @@ export async function searchJql(
     const keys = [...keyList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     const hits = keys.map((k) => issueByKey(k));
     if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
-    return (hits as JiraSearchIssue[]).map((i) => ({ ...i, fields: { ...i.fields } }));
+    return (hits as JiraSearchIssue[]).map(answer);
   }
   // One project's open issues (`project = "X" …`), the shape the provider's
   // priority-scheme probe uses (VERM-93): like Jira, only that project's, so
@@ -219,10 +289,10 @@ export async function searchJql(
   if (oneProject) {
     return FAKE_JIRA_ISSUES
       .filter((i) => i.key.startsWith(`${oneProject[1]}-`) && i.fields?.status?.statusCategory?.key !== 'done')
-      .map((i) => ({ ...i, fields: { ...i.fields } }));
+      .map(answer);
   }
   const found = fakeTextSearch(_jql) ?? FAKE_JIRA_ISSUES.filter((i) => i.fields?.status?.statusCategory?.key !== 'done');
-  return found.map((i) => ({ ...i, fields: { ...i.fields } }));
+  return found.map(answer);
 }
 
 export async function searchMyOpenIssues(_profile: JiraProfile, token: string): Promise<JiraSearchIssue[]> {
@@ -265,7 +335,8 @@ export async function getIssue(
   const project = FAKE_JIRA_PROJECTS.find((p) => issue.key.startsWith(`${p.key}-`));
   const extra: Record<string, unknown> = { ...(FAKE_JIRA_DETAIL_FIELDS[issue.key] ?? FAKE_JIRA_DETAIL_FIELDS[key]) };
   if (project) extra.project = { ...project };
-  return { ...issue, fields: { ...issue.fields, ...extra } as JiraSearchIssue['fields'] };
+  const answered = answer(issue);
+  return { ...answered, fields: { ...answered.fields, ...extra } as JiraSearchIssue['fields'] };
 }
 
 // ── Issue detail (VERM-35) ───────────────────────────────────────────────────
@@ -322,7 +393,7 @@ export async function searchProjectIssues(
       !unindexed.has(i.id) &&
       i.key.startsWith(`${projectKey}-`) &&
       (options.includeResolved || i.fields?.status?.statusCategory?.key !== 'done'),
-  ).map((i) => ({ ...i, fields: { ...i.fields } }));
+  ).map(answer);
 }
 
 // ── Workflow statuses (VERM-67) ──────────────────────────────────────────────
@@ -420,7 +491,7 @@ export async function searchProjectRecentlyUpdated(
   return FAKE_JIRA_ISSUES.filter((i) => {
     const at = Date.parse(String(i.fields?.updated ?? ''));
     return !unindexed.has(i.id) && i.key.startsWith(`${projectKey}-`) && !Number.isNaN(at) && at >= since;
-  }).map((i) => ({ ...i, fields: { ...i.fields } }));
+  }).map(answer);
 }
 
 // ── Test hooks (VERMILIAN_E2E only; registered in main/ipc.ts) ───────────────
@@ -569,7 +640,7 @@ export async function searchBoardIssues(
     if (key !== null && i.key !== key) return false;
     if (text !== null && !(i.fields?.summary ?? '').toLowerCase().includes(text)) return false;
     return true;
-  }).map((i) => ({ ...i, fields: { ...i.fields } }));
+  }).map(answer);
 }
 
 export async function isIssueOnBoard(base: string, email: string, token: string, boardId: number, key: string): Promise<boolean> {
