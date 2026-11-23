@@ -130,7 +130,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [x] All tasks has the same **Runway #** control (VERM-90): its Runway # cell (YouTrack) or
       card badge (Jira) opens a popover holding the detail panel's control, with the same
       matching, gating, Retry and Remove confirmation. Clicks and keys in it never reach the row
-      or card underneath.
+      or card underneath. Opening it moves keyboard focus into it; Escape, from the number field
+      or anywhere in it, closes it and returns focus to its cell or badge. Only one is open at a
+      time. A cell with too little room below (a bottom row) opens it above, so its controls stay
+      on screen.
 - [ ] **Section** and **note** rows keep the structure of an imported schedule. They appear in the
       Runway view only, and the Runway # counts **tickets only** — a section or note never uses up
       a number.

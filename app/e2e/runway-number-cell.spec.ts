@@ -6,6 +6,8 @@
  * active workspace's Runway, blank when it has none, and opens a popover
  * holding the detail panel's Runway # control: setting a number there updates
  * the Runway. Clicking the cell never opens the detail panel underneath.
+ * Opening moves focus into the popover; Escape closes it and returns focus to
+ * its cell; opening another closes it; a bottom-row cell opens it above.
  *
  * Fake YouTrack: TEST (0-e1) issues 1..6. Fake Jira: DEMO-101, DEMO-102.
  * Synthetic keys, names and hosts only.
@@ -156,5 +158,80 @@ test.describe('Runway # in All tasks', () => {
     await tid(page, 'cell-runway-number-input').press('Enter');
     await expect(tid(page, 'cell-runway-error')).toContainText('whole number');
     await expect(tid(page, 'jira-issue-detail-panel')).toHaveCount(0);
+  });
+
+  test('YouTrack: focus moves into the popover, Escape returns it to the cell, and only one popover is open', async () => {
+    const page = await launchWith(YT, ['yt:TEST-3']);
+    await tid(page, 'nav-all-tasks').click();
+    await expect(ytCell(page, 'TEST-3').getByTestId('runway-cell-number')).toHaveText('#1');
+
+    await ytCell(page, 'TEST-2').click();
+    await expect(tid(page, 'cell-runway-number-input')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(popover(page)).toHaveCount(0);
+    await expect(ytCell(page, 'TEST-2')).toBeFocused();
+    await expect(tid(page, 'task-detail-panel')).toHaveCount(0);
+
+    // Opened from the keyboard too, and Escape from the number field.
+    await page.keyboard.press('Enter');
+    await expect(tid(page, 'cell-runway-number-input')).toBeFocused();
+    await tid(page, 'cell-runway-number-input').fill('3');
+    await tid(page, 'cell-runway-number-input').press('Escape');
+    await expect(popover(page)).toHaveCount(0);
+    await expect(ytCell(page, 'TEST-2')).toBeFocused();
+
+    // Opening a second cell closes the first, by click (a row above, which
+    // the popover does not cover)…
+    const cells = page.locator('[data-testid="ws-issue-row"] [data-testid="runway-cell"]');
+    await cells.nth(3).click();
+    await expect(popover(page)).toHaveCount(1);
+    await cells.nth(0).click();
+    await expect(popover(page)).toHaveCount(1);
+    await expect(cells.nth(3)).toHaveAttribute('aria-expanded', 'false');
+    await expect(cells.nth(0)).toHaveAttribute('aria-expanded', 'true');
+    // …and from the keyboard.
+    await cells.nth(1).focus();
+    await page.keyboard.press('Enter');
+    await expect(popover(page)).toHaveCount(1);
+    await expect(cells.nth(0)).toHaveAttribute('aria-expanded', 'false');
+    await expect(cells.nth(1)).toHaveAttribute('aria-expanded', 'true');
+    await expect(tid(page, 'cell-runway-number-input')).toBeFocused();
+  });
+
+  test('a bottom-row cell with too little room below opens its popover above, every control on screen', async () => {
+    const page = await launchWith(YT, ['yt:TEST-3']);
+    await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1200, 520));
+    await tid(page, 'nav-all-tasks').click();
+    const rows = page.locator('[data-testid="ws-issue-row"]');
+    await expect(rows).toHaveCount(6);
+    const last = rows.last().locator('[data-testid="runway-cell"]');
+    await last.scrollIntoViewIfNeeded();
+    const height = await page.evaluate(() => window.innerHeight);
+    const cellBox = (await last.boundingBox())!;
+    expect(height - cellBox.y - cellBox.height).toBeLessThan(200);
+
+    await last.click();
+    await expect(popover(page)).toHaveAttribute('data-placement', 'above');
+    const box = (await popover(page).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(cellBox.y);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    for (const id of ['cell-runway-add-end', 'cell-runway-number-input', 'cell-runway-add-at']) {
+      const b = (await tid(page, id).boundingBox())!;
+      expect(b.y + b.height, id).toBeLessThanOrEqual(height);
+    }
+    // Still usable: add the ticket at the end from there.
+    await tid(page, 'cell-runway-add-end').click();
+    await expect(last.getByTestId('runway-cell-number')).toHaveText('#2');
+
+    // A top-row cell still opens below.
+    await page.keyboard.press('Escape');
+    const first = rows.first().locator('[data-testid="runway-cell"]');
+    await first.scrollIntoViewIfNeeded();
+    await first.click();
+    await expect(popover(page)).toHaveAttribute('data-placement', 'below');
+
+    // Scrolling its cell away closes it.
+    await rows.last().scrollIntoViewIfNeeded();
+    await expect(popover(page)).toHaveCount(0);
   });
 });

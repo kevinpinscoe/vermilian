@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and each Jira card a Runway # badge beside its key. It shows the ticket's Runway # on the active
   workspace's Runway, blank when it has none. Clicking it opens the detail panel's Runway #
   control in a popover — Add at end, Add at #, Move to #, Remove — without opening the ticket.
+  Focus moves into the popover and Escape returns it to the badge; opening another closes it; a
+  bottom row opens it above so its controls stay on screen.
 - **Runway tickets in All tasks** (VERM-89). All tasks, YouTrack and Jira, lists the workspace's
   project (and Jira board) issues plus the tickets added to its Runway from outside them, each
   exactly once: a ticket both in a project and on the Runway appears once. A workspace with no

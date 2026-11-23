@@ -9,12 +9,19 @@
 // cell and its popover keep their clicks and keys to themselves. The popover
 // is portalled to the document body, so a scrolling table cannot clip it;
 // React still bubbles its events through the cell, which stops them.
+//
+// Opening moves keyboard focus into the popover (its number field, else its
+// first control); Escape anywhere in it closes it and puts focus back on its
+// cell. Only one popover is open at a time: opening another closes it. It
+// opens below its cell, or above when there is too little room below (a
+// bottom row), so its controls stay on screen.
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRunwayItems, useRunwayTickets } from './api';
 import { RunwayNumberControl, runwayTicketStatus } from './RunwayNumberControl';
 import type { PanelTicket } from './rows';
+import { POPOVER_WIDTH, popoverPlacement } from './popoverPlacement';
 import styles from './RunwayNumberCell.module.css';
 
 export interface RunwayNumberCellProps {
@@ -26,14 +33,16 @@ export interface RunwayNumberCellProps {
   className?: string;
 }
 
-const POPOVER_WIDTH = 300;
+// The one open popover's close, so opening another closes it.
+let closeOpenPopover: (() => void) | null = null;
+
 
 export function RunwayNumberCell({ workspaceId, ticket, displayKey, className }: RunwayNumberCellProps) {
   const items = useRunwayItems(workspaceId);
   const tickets = useRunwayTickets(workspaceId);
   const status = runwayTicketStatus(items, tickets, ticket);
   const [open, setOpen] = useState(false);
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  const [place, setPlace] = useState<ReturnType<typeof popoverPlacement> | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -46,16 +55,45 @@ export function RunwayNumberCell({ workspaceId, ticket, displayKey, className }:
         ? `Unable to verify the Runway position of ${displayKey}`
         : `${displayKey} is not on this Runway: add`;
 
-  // Placed under the cell, kept inside the window.
+  // Placed once it has rendered (its height decides below or above), then
+  // focus moves into it.
   useLayoutEffect(() => {
-    if (!open || !buttonRef.current) return;
+    if (!open) {
+      setPlace(null);
+      return;
+    }
+    if (!buttonRef.current || !popoverRef.current) return;
     const r = buttonRef.current.getBoundingClientRect();
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - POPOVER_WIDTH - 8));
-    setPlace({ top: r.bottom + 4, left });
+    setPlace(popoverPlacement(r, popoverRef.current.getBoundingClientRect().height, { width: window.innerWidth, height: window.innerHeight }));
   }, [open]);
 
-  // Closed by Escape, a click outside, or the window scrolling or resizing
-  // (it would no longer sit under its cell).
+  useEffect(() => {
+    if (!open || !place || !popoverRef.current) return;
+    if (popoverRef.current.contains(document.activeElement)) return;
+    const target =
+      popoverRef.current.querySelector<HTMLElement>('input:not([disabled])') ??
+      popoverRef.current.querySelector<HTMLElement>('button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    target?.focus();
+  }, [open, place]);
+
+  // One open popover at a time.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    closeOpenPopover?.();
+    closeOpenPopover = close;
+    return () => {
+      if (closeOpenPopover === close) closeOpenPopover = null;
+    };
+  }, [open]);
+
+  function closeToCell() {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }
+
+  // Closed by Escape, a click outside, the window resizing, or a scroll that
+  // moves its cell (it would no longer sit beside it).
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -64,6 +102,7 @@ export function RunwayNumberCell({ workspaceId, ticket, displayKey, className }:
       if (popoverRef.current?.contains(t) || buttonRef.current?.contains(t)) return;
       close();
     };
+    // Escape outside the popover (focus left on its cell, say).
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         close();
@@ -72,13 +111,20 @@ export function RunwayNumberCell({ workspaceId, ticket, displayKey, className }:
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    // A scroll closes it only once its cell has actually moved: a scroll
+    // event still in flight from before it opened leaves it alone.
+    const opened = buttonRef.current?.getBoundingClientRect();
+    const onScroll = () => {
+      const now = buttonRef.current?.getBoundingClientRect();
+      if (!opened || !now || Math.abs(now.top - opened.top) > 1 || Math.abs(now.left - opened.left) > 1) close();
+    };
     window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
@@ -110,9 +156,22 @@ export function RunwayNumberCell({ workspaceId, ticket, displayKey, className }:
             role="dialog"
             aria-label={`Runway # of ${displayKey}`}
             data-testid="runway-cell-popover"
-            style={{ top: place?.top ?? -9999, left: place?.left ?? -9999, width: POPOVER_WIDTH }}
+            data-placement={place?.placement ?? ''}
+            style={
+              place
+                ? { top: place.top, bottom: place.bottom, left: place.left, width: POPOVER_WIDTH }
+                : { top: 0, left: 0, width: POPOVER_WIDTH, visibility: 'hidden' }
+            }
             onClick={stop}
-            onKeyDown={stop}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              // Escape anywhere in it, the number field included: close, back to the cell.
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+                closeToCell();
+              }
+            }}
             onMouseDown={stop}
           >
             <RunwayNumberControl workspaceId={workspaceId} ticket={ticket} displayKey={displayKey} testIdPrefix="cell-runway" bare />
