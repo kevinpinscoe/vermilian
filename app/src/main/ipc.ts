@@ -1221,6 +1221,7 @@ export function registerIpc(): void {
     );
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
     ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
+    ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,
     // read which calls were made, and hold searches back to test a poll in

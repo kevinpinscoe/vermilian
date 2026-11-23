@@ -131,6 +131,9 @@ function documentShape(
     jiraBoards: LEAF,
     // One choice, merged as a whole (VERM-60).
     jiraHiddenStatuses: LEAF,
+    // Per field, as the schema's shape has it (VERM-48). Omitting it here
+    // dropped the Master plan from every merged result (found in VERM-96).
+    masterPlan: struct({ articleId: LEAF }),
     // One choice, merged as a whole (VERM-96).
     prerequisiteLinkTypes: LEAF,
   });

@@ -9,6 +9,7 @@ import {
   prerequisiteRows,
   withPrerequisiteLinkTypes,
   type PrerequisiteRow,
+  usesDefaultPrerequisiteLinkTypes,
   type TrackerLinkType,
 } from '../../../shared/workspacePrerequisites';
 import styles from './AddProjectsModal.module.css';
@@ -26,7 +27,8 @@ interface WorkspacePrerequisitesModalProps {
  * "depends on" in YouTrack, "is blocked by" in Jira. Subtask and undirected
  * types are shown but can't be chosen. Saved through the workspace's own
  * article, leaving every other setting as it is. When the tracker can't be
- * read, the saved choice is shown and nothing can be changed, so it is kept.
+ * read, the saved choice is shown and can't be edited; closing keeps it, and
+ * an explicit Reset to default still removes it (it needs no tracker read).
  */
 export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: WorkspacePrerequisitesModalProps) {
   const [base, setBase] = useState<WorkspaceDocument | null>(null);
@@ -81,6 +83,10 @@ export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: W
 
   const tracker = base?.backend.kind === 'jira' ? 'Jira' : 'YouTrack';
   const editable = Boolean(base && types);
+  // Reset needs only the workspace article, so it stays available while the
+  // tracker can't be read — when there is a saved choice to reset.
+  const saved = Boolean(base && !usesDefaultPrerequisiteLinkTypes(base));
+  const canReset = editable || saved;
 
   return (
     <Modal id="workspace-prerequisites-modal" show onClose={onClose} size="medium">
@@ -104,8 +110,8 @@ export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: W
             </div>
             {typesError ? (
               <div className={styles.moveNotice} role="alert" data-testid="workspace-prerequisites-types-error">
-                {tracker}&apos;s link types could not be read: {typesError} Your saved choice is kept; try again when{' '}
-                {tracker} can be reached.
+                {tracker}&apos;s link types could not be read: {typesError} Your saved choice is kept and can&apos;t be
+                edited until {tracker} can be reached.{saved ? ' You can still reset it to the default.' : ''}
               </div>
             ) : !types ? (
               <Loader size="small" />
@@ -121,16 +127,16 @@ export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: W
         )}
 
         <div className={styles.footer}>
-          <Button kind="tertiary" onClick={onClose}>{editable ? 'Cancel' : 'Close'}</Button>
+          <Button kind="tertiary" data-testid="workspace-prerequisites-close" onClick={onClose}>{editable ? 'Cancel' : 'Close'}</Button>
+          {canReset && (
+            <Button kind="secondary" data-testid="workspace-prerequisites-reset" disabled={saving} onClick={() => void save(true)}>
+              Reset to default
+            </Button>
+          )}
           {editable && (
-            <>
-              <Button kind="secondary" data-testid="workspace-prerequisites-reset" disabled={saving} onClick={() => void save(true)}>
-                Reset to default
-              </Button>
-              <Button data-testid="workspace-prerequisites-save" disabled={saving} onClick={() => void save(false)}>
-                Save
-              </Button>
-            </>
+            <Button data-testid="workspace-prerequisites-save" disabled={saving} onClick={() => void save(false)}>
+              Save
+            </Button>
           )}
         </div>
       </ModalContent>

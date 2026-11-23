@@ -117,14 +117,102 @@ test('a Jira workspace defaults to "is blocked by" and can save no prerequisite 
   await expect(tid(page, 'workspace-prerequisites-current')).toHaveText('Current: None: no link makes a ticket a prerequisite');
 });
 
-test("when the tracker can't be reached, the saved choice is shown and kept", async () => {
-  const chosen = [{ type: 'Required by', side: 'outward' as const }];
-  await launch([{ ...YT, prerequisiteLinkTypes: chosen }], { VERMILIAN_E2E_LINK_TYPES_FAIL: '1' });
+// ─── Concurrent saves keep the Master plan (VERM-96 review) ─────────────────
+
+test('two sessions saving from the same document keep both the prerequisite choice and the Master plan', async () => {
+  const seeded = { ...YT, masterPlan: { articleId: 'VERM-A-5' } };
+  await launch([seeded]);
+  const base = await readDoc(YT.workspaceId);
+  const prereqs = { ...base, prerequisiteLinkTypes: [{ type: 'Required by', side: 'outward' as const }] };
+  const plan = { ...base, masterPlan: { articleId: 'VERM-A-9' } };
+  for (const edited of [prereqs, plan]) {
+    const r = await page.evaluate(([b, e]) => window.vermilian.updateWorkspaceArticle(b, e), [base, edited] as const);
+    expect(r.ok).toBe(true);
+  }
+  await page.reload();
+  await expect(tid(page, 'workspace-switcher')).toBeVisible({ timeout: 15_000 });
+  const after = await readDoc(YT.workspaceId);
+  expect(after.prerequisiteLinkTypes).toEqual([{ type: 'Required by', side: 'outward' }]);
+  expect(after.masterPlan).toEqual({ articleId: 'VERM-A-9' });
+});
+
+test('a rename and a Master plan change saved from the same document both survive', async () => {
+  await launch([{ ...YT, masterPlan: { articleId: 'VERM-A-5' } }]);
+  const base = await readDoc(YT.workspaceId);
+  for (const edited of [{ ...base, name: 'Renamed PQ' }, { ...base, masterPlan: { articleId: 'VERM-A-9' } }]) {
+    const r = await page.evaluate(([b, e]) => window.vermilian.updateWorkspaceArticle(b, e), [base, edited] as const);
+    expect(r.ok).toBe(true);
+  }
+  await page.reload();
+  await expect(tid(page, 'workspace-switcher')).toBeVisible({ timeout: 15_000 });
+  const after = await readDoc(YT.workspaceId);
+  expect(after.name).toBe('Renamed PQ');
+  expect(after.masterPlan).toEqual({ articleId: 'VERM-A-9' });
+});
+
+// ─── The tracker can't be reached (VERM-96 review) ──────────────────────────
+
+// Holds nothing for its backend but the prerequisite choice, so once that is
+// reset it may switch tracker.
+const SWITCHABLE: WorkspaceDocument = { ...YT, folders: [{ id: 'folder-a', name: 'Projects', order: 0, parentId: null, projectIds: [] }] };
+const TO_JIRA = { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' } as const;
+
+async function switchToJira() {
+  const base = await readDoc(YT.workspaceId);
+  return page.evaluate(([b, backend]) => window.vermilian.updateWorkspaceArticle(b, { ...b, backend }), [base, TO_JIRA] as const);
+}
+
+for (const [label, chosen] of [
+  ['a custom selection', [{ type: 'Required by', side: 'outward' as const }]],
+  ['an explicitly empty list', []],
+] as const) {
+  test(`with the tracker unreachable, ${label} is kept on close and removed by an explicit reset`, async () => {
+    await launch([{ ...SWITCHABLE, prerequisiteLinkTypes: [...chosen] }], { VERMILIAN_E2E_LINK_TYPES_FAIL: '1' });
+    // The saved choice holds the tracker switch.
+    const held = await switchToJira();
+    expect(held.ok).toBe(false);
+    expect(!held.ok && held.message).toContain('prerequisite link types');
+
+    // Shown, not editable; closing keeps it.
+    await openPrerequisites('YouTrack PQ');
+    await expect(tid(page, 'workspace-prerequisites-types-error')).toContainText('could not be read');
+    await expect(tid(page, 'workspace-prerequisites-current')).toHaveText(
+      chosen.length ? 'Current: Required by (outward side)' : 'Current: None: no link makes a ticket a prerequisite',
+    );
+    await expect(tid(page, 'workspace-prerequisites-save')).toHaveCount(0);
+    await expect(tid(page, 'workspace-prerequisites-option')).toHaveCount(0);
+    await expect(tid(page, 'workspace-prerequisites-reset')).toBeEnabled();
+    await tid(page, 'workspace-prerequisites-close').click();
+    await expect(page.locator('#workspace-prerequisites-modal')).toHaveCount(0);
+    expect((await readDoc(YT.workspaceId)).prerequisiteLinkTypes).toEqual(chosen);
+
+    // A failed reset shows the error and keeps the saved choice in view.
+    await openPrerequisites('YouTrack PQ');
+    await page.evaluate(() => window.vermilian.debugFailWorkspaceWrites!(1));
+    await tid(page, 'workspace-prerequisites-reset').click();
+    await expect(tid(page, 'workspace-prerequisites-save-error')).toBeVisible();
+    await expect(tid(page, 'workspace-prerequisites-current')).toBeVisible();
+    expect((await readDoc(YT.workspaceId)).prerequisiteLinkTypes).toEqual(chosen);
+
+    // An explicit reset goes through the normal save and survives a reload.
+    await tid(page, 'workspace-prerequisites-reset').click();
+    await expect(page.locator('#workspace-prerequisites-modal')).toHaveCount(0);
+    await page.reload();
+    await expect(tid(page, 'workspace-switcher')).toBeVisible({ timeout: 15_000 });
+    expect('prerequisiteLinkTypes' in (await readDoc(YT.workspaceId))).toBe(false);
+
+    // Nothing else holds the workspace to YouTrack now.
+    const switched = await switchToJira();
+    expect(switched.ok).toBe(true);
+    expect((await readDoc(YT.workspaceId)).backend.kind).toBe('jira');
+  });
+}
+
+test('with the tracker unreachable and nothing saved, there is nothing to reset', async () => {
+  await launch([SWITCHABLE], { VERMILIAN_E2E_LINK_TYPES_FAIL: '1' });
   await openPrerequisites('YouTrack PQ');
-  await expect(tid(page, 'workspace-prerequisites-types-error')).toContainText('could not be read');
-  await expect(tid(page, 'workspace-prerequisites-current')).toHaveText('Current: Required by (outward side)');
-  await expect(tid(page, 'workspace-prerequisites-save')).toHaveCount(0);
+  await expect(tid(page, 'workspace-prerequisites-types-error')).toBeVisible();
+  await expect(tid(page, 'workspace-prerequisites-current')).toHaveText('Current: Default: Depend (inward side)');
   await expect(tid(page, 'workspace-prerequisites-reset')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  expect((await readDoc(YT.workspaceId)).prerequisiteLinkTypes).toEqual(chosen);
+  await expect(tid(page, 'workspace-prerequisites-save')).toHaveCount(0);
 });

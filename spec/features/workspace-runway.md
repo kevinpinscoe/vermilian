@@ -283,7 +283,9 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       `Subtask` and undirected types are shown but can't be chosen. Saved in the workspace's own
       article (per-workspace storage) as `prerequisiteLinkTypes`; absent is the default, an
       empty list means no link is a prerequisite, and **Reset to default** removes it. When the
-      tracker can't be read, the saved choice is shown and kept (VERM-96).
+      tracker can't be read, the saved choice is shown and can't be edited; closing keeps it,
+      and **Reset to default** still removes it through the normal workspace save (VERM-96).
+      Saves combined from the same starting document keep every field, the Master plan included.
 - [ ] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
       In Progress)*, with an explicit **Add to Runway** action.
 - [ ] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.

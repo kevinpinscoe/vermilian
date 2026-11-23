@@ -558,9 +558,19 @@ function addWsArticle(summary: string, content: string): FakeWsArticle {
   return a;
 }
 
+// e2e-only: refuse the next N writes to workspace articles (VERM-96 review).
+let wsWriteFailures = 0;
+export function failWorkspaceWritesForTests(n: number): void {
+  wsWriteFailures = Number.isInteger(n) && n > 0 ? Math.min(n, 1000) : 0;
+}
+
 function writeWsArticle(articleId: string, content: string): { updated: number } | null {
   const a = wsArticles.get(articleId);
   if (!a) return null;
+  if (wsWriteFailures > 0) {
+    wsWriteFailures--;
+    return null;
+  }
   a.content = content;
   a.updated = nextUpdated();
   return { updated: a.updated };
