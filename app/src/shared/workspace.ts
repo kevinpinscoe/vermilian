@@ -90,6 +90,11 @@ export interface BoardIssue {
   // The assignee's display name, for Jira issues, whose fields.assignee is an
   // accountId (VERM-62); absent for YouTrack, whose assignee is a login.
   assigneeName?: string | null;
+  // Its links to other tickets, provider-neutral (VERM-94, shared/issueLink.ts):
+  // [] when the tracker answered with none; absent when they were not read
+  // (Jira until VERM-95), which the blocker states treat as Unknown, never as
+  // "no prerequisites".
+  links?: import('./issueLink').IssueLink[];
 }
 
 /** What a status means to Vermilian, whatever the workflow calls it. */
