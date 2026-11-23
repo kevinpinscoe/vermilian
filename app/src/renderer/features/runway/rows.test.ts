@@ -302,13 +302,40 @@ describe('panelRunwayStatus (detail panel Add safety, PR 199 review)', () => {
   it('is off only once every other ticket row has answered', () => {
     const reads: RunwayTicketRead[] = [
       { itemId: 'jira:OPS-7', state: 'resolved', issue: issue('OPS-7', 'x') },
-      { itemId: 'jira:DEMO-101', state: 'missing-or-unreadable' },
+      { itemId: 'jira:DEMO-101', state: 'missing' },
     ];
     expect(panelRunwayStatus(items, done(reads), jiraTicket)).toEqual({ kind: 'off' });
     // A row with no read yet: checking while a refetch runs, unverified otherwise.
     const partial = [reads[0]];
     expect(panelRunwayStatus(items, done(partial, true), jiraTicket)).toEqual({ kind: 'checking' });
     expect(panelRunwayStatus(items, done(partial), jiraTicket)).toEqual({ kind: 'unverified' });
+  });
+
+  it('a Jira row whose read is Missing or not readable could be the moved ticket: unverified', () => {
+    const ok: RunwayTicketRead = { itemId: 'jira:OPS-7', state: 'resolved', issue: issue('OPS-7', 'x') };
+    for (const ambiguous of [
+      { itemId: 'jira:DEMO-101', state: 'missing-or-unreadable' },
+      { itemId: 'jira:DEMO-101', state: 'not-readable' },
+    ] as RunwayTicketRead[]) {
+      expect(panelRunwayStatus(items, done([ok, ambiguous]), jiraTicket)).toEqual({ kind: 'unverified' });
+      // While a retry is under way it is checking, not off.
+      expect(panelRunwayStatus(items, done([ok, ambiguous], true), jiraTicket)).toEqual({ kind: 'checking' });
+    }
+    // Confirmed gone (410), or on the other tracker: it cannot be this ticket.
+    for (const settled of [
+      { itemId: 'jira:DEMO-101', state: 'missing' },
+      { itemId: 'jira:DEMO-101', state: 'wrong-tracker', reason: 'x' },
+    ] as RunwayTicketRead[]) {
+      expect(panelRunwayStatus(items, done([ok, settled]), jiraTicket)).toEqual({ kind: 'off' });
+    }
+  });
+
+  it('a YouTrack row read as 404 or 403 is another ticket: off', () => {
+    const ytItems = [item('yt:READ-12', 'issue', 1)];
+    const ytTicket = { tracker: 'youtrack' as const, keys: ['READ-30'], entityId: '2-45' };
+    for (const state of ['missing-or-unreadable', 'not-readable'] as const) {
+      expect(panelRunwayStatus(ytItems, done([{ itemId: 'yt:READ-12', state }]), ytTicket)).toEqual({ kind: 'off' });
+    }
   });
 
   it('needs no lookup when an ID matches, or when no other ticket row could be it', () => {

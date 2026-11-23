@@ -254,6 +254,41 @@ test.describe('Runway # in the detail panel: lookup failure and a closed panel',
     await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-101']);
   });
 
+  test('a saved Jira key that reads individually as Missing or not readable leaves the moved ticket unverified', async () => {
+    const { page, ws } = await jiraRunway(['jira:OPS-7', 'jira:DEMO-101']);
+    await jiraChange(page, { op: 'move', key: 'DEMO-101', toKey: 'DEMO-150', touch: true });
+    // Jira no longer answers for the old key: the batch falls back to single
+    // reads, which succeed overall but answer 404 for DEMO-101.
+    await jiraChange(page, { op: 'hideMovedKeys' });
+    const read = await page.evaluate((w) => window.vermilian.runwayItemsResolve({ workspaceId: w }), ws);
+    expect(read.ok, JSON.stringify(read)).toBe(true);
+    if (read.ok) {
+      expect(read.tickets.find((t) => t.itemId === 'jira:DEMO-101')?.state).toBe('missing-or-unreadable');
+      expect(read.tickets.find((t) => t.itemId === 'jira:OPS-7')?.state).toBe('resolved');
+    }
+    await page.reload();
+    await expect(tid(page, 'jira-workspace-board')).toBeVisible({ timeout: 15_000 });
+
+    // DEMO-150 may be the ticket saved as DEMO-101: its position cannot be ruled out.
+    await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-150"]').click();
+    await expect(tid(page, 'jira-issue-detail-panel')).toBeVisible();
+    await expect(panelNumber(page)).toHaveText('Unable to verify Runway position');
+    await expect(tid(page, 'detail-runway-retry')).toBeVisible();
+    await expect(tid(page, 'detail-runway-add-end')).toBeDisabled();
+    await typeNumber(page, '1');
+    await expect(tid(page, 'detail-runway-add-at')).toBeDisabled();
+    await tid(page, 'detail-runway-number-input').press('Enter');
+    await page.waitForTimeout(500);
+    await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-101']);
+
+    // Jira answers for the old key again: Retry shows the existing position.
+    await jiraChange(page, { op: 'showMovedKeys' });
+    await tid(page, 'detail-runway-retry').click();
+    await expect(panelNumber(page)).toHaveText('#2');
+    await expect(tid(page, 'detail-runway-add-end')).toHaveCount(0);
+    await expectStored(page, ws, ['jira:OPS-7', 'jira:DEMO-101']);
+  });
+
   test('an add that finishes after the panel closed still shows in the Runway view, without a refresh', async () => {
     const { page, ws } = await jiraRunway(['jira:OPS-7']);
     await page.locator('[data-testid="jira-card"][data-issue-key="DEMO-102"]').click();

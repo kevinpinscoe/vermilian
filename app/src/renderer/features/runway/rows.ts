@@ -244,8 +244,15 @@ export function panelRunwayRow(
  *               ticket row's read answered;
  *   checking    the tracker reads that could identify a row are still in flight;
  *   unverified  they failed, or a ticket row has no read yet and none is on
- *               the way, so a row saved under an ID the panel does not know
- *               (a Jira key the ticket moved from) cannot be ruled out.
+ *               the way, or a Jira row read as Missing or not readable (404)
+ *               or Not readable (403) — Jira says nothing of where a ticket
+ *               went, so that row may be this ticket under a key it moved
+ *               from. A row saved under an ID the panel does not know cannot
+ *               be ruled out.
+ * A row confirmed gone (410) or on the other tracker is settled: it cannot be
+ * the ticket open in the panel. For YouTrack, a 404 or 403 is settled too: the
+ * panel's ticket is readable on the same connection, and YouTrack answers a
+ * moved ticket's old ID with the ticket itself, so the row is another ticket.
  * Add is offered only for 'off'; anything else could add the ticket twice.
  */
 export type PanelRunwayStatus =
@@ -268,7 +275,13 @@ export function panelRunwayStatus(
   if (others.length === 0) return { kind: 'off' };
   if (reads.state === 'pending') return { kind: 'checking' };
   if (reads.state === 'failed') return { kind: 'unverified' };
-  const answered = new Set(reads.reads.map((r) => r.itemId));
-  if (others.every((i) => answered.has(i.itemId))) return { kind: 'off' };
+  const byItem = new Map(reads.reads.map((r) => [r.itemId, r]));
+  const settled = (itemId: string): boolean => {
+    const read = byItem.get(itemId);
+    if (!read) return false;
+    if (read.state === 'missing-or-unreadable' || read.state === 'not-readable') return ticket.tracker !== 'jira';
+    return true;
+  };
+  if (others.every((i) => settled(i.itemId))) return { kind: 'off' };
   return reads.refetching ? { kind: 'checking' } : { kind: 'unverified' };
 }

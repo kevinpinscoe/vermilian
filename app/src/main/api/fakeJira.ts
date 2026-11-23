@@ -80,6 +80,7 @@ const unindexed = new Set<string>();
 const movedFrom = new Map<string, string>();
 // VERM-88 test hooks: failing key-list reads, and a held getIssue.
 let keyReadsFail = false;
+let movedKeysHidden = false;
 let getIssueHold: Promise<void> | null = null;
 let releaseGetIssueHold: (() => void) | null = null;
 
@@ -87,7 +88,7 @@ let releaseGetIssueHold: (() => void) | null = null;
 function issueByKey(key: string): JiraSearchIssue | undefined {
   const direct = FAKE_JIRA_ISSUES.find((i) => i.key === key);
   if (direct) return direct;
-  const id = movedFrom.get(key);
+  const id = movedKeysHidden ? undefined : movedFrom.get(key);
   return id === undefined ? undefined : FAKE_JIRA_ISSUES.find((i) => i.id === id);
 }
 
@@ -428,7 +429,12 @@ export type FakeJiraChange =
   | { op: 'restoreKeyReads' }
   // getIssue waits until released: a check held mid-flight (VERM-88).
   | { op: 'holdGetIssue' }
-  | { op: 'releaseGetIssue' };
+  | { op: 'releaseGetIssue' }
+  // A read by a moved issue's old key answers 404 (single read) or fails the
+  // key list (batch) until shown again, as when Jira will not say where an
+  // issue went (VERM-88).
+  | { op: 'hideMovedKeys' }
+  | { op: 'showMovedKeys' };
 
 function stampNow(): string {
   return new Date().toISOString();
@@ -441,6 +447,10 @@ export function applyChangeForTests(change: FakeJiraChange): boolean {
   }
   if (change.op === 'failKeyReads' || change.op === 'restoreKeyReads') {
     keyReadsFail = change.op === 'failKeyReads';
+    return true;
+  }
+  if (change.op === 'hideMovedKeys' || change.op === 'showMovedKeys') {
+    movedKeysHidden = change.op === 'hideMovedKeys';
     return true;
   }
   if (change.op === 'holdGetIssue') {
