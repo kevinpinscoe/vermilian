@@ -238,3 +238,57 @@ describe('mergeWorkspaceEdit — jiraProjects (VERM-31)', () => {
     expect(c.map((x) => x.path)).toEqual(['jiraProjects["DEMO"].statusRoles["Impeded"]']);
   });
 });
+
+describe('mergeWorkspaceEdit — masterPlan (VERM-48, kept since VERM-96)', () => {
+  const base = doc({ masterPlan: { articleId: 'VERM-A-5' } });
+
+  it('keeps a Master plan change made here when the other side renamed the workspace', () => {
+    const out = merged(base, { ...copy(base), masterPlan: { articleId: 'VERM-A-9' } }, { ...copy(base), name: 'Renamed' });
+    expect(out.masterPlan).toEqual({ articleId: 'VERM-A-9' });
+    expect(out.name).toBe('Renamed');
+  });
+
+  it('keeps a Master plan changed elsewhere when this side renamed the workspace', () => {
+    const out = merged(base, { ...copy(base), name: 'Renamed' }, { ...copy(base), masterPlan: { articleId: null } });
+    expect(out.masterPlan).toEqual({ articleId: null });
+    expect(out.name).toBe('Renamed');
+  });
+
+  it('keeps both a prerequisite change and a Master plan change, whichever side made which', () => {
+    const prereqs = { ...copy(base), prerequisiteLinkTypes: [{ type: 'Depend', side: 'inward' as const }] };
+    const plan = { ...copy(base), masterPlan: { articleId: 'VERM-A-9' } };
+    for (const [edited, remote] of [[prereqs, plan], [plan, prereqs]]) {
+      const out = merged(base, edited, remote);
+      expect(out.masterPlan).toEqual({ articleId: 'VERM-A-9' });
+      expect(out.prerequisiteLinkTypes).toEqual([{ type: 'Depend', side: 'inward' }]);
+    }
+  });
+
+  it('keeps an unchanged Master plan, sets one where the base had none, and conflicts on two different plans', () => {
+    expect(merged(base, { ...copy(base), name: 'A' }, copy(base)).masterPlan).toEqual({ articleId: 'VERM-A-5' });
+    const none = doc();
+    expect(merged(none, { ...copy(none), masterPlan: { articleId: 'VERM-A-7' } }, { ...copy(none), name: 'B' }).masterPlan).toEqual({ articleId: 'VERM-A-7' });
+    expect(conflicts(base, { ...copy(base), masterPlan: { articleId: 'VERM-A-1' } }, { ...copy(base), masterPlan: { articleId: 'VERM-A-2' } })
+      .map((c) => c.path)).toEqual(['masterPlan.articleId']);
+  });
+});
+
+describe('mergeWorkspaceEdit — every known field survives an unrelated remote change', () => {
+  it('keeps each optional field the edit set while the other side renamed the workspace', () => {
+    const jiraBase = doc({
+      backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-1' },
+      folders: [{ id: 'folder-1', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+      boards: {},
+    });
+    const edited: WorkspaceDocument = {
+      ...copy(jiraBase),
+      jiraProjects: { DEMO: { dueDateField: 'customfield_10042' } },
+      jiraBoards: [{ id: 12, name: 'Board' }],
+      jiraHiddenStatuses: ['Blocked'],
+      masterPlan: { articleId: null },
+      prerequisiteLinkTypes: [{ type: 'Blocks', side: 'inward' }],
+    };
+    const out = merged(jiraBase, edited, { ...copy(jiraBase), name: 'Renamed' });
+    expect(out).toEqual({ ...edited, name: 'Renamed' });
+  });
+});

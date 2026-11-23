@@ -40,6 +40,7 @@ export function createYouTrackProvider(
     getIssueDetail: (issueId) => client.getIssueDetail(url, token, issueId),
     // The project's own Priority bundle, in its order (VERM-92).
     getPriorityValues: (projectShortName) => client.getPriorityOrder(url, token, projectShortName),
+    getLinkTypes: () => client.getLinkTypes(url, token),
     patchIssue: (issueId, field, value) => client.patchIssue(url, token, issueId, field, value),
     postComment: (issueId, text) => client.postComment(url, token, issueId, text),
     moveIssue: (issueId, targetProjectId) => client.moveIssue(url, token, issueId, targetProjectId),

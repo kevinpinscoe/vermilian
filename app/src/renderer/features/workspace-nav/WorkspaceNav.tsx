@@ -22,6 +22,7 @@ import { buildWorkspaceDocument, nextWorkspaceOrder, type NewWorkspaceBackend } 
 import { parseAiCredentialRefInput } from '../../../shared/workspaceAi';
 import { WorkspaceAiCredentialModal } from './WorkspaceAiCredentialModal';
 import { WorkspaceMasterPlanModal } from './WorkspaceMasterPlanModal';
+import { WorkspacePrerequisitesModal } from './WorkspacePrerequisitesModal';
 import { MASTER_PLAN_QUERY_KEY } from '../priority-desk/masterPlanApi';
 import { ManageWorkspacesModal } from './ManageWorkspacesModal';
 import { AddProjectsModal } from './AddProjectsModal';
@@ -874,6 +875,7 @@ export function WorkspaceNav({
   const [aiCredentialFor, setAiCredentialFor] = useState<string | null>(null);
   // The workspace whose master-plan reference is being edited (VERM-48).
   const [masterPlanFor, setMasterPlanFor] = useState<string | null>(null);
+  const [prerequisitesFor, setPrerequisitesFor] = useState<string | null>(null);
   const [showAddProjects, setShowAddProjects] = useState(false);
 
   // ── On fresh install: auto-create default workspace config ──────────────────
@@ -1428,7 +1430,15 @@ export function WorkspaceNav({
           storage={storage}
           onEditAiCredential={(id) => { setShowManage(false); setAiCredentialFor(id); }}
           onEditMasterPlan={(id) => { setShowManage(false); setMasterPlanFor(id); }}
+          onEditPrerequisites={(id) => { setShowManage(false); setPrerequisitesFor(id); }}
           onDeletePerWorkspace={deletePerWorkspace}
+        />
+      )}
+      {prerequisitesFor && (
+        <WorkspacePrerequisitesModal
+          workspaceId={prerequisitesFor}
+          onClose={() => setPrerequisitesFor(null)}
+          onSaved={() => { void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY }); }}
         />
       )}
       {masterPlanFor && (

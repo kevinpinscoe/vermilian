@@ -1,4 +1,5 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
+import type { TrackerLinkTypesResult } from '../shared/workspacePrerequisites';
 import type { StandupWorkspace } from '../shared/standup';
 import { generateWorkspaceStandup } from './services/workspaceStandup';
 import { randomUUID } from 'node:crypto';
@@ -1220,6 +1221,7 @@ export function registerIpc(): void {
     );
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
     ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
+    ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,
     // read which calls were made, and hold searches back to test a poll in
@@ -2340,6 +2342,28 @@ export function registerIpc(): void {
     },
   });
   ipcMain.handle(IPC.youtrackPriorityOrders, (_e, args) => youtrackPriorityOrders(args));
+
+  // The workspace's tracker's link types (VERM-96), for its prerequisite link
+  // type picker: read-only, on the workspace's own connection — the Jira
+  // provider, or its own YouTrack server and credential — never another's.
+  // Per-workspace storage only: the setting lives in the workspace's article.
+  ipcMain.handle(IPC.workspaceLinkTypes, async (_e, workspaceId: unknown): Promise<TrackerLinkTypesResult> => {
+    try {
+      if (typeof workspaceId !== 'string' || workspaceId === '') return { ok: false, message: 'No workspace ID was given.' };
+      const doc = await perWorkspaceDocument(workspaceId);
+      if (!doc) return { ok: false, message: `No workspace ${workspaceId} is configured.` };
+      if (doc.backend.kind === 'jira') {
+        const r = await workspaceJiraProvider(workspaceId);
+        if (!r.ok) return { ok: false, message: r.message };
+        return { ok: true, types: await r.provider.getLinkTypes() };
+      }
+      const yt = await resolveWorkspaceYouTrackConnection(doc, await readConfig(), credentialSourceIO, IS_E2E);
+      if (!yt.ok) return { ok: false, message: yt.error };
+      return { ok: true, types: await youtrackTracker(yt.url, yt.token).getLinkTypes() };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message || 'The link types could not be read.' };
+    }
+  });
 
   // Adding a ticket by key or link (VERM-86): the link must be on the
   // workspace's own tracker host, the exact key is read once on the same

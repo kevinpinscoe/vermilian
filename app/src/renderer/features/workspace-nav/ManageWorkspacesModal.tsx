@@ -66,13 +66,15 @@ interface ManageWorkspacesModalProps {
   onEditAiCredential?: (workspaceId: string) => void;
   // Per-workspace storage only: each workspace's own master plan (VERM-48).
   onEditMasterPlan?: (workspaceId: string) => void;
+  // Per-workspace storage only: each workspace's prerequisite link types (VERM-96).
+  onEditPrerequisites?: (workspaceId: string) => void;
   // Per-workspace storage only: deletes the workspace's article. Resolves to
   // an error message, or null once it is gone (VERM-72).
   onDeletePerWorkspace?: (workspaceId: string, destinationId: string | null) => Promise<string | null>;
 }
 
 export function ManageWorkspacesModal({
-  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential, onEditMasterPlan, onDeletePerWorkspace,
+  config, onClose, onSave, onActiveWorkspaceChanged, storage = 'legacy', onEditAiCredential, onEditMasterPlan, onEditPrerequisites, onDeletePerWorkspace,
 }: ManageWorkspacesModalProps) {
   const sorted = config.workspaces.slice().sort((a, b) => a.order - b.order);
   const perWorkspace = storage === 'per-workspace';
@@ -220,6 +222,16 @@ export function ManageWorkspacesModal({
                     title="Choose the YouTrack article this workspace's Priority Desk uses as its master plan"
                     onClick={() => onEditMasterPlan(ws.id)}
                   >Master plan…</button>
+                )}
+
+                {storage === 'per-workspace' && onEditPrerequisites && (
+                  <button
+                    type="button"
+                    data-testid="workspace-prerequisites-btn"
+                    className={styles.deleteBtn}
+                    title="Choose which link types make a ticket wait on another in this workspace"
+                    onClick={() => onEditPrerequisites(ws.id)}
+                  >Prerequisites…</button>
                 )}
 
                 <button

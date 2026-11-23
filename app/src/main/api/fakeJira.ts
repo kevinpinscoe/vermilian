@@ -3,6 +3,7 @@
 // Any token is accepted as classic except FAKE_JIRA_BAD_TOKEN, which both
 // routes reject, so a spec can exercise the failure path.
 
+import { mapJiraLinkTypes, type TrackerLinkType } from '../../shared/workspacePrerequisites';
 import type { JiraProfile } from '../../shared/jiraProfile';
 import { isValidBoardId, isValidProjectKey, JIRA_BOARD_SCOPE, projectRecentlyUpdatedJql, siteApiBase, type JiraBoard, type BoardIssueOptions, type JiraAccount, type JiraComment, type JiraEditMeta, type JiraProbeResult, type JiraProject, type ProjectSearchOptions, type RecentlyUpdatedOptions } from './jira';
 import { JIRA_POLL_WINDOW_MINUTES } from '../../shared/jiraPoll';
@@ -403,6 +404,22 @@ export const FAKE_JIRA_STATUSES: Record<string, string[]> = {
   OPS: ['Waiting', 'Done'],
 };
 let statusReadsFail = false;
+
+// Jira Cloud's four default link types, for the prerequisite picker (VERM-96).
+const FAKE_JIRA_LINK_TYPE_LIST = {
+  issueLinkTypes: [
+    { id: '10000', name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+    { id: '10001', name: 'Cloners', inward: 'is cloned by', outward: 'clones' },
+    { id: '10002', name: 'Duplicate', inward: 'is duplicated by', outward: 'duplicates' },
+    { id: '10003', name: 'Relates', inward: 'relates to', outward: 'relates to' },
+  ],
+};
+
+export async function getLinkTypes(_base: string, _email: string, _token: string): Promise<TrackerLinkType[]> {
+  logCall('getLinkTypes', {});
+  if (process.env.VERMILIAN_E2E_LINK_TYPES_FAIL === '1') throw new Error('Jira could not be reached.');
+  return mapJiraLinkTypes(FAKE_JIRA_LINK_TYPE_LIST);
+}
 
 export async function listProjectStatuses(_base: string, _email: string, token: string, projectKey: string): Promise<string[]> {
   logCall('listProjectStatuses', { projectKey });

@@ -133,6 +133,15 @@ export async function getPriorityOrder(url: string, token: string, projectShortN
   return youtrackPriorityOrder(fields) ?? [];
 }
 
+/**
+ * Every issue link type on the server, with each side's wording (VERM-96),
+ * for choosing a workspace's prerequisite link types. Readable by any user.
+ */
+export async function getLinkTypes(url: string, token: string): Promise<TrackerLinkType[]> {
+  const raw = await request<unknown>(url, token, '/api/issueLinkTypes?fields=name,directed,sourceToTarget,targetToSource&$top=200');
+  return mapYouTrackLinkTypes(raw);
+}
+
 // --- Issues ---
 
 interface RawCustomField {
@@ -160,6 +169,7 @@ interface RawIssue {
   links?: RawIssueLink[];
 }
 
+import { mapYouTrackLinkTypes, type TrackerLinkType } from '../../shared/workspacePrerequisites';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, IssueDetail, ParentEpic } from '../../shared/workspace';
 import { buildIssueIdsQuery, buildIssueSearchQuery } from '../../shared/search';

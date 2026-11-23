@@ -11,6 +11,7 @@
 //
 // Pure TypeScript: no Electron, no React. Safe in either process and in tests.
 
+import type { TrackerLinkType } from './workspacePrerequisites';
 import type { BoardIssue, IssueDetail } from './workspace';
 
 export const TRACKER_KINDS = ['youtrack', 'jira'] as const;
@@ -132,6 +133,8 @@ export interface TrackerProvider {
    * (shared/priority.ts). [] when the backend cannot say (VERM-30).
    */
   getPriorityValues(projectShortName: string): Promise<string[]>;
+  /** Every issue link type, with each side's wording (VERM-96). Throws when the tracker can't be read. */
+  getLinkTypes(): Promise<TrackerLinkType[]>;
 }
 
 /**

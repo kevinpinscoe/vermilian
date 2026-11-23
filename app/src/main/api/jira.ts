@@ -10,6 +10,7 @@
 // documented in an Atlassian KB but not as a supported API, so callers keep a
 // hand-entered cloudId as the fallback when detection fails.
 
+import { mapJiraLinkTypes, type TrackerLinkType } from '../../shared/workspacePrerequisites';
 import type { JiraProfile } from '../../shared/jiraProfile';
 import { JIRA_LIST_FIELDS, type JiraSearchIssue } from '../../shared/jiraIssue';
 import { isValidLocalId } from '../../shared/tracker';
@@ -340,6 +341,12 @@ export async function listProjectStatuses(base: string, email: string, token: st
   );
   const names = (Array.isArray(res) ? res : []).flatMap((t) => (t.statuses ?? []).flatMap((s) => (s.name ? [s.name] : [])));
   return [...new Set(names)];
+}
+
+// GET /rest/api/3/issueLinkType: every issue link type on the site, with
+// each side's wording (VERM-96). Throws JiraError.
+export async function getLinkTypes(base: string, email: string, token: string): Promise<TrackerLinkType[]> {
+  return mapJiraLinkTypes(await jiraRequest<unknown>(base, email, token, '/rest/api/3/issueLinkType'));
 }
 
 // Jira project keys: an uppercase letter, then uppercase letters, digits or

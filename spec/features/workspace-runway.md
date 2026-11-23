@@ -275,9 +275,17 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       the same (`Relates`) is undirected (VERM-95).
 - [ ] A YouTrack `BLOCKED` status with no prerequisite link shows the reason
       *status BLOCKED, no linked prerequisite*.
-- [ ] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`
+- [x] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`
       (*depends on* is a prerequisite) and Jira `Blocks` (*is blocked by* is a prerequisite).
-      `Subtask` and parent links are never blockers.
+      `Subtask` and parent links are never blockers. Chosen in Manage workspaces →
+      **Prerequisites…** from the workspace's own tracker's link types: for each, the wording
+      that answers "What am I waiting on?", so a custom type worded the other way works.
+      `Subtask` and undirected types are shown but can't be chosen. Saved in the workspace's own
+      article (per-workspace storage) as `prerequisiteLinkTypes`; absent is the default, an
+      empty list means no link is a prerequisite, and **Reset to default** removes it. When the
+      tracker can't be read, the saved choice is shown and can't be edited; closing keeps it,
+      and **Reset to default** still removes it through the normal workspace save (VERM-96).
+      Saves combined from the same starting document keep every field, the Master plan included.
 - [ ] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
       In Progress)*, with an explicit **Add to Runway** action.
 - [ ] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.

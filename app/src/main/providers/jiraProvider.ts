@@ -213,6 +213,10 @@ export function createJiraProvider(
       return client.listProjectStatuses(base, email, token, projectKey);
     },
 
+    async getLinkTypes() {
+      return client.getLinkTypes(base, email, token);
+    },
+
     async getBoards() {
       return client.listBoards(base, email, token);
     },

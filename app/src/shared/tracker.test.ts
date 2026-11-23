@@ -128,6 +128,7 @@ describe('isWritableTracker', () => {
   const reader: TrackerProvider = {
     kind: 'jira',
     getCurrentUser: async () => 'User',
+    getLinkTypes: async () => [],
     getProjects: async () => [],
     getIssues: async () => [],
     searchIssues: async () => [],
