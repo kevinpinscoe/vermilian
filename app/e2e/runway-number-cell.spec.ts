@@ -83,7 +83,7 @@ test.describe('Runway # in All tasks', () => {
   test('YouTrack: the column shows each Runway #, blank when unnumbered, and the popover adds, moves and removes', async () => {
     const page = await launchWith(YT, ['yt:TEST-3', 'yt:TEST-1']);
     await tid(page, 'nav-all-tasks').click();
-    await expect(tid(page, 'ws-runway-header')).toHaveText('Runway #');
+    await expect(tid(page, 'ws-runway-header')).toHaveText(/^Runway #/); // plus its sort arrow (VERM-92)
     await expect(ytCell(page, 'TEST-3')).toHaveAttribute('data-runway-number', '1');
     await expect(ytCell(page, 'TEST-3').getByTestId('runway-cell-number')).toHaveText('#1');
     await expect(ytCell(page, 'TEST-1').getByTestId('runway-cell-number')).toHaveText('#2');
@@ -114,7 +114,7 @@ test.describe('Runway # in All tasks', () => {
     await expect(tid(page, 'task-detail-panel')).toHaveCount(0);
 
     // A click outside closes it; Remove asks first.
-    await tid(page, 'ws-runway-header').click();
+    await tid(page, 'ws-issue-count').click(); // the Runway # header now sorts (VERM-92)
     await expect(popover(page)).toHaveCount(0);
     await ytCell(page, 'TEST-3').click();
     await tid(page, 'cell-runway-remove').click();

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { AppConfig, DEFAULT_CONFIG } from '../../shared/config';
 import { sanitiseCredentialSources } from '../../shared/credentialRefs';
 import { sanitiseOpenBaoScopes } from '../../shared/openbao';
+import { sanitiseRunwaySorts } from '../../shared/runwaySort';
 import { IS_E2E } from '../e2e';
 
 function configPath(): string {
@@ -26,6 +27,7 @@ function merge(partial: Partial<AppConfig>): AppConfig {
     credentialSources: sanitiseCredentialSources(partial.credentialSources),
     openbaoScopes: sanitiseOpenBaoScopes(partial.openbaoScopes),
     defaultAssignees: stringEntries(partial.defaultAssignees),
+    allTasksSorts: sanitiseRunwaySorts(partial.allTasksSorts),
   };
 }
 

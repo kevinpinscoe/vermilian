@@ -73,6 +73,8 @@ export const IPC = {
   runwayItemsMoveUp: 'runway-items:move-up',
   runwayItemsMoveDown: 'runway-items:move-down',
   runwayItemsResolve: 'runway-items:resolve',
+  // Each YouTrack project's Priority bundle order (VERM-92), read-only.
+  youtrackPriorityOrders: 'youtrack:priorityOrders',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
@@ -823,6 +825,7 @@ export interface VermilianAPI {
   // only (VERM-84). Read-only: any configured workspace. See
   // shared/runwayTicket.ts for the states and errors.
   runwayItemsResolve(args: RunwayItemsListArgs): Promise<import('./runwayTicket').RunwayTicketsResult>;
+  youtrackPriorityOrders(args: YouTrackPriorityOrdersArgs): Promise<YouTrackPriorityOrdersResult>;
   // Add a ticket by key or link to the active workspace's Runway (VERM-86):
   // checked once on the workspace's own connection, then added through the
   // write gate. See shared/runwayAdd.ts.
@@ -946,3 +949,16 @@ declare global {
     vermilian: VermilianAPI;
   }
 }
+
+// Each YouTrack project's Priority values in its own bundle's order (VERM-92),
+// for the All tasks Tracker priority sort. Read on the workspace's own
+// connection — the same one its Runway tickets are read on — and never
+// written. A project whose order cannot be read is left out (its tickets
+// rank as unknown); [] means the project has no Priority field.
+export interface YouTrackPriorityOrdersArgs {
+  workspaceId: string;
+  projectShortNames: string[];
+}
+export type YouTrackPriorityOrdersResult =
+  | { ok: true; orders: Record<string, string[]> }
+  | { ok: false; error: string };

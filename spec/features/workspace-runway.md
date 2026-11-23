@@ -204,7 +204,8 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       table has a *Runway #* column; Jira's All tasks is a card board, so each card carries a
       Runway # badge beside its key. Each shows the ticket's Runway # on the active workspace's
       Runway, blank when it has none and *?* when its position cannot be verified.
-- [ ] A sort control offers three keys, each ascending or descending:
+- [x] A sort control offers three keys, each ascending or descending (VERM-92 for YouTrack's All
+      tasks table; Jira's All tasks board is VERM-93):
 
   | Sort key | Order |
   | --- | --- |
@@ -212,14 +213,27 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
   | **Tracker priority** | The tracker's own order — YouTrack's `Priority` bundle order; each Jira project's priority order from editmeta — never alphabetical. Applies to the **whole list**, positioned and unpositioned alike. **Ascending is the order the tracker lists, most urgent first.** Each ticket ranks by its position in **its own project's** order, so tickets from different Jira schemes compare by rank (`Highest` and `P1` are both rank 1). Only **known** ranks follow the direction. A priority whose rank is unknown — a value its project's order does not list, or a project whose order is unknown — comes **after every ranked ticket in both directions**, followed by tickets with no priority, last in both directions. |
   | **Ticket ID** | The displayed key's **project prefix as text** (code unit by code unit, no locale), then its **final number numerically**: ascending gives `VERM-90` → `VERM-101` and `OPS-96` → `OPS-956` → `OPS-4089`; descending reverses each. Applies to the **whole list**. |
 
-- [ ] Ties under **Runway #** and **Tracker priority** break by the ascending **Ticket ID** order
+- [x] Ties under **Runway #** and **Tracker priority** break by the ascending **Ticket ID** order
       (prefix as text, number numerically), even when those sorts are descending, so the order is
       fully deterministic.
-- [ ] **Sorting never writes Runway positions or tracker fields.** Switching sorts calls no
+- [x] **Sorting never writes Runway positions or tracker fields.** Switching sorts calls no
       Runway write and no tracker write, and Runway positions are identical afterwards.
-- [ ] The chosen sort is remembered **per workspace, on this computer only**. It is saved as a
+- [x] The chosen sort is remembered **per workspace, on this computer only**. It is saved as a
       local view setting, not in the snapshot and not in the tracker, so it survives a restart.
-      Saving it is the only write a sort change makes.
+      Saving it is the only write a sort change makes. It lives in `app-config.json`'s
+      `allTasksSorts`, by workspace ID (VERM-92).
+- [x] YouTrack's Tracker priority order is each project's own configured `Priority` bundle, read
+      by `ordinal` on the workspace's own connection for every project the visible tickets come
+      from — tickets added to the Runway from outside the workspace's projects included. A project
+      whose bundle cannot be read ranks its tickets as unknown (VERM-92).
+- [x] In YouTrack's All tasks a chosen sort lists every visible ticket as **one flat list**, with no
+      status sections, so the Runway # reads straight down across statuses; the Status column
+      stays and the filters still apply. **Clear sort** returns to the usual status sections and
+      removes only the active workspace's remembered entry (VERM-92).
+- [x] One sort is active at a time. Clicking the **Runway #** or **Priority** column header chooses
+      that sort (a second click reverses it) and is remembered like the control. The other
+      headers (Task, Status, Category, Due date) are a temporary sort inside the status sections
+      for this session; they leave the remembered sort untouched (VERM-92).
 - [ ] Project boards keep their own sorts and drag order; the new sorts apply to All tasks only.
 - [ ] *Optional:* the same sort control orders cards **within** each Kanban status column, for
       YouTrack and Jira. The column order itself is unchanged. With no sort chosen, Jira columns

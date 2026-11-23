@@ -136,3 +136,38 @@ export function sortByRunwaySort<T>(items: readonly T[], sort: RunwaySort, ticke
     .sort((x, y) => compare(x.ticket, y.ticket))
     .map((x) => x.item);
 }
+
+const SORT_KEYS: readonly RunwaySortKey[] = ['runwayNumber', 'priority', 'ticketId'];
+
+/** Whether `value` is a well-formed RunwaySort. */
+export function isRunwaySort(value: unknown): value is RunwaySort {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as { key?: unknown; direction?: unknown };
+  return SORT_KEYS.includes(v.key as RunwaySortKey) && (v.direction === 'asc' || v.direction === 'desc');
+}
+
+/**
+ * The remembered All tasks sort of each workspace on this computer (VERM-92),
+ * by workspace ID, keeping only well-formed entries: a hand-edited or older
+ * app-config.json can never put an unknown sort on screen.
+ */
+export function sanitiseRunwaySorts(value: unknown): Record<string, RunwaySort> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  const out: Record<string, RunwaySort> = {};
+  for (const [id, sort] of Object.entries(value)) {
+    if (id && isRunwaySort(sort)) out[id] = { key: sort.key, direction: sort.direction };
+  }
+  return out;
+}
+
+/** `sorts` with `workspaceId`'s entry set to `sort`, or removed when `sort` is null. Never mutates. */
+export function withRunwaySort(
+  sorts: Readonly<Record<string, RunwaySort>>,
+  workspaceId: string,
+  sort: RunwaySort | null,
+): Record<string, RunwaySort> {
+  const next = { ...sorts };
+  if (sort) next[workspaceId] = { key: sort.key, direction: sort.direction };
+  else delete next[workspaceId];
+  return next;
+}

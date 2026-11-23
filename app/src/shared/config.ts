@@ -3,6 +3,7 @@
 // (those live only in safeStorage blobs — see ADR-0004).
 
 import type { OpenBaoScopeConfig } from './openbao';
+import type { RunwaySort } from './runwaySort';
 
 export type ThemeSetting = 'light' | 'dark' | 'system';
 
@@ -69,6 +70,12 @@ export interface AppConfig {
   // (VERM-68): a YouTrack login or a Jira accountId.
   defaultAssignees: Record<string, string>;
 
+  // The All tasks sort each workspace remembers on this computer (VERM-92),
+  // by workspace ID: Runway #, tracker priority or ticket ID, and its
+  // direction. A local view setting only — never in a Runway snapshot and
+  // never written to the tracker. No entry means the usual status sections.
+  allTasksSorts: Record<string, RunwaySort>;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -100,6 +107,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   credentialSources: {},
   openbaoScopes: {},
   defaultAssignees: {},
+  allTasksSorts: {},
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',

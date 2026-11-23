@@ -57,3 +57,28 @@
 .runwayCell {
   width: 76px;
 }
+
+/* The All tasks sort control (VERM-92). */
+.sortControl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sortLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+}
+
+.sortSelect {
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+}

@@ -11,7 +11,7 @@
 
 import type * as YouTrackClient from '../api/youtrack';
 import type { WritableTrackerProvider } from '../../shared/tracker';
-import { PRIORITY_OPTIONS, type BoardIssue } from '../../shared/workspace';
+import type { BoardIssue } from '../../shared/workspace';
 
 export interface YouTrackProvider extends WritableTrackerProvider {
   readonly kind: 'youtrack';
@@ -38,8 +38,8 @@ export function createYouTrackProvider(
       client.getIssues(url, token, projectShortName, includeResolved),
     searchIssues: (projectShortNames, query) => client.searchIssues(url, token, projectShortNames, query),
     getIssueDetail: (issueId) => client.getIssueDetail(url, token, issueId),
-    // One shared Priority bundle for every YouTrack project.
-    getPriorityValues: async () => [...PRIORITY_OPTIONS],
+    // The project's own Priority bundle, in its order (VERM-92).
+    getPriorityValues: (projectShortName) => client.getPriorityOrder(url, token, projectShortName),
     patchIssue: (issueId, field, value) => client.patchIssue(url, token, issueId, field, value),
     postComment: (issueId, text) => client.postComment(url, token, issueId, text),
     moveIssue: (issueId, targetProjectId) => client.moveIssue(url, token, issueId, targetProjectId),
