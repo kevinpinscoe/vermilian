@@ -45,6 +45,7 @@ describe('createYouTrackProvider', () => {
     ],
     ['getIssuesForRecommendation', (p) => p.getIssuesForRecommendation(['DEMO-1']), 'getIssuesForRecommendation', [['DEMO-1']]],
     ['getIssuesForStandup', (p) => p.getIssuesForStandup(['DEMO'], 1000), 'getIssuesForStandup', [['DEMO'], 1000]],
+    ['getPriorityValues', (p) => p.getPriorityValues('DEMO'), 'getPriorityOrder', ['DEMO']],
   ];
 
   it.each(cases)('%s delegates to the client with the bound URL and token', async (_n, call, clientFn, args) => {
@@ -73,16 +74,10 @@ describe('createYouTrackProvider', () => {
   });
 });
 
-describe('createYouTrackProvider — priority values (VERM-30)', () => {
-  it('returns the shared YouTrack Priority bundle, in order, without a request', async () => {
-    const { client, calls } = recordingClient();
-    await expect(createYouTrackProvider(client, URL, TOKEN).getPriorityValues('DEMO')).resolves.toEqual([
-      'Show-stopper',
-      'Critical',
-      'Major',
-      'Normal',
-      'Minor',
-    ]);
-    expect(calls).toEqual([]);
+describe('createYouTrackProvider — priority values (VERM-92)', () => {
+  it("reads the project's own Priority bundle order, not a built-in list", async () => {
+    const order = ['Urgent', 'Minor', 'Critical'];
+    const client = { getPriorityOrder: async () => order } as unknown as typeof YouTrackClient;
+    await expect(createYouTrackProvider(client, URL, TOKEN).getPriorityValues('DEMO')).resolves.toEqual(order);
   });
 });

@@ -6,7 +6,7 @@
 import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
-import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
+import { FIELD_DEFS, FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import type {
   YouTrackProject,
   CreateIssuePayload,
@@ -143,6 +143,20 @@ export async function getProjects(_url: string, _token: string): Promise<YouTrac
     throw { status: 401, message: 'Unauthorized' };
   }
   return PROJECTS.map((p) => ({ ...p }));
+}
+
+// Each project's Priority bundle order (VERM-92). The built-in list unless
+// VERMILIAN_E2E_YT_PRIORITY_BUNDLES seeds a project's own order, as JSON
+// { "<shortName>": ["most urgent", …] }, so a test can prove the board reads
+// the project's bundle rather than the built-in list.
+export async function getPriorityOrder(_url: string, _token: string, projectShortName: string): Promise<string[]> {
+  let seeded: Record<string, unknown> = {};
+  try {
+    seeded = JSON.parse(process.env.VERMILIAN_E2E_YT_PRIORITY_BUNDLES ?? '{}') as Record<string, unknown>;
+  } catch { /* unseeded */ }
+  const own = seeded[projectShortName];
+  if (Array.isArray(own)) return own.filter((v): v is string => typeof v === 'string');
+  return [...FIELD_DEFS.priority.options];
 }
 
 function toBoardIssue(i: FakeIssue): BoardIssue {

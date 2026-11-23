@@ -119,6 +119,20 @@ export async function getProjects(url: string, token: string): Promise<YouTrackP
     .map(({ id, name, shortName }) => ({ id, name, shortName }));
 }
 
+/**
+ * A project's Priority values in its own bundle's order (VERM-92); [] when it
+ * has no Priority field. Readable by any user who can read the project.
+ */
+export async function getPriorityOrder(url: string, token: string, projectShortName: string): Promise<string[]> {
+  const fields = await request<YouTrackProjectCustomField[]>(
+    url,
+    token,
+    `/api/admin/projects/${encodeURIComponent(projectShortName)}/customFields` +
+      '?fields=field(name),bundle(values(name,ordinal))&$top=200',
+  );
+  return youtrackPriorityOrder(fields) ?? [];
+}
+
 // --- Issues ---
 
 interface RawCustomField {
@@ -166,6 +180,7 @@ import { isValidLocalId } from '../../shared/tracker';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
+import { youtrackPriorityOrder, type YouTrackProjectCustomField } from '../../shared/priority';
 import {
   FIELD_DEFS,
   FIELD_KEYS,

@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Tracker priority** or **Ticket ID**, each ascending or descending, and **Clear sort**. A chosen
   sort lists every visible ticket as one flat list, with no status sections, so the Runway # reads
   straight down; filters still apply. Clicking the **Runway #** or **Priority** column header
-  chooses the same sort; the other headers stay a temporary sort inside the status sections. Each
+  chooses the same sort; the other headers stay a temporary sort inside the status sections.
+  Tracker priority ranks each ticket by **its own project's configured Priority bundle** — read
+  from YouTrack on the workspace's own connection, including for tickets added to the Runway from
+  outside the workspace's projects — not by a built-in list. Each
   workspace remembers its own sort on this computer (in `app-config.json`), so it survives a
   restart; it is never in a Runway snapshot or the tracker. Sorting never writes a Runway position
   or a tracker field.

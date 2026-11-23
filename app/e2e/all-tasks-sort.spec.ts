@@ -90,8 +90,8 @@ test.describe('All tasks sort (VERM-92)', () => {
   let userData: string;
 
   /** Launches, then — on a relaunch — waits until the last active workspace's All tasks has loaded. */
-  async function launch(restored?: string) {
-    app = await launchAppWithUserDataDir(userData, { VERMILIAN_E2E_ARTICLE_CONTENT: ARTICLE });
+  async function launch(restored?: string, env: Record<string, string> = {}) {
+    app = await launchAppWithUserDataDir(userData, { VERMILIAN_E2E_ARTICLE_CONTENT: ARTICLE, ...env });
     page = await app.firstWindow();
     await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
     if (restored) {
@@ -246,5 +246,44 @@ test.describe('All tasks sort (VERM-92)', () => {
     await switchTo(page, 'Sort Alpha');
     await expect(tid(page, 'ws-sort-select')).toHaveValue('runwayNumber');
     await expect.poll(() => rows(page)).toEqual(['TEST-6', 'TEST-2', 'TEST-5', 'TEST-1', 'TEST-3', 'TEST-4']);
+  });
+
+  test("Tracker priority follows each project's configured bundle, from the toolbar and the Priority header", async () => {
+    // TEST's bundle puts Minor first, unlike the built-in list: TEST-2
+    // (Critical) has the smaller ID but is LESS urgent than TEST-3 (Minor).
+    // TST2's bundle puts Major fourth; TST2-2 joins Alpha's Runway from
+    // outside its projects and ranks by TST2's bundle, not TEST's.
+    const bundles = {
+      TEST: ['Minor', 'Show-stopper', 'Critical', 'Major', 'Normal'],
+      TST2: ['Show-stopper', 'Critical', 'Normal', 'Major', 'Minor'],
+    };
+    const r = await page.evaluate(() => window.vermilian.runwayItemsAddIssue({ workspaceId: 'ws-sort-a', issueId: 'yt:TST2-2' }));
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    await app!.close();
+    await launch('Sort Alpha', { VERMILIAN_E2E_YT_PRIORITY_BUNDLES: JSON.stringify(bundles) });
+    await expect.poll(() => rows(page).then((r) => r.length)).toBe(7);
+
+    const ASC = ['TEST-3', 'TEST-2', 'TEST-6', 'TEST-4', 'TST2-2', 'TEST-1', 'TEST-5'];
+    const DESC = ['TEST-1', 'TEST-5', 'TEST-4', 'TST2-2', 'TEST-2', 'TEST-6', 'TEST-3'];
+
+    // The toolbar.
+    await tid(page, 'ws-sort-select').selectOption('priority');
+    await expect(tid(page, 'ws-sort-direction')).toHaveAttribute('data-direction', 'asc');
+    await expect.poll(() => rows(page)).toEqual(ASC);
+    const asc = await rows(page);
+    expect(asc.indexOf('TEST-3')).toBeLessThan(asc.indexOf('TEST-2'));
+    await tid(page, 'ws-sort-direction').click();
+    await expect(tid(page, 'ws-sort-direction')).toHaveAttribute('data-direction', 'desc');
+    await expect.poll(() => rows(page)).toEqual(DESC);
+
+    // The Priority header, from no sort.
+    await tid(page, 'ws-sort-clear').click();
+    await expect(tid(page, 'ws-group-header')).toHaveCount(2);
+    await tid(page, 'ws-sort-header-priority').click();
+    await expect(tid(page, 'ws-sort-header-priority')).toHaveAttribute('aria-sort', 'ascending');
+    await expect.poll(() => rows(page)).toEqual(ASC);
+    await tid(page, 'ws-sort-header-priority').click();
+    await expect(tid(page, 'ws-sort-header-priority')).toHaveAttribute('aria-sort', 'descending');
+    await expect.poll(() => rows(page)).toEqual(DESC);
   });
 });

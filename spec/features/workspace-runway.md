@@ -222,6 +222,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       local view setting, not in the snapshot and not in the tracker, so it survives a restart.
       Saving it is the only write a sort change makes. It lives in `app-config.json`'s
       `allTasksSorts`, by workspace ID (VERM-92).
+- [x] YouTrack's Tracker priority order is each project's own configured `Priority` bundle, read
+      by `ordinal` on the workspace's own connection for every project the visible tickets come
+      from — tickets added to the Runway from outside the workspace's projects included. A project
+      whose bundle cannot be read ranks its tickets as unknown (VERM-92).
 - [x] In YouTrack's All tasks a chosen sort lists every visible ticket as **one flat list**, with no
       status sections, so the Runway # reads straight down across statuses; the Status column
       stays and the filters still apply. **Clear sort** returns to the usual status sections and

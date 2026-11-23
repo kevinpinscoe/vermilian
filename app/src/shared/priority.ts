@@ -51,3 +51,38 @@ export function jiraPriorityOrder(fields: Record<string, JiraAllowedValuesField 
   }
   return names.length ? names : null;
 }
+
+/** One project custom field, as far as the YouTrack Priority order reads it. */
+export interface YouTrackProjectCustomField {
+  field?: { name?: unknown } | null;
+  bundle?: { values?: Array<{ name?: unknown; ordinal?: unknown } | null> | null } | null;
+}
+
+/**
+ * A YouTrack project's Priority values in its own bundle's order (VERM-92),
+ * from `/api/admin/projects/{id}/customFields?fields=field(name),bundle(values(name,ordinal))`:
+ * by `ordinal`, most urgent first, de-duplicated. Archived values stay in
+ * place, since issues can still carry them. null when the project has no
+ * Priority field or its bundle lists no values.
+ */
+export function youtrackPriorityOrder(fields: readonly (YouTrackProjectCustomField | null)[] | null | undefined): string[] | null {
+  const priority = (fields ?? []).find((f) => f?.field?.name === 'Priority');
+  const values = priority?.bundle?.values;
+  if (!Array.isArray(values)) return null;
+  const ranked = values
+    .map((v, i) => ({
+      name: v && typeof v.name === 'string' ? v.name : '',
+      ordinal: v && typeof v.ordinal === 'number' ? v.ordinal : Number.MAX_SAFE_INTEGER,
+      i,
+    }))
+    .filter((v) => v.name)
+    .sort((a, b) => a.ordinal - b.ordinal || a.i - b.i);
+  const names: string[] = [];
+  for (const v of ranked) if (!names.includes(v.name)) names.push(v.name);
+  return names.length ? names : null;
+}
+
+/** A YouTrack project short name safe to put in a request path. */
+export function isYouTrackShortName(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(value);
+}

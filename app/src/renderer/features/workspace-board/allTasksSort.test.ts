@@ -4,8 +4,13 @@ import type { RunwaySort } from '../../../shared/runwaySort';
 import { isRunwaySort, sanitiseRunwaySorts, withRunwaySort } from '../../../shared/runwaySort';
 import {
   activeAllTasksSort, allTasksSortAction, headerSortDirection, sortAllTasksFlat,
-  projectIssuesKey, type AllTasksSortState,
+  projectIssuesKey, projectsOfTickets, youtrackProjectOf, type AllTasksSortState,
 } from './allTasksSort';
+import { FIELD_DEFS } from '../../../shared/fields';
+
+// The built-in list, used here as each project's bundle where a test does not
+// configure its own.
+const BUILT_IN = FIELD_DEFS.priority.options as readonly string[];
 
 // Synthetic keys and names only.
 function issue(idReadable: string, priority: string | null, status = 'To do'): BoardIssue {
@@ -88,7 +93,8 @@ describe('sortAllTasksFlat (VERM-92)', () => {
   ];
   const numbers: Record<string, number> = { 'SYNC-3': 1, 'READ-1': 2, 'READ-12': 3 };
   const numberOf = (i: BoardIssue) => numbers[i.idReadable] ?? null;
-  const keys = (sort: RunwaySort) => sortAllTasksFlat(list, sort, numberOf).map((i) => i.idReadable);
+  const builtIn = { READ: BUILT_IN, SYNC: BUILT_IN, PLAT: BUILT_IN };
+  const keys = (sort: RunwaySort) => sortAllTasksFlat(list, sort, numberOf, builtIn).map((i) => i.idReadable);
 
   it('Runway # reads straight down across statuses, unnumbered last both ways', () => {
     expect(keys(RN('runwayNumber'))).toEqual(['SYNC-3', 'READ-1', 'READ-12', 'PLAT-40', 'READ-9']);
@@ -107,8 +113,49 @@ describe('sortAllTasksFlat (VERM-92)', () => {
 
   it('returns a copy and leaves the input order alone', () => {
     const before = list.map((i) => i.idReadable);
-    sortAllTasksFlat(list, RN('ticketId'), numberOf);
+    sortAllTasksFlat(list, RN('ticketId'), numberOf, builtIn);
     expect(list.map((i) => i.idReadable)).toEqual(before);
+  });
+});
+
+describe("Tracker priority uses each project's configured bundle (VERM-92)", () => {
+  // READ's bundle puts Minor above Critical — unlike the built-in list. READ-2
+  // (Critical) has the smaller ID but is the LESS urgent ticket here, so
+  // neither the built-in list nor ticket ID order can produce the right answer.
+  const READ_BUNDLE = ['Minor', 'Show-stopper', 'Critical', 'Major', 'Normal'];
+  const read2 = issue('READ-2', 'Critical');
+  const read3 = issue('READ-3', 'Minor');
+  const none = () => null;
+  const keys = (list: BoardIssue[], sort: RunwaySort, orders: Record<string, readonly string[]>) =>
+    sortAllTasksFlat(list, sort, none, orders).map((i) => i.idReadable);
+
+  it('ascending puts the more urgent ticket first; descending reverses it', () => {
+    expect(READ_BUNDLE).not.toEqual(BUILT_IN);
+    expect(keys([read2, read3], RN('priority'), { READ: READ_BUNDLE })).toEqual(['READ-3', 'READ-2']);
+    expect(keys([read2, read3], RN('priority', 'desc'), { READ: READ_BUNDLE })).toEqual(['READ-2', 'READ-3']);
+    // The built-in list would have given the opposite.
+    expect(keys([read2, read3], RN('priority'), { READ: BUILT_IN })).toEqual(['READ-2', 'READ-3']);
+  });
+
+  it('ranks a ticket from outside the workspace projects by its own project\'s bundle', () => {
+    // PLAT's bundle puts Major fourth (rank 3), where the built-in list has it third.
+    const PLAT_BUNDLE = ['Show-stopper', 'Critical', 'Normal', 'Major', 'Minor'];
+    const list = [issue('READ-1', 'Normal'), read2, read3, issue('READ-4', 'Major'), issue('PLAT-40', 'Major')];
+    const orders = { READ: READ_BUNDLE, PLAT: PLAT_BUNDLE };
+    expect(keys(list, RN('priority'), orders)).toEqual(['READ-3', 'READ-2', 'PLAT-40', 'READ-4', 'READ-1']);
+    expect(keys(list, RN('priority', 'desc'), orders)).toEqual(['READ-1', 'PLAT-40', 'READ-4', 'READ-2', 'READ-3']);
+  });
+
+  it("a project whose order is not known ranks its tickets as unknown, after every ranked one", () => {
+    const list = [issue('SYNC-1', 'Show-stopper'), read2, read3];
+    expect(keys(list, RN('priority'), { READ: READ_BUNDLE })).toEqual(['READ-3', 'READ-2', 'SYNC-1']);
+    expect(keys(list, RN('priority', 'desc'), { READ: READ_BUNDLE })).toEqual(['READ-2', 'READ-3', 'SYNC-1']);
+  });
+
+  it('finds each ticket\'s project from its key', () => {
+    expect(youtrackProjectOf('READ-12')).toBe('READ');
+    expect(youtrackProjectOf('TST2-2')).toBe('TST2');
+    expect(projectsOfTickets([issue('SYNC-3', null), read2, issue('PLAT-40', null), read3])).toEqual(['PLAT', 'READ', 'SYNC']);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comparePriority, jiraPriorityOrder, priorityOrdinal } from './priority';
+import { comparePriority, isYouTrackShortName, jiraPriorityOrder, priorityOrdinal, youtrackPriorityOrder } from './priority';
 import { PRIORITY_OPTIONS } from './workspace';
 
 // Fictional values only. A scheme shaped like a site's seven-value one, which
@@ -61,5 +61,34 @@ describe('priorityOrdinal / comparePriority — sorting by a project order', () 
   it('reproduces the YouTrack order when given the YouTrack list', () => {
     const shuffled = ['Minor', 'Show-stopper', 'Normal', 'Major', 'Critical'];
     expect(shuffled.sort((a, b) => comparePriority(a, b, PRIORITY_OPTIONS))).toEqual([...PRIORITY_OPTIONS]);
+  });
+});
+
+describe('youtrackPriorityOrder (VERM-92)', () => {
+  const field = (name: string, values: Array<{ name?: unknown; ordinal?: unknown } | null>) => ({ field: { name }, bundle: { values } });
+
+  it("returns the Priority bundle's values by ordinal, most urgent first", () => {
+    expect(youtrackPriorityOrder([
+      field('Type', [{ name: 'Bug', ordinal: 0 }]),
+      field('Priority', [{ name: 'Normal', ordinal: 2 }, { name: 'Minor', ordinal: 0 }, { name: 'Critical', ordinal: 1 }]),
+    ])).toEqual(['Minor', 'Critical', 'Normal']);
+  });
+
+  it('keeps the listed order for equal or missing ordinals and drops blanks and duplicates', () => {
+    expect(youtrackPriorityOrder([
+      field('Priority', [{ name: 'B' }, null, { name: '' }, { name: 'A' }, { name: 'B' }, { name: 'C', ordinal: 0 }]),
+    ])).toEqual(['C', 'B', 'A']);
+  });
+
+  it('is null with no Priority field or no values', () => {
+    expect(youtrackPriorityOrder([field('Type', [{ name: 'Bug' }])])).toBeNull();
+    expect(youtrackPriorityOrder([field('Priority', [])])).toBeNull();
+    expect(youtrackPriorityOrder(null)).toBeNull();
+  });
+
+  it('accepts only path-safe project short names', () => {
+    expect(isYouTrackShortName('READ')).toBe(true);
+    expect(isYouTrackShortName('TST2')).toBe(true);
+    for (const bad of ['', '../x', 'a/b', 'A B', 'A?b', 7, null]) expect(isYouTrackShortName(bad)).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader, Text, Heading, Button, Tooltip } from '@vibe/core';
 import { Wand, Play } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
@@ -26,7 +26,7 @@ import { CONFIG_QUERY_KEY, useConfig, useSaveConfig } from '../settings/api';
 import type { AppConfig } from '../../../shared/config';
 import { withRunwaySort, type RunwaySortKey } from '../../../shared/runwaySort';
 import {
-  RUNWAY_SORT_LABELS, activeAllTasksSort, allTasksSortAction, headerSortDirection, projectIssuesKey, sortAllTasksFlat,
+  RUNWAY_SORT_LABELS, activeAllTasksSort, allTasksSortAction, headerSortDirection, projectIssuesKey, projectsOfTickets, sortAllTasksFlat,
   type AllTasksSortAction,
 } from './allTasksSort';
 import pbStyles from '../project-board/ProjectBoard.module.css';
@@ -89,6 +89,7 @@ function sortIssues(issues: BoardIssue[], sort: BoardSortConfig | undefined): Bo
 
 // ─── Issue row ────────────────────────────────────────────────────────────────
 
+const EMPTY_ORDERS: Record<string, string[]> = {};
 const VISIBLE_COLS: ColumnField[] = ['status', 'priority', 'category', 'dueDate'];
 
 function IssueRow({
@@ -302,6 +303,20 @@ export function WorkspaceBoard({
     queryClient.setQueryData<AppConfig>(CONFIG_QUERY_KEY, (cur) => (cur ? { ...cur, allTasksSorts } : cur));
     saveConfig.mutate({ allTasksSorts });
   }
+
+  // Each project's configured Priority bundle order (VERM-92), read on the
+  // workspace's own connection while the Tracker priority sort is on — for
+  // every project the visible tickets come from, outside Runway tickets'
+  // projects included. Until it answers (or for a project it cannot read)
+  // those tickets rank as unknown.
+  const priorityProjects = useMemo(() => projectsOfTickets(filteredIssues), [filteredIssues]);
+  const priorityOrders = useQuery({
+    queryKey: ['youtrack', 'priority-orders', workspaceId, priorityProjects.join(',')],
+    queryFn: () => window.vermilian.youtrackPriorityOrders({ workspaceId, projectShortNames: priorityProjects }),
+    enabled: Boolean(workspaceId) && activeSort?.kind === 'runway' && activeSort.sort.key === 'priority' && priorityProjects.length > 0,
+    staleTime: 10 * 60_000,
+  });
+  const priorityOrderMap = priorityOrders.data?.ok ? priorityOrders.data.orders : EMPTY_ORDERS;
 
   function handleSort(field: ColumnField | 'runwayNumber') {
     applySort({ type: 'header', field });
@@ -525,7 +540,7 @@ export function WorkspaceBoard({
                 {activeSort?.kind === 'runway' ? (
                   // A Runway sort lists every visible ticket as one flat list
                   // (VERM-92), so Runway # reads straight down across statuses.
-                  sortAllTasksFlat(filteredIssues, activeSort.sort, runwayNumberOf).map((issue) => renderRow(issue))
+                  sortAllTasksFlat(filteredIssues, activeSort.sort, runwayNumberOf, priorityOrderMap).map((issue) => renderRow(issue))
                 ) : groups.map(([status, groupIssues]) => {
                   const exp = !collapsed.has(status);
                   const sorted = sortIssues(groupIssues, activeSort?.kind === 'header' ? activeSort.sort : undefined);

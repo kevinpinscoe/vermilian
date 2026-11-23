@@ -69,6 +69,8 @@ import {
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
+import { createYouTrackPriorityOrders } from './services/youtrackPriorityOrders';
+import { runwayWorkspaceTracker } from '../shared/runwayItem';
 import type { AppConfig } from '../shared/config';
 import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
 import { readConfig, writeConfig } from './services/config';
@@ -2288,6 +2290,28 @@ export function registerIpc(): void {
     reader: runwayReader,
   });
   ipcMain.handle(IPC.runwayItemsResolve, (_e, args) => resolveRunwayTickets(args));
+
+  // Each YouTrack project's Priority bundle order (VERM-92), for the All tasks
+  // Tracker priority sort: read-only, on the workspace's own YouTrack
+  // connection — the same one runwayReader opens — and only for a configured
+  // YouTrack workspace. The rules live in services/youtrackPriorityOrders.ts.
+  const youtrackPriorityOrders = createYouTrackPriorityOrders({
+    async connection(workspaceId) {
+      const { workspaces } = await runwayWorkspaces();
+      const workspace = workspaces.find((w) => w.id === workspaceId);
+      if (!workspace) return { ok: false, error: `No workspace ${workspaceId} is configured` };
+      if (runwayWorkspaceTracker(workspace) !== 'youtrack') return { ok: false, error: 'Not a YouTrack workspace.' };
+      const cfg = await readConfig();
+      const yt =
+        workspaceStorageMode() === 'per-workspace'
+          ? await resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(workspaceId), cfg, credentialSourceIO, IS_E2E)
+          : await trackerConnection(cfg);
+      if (!yt.ok) return { ok: false, error: yt.error };
+      const provider = youtrackTracker(yt.url, yt.token);
+      return { ok: true, read: (projectShortName) => provider.getPriorityValues(projectShortName) };
+    },
+  });
+  ipcMain.handle(IPC.youtrackPriorityOrders, (_e, args) => youtrackPriorityOrders(args));
 
   // Adding a ticket by key or link (VERM-86): the link must be on the
   // workspace's own tracker host, the exact key is read once on the same

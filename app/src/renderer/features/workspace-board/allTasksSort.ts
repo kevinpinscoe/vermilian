@@ -19,7 +19,7 @@
 // position or a tracker field.
 
 import type { BoardIssue } from '../../../shared/workspace';
-import { PRIORITY_OPTIONS } from '../../../shared/workspace';
+import type { PriorityOrder } from '../../../shared/priority';
 import type { BoardSortConfig, ColumnField } from '../../../shared/boardConfig';
 import { sortByRunwaySort, type RunwaySort, type RunwaySortKey, type SortDirection } from '../../../shared/runwaySort';
 
@@ -114,22 +114,40 @@ export function headerSortDirection(active: ActiveAllTasksSort, field: ColumnFie
   return active.sort.field === field ? active.sort.direction : null;
 }
 
+/** A YouTrack ticket's project short name: its key before the last '-'. */
+export function youtrackProjectOf(idReadable: string): string {
+  const i = idReadable.lastIndexOf('-');
+  return i > 0 ? idReadable.slice(0, i) : idReadable;
+}
+
 /**
- * The visible tickets as one flat list in `sort`'s order. YouTrack has one
- * shared Priority bundle, so every ticket ranks by its order. `runwayNumberOf`
- * gives a ticket's Runway # on this workspace's Runway, null when it has none
- * or its position cannot be verified (both sort last). Returns a copy.
+ * Every project the tickets come from, sorted — project tickets and tickets
+ * added to the Runway from outside the workspace's projects alike.
+ */
+export function projectsOfTickets(issues: readonly BoardIssue[]): string[] {
+  return [...new Set(issues.map((i) => youtrackProjectOf(i.idReadable)))].sort();
+}
+
+/**
+ * The visible tickets as one flat list in `sort`'s order. Each ticket ranks
+ * by its own project's configured Priority bundle order (VERM-92):
+ * `priorityOrders` by project short name; a project missing from it (not yet
+ * read, or unreadable) ranks its tickets as unknown, after every ranked one.
+ * `runwayNumberOf` gives a ticket's Runway # on this workspace's Runway, null
+ * when it has none or its position cannot be verified (both sort last).
+ * Returns a copy.
  */
 export function sortAllTasksFlat(
   issues: readonly BoardIssue[],
   sort: RunwaySort,
   runwayNumberOf: (issue: BoardIssue) => number | null,
+  priorityOrders: Readonly<Record<string, PriorityOrder>>,
 ): BoardIssue[] {
   return sortByRunwaySort(issues, sort, (issue) => ({
     key: issue.idReadable,
     runwayNumber: runwayNumberOf(issue),
     priority: issue.fields.priority ?? null,
-    priorityOrder: PRIORITY_OPTIONS,
+    priorityOrder: priorityOrders[youtrackProjectOf(issue.idReadable)] ?? null,
   }));
 }
 
