@@ -235,9 +235,19 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       headers (Task, Status, Category, Due date) are a temporary sort inside the status sections
       for this session; they leave the remembered sort untouched (VERM-92).
 - [ ] Project boards keep their own sorts and drag order; the new sorts apply to All tasks only.
-- [ ] *Optional:* the same sort control orders cards **within** each Kanban status column, for
+- [x] *Optional:* the same sort control orders cards **within** each Kanban status column, for
       YouTrack and Jira. The column order itself is unchanged. With no sort chosen, Jira columns
-      keep today's order. The Initial Usable Milestone does not depend on this.
+      keep today's order. The Initial Usable Milestone does not depend on this (VERM-93):
+      - **Jira's All tasks board** uses the All tasks sort (`allTasksSorts`) — it is All tasks.
+        Tracker priority ranks each card by its own project's scheme, a Runway ticket from
+        outside the workspace's projects included (read only for the workspace's own projects and
+        its Runway tickets' projects).
+      - **YouTrack project boards' Kanban view** has its own sort, remembered per workspace on
+        this computer in `app-config.json`'s `kanbanSorts`, apart from All tasks'. It replaces
+        the table's Sort menu in Kanban, which never ordered Kanban cards. Tracker priority uses
+        the project's configured Priority bundle. With no sort, the cards keep today's order.
+      - Each YouTrack Kanban card carries the All tasks **Runway #** cell and its popover. A press
+        on the cell or its popover never starts a card drag.
 
 ### Blockers
 
@@ -339,7 +349,7 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
       ascending, across the whole list.
 - [ ] **6. Sort safety:** switching sorts writes no Runway position and no tracker field, and
       the positions afterwards are identical. Only the remembered sort is saved locally.
-- [ ] **7. Kanban (optional):** each status column follows the chosen sort, and the column order
+- [x] **7. Kanban (optional):** each status column follows the chosen sort, and the column order
       is unchanged.
 - [ ] **8. Blockers:** resolving SYNC-3 turns READ-14 from Blocked to Ready without reordering,
       and PLAT-40 still shows as external on SYNC-7.

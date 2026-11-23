@@ -194,3 +194,17 @@ describe('projectIssuesKey', () => {
     expect(projectIssuesKey(['TEST', 'TST2'], false, [5, 6])).toBe(projectIssuesKey(['TEST', 'TST2'], false, [5, 6]));
   });
 });
+
+describe('sorting within a Jira board column (VERM-93)', () => {
+  it("ranks each Jira card by its own project's scheme, found by jiraProjectKeyOf", async () => {
+    const { jiraProjectKeyOf } = await import('../../../shared/jiraBoardIssue');
+    // DEMO-110 (Low) has the smaller ID but is less urgent than DEMO-111 (High);
+    // PLAT-4 (P2) ranks by PLAT's scheme: rank 1, level with DEMO's High.
+    const column = [issue('DEMO-110', 'Low'), issue('PLAT-4', 'P2'), issue('DEMO-111', 'High')];
+    const orders = { DEMO: ['Highest', 'High', 'Medium', 'Low'], PLAT: ['P1', 'P2', 'P3'] };
+    const keys = (dir: RunwaySort['direction']) =>
+      sortAllTasksFlat(column, RN('priority', dir), () => null, orders, jiraProjectKeyOf).map((i) => i.idReadable);
+    expect(keys('asc')).toEqual(['DEMO-111', 'PLAT-4', 'DEMO-110']);
+    expect(keys('desc')).toEqual(['DEMO-110', 'DEMO-111', 'PLAT-4']);
+  });
+});

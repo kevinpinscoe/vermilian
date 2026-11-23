@@ -24,6 +24,11 @@ import pbStyles from '../project-board/ProjectBoard.module.css';
 import { boardSourceId, jiraSourceIds } from '../../../shared/jiraSource';
 import type { WorkspaceJiraBoard } from '../../../shared/workspace';
 import styles from './JiraWorkspaceBoard.module.css';
+import { jiraProjectKeyOf } from '../../../shared/jiraBoardIssue';
+import { useRememberedSort } from '../runway/rememberedSort';
+import { useRunwayNumberOf } from '../runway/useRunwayNumberOf';
+import { RunwaySortControl } from '../runway/RunwaySortControl';
+import { allTasksSortAction, sortAllTasksFlat, type AllTasksSortAction } from '../workspace-board/allTasksSort';
 
 interface JiraWorkspaceBoardProps {
   workspaceId: string;
@@ -145,6 +150,35 @@ export function JiraWorkspaceBoard({
   // Columns come from every loaded issue, so they keep their order and place
   // while a filter empties some of them; each shows "N of M" while filtering.
   const columns = useMemo(() => jiraBoardColumns(issues, priorities), [issues, priorities]);
+
+  // The All tasks sort (VERM-92/93): this workspace's remembered
+  // allTasksSorts entry — Jira's All tasks is this board — ordering the cards
+  // inside each status column. The column order is unchanged, and with no
+  // sort each column keeps compareJiraIssues. Tracker priority ranks each card
+  // by its own project's scheme: the board's projects and boards supply
+  // theirs; Runway tickets from other projects are read on request.
+  const remembered = useRememberedSort(workspaceId, 'allTasksSorts');
+  const sort = remembered.saved;
+  const runwayNumberOf = useRunwayNumberOf(workspaceId, 'jira');
+  const missingPriorityProjects = useMemo(
+    () => [...new Set(issues.map((i) => jiraProjectKeyOf(i.idReadable)))].filter((k) => !(k in priorities)).sort(),
+    [issues, priorities],
+  );
+  const extraPriorities = useQuery({
+    queryKey: ['workspace', 'jira-priority-orders', workspaceId, missingPriorityProjects.join(',')],
+    queryFn: () => window.vermilian.jiraPriorityOrders({ workspaceId, projectKeys: missingPriorityProjects }),
+    enabled: sort?.key === 'priority' && missingPriorityProjects.length > 0,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const sortPriorities = useMemo(
+    () => ({ ...(extraPriorities.data?.ok ? extraPriorities.data.orders : {}), ...priorities }),
+    [extraPriorities.data, priorities],
+  );
+  function chooseSort(action: AllTasksSortAction) {
+    const r = allTasksSortAction({ saved: sort, temp: null }, action);
+    if (r.save !== undefined) remembered.save(r.save);
+  }
   // Every status the workspace's projects define, for the filter (VERM-67).
   const statusList = useQuery({
     queryKey: ['workspace', 'jira-statuses', workspaceId, sources] as const,
@@ -193,6 +227,15 @@ export function JiraWorkspaceBoard({
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} data-testid="jira-show-done" />
           Show done
         </label>
+        <RunwaySortControl
+          selected={sort}
+          noneLabel="Default order"
+          clearable={sort !== null}
+          testIdPrefix="jira-sort"
+          onChooseKey={(key) => chooseSort({ type: 'chooseKey', key })}
+          onChooseDirection={(direction) => chooseSort({ type: 'chooseDirection', direction })}
+          onClear={() => chooseSort({ type: 'clear' })}
+        />
         <JiraColumnsMenu
           workspaceId={workspaceId}
           statuses={statusOptions}
@@ -280,7 +323,8 @@ export function JiraWorkspaceBoard({
           ) : (
             <div className={styles.columns}>
               {shownColumns.map((col) => {
-                const shown = filtering ? col.issues.filter((i) => visible.has(i.id)) : col.issues;
+                const ordered = sort ? sortAllTasksFlat(col.issues, sort, runwayNumberOf, sortPriorities, jiraProjectKeyOf) : col.issues;
+                const shown = filtering ? ordered.filter((i) => visible.has(i.id)) : ordered;
                 return (
                 <section key={col.status} className={styles.column} data-testid="jira-column" data-status={col.status} data-role={col.role ?? ''}>
                   <div className={styles.columnHeader}>

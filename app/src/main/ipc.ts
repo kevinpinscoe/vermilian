@@ -69,7 +69,7 @@ import {
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
-import { createYouTrackPriorityOrders } from './services/youtrackPriorityOrders';
+import { createPriorityOrders } from './services/priorityOrders';
 import { runwayWorkspaceTracker } from '../shared/runwayItem';
 import type { AppConfig } from '../shared/config';
 import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
@@ -1426,6 +1426,34 @@ export function registerIpc(): void {
     };
   }
 
+  // Each Jira project's priority scheme order (VERM-93), for the Jira All
+  // tasks board's Tracker priority sort, through the workspace's own provider.
+  // Only the workspace's own projects and the projects of its Runway's Jira
+  // tickets — the projects whose tickets the board can show — are read; any
+  // other key is refused (left out), so a renderer cannot read the scheme of
+  // a project just by naming it. The rules live in services/priorityOrders.ts.
+  const jiraPriorityOrders = createPriorityOrders({
+    async connection(workspaceId) {
+      const p = await workspaceJiraProvider(workspaceId);
+      if (!p.ok) return { ok: false, error: p.message };
+      const allowed = new Set([
+        ...workspaceProjectIds(p.doc),
+        ...openRunwayItemStore()
+          .list(p.doc.workspaceId)
+          .filter((item) => item.kind === 'issue' && item.itemId.startsWith('jira:'))
+          .map((item) => jiraProjectKeyOf(item.itemId.slice('jira:'.length))),
+      ]);
+      return {
+        ok: true,
+        async read(projectKey) {
+          if (!allowed.has(projectKey)) throw new Error(`${projectKey} is not readable from this workspace.`);
+          return p.provider.getPriorityValues(projectKey);
+        },
+      };
+    },
+  });
+  ipcMain.handle(IPC.jiraPriorityOrders, (_e, args) => jiraPriorityOrders(args));
+
   ipcMain.handle(
     IPC.listWorkspaceJiraProjects,
     async (_e, workspaceId: unknown): Promise<ListWorkspaceJiraProjectsResult> => {
@@ -2294,8 +2322,8 @@ export function registerIpc(): void {
   // Each YouTrack project's Priority bundle order (VERM-92), for the All tasks
   // Tracker priority sort: read-only, on the workspace's own YouTrack
   // connection — the same one runwayReader opens — and only for a configured
-  // YouTrack workspace. The rules live in services/youtrackPriorityOrders.ts.
-  const youtrackPriorityOrders = createYouTrackPriorityOrders({
+  // YouTrack workspace. The rules live in services/priorityOrders.ts.
+  const youtrackPriorityOrders = createPriorityOrders({
     async connection(workspaceId) {
       const { workspaces } = await runwayWorkspaces();
       const workspace = workspaces.find((w) => w.id === workspaceId);

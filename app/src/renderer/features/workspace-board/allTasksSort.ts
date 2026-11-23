@@ -51,12 +51,6 @@ export interface AllTasksSortResult {
   save: RunwaySort | null | undefined;
 }
 
-export const RUNWAY_SORT_LABELS: Record<RunwaySortKey, string> = {
-  runwayNumber: 'Runway #',
-  priority: 'Tracker priority',
-  ticketId: 'Ticket ID',
-};
-
 /** The column headers that choose a Runway sort instead of a header sort. */
 const HEADER_RUNWAY_KEYS: Partial<Record<ColumnField | 'runwayNumber', RunwaySortKey>> = {
   runwayNumber: 'runwayNumber',
@@ -135,19 +129,22 @@ export function projectsOfTickets(issues: readonly BoardIssue[]): string[] {
  * read, or unreadable) ranks its tickets as unknown, after every ranked one.
  * `runwayNumberOf` gives a ticket's Runway # on this workspace's Runway, null
  * when it has none or its position cannot be verified (both sort last).
- * Returns a copy.
+ * `projectOf` finds a ticket's project from its key (YouTrack's by default;
+ * Jira's for a Jira board). The same order sorts cards within a Kanban column
+ * (VERM-93). Returns a copy.
  */
 export function sortAllTasksFlat(
   issues: readonly BoardIssue[],
   sort: RunwaySort,
   runwayNumberOf: (issue: BoardIssue) => number | null,
   priorityOrders: Readonly<Record<string, PriorityOrder>>,
+  projectOf: (idReadable: string) => string = youtrackProjectOf,
 ): BoardIssue[] {
   return sortByRunwaySort(issues, sort, (issue) => ({
     key: issue.idReadable,
     runwayNumber: runwayNumberOf(issue),
     priority: issue.fields.priority ?? null,
-    priorityOrder: priorityOrders[youtrackProjectOf(issue.idReadable)] ?? null,
+    priorityOrder: priorityOrders[projectOf(issue.idReadable)] ?? null,
   }));
 }
 

@@ -75,6 +75,7 @@ export const IPC = {
   runwayItemsResolve: 'runway-items:resolve',
   // Each YouTrack project's Priority bundle order (VERM-92), read-only.
   youtrackPriorityOrders: 'youtrack:priorityOrders',
+  jiraPriorityOrders: 'jira:priorityOrders',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
@@ -826,6 +827,7 @@ export interface VermilianAPI {
   // shared/runwayTicket.ts for the states and errors.
   runwayItemsResolve(args: RunwayItemsListArgs): Promise<import('./runwayTicket').RunwayTicketsResult>;
   youtrackPriorityOrders(args: YouTrackPriorityOrdersArgs): Promise<YouTrackPriorityOrdersResult>;
+  jiraPriorityOrders(args: JiraPriorityOrdersArgs): Promise<PriorityOrdersResult>;
   // Add a ticket by key or link to the active workspace's Runway (VERM-86):
   // checked once on the workspace's own connection, then added through the
   // write gate. See shared/runwayAdd.ts.
@@ -959,6 +961,17 @@ export interface YouTrackPriorityOrdersArgs {
   workspaceId: string;
   projectShortNames: string[];
 }
-export type YouTrackPriorityOrdersResult =
+export type PriorityOrdersResult =
   | { ok: true; orders: Record<string, string[]> }
   | { ok: false; error: string };
+export type YouTrackPriorityOrdersResult = PriorityOrdersResult;
+
+// Each Jira project's priority scheme order (VERM-93), for the Jira All tasks
+// board's Tracker priority sort: read-only, through the workspace's own Jira
+// provider, and only for its own projects and the projects of its Runway's
+// Jira tickets. A project outside those, or whose order cannot be read, is
+// left out.
+export interface JiraPriorityOrdersArgs {
+  workspaceId: string;
+  projectKeys: string[];
+}

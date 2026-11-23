@@ -342,3 +342,9 @@
 .addCardCancel:hover {
   background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
 }
+
+/* The Runway # cell on a card (VERM-93). */
+.cardRunway {
+  display: inline-flex;
+  align-items: center;
+}

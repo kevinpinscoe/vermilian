@@ -212,6 +212,15 @@ export async function searchJql(
     if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
     return (hits as JiraSearchIssue[]).map((i) => ({ ...i, fields: { ...i.fields } }));
   }
+  // One project's open issues (`project = "X" …`), the shape the provider's
+  // priority-scheme probe uses (VERM-93): like Jira, only that project's, so
+  // each project's scheme comes from its own issues.
+  const oneProject = /^project = "([^"]+)"/.exec(_jql);
+  if (oneProject) {
+    return FAKE_JIRA_ISSUES
+      .filter((i) => i.key.startsWith(`${oneProject[1]}-`) && i.fields?.status?.statusCategory?.key !== 'done')
+      .map((i) => ({ ...i, fields: { ...i.fields } }));
+  }
   const found = fakeTextSearch(_jql) ?? FAKE_JIRA_ISSUES.filter((i) => i.fields?.status?.statusCategory?.key !== 'done');
   return found.map((i) => ({ ...i, fields: { ...i.fields } }));
 }
@@ -336,6 +345,10 @@ export async function listProjectStatuses(_base: string, _email: string, token: 
 // YouTrack list; OPS has no priority field on its screens.
 export const FAKE_JIRA_PRIORITY_SCHEMES: Record<string, string[]> = {
   DEMO: ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'None'],
+  // A second scheme with no issues of its own (VERM-93): a test creates a
+  // PLAT ticket to stand for a Runway ticket from outside the workspace's
+  // projects, ranked by this scheme, not DEMO's.
+  PLAT: ['P1', 'P2', 'P3'],
 };
 
 export async function getEditMeta(_base: string, _email: string, token: string, key: string): Promise<JiraEditMeta> {
@@ -416,7 +429,8 @@ export async function searchProjectRecentlyUpdated(
 
 export type FakeJiraChange =
   | { op: 'edit'; key: string; summary?: string; status?: { name: string; category: 'new' | 'indeterminate' | 'done' } }
-  | { op: 'create'; id: string; key: string; summary: string }
+  // priority (VERM-93) defaults to Medium; null creates one with none.
+  | { op: 'create'; id: string; key: string; summary: string; priority?: string | null }
   | { op: 'delete'; key: string }
   | { op: 'move'; key: string; toKey: string; touch?: boolean }
   // Search-index lag: the issue stays readable by key but no search lists it.
@@ -468,7 +482,12 @@ export function applyChangeForTests(change: FakeJiraChange): boolean {
     FAKE_JIRA_ISSUES.push({
       id: change.id,
       key: change.key,
-      fields: { summary: change.summary, status: { name: 'To Do', statusCategory: { key: 'new' } }, priority: { name: 'Medium' }, updated: stampNow() },
+      fields: {
+        summary: change.summary,
+        status: { name: 'To Do', statusCategory: { key: 'new' } },
+        priority: change.priority === null ? null : { name: change.priority ?? 'Medium' },
+        updated: stampNow(),
+      },
     });
     return true;
   }
