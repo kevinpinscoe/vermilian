@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createYouTrackPriorityOrders, MAX_PRIORITY_ORDER_PROJECTS, type PriorityOrderConnection } from './youtrackPriorityOrders';
+import { createPriorityOrders, MAX_PRIORITY_ORDER_PROJECTS, type PriorityOrderConnection } from './priorityOrders';
 
 // Synthetic project names only.
 function handler(bundles: Record<string, string[] | Error>, conn?: PriorityOrderConnection) {
   const asked: Array<{ workspaceId: string; project?: string }> = [];
-  const h = createYouTrackPriorityOrders({
+  const h = createPriorityOrders({
     async connection(workspaceId) {
       asked.push({ workspaceId });
       return conn ?? {
@@ -21,7 +21,7 @@ function handler(bundles: Record<string, string[] | Error>, conn?: PriorityOrder
   return { h, asked };
 }
 
-describe('youtrackPriorityOrders (VERM-92)', () => {
+describe('priorityOrders (VERM-92, VERM-93)', () => {
   it("reads each project's bundle order on the workspace's connection", async () => {
     const { h, asked } = handler({ READ: ['Minor', 'Critical'], PLAT: ['P1', 'P2'] });
     await expect(h({ workspaceId: 'ws-a', projectShortNames: ['READ', 'PLAT', 'READ'] })).resolves.toEqual({
@@ -47,6 +47,11 @@ describe('youtrackPriorityOrders (VERM-92)', () => {
     await expect(h({ workspaceId: 'ws-a', projectShortNames: ['../admin', 'READ?x', 7, 'READ'] })).resolves.toEqual({ ok: true, orders: { READ: ['Minor'] } });
     await expect(h({ workspaceId: 'ws-a', projectShortNames: ['a/b'] })).resolves.toEqual({ ok: true, orders: {} });
     expect(asked.filter((x) => x.project).map((x) => x.project)).toEqual(['READ']);
+  });
+
+  it('accepts Jira project keys under projectKeys', async () => {
+    const { h } = handler({ OPS: ['P1', 'P2'] });
+    await expect(h({ workspaceId: 'ws-j', projectKeys: ['OPS'] })).resolves.toEqual({ ok: true, orders: { OPS: ['P1', 'P2'] } });
   });
 
   it('rejects malformed requests', async () => {

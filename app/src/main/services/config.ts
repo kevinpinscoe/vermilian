@@ -28,6 +28,7 @@ function merge(partial: Partial<AppConfig>): AppConfig {
     openbaoScopes: sanitiseOpenBaoScopes(partial.openbaoScopes),
     defaultAssignees: stringEntries(partial.defaultAssignees),
     allTasksSorts: sanitiseRunwaySorts(partial.allTasksSorts),
+    kanbanSorts: sanitiseRunwaySorts(partial.kanbanSorts),
   };
 }
 

@@ -12,6 +12,7 @@ import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../sha
 import { getContrastColor } from './colors';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useBoardDragStore } from '../../stores/boardDrag';
+import { RunwayNumberCell } from '../runway/RunwayNumberCell';
 import { FocusControl } from './FocusControl';
 import styles from './KanbanView.module.css';
 
@@ -171,16 +172,21 @@ interface KanbanCardInnerProps {
   isActiveTimer: boolean;
   timerDisplay: string;
   isDragOverlay?: boolean;
+  /** The workspace whose Runway # the card shows (VERM-93); null shows none. */
+  runwayWorkspaceId?: string | null;
 }
 
 function KanbanCardInner({
   issue, projectShortName, colors, onClick, onPatch, onStartTimer, isActiveTimer, timerDisplay, isDragOverlay,
+  runwayWorkspaceId,
 }: KanbanCardInnerProps) {
   const [hovered, setHovered] = useState(false);
 
   return (
     <div
       className={`${styles.card} ${isDragOverlay ? styles.cardDragOverlay : ''}`}
+      data-testid="kanban-card"
+      data-issue-id={issue.idReadable}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -188,6 +194,23 @@ function KanbanCardInner({
       <div className={styles.cardTop}>
         <span className={styles.cardTopLeft}>
           <span className={styles.cardId}>{issue.idReadable}</span>
+          {runwayWorkspaceId && !isDragOverlay && (
+            // The All tasks Runway # cell and its popover (VERM-93). A press on
+            // it, or anywhere in its portalled popover (React bubbles portal
+            // events through here), never reaches the card's drag listeners,
+            // so it can never start a drag; the cell keeps its own clicks.
+            <span
+              className={styles.cardRunway}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <RunwayNumberCell
+                workspaceId={runwayWorkspaceId}
+                ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }}
+                displayKey={issue.idReadable}
+              />
+            </span>
+          )}
           <FocusControl issue={issue} projectShortName={projectShortName} />
         </span>
         {isActiveTimer ? (
@@ -255,8 +278,9 @@ function KanbanCard(props: KanbanCardInnerProps) {
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  title, issues, colorDot, colors, projectShortName, onSelectIssue, onPatch, onStartTimer, onAdd,
+  title, issues, colorDot, colors, projectShortName, onSelectIssue, onPatch, onStartTimer, onAdd, runwayWorkspaceId,
 }: {
+  runwayWorkspaceId: string | null;
   title: string;
   issues: BoardIssue[];
   colorDot: string;
@@ -283,6 +307,8 @@ function KanbanColumn({
     <div
       ref={setDropRef}
       className={`${styles.column} ${isOver ? styles.columnDropTarget : ''}`}
+      data-testid="kanban-column"
+      data-status={title}
     >
       <div className={styles.columnHeader}>
         <button
@@ -314,6 +340,7 @@ function KanbanColumn({
                 onStartTimer={onStartTimer}
                 isActiveTimer={isActiveTimer}
                 timerDisplay={isActiveTimer && timer ? fmtMs(getTotalWorkMs(timer)) : ''}
+                runwayWorkspaceId={runwayWorkspaceId}
               />
             );
           })}
@@ -337,11 +364,13 @@ export interface KanbanViewProps {
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   onAddTask: (summary: string, groupValue: string) => void;
   onCrossBoardDrop?: (issue: BoardIssue, targetProjectId: string, targetProjectName: string) => void;
+  /** The active workspace, whose Runway # each card shows (VERM-93); '' or absent shows none. */
+  runwayWorkspaceId?: string;
 }
 
 export function KanbanView({
   groups, groupColorMap, colors, groupByField, projectShortName,
-  onSelectIssue, onPatch, onStartTimer, onAddTask, onCrossBoardDrop,
+  onSelectIssue, onPatch, onStartTimer, onAddTask, onCrossBoardDrop, runwayWorkspaceId,
 }: KanbanViewProps) {
   const [draggingIssue, setDraggingIssue] = useState<BoardIssue | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -414,6 +443,7 @@ export function KanbanView({
             onPatch={onPatch}
             onStartTimer={onStartTimer}
             onAdd={(summary) => onAddTask(summary, groupVal)}
+            runwayWorkspaceId={runwayWorkspaceId || null}
           />
         ))}
       </div>

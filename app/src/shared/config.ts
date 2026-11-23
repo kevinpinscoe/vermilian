@@ -76,6 +76,12 @@ export interface AppConfig {
   // never written to the tracker. No entry means the usual status sections.
   allTasksSorts: Record<string, RunwaySort>;
 
+  // The Kanban sort each workspace remembers on this computer for its
+  // YouTrack project boards (VERM-93), by workspace ID: it orders cards
+  // inside each status column, and is kept apart from All tasks' sort.
+  // Local only, like allTasksSorts. No entry means today's card order.
+  kanbanSorts: Record<string, RunwaySort>;
+
   modelForCreate: string;
   modelForStandup: string;
   // No Settings UI field yet (VERM-8 scope trim, PLAN.md "Trims made under
@@ -108,6 +114,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   openbaoScopes: {},
   defaultAssignees: {},
   allTasksSorts: {},
+  kanbanSorts: {},
   modelForCreate: 'claude-haiku-4-5-20251001',
   modelForStandup: 'claude-sonnet-4-6',
   modelForRecommendation: 'claude-sonnet-4-6',

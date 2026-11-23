@@ -1,0 +1,41 @@
+/* The sort control (VERM-92/93). */
+.sortControl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sortLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #444444);
+}
+
+.sortSelect {
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+}
+
+.sortButton {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  background: var(--surface-main-background-color, #fff);
+  color: var(--secondary-text-color, #444444);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.sortButton:hover {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}

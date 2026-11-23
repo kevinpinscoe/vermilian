@@ -34,6 +34,11 @@ import {
   assigneeOptions, assigneeLabel,
 } from './grouping';
 import { useConfig } from '../settings/api';
+import { useRememberedSort } from '../runway/rememberedSort';
+import { useRunwayNumberOf } from '../runway/useRunwayNumberOf';
+import { useYouTrackPriorityOrders } from '../runway/usePriorityOrders';
+import { RunwaySortControl } from '../runway/RunwaySortControl';
+import { allTasksSortAction, sortAllTasksFlat, type AllTasksSortAction } from '../workspace-board/allTasksSort';
 import { ASSIGNEE_PILL_COLOR } from './FilterPills';
 import styles from './ProjectBoard.module.css';
 
@@ -1047,11 +1052,16 @@ interface ProjectBoardProps {
   // Why AI is off for the active workspace (VERM-47); shown as the tooltip.
   aiUnavailableReason?: string | null;
   onCrossBoardDrop?: (issue: BoardIssue, targetProjectId: string, targetProjectName: string) => void;
+  /**
+   * The active workspace (VERM-93): its Kanban sort and the Runway # on each
+   * Kanban card. '' or absent leaves both out.
+   */
+  workspaceId?: string;
 }
 
 export function ProjectBoard({
   projectId, projectName, projectShortName, onSelectIssue, onNewTask, onAiCreate,
-  onStartTimer, hasClaudeKey, aiUnavailableReason, onCrossBoardDrop,
+  onStartTimer, hasClaudeKey, aiUnavailableReason, onCrossBoardDrop, workspaceId = '',
 }: ProjectBoardProps) {
   const [showColumns, setShowColumns] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -1214,8 +1224,28 @@ export function ProjectBoard({
   // All issues filtered out by active filters (vs. a genuinely empty board).
   const filteredEmpty = (issues?.length ?? 0) > 0 && filteredIssues.length === 0;
   const projectEmpty = !!issues && issues.length === 0;
-  const groups = groupIssues(filteredIssues, effectiveGroupBy);
   const groupColorMap = getGroupColorMap(effectiveGroupBy, colors);
+
+  // The Kanban sort (VERM-93): this workspace's remembered kanbanSorts entry,
+  // kept apart from All tasks'. It orders the cards inside each status
+  // column; the column order is unchanged, and with no sort the cards keep
+  // today's order. Tracker priority uses this project's own Priority bundle.
+  const kanbanSort = useRememberedSort(workspaceId, 'kanbanSorts');
+  const kanbanSorting = isKanban && Boolean(workspaceId) && kanbanSort.saved !== null;
+  const runwayNumberOf = useRunwayNumberOf(workspaceId, 'youtrack');
+  const kanbanPriorityOrders = useYouTrackPriorityOrders(
+    workspaceId,
+    [projectShortName],
+    kanbanSorting && kanbanSort.saved?.key === 'priority',
+  );
+  const rawGroups = groupIssues(filteredIssues, effectiveGroupBy);
+  const groups: typeof rawGroups = kanbanSorting
+    ? rawGroups.map(([status, list]) => [status, sortAllTasksFlat(list, kanbanSort.saved!, runwayNumberOf, kanbanPriorityOrders)])
+    : rawGroups;
+  function chooseKanbanSort(action: AllTasksSortAction) {
+    const r = allTasksSortAction({ saved: kanbanSort.saved, temp: null }, action);
+    if (r.save !== undefined) kanbanSort.save(r.save);
+  }
 
   return (
     <div className={styles.board} style={{ position: 'relative' }}>
@@ -1271,7 +1301,19 @@ export function ProjectBoard({
           {activeFilterCount > 0 ? `Filter (${activeFilterCount})` : 'Filter'}
         </Button>
 
-        {/* Sort menu */}
+        {/* Kanban: the Runway sort within each column (VERM-93), in place of
+            the table's Sort menu, which does not order Kanban cards. */}
+        {isKanban && workspaceId ? (
+          <RunwaySortControl
+            selected={kanbanSort.saved}
+            noneLabel="Default order"
+            clearable={kanbanSort.saved !== null}
+            testIdPrefix="kanban-sort"
+            onChooseKey={(key) => chooseKanbanSort({ type: 'chooseKey', key })}
+            onChooseDirection={(direction) => chooseKanbanSort({ type: 'chooseDirection', direction })}
+            onClear={() => chooseKanbanSort({ type: 'clear' })}
+          />
+        ) : (
         <div className={styles.sortWrap}>
           <Button
             data-testid="sort-btn"
@@ -1290,6 +1332,7 @@ export function ProjectBoard({
             />
           )}
         </div>
+        )}
 
         {/* Hide/show closed */}
         <button
@@ -1423,6 +1466,7 @@ export function ProjectBoard({
           onStartTimer={onStartTimer}
           onAddTask={handleAddTaskKanban}
           onCrossBoardDrop={onCrossBoardDrop}
+          runwayWorkspaceId={workspaceId}
         />
       )}
 

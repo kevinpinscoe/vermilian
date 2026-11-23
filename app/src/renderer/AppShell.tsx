@@ -683,6 +683,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               onStartTimer={handleStartTimer}
               hasClaudeKey={hasClaudeKey}
               aiUnavailableReason={aiUnavailableReason}
+              workspaceId={activeContext.data?.workspaceId ?? ''}
               onCrossBoardDrop={(issue, targetProjectId, targetProjectName) => {
                 if (targetProjectId === activeProjectId) return;
                 setCrossBoardDrop({ issue, targetProjectId, targetProjectName });

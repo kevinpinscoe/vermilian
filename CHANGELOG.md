@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sorting cards within Kanban columns** (VERM-93). Jira's All tasks board has the **Sort**
+  control too: Runway #, Tracker priority or Ticket ID, ascending or descending, ordering the cards
+  inside each status column; the columns stay where they are, and Clear sort returns to the usual
+  order. It shares the All tasks sort. Tracker priority ranks each card by its own project's
+  priority scheme, Runway tickets from other projects included. The Kanban view of YouTrack project
+  boards gets the same control, with its **own** remembered sort per workspace on this computer,
+  and each Kanban card now shows the Runway # cell with its Add / Move / Remove popover; pressing it
+  never drags the card.
 - **All tasks sort** (VERM-92). YouTrack's All tasks has a **Sort** control: **Runway #**,
   **Tracker priority** or **Ticket ID**, each ascending or descending, and **Clear sort**. A chosen
   sort lists every visible ticket as one flat list, with no status sections, so the Runway # reads

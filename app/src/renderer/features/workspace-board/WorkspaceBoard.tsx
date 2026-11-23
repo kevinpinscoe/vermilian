@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Loader, Text, Heading, Button, Tooltip } from '@vibe/core';
 import { Wand, Play } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
@@ -21,12 +21,12 @@ import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../r
 import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { RunwayNumberCell } from '../runway/RunwayNumberCell';
-import { runwayTicketStatus } from '../runway/RunwayNumberControl';
-import { CONFIG_QUERY_KEY, useConfig, useSaveConfig } from '../settings/api';
-import type { AppConfig } from '../../../shared/config';
-import { withRunwaySort, type RunwaySortKey } from '../../../shared/runwaySort';
+import { useRememberedSort } from '../runway/rememberedSort';
+import { useRunwayNumberOf } from '../runway/useRunwayNumberOf';
+import { useYouTrackPriorityOrders } from '../runway/usePriorityOrders';
+import { RunwaySortControl } from '../runway/RunwaySortControl';
 import {
-  RUNWAY_SORT_LABELS, activeAllTasksSort, allTasksSortAction, headerSortDirection, projectIssuesKey, projectsOfTickets, sortAllTasksFlat,
+  activeAllTasksSort, allTasksSortAction, headerSortDirection, projectIssuesKey, projectsOfTickets, sortAllTasksFlat,
   type AllTasksSortAction,
 } from './allTasksSort';
 import pbStyles from '../project-board/ProjectBoard.module.css';
@@ -89,7 +89,6 @@ function sortIssues(issues: BoardIssue[], sort: BoardSortConfig | undefined): Bo
 
 // ─── Issue row ────────────────────────────────────────────────────────────────
 
-const EMPTY_ORDERS: Record<string, string[]> = {};
 const VISIBLE_COLS: ColumnField[] = ['status', 'priority', 'category', 'dueDate'];
 
 function IssueRow({
@@ -285,9 +284,8 @@ export function WorkspaceBoard({
 
   // The remembered sort is per workspace; a temporary header sort belongs to
   // the workspace it was chosen in, so switching workspace drops it.
-  const config = useConfig();
-  const saveConfig = useSaveConfig();
-  const savedSort = (workspaceId && config.data?.allTasksSorts?.[workspaceId]) || null;
+  const remembered = useRememberedSort(workspaceId, 'allTasksSorts');
+  const savedSort = remembered.saved;
   const temp = tempSort && tempSort.workspaceId === workspaceId ? tempSort.sort : null;
   const sortState = { saved: savedSort, temp };
   const activeSort = activeAllTasksSort(sortState);
@@ -298,10 +296,7 @@ export function WorkspaceBoard({
   function applySort(action: AllTasksSortAction) {
     const r = allTasksSortAction(sortState, action);
     setTempSort(r.temp ? { workspaceId, sort: r.temp } : null);
-    if (r.save === undefined || !workspaceId || !config.data) return;
-    const allTasksSorts = withRunwaySort(config.data.allTasksSorts ?? {}, workspaceId, r.save);
-    queryClient.setQueryData<AppConfig>(CONFIG_QUERY_KEY, (cur) => (cur ? { ...cur, allTasksSorts } : cur));
-    saveConfig.mutate({ allTasksSorts });
+    if (r.save !== undefined) remembered.save(r.save);
   }
 
   // Each project's configured Priority bundle order (VERM-92), read on the
@@ -310,13 +305,11 @@ export function WorkspaceBoard({
   // projects included. Until it answers (or for a project it cannot read)
   // those tickets rank as unknown.
   const priorityProjects = useMemo(() => projectsOfTickets(filteredIssues), [filteredIssues]);
-  const priorityOrders = useQuery({
-    queryKey: ['youtrack', 'priority-orders', workspaceId, priorityProjects.join(',')],
-    queryFn: () => window.vermilian.youtrackPriorityOrders({ workspaceId, projectShortNames: priorityProjects }),
-    enabled: Boolean(workspaceId) && activeSort?.kind === 'runway' && activeSort.sort.key === 'priority' && priorityProjects.length > 0,
-    staleTime: 10 * 60_000,
-  });
-  const priorityOrderMap = priorityOrders.data?.ok ? priorityOrders.data.orders : EMPTY_ORDERS;
+  const priorityOrderMap = useYouTrackPriorityOrders(
+    workspaceId,
+    priorityProjects,
+    activeSort?.kind === 'runway' && activeSort.sort.key === 'priority',
+  );
 
   function handleSort(field: ColumnField | 'runwayNumber') {
     applySort({ type: 'header', field });
@@ -324,10 +317,7 @@ export function WorkspaceBoard({
 
   // A ticket's Runway # on this workspace's Runway; null when it has none or
   // its position cannot be verified (both sort last).
-  function runwayNumberOf(issue: BoardIssue): number | null {
-    const status = runwayTicketStatus(runwayItems, runwayTickets, { tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id });
-    return status?.kind === 'on' ? status.row.runwayNumber : null;
-  }
+  const runwayNumberOf = useRunwayNumberOf(workspaceId, 'youtrack');
 
   function toggle(field: 'status' | 'priority' | 'category' | 'assignee', value: string) {
     const cur = filter[field];
@@ -409,39 +399,15 @@ export function WorkspaceBoard({
           {showClosed ? 'Hide closed' : 'Show closed'}
         </button>
         {workspaceId && (
-          <div className={styles.sortControl} data-testid="ws-sort-control">
-            <label className={styles.sortLabel}>
-              Sort
-              <select
-                className={styles.sortSelect}
-                data-testid="ws-sort-select"
-                value={activeSort?.kind === 'runway' ? activeSort.sort.key : ''}
-                onChange={(e) => applySort(e.target.value ? { type: 'chooseKey', key: e.target.value as RunwaySortKey } : { type: 'clear' })}
-              >
-                <option value="">{activeSort?.kind === 'header' ? 'Column header' : 'Status sections'}</option>
-                {(Object.keys(RUNWAY_SORT_LABELS) as RunwaySortKey[]).map((k) => (
-                  <option key={k} value={k}>{RUNWAY_SORT_LABELS[k]}</option>
-                ))}
-              </select>
-            </label>
-            {activeSort?.kind === 'runway' && (
-              <button
-                type="button"
-                className={styles.assignedBtn}
-                data-testid="ws-sort-direction"
-                data-direction={activeSort.sort.direction}
-                onClick={() => applySort({ type: 'chooseDirection', direction: activeSort.sort.direction === 'asc' ? 'desc' : 'asc' })}
-                title={activeSort.sort.direction === 'asc' ? 'Ascending: click for descending' : 'Descending: click for ascending'}
-              >
-                {activeSort.sort.direction === 'asc' ? '↑ Ascending' : '↓ Descending'}
-              </button>
-            )}
-            {activeSort && (
-              <button type="button" className={styles.assignedBtn} data-testid="ws-sort-clear" onClick={() => applySort({ type: 'clear' })}>
-                Clear sort
-              </button>
-            )}
-          </div>
+          <RunwaySortControl
+            selected={activeSort?.kind === 'runway' ? activeSort.sort : null}
+            noneLabel={activeSort?.kind === 'header' ? 'Column header' : 'Status sections'}
+            clearable={activeSort !== null}
+            testIdPrefix="ws-sort"
+            onChooseKey={(key) => applySort({ type: 'chooseKey', key })}
+            onChooseDirection={(direction) => applySort({ type: 'chooseDirection', direction })}
+            onClear={() => applySort({ type: 'clear' })}
+          />
         )}
         <Text type="text2" className={styles.issueCount} data-testid="ws-issue-count">
           {filteredIssues.length !== allIssues.length ? `${filteredIssues.length} of ${allIssues.length}` : filteredIssues.length} {showClosed ? 'issues' : 'open'}
