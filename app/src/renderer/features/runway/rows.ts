@@ -6,7 +6,7 @@
 // sections and notes as they were saved, and a ticket that did not resolve
 // in its place with its Runway # and the reason it shows no details.
 
-import { decodeIssueId } from '../../../shared/tracker';
+import { decodeIssueId, encodeIssueId, isValidLocalId, type TrackerKind } from '../../../shared/tracker';
 import type { RunwayItem } from '../../../shared/runwayItem';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
@@ -180,4 +180,108 @@ export function movedItems(items: readonly RunwayItem[], itemId: string, positio
     position: i + 1,
     runwayNumber: item.kind === 'issue' ? ++runwayNumber : null,
   }));
+}
+
+// ── The ticket detail panel's Runway # control (VERM-88) ────────────────────
+
+/** A ticket as the detail panel knows it: every ID it goes by. */
+export interface PanelTicket {
+  tracker: TrackerKind;
+  /**
+   * Its readable keys: the key the tracker answered with and, for Jira, the
+   * key the panel was opened by (a moved ticket's old key).
+   */
+  keys: readonly string[];
+  /** The YouTrack entity ID (2-45); null when unknown or for Jira. */
+  entityId: string | null;
+}
+
+/** Every namespaced ID the panel's ticket goes by, invalid ones dropped. */
+export function panelTicketIds(ticket: PanelTicket): string[] {
+  const local = [...ticket.keys, ...(ticket.entityId ? [ticket.entityId] : [])];
+  return [...new Set(local.filter((id) => id && isValidLocalId(ticket.tracker, id)).map((id) => encodeIssueId(ticket.tracker, id)))];
+}
+
+/** The panel ticket's Runway row: its stored ID, which Move and Remove use. */
+export interface PanelRunwayRow {
+  itemId: string;
+  runwayNumber: number;
+}
+
+/**
+ * The saved Runway row that holds the panel's ticket, or null when none
+ * does. A row matches when its stored ID is any ID the ticket goes by (a
+ * YouTrack ticket saved under its entity ID included), or when the tracker
+ * read of that row resolved to this ticket — which is how a Jira ticket
+ * saved under a key it has since moved from is found.
+ */
+export function panelRunwayRow(
+  items: readonly RunwayItem[],
+  reads: readonly RunwayTicketRead[] | null,
+  ticket: PanelTicket,
+): PanelRunwayRow | null {
+  const ids = new Set(panelTicketIds(ticket));
+  const keys = new Set(ticket.keys);
+  const resolvedHere = new Set(
+    (reads ?? []).flatMap((r) =>
+      r.state === 'resolved' && (keys.has(r.issue.idReadable) || (ticket.entityId !== null && r.issue.id === ticket.entityId))
+        ? [r.itemId]
+        : [],
+    ),
+  );
+  for (const row of buildRunwayRows(items, null)) {
+    if (row.kind === 'ticket' && (ids.has(row.itemId) || resolvedHere.has(row.itemId))) {
+      return { itemId: row.itemId, runwayNumber: row.runwayNumber };
+    }
+  }
+  return null;
+}
+
+/**
+ * Where the panel's ticket stands on the Runway, as far as can be known:
+ *   on          its row was found (by ID, or by that row's tracker read);
+ *   off         no row holds it, established: no ID matches, and every other
+ *               ticket row's read answered;
+ *   checking    the tracker reads that could identify a row are still in flight;
+ *   unverified  they failed, or a ticket row has no read yet and none is on
+ *               the way, or a Jira row read as Missing or not readable (404)
+ *               or Not readable (403) — Jira says nothing of where a ticket
+ *               went, so that row may be this ticket under a key it moved
+ *               from. A row saved under an ID the panel does not know cannot
+ *               be ruled out.
+ * A row confirmed gone (410) or on the other tracker is settled: it cannot be
+ * the ticket open in the panel. For YouTrack, a 404 or 403 is settled too: the
+ * panel's ticket is readable on the same connection, and YouTrack answers a
+ * moved ticket's old ID with the ticket itself, so the row is another ticket.
+ * Add is offered only for 'off'; anything else could add the ticket twice.
+ */
+export type PanelRunwayStatus =
+  | { kind: 'on'; row: PanelRunwayRow }
+  | { kind: 'off' }
+  | { kind: 'checking' }
+  | { kind: 'unverified' };
+
+export function panelRunwayStatus(
+  items: readonly RunwayItem[],
+  reads: { state: 'pending' } | { state: 'failed' } | { state: 'done'; reads: readonly RunwayTicketRead[]; refetching: boolean },
+  ticket: PanelTicket,
+): PanelRunwayStatus {
+  const known = reads.state === 'done' ? reads.reads : null;
+  const row = panelRunwayRow(items, known, ticket);
+  if (row) return { kind: 'on', row };
+  // Every ticket row whose stored ID is not one of the panel ticket's.
+  const ids = new Set(panelTicketIds(ticket));
+  const others = items.filter((i) => i.kind === 'issue' && !ids.has(i.itemId));
+  if (others.length === 0) return { kind: 'off' };
+  if (reads.state === 'pending') return { kind: 'checking' };
+  if (reads.state === 'failed') return { kind: 'unverified' };
+  const byItem = new Map(reads.reads.map((r) => [r.itemId, r]));
+  const settled = (itemId: string): boolean => {
+    const read = byItem.get(itemId);
+    if (!read) return false;
+    if (read.state === 'missing-or-unreadable' || read.state === 'not-readable') return ticket.tracker !== 'jira';
+    return true;
+  };
+  if (others.every((i) => settled(i.itemId))) return { kind: 'off' };
+  return reads.refetching ? { kind: 'checking' } : { kind: 'unverified' };
 }

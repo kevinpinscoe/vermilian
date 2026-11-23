@@ -334,13 +334,15 @@ test.describe('New workspace and Jira projects — per-workspace storage (e2e ga
     await expect(comments.nth(1)).toContainText('Fictional Reviewer');
     await expect(comments.nth(1)).toContainText('(edited');
 
-    // No edits to Jira: no timer, no delete, and the only editable control is
-    // the Priority Desk section's Why now (VERM-38), which is Vermilian's own
-    // local Runway metadata, never a Jira field.
+    // No edits to Jira: no timer, no delete, and the only editable controls
+    // are Vermilian's own local metadata, never a Jira field: the Priority
+    // Desk section's Why now (VERM-38) and the Runway # field (VERM-88).
     const editable = 'input, textarea, select, [contenteditable="true"]';
     await expect(tid(page, 'jira-runway-section').locator(editable)).toHaveCount(1);
     await expect(tid(page, 'jira-runway-section').locator(editable)).toHaveAttribute('data-testid', 'jira-why-now-input');
-    await expect(panel.locator(editable)).toHaveCount(1);
+    await expect(tid(page, 'detail-runway').locator(editable)).toHaveCount(1);
+    await expect(tid(page, 'detail-runway').locator(editable)).toHaveAttribute('data-testid', 'detail-runway-number-input');
+    await expect(panel.locator(editable)).toHaveCount(2);
     await expect(panel.locator('[data-testid="detail-start-timer"], [aria-label="Delete task"]')).toHaveCount(0);
     await expect(tid(page, 'task-detail-panel')).toHaveCount(0);
 

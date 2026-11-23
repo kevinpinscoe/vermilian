@@ -75,6 +75,22 @@ let searchDelayMs = 0;
 let getIssueDelayMs = 0;
 // Issue ids no search lists (simulated index lag); getIssue still finds them.
 const unindexed = new Set<string>();
+// Keys issues were moved from (VERM-88): like Jira, a read by an old key
+// still answers with the moved issue, under its new key.
+const movedFrom = new Map<string, string>();
+// VERM-88 test hooks: failing key-list reads, and a held getIssue.
+let keyReadsFail = false;
+let movedKeysHidden = false;
+let getIssueHold: Promise<void> | null = null;
+let releaseGetIssueHold: (() => void) | null = null;
+
+/** The issue a key names now: by its own key, or by a key it was moved from. */
+function issueByKey(key: string): JiraSearchIssue | undefined {
+  const direct = FAKE_JIRA_ISSUES.find((i) => i.key === key);
+  if (direct) return direct;
+  const id = movedKeysHidden ? undefined : movedFrom.get(key);
+  return id === undefined ? undefined : FAKE_JIRA_ISSUES.find((i) => i.id === id);
+}
 
 function logCall(fn: string, detail: Omit<FakeJiraCall, 'fn' | 'at'> = {}): void {
   calls.push({ fn, ...detail, at: Date.now() });
@@ -190,8 +206,9 @@ export async function searchJql(
   // `key in ("A", "B")` (VERM-84): like Jira, one unknown key fails the whole query.
   const keyList = /^key in \(([^)]*)\)$/.exec(_jql);
   if (keyList) {
+    if (keyReadsFail) throw { status: 503, message: 'Service Unavailable' };
     const keys = [...keyList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    const hits = keys.map((k) => FAKE_JIRA_ISSUES.find((i) => i.key === k));
+    const hits = keys.map((k) => issueByKey(k));
     if (hits.some((i) => !i)) throw { status: 400, message: "An issue with key does not exist for field 'key'." };
     return (hits as JiraSearchIssue[]).map((i) => ({ ...i, fields: { ...i.fields } }));
   }
@@ -230,13 +247,14 @@ export async function getIssue(
 ): Promise<JiraSearchIssue> {
   logCall('getIssue', { key });
   if (getIssueDelayMs > 0) await new Promise((r) => setTimeout(r, getIssueDelayMs));
+  if (getIssueHold) await getIssueHold;
   rejectBadToken(token);
   if (!isValidLocalId('jira', key)) throw { message: `Invalid Jira issue key: ${JSON.stringify(key)}` };
-  const issue = FAKE_JIRA_ISSUES.find((i) => i.key === key);
+  const issue = issueByKey(key);
   if (!issue) throw { status: 404, message: 'Issue does not exist or you do not have permission to see it.' };
   // The detail panel's extra fields (VERM-35): project, due date, description.
-  const project = FAKE_JIRA_PROJECTS.find((p) => key.startsWith(`${p.key}-`));
-  const extra: Record<string, unknown> = { ...FAKE_JIRA_DETAIL_FIELDS[key] };
+  const project = FAKE_JIRA_PROJECTS.find((p) => issue.key.startsWith(`${p.key}-`));
+  const extra: Record<string, unknown> = { ...(FAKE_JIRA_DETAIL_FIELDS[issue.key] ?? FAKE_JIRA_DETAIL_FIELDS[key]) };
   if (project) extra.project = { ...project };
   return { ...issue, fields: { ...issue.fields, ...extra } as JiraSearchIssue['fields'] };
 }
@@ -404,7 +422,19 @@ export type FakeJiraChange =
   // Search-index lag: the issue stays readable by key but no search lists it.
   | { op: 'unindex'; key: string }
   // A token that cannot read workflow statuses (VERM-67).
-  | { op: 'failStatusReads' };
+  | { op: 'failStatusReads' }
+  // Reads by key list (`key in (…)`, the Runway's batch read) answer 503
+  // until restored (VERM-88).
+  | { op: 'failKeyReads' }
+  | { op: 'restoreKeyReads' }
+  // getIssue waits until released: a check held mid-flight (VERM-88).
+  | { op: 'holdGetIssue' }
+  | { op: 'releaseGetIssue' }
+  // A read by a moved issue's old key answers 404 (single read) or fails the
+  // key list (batch) until shown again, as when Jira will not say where an
+  // issue went (VERM-88).
+  | { op: 'hideMovedKeys' }
+  | { op: 'showMovedKeys' };
 
 function stampNow(): string {
   return new Date().toISOString();
@@ -413,6 +443,24 @@ function stampNow(): string {
 export function applyChangeForTests(change: FakeJiraChange): boolean {
   if (change.op === 'failStatusReads') {
     statusReadsFail = true;
+    return true;
+  }
+  if (change.op === 'failKeyReads' || change.op === 'restoreKeyReads') {
+    keyReadsFail = change.op === 'failKeyReads';
+    return true;
+  }
+  if (change.op === 'hideMovedKeys' || change.op === 'showMovedKeys') {
+    movedKeysHidden = change.op === 'hideMovedKeys';
+    return true;
+  }
+  if (change.op === 'holdGetIssue') {
+    if (!getIssueHold) getIssueHold = new Promise<void>((resolve) => (releaseGetIssueHold = resolve));
+    return true;
+  }
+  if (change.op === 'releaseGetIssue') {
+    releaseGetIssueHold?.();
+    getIssueHold = null;
+    releaseGetIssueHold = null;
     return true;
   }
   if (change.op === 'create') {
@@ -434,6 +482,7 @@ export function applyChangeForTests(change: FakeJiraChange): boolean {
   } else if (change.op === 'move') {
     // Jira gives a moved issue a new key and keeps its id. A move it does not
     // touch leaves `updated` alone, so only a full read can notice it.
+    movedFrom.set(issue.key, issue.id);
     FAKE_JIRA_ISSUES[at] = { ...issue, key: change.toKey, fields: { ...issue.fields, ...(change.touch ? { updated: stampNow() } : {}) } };
   } else {
     const fields = { ...issue.fields, updated: stampNow() };

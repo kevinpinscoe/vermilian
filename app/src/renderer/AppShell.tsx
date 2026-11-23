@@ -723,6 +723,7 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
               onDeleted={() => setSelectedIssue(null)}
               onStartTimer={handleStartTimer}
               onStopAndLog={stopAndLog}
+              runwayWorkspaceId={activeContext.data && !isJiraWorkspace ? activeContext.data.workspaceId : null}
             />
           )}
         </main>

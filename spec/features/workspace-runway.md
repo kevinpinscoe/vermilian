@@ -118,8 +118,16 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       receives the request, and check it inside the Runway write gate after the last awaited
       validation, immediately before the write. Any switch while the edit waits — including a round
       trip A → B → A — cancels it, and neither workspace's Runway changes.
-- [ ] All tasks and the ticket detail panel have a **Runway #** control. Empty, it offers
-      *Add at end* and *Add at #N*; filled, it offers *Move to #N* and *Remove*.
+- [x] The ticket detail panel — YouTrack and Jira — has a **Runway #** control (VERM-88). Empty,
+      it offers *Add at end* and *Add at #N*; filled, it shows the ticket's Runway # and offers
+      *Move to #N* and *Remove*, confirmed inline (*Remove READ-12 from this Runway?*). It is
+      independent of the Priority Desk: a Jira ticket with no Desk slot shows it too. The panel's
+      ticket is matched to its saved row by every ID it goes by — its key, a YouTrack entity ID,
+      the key a Jira panel was opened by — and by the row's tracker read, so a Jira ticket saved
+      under a key it has since moved from is found; Move and Remove then use the row's stored ID.
+      Adds go through the Add box's gated add (duplicate check by every ID, cancelled by any
+      workspace switch); moves and removes are the Runway view's edits.
+- [ ] All tasks has the same **Runway #** control (VERM-90).
 - [ ] **Section** and **note** rows keep the structure of an imported schedule. They appear in the
       Runway view only, and the Runway # counts **tickets only** — a section or note never uses up
       a number.

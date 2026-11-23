@@ -6,6 +6,7 @@ import type { BoardIssueFields } from '../../../shared/workspace';
 import { FIELD_KEYS, getFieldDef, type FieldKey } from '../../../shared/fields';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS, getContrastColor } from '../project-board/colors';
 import { FocusControl } from '../project-board/FocusControl';
+import { RunwayNumberControl } from '../runway/RunwayNumberControl';
 import { useIssueDetail, usePatchIssue, useDeleteIssue } from './api';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useQueryClient } from '@tanstack/react-query';
@@ -376,6 +377,11 @@ interface TaskDetailPanelProps {
   onDeleted: () => void;
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   onStopAndLog: () => Promise<void>;
+  /**
+   * The active YouTrack workspace, for the Runway # control (VERM-88); null
+   * or absent hides the control (no workspace, or a Jira one).
+   */
+  runwayWorkspaceId?: string | null;
 }
 
 export function TaskDetailPanel({
@@ -385,6 +391,7 @@ export function TaskDetailPanel({
   onDeleted,
   onStartTimer,
   onStopAndLog,
+  runwayWorkspaceId = null,
 }: TaskDetailPanelProps) {
   const { data: issue, isLoading, isError, error, refetch } = useIssueDetail(issueId);
   // The caller-supplied projectShortName is null from any cross-project view
@@ -631,6 +638,15 @@ export function TaskDetailPanel({
               onEnter={() => advanceField('summary')}
             />
           </div>
+
+          {runwayWorkspaceId && (
+            <RunwayNumberControl
+              key={runwayWorkspaceId}
+              workspaceId={runwayWorkspaceId}
+              ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }}
+              displayKey={issue.idReadable}
+            />
+          )}
 
           <div className={styles.fields}>
             {renderFields(issue.fields)}
