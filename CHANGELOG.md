@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **All tasks sort** (VERM-92). YouTrack's All tasks has a **Sort** control: **Runway #**,
+  **Tracker priority** or **Ticket ID**, each ascending or descending, and **Clear sort**. A chosen
+  sort lists every visible ticket as one flat list, with no status sections, so the Runway # reads
+  straight down; filters still apply. Clicking the **Runway #** or **Priority** column header
+  chooses the same sort; the other headers stay a temporary sort inside the status sections. Each
+  workspace remembers its own sort on this computer (in `app-config.json`), so it survives a
+  restart; it is never in a Runway snapshot or the tracker. Sorting never writes a Runway position
+  or a tracker field.
 - **Runway # in All tasks** (VERM-90). YouTrack's All tasks table has a **Runway #** column,
   and each Jira card a Runway # badge beside its key. It shows the ticket's Runway # on the active
   workspace's Runway, blank when it has none. Clicking it opens the detail panel's Runway #
@@ -124,6 +132,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is upgraded in the private staging copy, never in the live database. Its preview says so,
   shows the exporting computer and export time as *Not recorded (version 1 snapshot)*, and warns
   that Vermilian cannot tell whether this computer has newer Runway changes.
+
+### Fixed
+
+- **All tasks could show the previous workspace's issues** (found under VERM-92). Its project
+  issues were remembered by the time each read finished, and two projects' reads can finish in the
+  same millisecond, so switching workspace could leave the old workspace's issues in the table.
+  They are now remembered by project as well.
 
 ## [1.6.0] - 2026-11-19
 

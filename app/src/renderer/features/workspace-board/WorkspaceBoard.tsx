@@ -21,6 +21,14 @@ import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../r
 import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { RunwayNumberCell } from '../runway/RunwayNumberCell';
+import { runwayTicketStatus } from '../runway/RunwayNumberControl';
+import { CONFIG_QUERY_KEY, useConfig, useSaveConfig } from '../settings/api';
+import type { AppConfig } from '../../../shared/config';
+import { withRunwaySort, type RunwaySortKey } from '../../../shared/runwaySort';
+import {
+  RUNWAY_SORT_LABELS, activeAllTasksSort, allTasksSortAction, headerSortDirection, projectIssuesKey, sortAllTasksFlat,
+  type AllTasksSortAction,
+} from './allTasksSort';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
 
@@ -146,7 +154,7 @@ function GroupHeader({ label, count, colSpan, expanded, onToggle, color }: {
   onToggle: () => void; color: string;
 }) {
   return (
-    <tr className={pbStyles.groupHeaderRow}>
+    <tr className={pbStyles.groupHeaderRow} data-testid="ws-group-header" data-status={label}>
       <td colSpan={colSpan}>
         <button type="button" className={pbStyles.groupHeaderButton} onClick={onToggle}>
           <svg width="10" height="10" viewBox="0 0 10 10"
@@ -186,7 +194,9 @@ export function WorkspaceBoard({
 }: WorkspaceBoardProps) {
   const patchMutation = usePatchIssueOnBoard(null);
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
-  const [sort, setSort] = useState<BoardSortConfig | undefined>(undefined);
+  // The sort (VERM-92): this workspace's remembered Runway sort from
+  // app-config.json, and a temporary header sort for this session only.
+  const [tempSort, setTempSort] = useState<{ workspaceId: string; sort: BoardSortConfig } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const timer = useTimerStore((s) => s.timer);
   const [, setTick] = useState(0);
@@ -207,10 +217,12 @@ export function WorkspaceBoard({
     })),
   });
 
+  // Keyed by project as well as time (projectIssuesKey): keyed on the times
+  // alone, a workspace switch could keep the previous workspace's issues.
   const projectIssues: BoardIssue[] = useMemo(() =>
     results.flatMap((r) => r.data ?? []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [results.map((r) => r.dataUpdatedAt).join(',')],
+    [projectIssuesKey(projectShortNames, showClosed, results.map((r) => r.dataUpdatedAt))],
   );
 
   // Plus the tickets added to this workspace's Runway from outside its
@@ -270,12 +282,36 @@ export function WorkspaceBoard({
     });
   }
 
-  function handleSort(field: ColumnField) {
-    setSort((cur) =>
-      cur?.field === field
-        ? { field, direction: cur.direction === 'asc' ? 'desc' : 'asc' }
-        : { field, direction: 'asc' },
-    );
+  // The remembered sort is per workspace; a temporary header sort belongs to
+  // the workspace it was chosen in, so switching workspace drops it.
+  const config = useConfig();
+  const saveConfig = useSaveConfig();
+  const savedSort = (workspaceId && config.data?.allTasksSorts?.[workspaceId]) || null;
+  const temp = tempSort && tempSort.workspaceId === workspaceId ? tempSort.sort : null;
+  const sortState = { saved: savedSort, temp };
+  const activeSort = activeAllTasksSort(sortState);
+
+  // A sort change saves at most this workspace's entry in app-config.json —
+  // never a Runway position, never a tracker field. The config cache is
+  // updated first so the table follows the choice at once.
+  function applySort(action: AllTasksSortAction) {
+    const r = allTasksSortAction(sortState, action);
+    setTempSort(r.temp ? { workspaceId, sort: r.temp } : null);
+    if (r.save === undefined || !workspaceId || !config.data) return;
+    const allTasksSorts = withRunwaySort(config.data.allTasksSorts ?? {}, workspaceId, r.save);
+    queryClient.setQueryData<AppConfig>(CONFIG_QUERY_KEY, (cur) => (cur ? { ...cur, allTasksSorts } : cur));
+    saveConfig.mutate({ allTasksSorts });
+  }
+
+  function handleSort(field: ColumnField | 'runwayNumber') {
+    applySort({ type: 'header', field });
+  }
+
+  // A ticket's Runway # on this workspace's Runway; null when it has none or
+  // its position cannot be verified (both sort last).
+  function runwayNumberOf(issue: BoardIssue): number | null {
+    const status = runwayTicketStatus(runwayItems, runwayTickets, { tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id });
+    return status?.kind === 'on' ? status.row.runwayNumber : null;
   }
 
   function toggle(field: 'status' | 'priority' | 'category' | 'assignee', value: string) {
@@ -286,12 +322,28 @@ export function WorkspaceBoard({
     }));
   }
 
-  function SortTh({ field, label, className }: { field: ColumnField; label: string; className?: string }) {
-    const active = sort?.field === field;
+  function SortTh({ field, label, className, testId }: { field: ColumnField | 'runwayNumber'; label: string; className?: string; testId?: string }) {
+    const direction = headerSortDirection(activeSort, field);
     return (
-      <th className={`${pbStyles.th} ${pbStyles.thSortable} ${className ?? ''}`} onClick={() => handleSort(field)}>
-        {label}<span className={pbStyles.sortIcon}>{active ? (sort!.direction === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+      <th className={`${pbStyles.th} ${pbStyles.thSortable} ${className ?? ''}`} onClick={() => handleSort(field)}
+        data-testid={testId ?? `ws-sort-header-${field}`} aria-sort={direction ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}>
+        {label}<span className={pbStyles.sortIcon}>{direction ? (direction === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
       </th>
+    );
+  }
+
+  function renderRow(issue: BoardIssue) {
+    const isActive = timer?.issueId === issue.id;
+    return (
+      <IssueRow
+        key={issue.id} issue={issue}
+        onClick={() => onSelectIssue(issue.id)}
+        onStartTimer={onStartTimer}
+        isActiveTimer={isActive}
+        timerDisplay={isActive && timer ? fmtMs(getTotalWorkMs(timer)) : ''}
+        onPatch={handlePatch}
+        runwayWorkspaceId={workspaceId || null}
+      />
     );
   }
 
@@ -341,6 +393,41 @@ export function WorkspaceBoard({
         >
           {showClosed ? 'Hide closed' : 'Show closed'}
         </button>
+        {workspaceId && (
+          <div className={styles.sortControl} data-testid="ws-sort-control">
+            <label className={styles.sortLabel}>
+              Sort
+              <select
+                className={styles.sortSelect}
+                data-testid="ws-sort-select"
+                value={activeSort?.kind === 'runway' ? activeSort.sort.key : ''}
+                onChange={(e) => applySort(e.target.value ? { type: 'chooseKey', key: e.target.value as RunwaySortKey } : { type: 'clear' })}
+              >
+                <option value="">{activeSort?.kind === 'header' ? 'Column header' : 'Status sections'}</option>
+                {(Object.keys(RUNWAY_SORT_LABELS) as RunwaySortKey[]).map((k) => (
+                  <option key={k} value={k}>{RUNWAY_SORT_LABELS[k]}</option>
+                ))}
+              </select>
+            </label>
+            {activeSort?.kind === 'runway' && (
+              <button
+                type="button"
+                className={styles.assignedBtn}
+                data-testid="ws-sort-direction"
+                data-direction={activeSort.sort.direction}
+                onClick={() => applySort({ type: 'chooseDirection', direction: activeSort.sort.direction === 'asc' ? 'desc' : 'asc' })}
+                title={activeSort.sort.direction === 'asc' ? 'Ascending: click for descending' : 'Descending: click for ascending'}
+              >
+                {activeSort.sort.direction === 'asc' ? '↑ Ascending' : '↓ Descending'}
+              </button>
+            )}
+            {activeSort && (
+              <button type="button" className={styles.assignedBtn} data-testid="ws-sort-clear" onClick={() => applySort({ type: 'clear' })}>
+                Clear sort
+              </button>
+            )}
+          </div>
+        )}
         <Text type="text2" className={styles.issueCount} data-testid="ws-issue-count">
           {filteredIssues.length !== allIssues.length ? `${filteredIssues.length} of ${allIssues.length}` : filteredIssues.length} {showClosed ? 'issues' : 'open'}
         </Text>
@@ -425,8 +512,8 @@ export function WorkspaceBoard({
             <table className={pbStyles.table}>
               <thead>
                 <tr className={pbStyles.headerRow}>
-                  {/* Runway # (VERM-90); its sort comes with VERM-91/92. */}
-                  {workspaceId && <th className={`${pbStyles.th} ${styles.thRunway}`} data-testid="ws-runway-header">Runway #</th>}
+                  {/* Runway # (VERM-90); a click chooses the Runway # sort (VERM-92). */}
+                  {workspaceId && <SortTh field="runwayNumber" label="Runway #" className={styles.thRunway} testId="ws-runway-header" />}
                   <SortTh field="summary"  label={COLUMN_LABELS.summary}  className={pbStyles.thTask} />
                   <SortTh field="status"   label={COLUMN_LABELS.status} />
                   <SortTh field="priority" label={COLUMN_LABELS.priority} />
@@ -435,9 +522,13 @@ export function WorkspaceBoard({
                 </tr>
               </thead>
               <tbody>
-                {groups.map(([status, groupIssues]) => {
+                {activeSort?.kind === 'runway' ? (
+                  // A Runway sort lists every visible ticket as one flat list
+                  // (VERM-92), so Runway # reads straight down across statuses.
+                  sortAllTasksFlat(filteredIssues, activeSort.sort, runwayNumberOf).map((issue) => renderRow(issue))
+                ) : groups.map(([status, groupIssues]) => {
                   const exp = !collapsed.has(status);
-                  const sorted = sortIssues(groupIssues, sort);
+                  const sorted = sortIssues(groupIssues, activeSort?.kind === 'header' ? activeSort.sort : undefined);
                   return (
                     <React.Fragment key={status}>
                       <GroupHeader
@@ -445,20 +536,7 @@ export function WorkspaceBoard({
                         expanded={exp} onToggle={() => setCollapsed((s) => { const n = new Set(s); if (n.has(status)) n.delete(status); else n.add(status); return n; })}
                         color={COLORS.Status[status] ?? '#C4C4C4'}
                       />
-                      {exp && sorted.map((issue) => {
-                        const isActive = timer?.issueId === issue.id;
-                        return (
-                          <IssueRow
-                            key={issue.id} issue={issue}
-                            onClick={() => onSelectIssue(issue.id)}
-                            onStartTimer={onStartTimer}
-                            isActiveTimer={isActive}
-                            timerDisplay={isActive && timer ? fmtMs(getTotalWorkMs(timer)) : ''}
-                            onPatch={handlePatch}
-                            runwayWorkspaceId={workspaceId || null}
-                          />
-                        );
-                      })}
+                      {exp && sorted.map((issue) => renderRow(issue))}
                     </React.Fragment>
                   );
                 })}
