@@ -263,3 +263,8 @@
   display: flex;
   gap: 8px;
 }
+
+/* The Runway # badge sits beside the key; the Desk star stays right (VERM-90). */
+.cardRunway {
+  margin-right: auto;
+}

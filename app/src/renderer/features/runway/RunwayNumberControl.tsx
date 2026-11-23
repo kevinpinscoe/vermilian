@@ -40,11 +40,35 @@ export interface RunwayNumberControlProps {
   ticket: PanelTicket;
   /** The key shown in messages and sent when adding (the tracker's current key). */
   displayKey: string;
+  /** Prefix of every test id: `detail-runway` in the panel, `cell-runway` in an All tasks popover. */
+  testIdPrefix?: string;
+  /** Without the panel's dividing rule (inside a popover). */
+  bare?: boolean;
+}
+
+/**
+ * Where a ticket stands on the Runway, from the shared Runway queries: on it
+ * (with its row), off it, still checking, or unverified (panelRunwayStatus).
+ * Null while the saved rows are not known. Shared by the panel control and
+ * the All tasks Runway # cell (VERM-90), so the two always agree.
+ */
+export function runwayTicketStatus(
+  items: ReturnType<typeof useRunwayItems>,
+  tickets: ReturnType<typeof useRunwayTickets>,
+  ticket: PanelTicket,
+): ReturnType<typeof panelRunwayStatus> | null {
+  const readState = tickets.isPending
+    ? ({ state: 'pending' } as const)
+    : tickets.isError || !tickets.data?.ok
+      ? ({ state: 'failed' } as const)
+      : ({ state: 'done', reads: tickets.data.tickets, refetching: tickets.isFetching } as const);
+  return items.data?.ok ? panelRunwayStatus(items.data.items, readState, ticket) : null;
 }
 
 const BAD_NUMBER = 'The Runway # must be a whole number of 1 or more.';
 
-export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayNumberControlProps) {
+export function RunwayNumberControl({ workspaceId, ticket, displayKey, testIdPrefix = 'detail-runway', bare = false }: RunwayNumberControlProps) {
+  const tid = (suffix: string) => (suffix ? `${testIdPrefix}-${suffix}` : testIdPrefix);
   const queryClient = useQueryClient();
   const items = useRunwayItems(workspaceId);
   const tickets = useRunwayTickets(workspaceId);
@@ -65,12 +89,7 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
   // does not know (a Jira key the ticket moved from) is recognised only by
   // the tracker reads, so until they have answered Add is not offered — and
   // if they failed, the position is reported as unverified, with a retry.
-  const readState = tickets.isPending
-    ? ({ state: 'pending' } as const)
-    : tickets.isError || !tickets.data?.ok
-      ? ({ state: 'failed' } as const)
-      : ({ state: 'done', reads: tickets.data.tickets, refetching: tickets.isFetching } as const);
-  const status = items.data?.ok ? panelRunwayStatus(items.data.items, readState, ticket) : null;
+  const status = runwayTicketStatus(items, tickets, ticket);
   const row = status?.kind === 'on' ? status.row : null;
   const canAdd = status?.kind === 'off';
   const busy = adding || edit.pending;
@@ -142,10 +161,10 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
   const error = message?.error ? message.text : edit.error;
 
   return (
-    <section className={styles.control} data-testid="detail-runway" data-runway-number={row?.runwayNumber ?? ''}>
+    <section className={`${styles.control} ${bare ? styles.bare : ''}`} data-testid={tid('')} data-runway-number={row?.runwayNumber ?? ''}>
       <div className={styles.headerRow}>
         <span className={styles.label}>Runway #</span>
-        <span className={styles.value} data-testid="detail-runway-number">
+        <span className={styles.value} data-testid={tid('number')}>
           {items.isPending || status?.kind === 'checking'
             ? 'Loading…'
             : row
@@ -155,7 +174,7 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
                 : 'Not on this Runway'}
         </span>
         {status?.kind === 'unverified' && (
-          <Button size="small" kind="tertiary" disabled={tickets.isFetching} data-testid="detail-runway-retry"
+          <Button size="small" kind="tertiary" disabled={tickets.isFetching} data-testid={tid('retry')}
             onClick={() => void tickets.refetch()}>
             Retry
           </Button>
@@ -170,14 +189,14 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
 
       {items.data?.ok && confirmRemove && row ? (
         <div className={styles.actions}>
-          <span className={styles.prompt} data-testid="detail-runway-remove-prompt">
+          <span className={styles.prompt} data-testid={tid('remove-prompt')}>
             Remove {displayKey} from this Runway?
           </span>
-          <Button size="small" kind="primary" color="negative" disabled={busy} data-testid="detail-runway-remove-confirm"
+          <Button size="small" kind="primary" color="negative" disabled={busy} data-testid={tid('remove-confirm')}
             onClick={() => void remove()}>
             Remove
           </Button>
-          <Button size="small" kind="tertiary" disabled={busy} data-testid="detail-runway-remove-cancel"
+          <Button size="small" kind="tertiary" disabled={busy} data-testid={tid('remove-cancel')}
             onClick={() => setConfirmRemove(false)}>
             Cancel
           </Button>
@@ -196,14 +215,14 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
           }}
         >
           {!row && (
-            <Button size="small" kind="secondary" disabled={busy || !canAdd} data-testid="detail-runway-add-end"
+            <Button size="small" kind="secondary" disabled={busy || !canAdd} data-testid={tid('add-end')}
               onClick={() => void add(undefined)}>
               Add at end
             </Button>
           )}
           <input
             className={styles.number}
-            data-testid="detail-runway-number-input"
+            data-testid={tid('number-input')}
             aria-label={row ? 'Runway number to move to' : 'Runway number to add at'}
             inputMode="numeric"
             placeholder="#"
@@ -212,11 +231,11 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
             onChange={(e) => setNumberText(e.target.value)}
           />
           <Button type="submit" size="small" kind="secondary" disabled={busy || (!row && !canAdd) || numberText.trim() === ''}
-            data-testid={row ? 'detail-runway-move' : 'detail-runway-add-at'}>
+            data-testid={tid(row ? 'move' : 'add-at')}>
             {row ? 'Move to #' : 'Add at #'}
           </Button>
           {row && (
-            <Button size="small" kind="tertiary" disabled={busy} data-testid="detail-runway-remove"
+            <Button size="small" kind="tertiary" disabled={busy} data-testid={tid('remove')}
               onClick={() => {
                 setMessage(null);
                 setConfirmRemove(true);
@@ -228,11 +247,11 @@ export function RunwayNumberControl({ workspaceId, ticket, displayKey }: RunwayN
       ) : null}
 
       {error ? (
-        <div className={styles.error} role="alert" data-testid="detail-runway-error">
+        <div className={styles.error} role="alert" data-testid={tid('error')}>
           {error}
         </div>
       ) : message ? (
-        <div className={styles.status} role="status" data-testid="detail-runway-status">
+        <div className={styles.status} role="status" data-testid={tid('status')}>
           {message.text}
         </div>
       ) : null}

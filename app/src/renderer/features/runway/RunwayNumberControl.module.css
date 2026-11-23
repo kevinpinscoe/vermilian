@@ -54,3 +54,9 @@
   font-size: 12px;
   color: var(--negative-color, #d83a52);
 }
+
+/* Inside an All tasks popover (VERM-90): no dividing rule. */
+.bare {
+  padding: 0;
+  border-bottom: none;
+}
