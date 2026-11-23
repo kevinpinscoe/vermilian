@@ -260,6 +260,13 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
   | **Ready** | Unresolved, links read, every prerequisite resolved | — |
   | **Unknown** | Links could not be read: offline, not readable with this credential, link type not mapped, or stale | the reason |
 
+- [x] Links are read into a provider-neutral `IssueLink` on each ticket: link type, direction as
+      that ticket sees it, the wording from its side, and the linked ticket's key, summary and
+      resolved state (YouTrack: VERM-94; Jira: VERM-95). A ticket whose links were not read has
+      none recorded, which the blocker states treat as *Unknown*, never as "no prerequisites".
+      Whether a link is a prerequisite is decided from its type and direction at display time
+      (`linkRole`): an inward link of a prerequisite type (YouTrack `Depend` "depends on", Jira
+      `Blocks` "is blocked by") makes the linked ticket a prerequisite.
 - [ ] A YouTrack `BLOCKED` status with no prerequisite link shows the reason
       *status BLOCKED, no linked prerequisite*.
 - [ ] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`

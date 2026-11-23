@@ -6,6 +6,7 @@
 import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
+import type { IssueLink } from '../../shared/issueLink';
 import { FIELD_DEFS, FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import type {
   YouTrackProject,
@@ -25,6 +26,16 @@ import { STORAGE_MARKER_TITLE, serialiseStorageMarker } from '../../shared/stora
 // has >=2 status groups and >=3 issues in one group so the reorder / between-group
 // tests have enough data and never skip.
 
+// VERMILIAN_E2E_YT_RUNWAY_FIXTURES=1 adds the Workspace Runway projects READ,
+// SYNC and PLAT and their links (VERM-94), for the blocker tests. Off, the
+// fake is exactly as it was, so no other e2e test sees extra projects.
+const RUNWAY_FIXTURES = process.env.VERMILIAN_E2E_YT_RUNWAY_FIXTURES === '1';
+const RUNWAY_PROJECTS: YouTrackProject[] = [
+  { id: '0-e5', shortName: 'READ', name: 'Reader App' },
+  { id: '0-e6', shortName: 'SYNC', name: 'Sync Engine' },
+  { id: '0-e7', shortName: 'PLAT', name: 'Platform' },
+];
+
 const PROJECTS: YouTrackProject[] = [
   { id: '0-e1', shortName: 'TEST', name: 'Test Project' },
   { id: '0-e2', shortName: 'TST2', name: 'Test Project Two' },
@@ -34,6 +45,7 @@ const PROJECTS: YouTrackProject[] = [
   // state can be exercised. Kept last so existing .first()/.nth() nav selectors
   // stay stable.
   { id: '0-e4', shortName: 'EMP', name: 'Empty Project' },
+  ...(RUNWAY_FIXTURES ? RUNWAY_PROJECTS : []),
 ];
 
 function emptyFields(over: Partial<BoardIssueFields>): BoardIssueFields {
@@ -103,7 +115,73 @@ function makeIssues(): FakeIssue[] {
     mk(2, '0-e2', 'TST2', 'In Progress', 'Major'),
     // INB: one issue so the Inbox board renders content
     mk(1, '0-e3', 'INB', 'To do', 'Normal'),
+    // The spec's synthetic schedule (VERM-94), behind RUNWAY_FIXTURES.
+    ...(RUNWAY_FIXTURES ? runwayFixtureIssues(mk) : []),
   ].map(withAssignee);
+}
+
+type MkIssue = (n: number, projectId: string, prefix: string, status: string, priority: string) => FakeIssue;
+
+function runwayFixtureIssues(mk: MkIssue): FakeIssue[] {
+  const named = (issue: FakeIssue, summary: string): FakeIssue => ({ ...issue, summary });
+  return [
+    named(mk(9, '0-e5', 'READ', 'To do', 'Minor'), 'First attempt at offline reading'),
+    named(mk(12, '0-e5', 'READ', 'To do', 'Major'), 'Cache articles locally'),
+    named(mk(14, '0-e5', 'READ', 'To do', 'Normal'), 'Sync read state between devices'),
+    named(mk(20, '0-e5', 'READ', 'To do', 'Normal'), 'Offline indicator in the toolbar'),
+    named(mk(3, '0-e6', 'SYNC', 'In Progress', 'Critical'), 'Conflict-free merge library'),
+    named(mk(7, '0-e6', 'SYNC', 'To do', 'Major'), 'Background sync worker'),
+    named(mk(40, '0-e7', 'PLAT', 'In Progress', 'Major'), 'Device token service'),
+  ];
+}
+
+// ─── Links (VERM-94) ──────────────────────────────────────────────────────────
+// Link types worded as the live server's /api/issueLinkTypes words them.
+const FAKE_LINK_TYPES = {
+  Depend: { directed: true, sourceToTarget: 'is required for', targetToSource: 'depends on' },
+  Relates: { directed: false, sourceToTarget: 'relates to', targetToSource: '' },
+  Subtask: { directed: true, sourceToTarget: 'parent for', targetToSource: 'subtask of' },
+} as const;
+
+/** `source` <type's sourceToTarget> `target`: SYNC-3 "is required for" READ-14. */
+interface FakeLink {
+  type: keyof typeof FAKE_LINK_TYPES;
+  source: string;
+  target: string;
+}
+
+const FAKE_LINKS: FakeLink[] = RUNWAY_FIXTURES
+  ? [
+      { type: 'Depend', source: 'SYNC-3', target: 'READ-14' }, // READ-14 depends on SYNC-3
+      { type: 'Depend', source: 'PLAT-40', target: 'SYNC-7' }, // SYNC-7 depends on PLAT-40 (outside the Runway)
+      { type: 'Relates', source: 'READ-12', target: 'READ-9' }, // never a blocker
+      { type: 'Subtask', source: 'READ-12', target: 'READ-20' }, // parent and child: never a blocker
+    ]
+  : [];
+
+/**
+ * An issue's links as the real client maps them: direction from this issue's
+ * side, and the linked issue's resolved state read now, so resolving a
+ * prerequisite shows on the next read.
+ */
+function fakeLinksOf(idReadable: string): IssueLink[] {
+  const out: IssueLink[] = [];
+  for (const l of FAKE_LINKS) {
+    const t = FAKE_LINK_TYPES[l.type];
+    const side = l.source === idReadable ? 'source' : l.target === idReadable ? 'target' : null;
+    if (!side) continue;
+    const other = issues.find((i) => i.idReadable === (side === 'source' ? l.target : l.source));
+    if (!other) continue;
+    const direction = !t.directed ? 'both' : side === 'source' ? 'outward' : 'inward';
+    out.push({
+      type: l.type,
+      directed: t.directed,
+      direction,
+      verb: direction === 'inward' ? t.targetToSource : t.sourceToTarget,
+      issue: { id: other.id, key: other.idReadable, summary: other.summary, resolved: other.resolved !== null },
+    });
+  }
+  return out;
 }
 
 // ─── Mutable state ──────────────────────────────────────────────────────────────
@@ -168,6 +246,7 @@ function toBoardIssue(i: FakeIssue): BoardIssue {
     fields: { ...i.fields },
     parentEpic: i.parentEpic,
     isEpic: i.isEpic,
+    links: fakeLinksOf(i.idReadable),
   };
 }
 

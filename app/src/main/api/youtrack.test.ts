@@ -82,6 +82,38 @@ describe('getProjects', () => {
 // ─── getIssues ──────────────────────────────────────────────────────────────
 
 describe('getIssues', () => {
+  it('requests link wording, direction and linked resolution, and maps Depend links (VERM-94)', async () => {
+    const DEPEND = { name: 'Depend', sourceToTarget: 'is required for', targetToSource: 'depends on', directed: true };
+    fetchMock.mockResolvedValueOnce(
+      jsonRes([
+        {
+          id: '2-14', idReadable: 'READ-14', summary: 'Sync read state', resolved: null, customFields: [],
+          links: [
+            { direction: 'INWARD', linkType: DEPEND, issues: [{ id: '2-3', idReadable: 'SYNC-3', summary: 'Merge library', resolved: 1_790_000_000_000, customFields: [] }] },
+            { direction: 'OUTWARD', linkType: DEPEND, issues: [{ id: '2-41', idReadable: 'PLAT-41', summary: 'Token service', resolved: null, customFields: [] }] },
+          ],
+        },
+      ]),
+    );
+    const [issue] = await getIssues(URL, TOKEN, 'READ');
+    const requested = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
+    expect(requested).toContain('links(direction,linkType(name,sourceToTarget,targetToSource,directed),issues(id,idReadable,summary,resolved,');
+    expect(issue.links).toEqual([
+      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-3', key: 'SYNC-3', summary: 'Merge library', resolved: true } },
+      { type: 'Depend', directed: true, direction: 'outward', verb: 'is required for', issue: { id: '2-41', key: 'PLAT-41', summary: 'Token service', resolved: false } },
+    ]);
+  });
+
+  it('leaves links absent (not read) when the response carries none, and [] when it carries empty buckets (VERM-94)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes([
+      { id: '1', idReadable: 'TST-1', summary: 'A', resolved: null, customFields: [] },
+      { id: '2', idReadable: 'TST-2', summary: 'B', resolved: null, customFields: [], links: [{ direction: 'BOTH', linkType: { name: 'Relates' }, issues: [] }] },
+    ]));
+    const [a, b] = await getIssues(URL, TOKEN, 'TST');
+    expect(a.links).toBeUndefined();
+    expect(b.links).toEqual([]);
+  });
+
   it('transforms YouTrack custom fields into the flat board shape', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonRes([

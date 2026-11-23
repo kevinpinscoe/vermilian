@@ -151,19 +151,6 @@ interface RawCustomField {
 // linked issue's own Type field being "Epic", checked across both direction
 // buckets, never off which bucket it happened to land in. See
 // docs/adr/0008-master-plan-storage.md and PLAN.md § "Design decisions".
-interface RawLinkedIssue {
-  id: string;
-  idReadable: string;
-  summary: string;
-  customFields: RawCustomField[];
-}
-
-interface RawIssueLink {
-  direction: 'OUTWARD' | 'INWARD' | 'BOTH';
-  linkType: { name: string };
-  issues: RawLinkedIssue[];
-}
-
 interface RawIssue {
   id: string;
   idReadable: string;
@@ -181,6 +168,7 @@ import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/wo
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
 import { youtrackPriorityOrder, type YouTrackProjectCustomField } from '../../shared/priority';
+import { mapYouTrackLinks, type RawIssueLink } from './youtrackLinks';
 import {
   FIELD_DEFS,
   FIELD_KEYS,
@@ -195,10 +183,12 @@ import {
 // links(...) is embedded in the same bounded per-project request the board/
 // candidate queries already make — no per-card N+1 (VERM-7 PLAN.md § "Fetch
 // shape"). The linked issue's customFields are fetched only so its Type name
-// can be read for parent-Epic resolution below.
+// can be read for parent-Epic resolution below; its `resolved` and the link
+// type's wording and direction feed the provider-neutral links (VERM-94).
 const ISSUE_FIELDS =
   'id,idReadable,summary,resolved,customFields(name,$type,value(name,isResolved,login)),' +
-  'links(direction,linkType(name),issues(id,idReadable,summary,customFields(name,value(name))))';
+  'links(direction,linkType(name,sourceToTarget,targetToSource,directed),' +
+  'issues(id,idReadable,summary,resolved,customFields(name,value(name))))';
 
 function parseFieldStringValue(field: RawCustomField): string | null {
   if (field.value === null || field.value === undefined) return null;
@@ -288,6 +278,8 @@ function rawToBoardIssue(issue: RawIssue): BoardIssue {
     // (VERM-7 review finding, 2026-09-16) — read from the issue's own Type
     // field, which ISSUE_FIELDS already fetches as an ordinary custom field.
     isEpic: typeNameOf(issue.customFields) === 'Epic',
+    // Absent when the response carried no links at all: not read, never "none".
+    links: issue.links === undefined ? undefined : mapYouTrackLinks(issue.links),
   };
 }
 
