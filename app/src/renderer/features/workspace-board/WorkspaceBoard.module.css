@@ -48,3 +48,12 @@
   align-items: center;
   gap: 8px;
 }
+
+/* The Runway # column (VERM-90). */
+.thRunway {
+  width: 76px;
+}
+
+.runwayCell {
+  width: 76px;
+}

@@ -20,6 +20,7 @@ import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../runway/api';
 import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { RunwayNumberCell } from '../runway/RunwayNumberCell';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
 
@@ -83,9 +84,11 @@ function sortIssues(issues: BoardIssue[], sort: BoardSortConfig | undefined): Bo
 const VISIBLE_COLS: ColumnField[] = ['status', 'priority', 'category', 'dueDate'];
 
 function IssueRow({
-  issue, onClick, onStartTimer, isActiveTimer, timerDisplay, onPatch,
+  issue, onClick, onStartTimer, isActiveTimer, timerDisplay, onPatch, runwayWorkspaceId,
 }: {
   issue: BoardIssue; onClick: () => void;
+  /** The workspace whose Runway # the row shows (VERM-90); null shows no Runway # cell. */
+  runwayWorkspaceId: string | null;
   onStartTimer: (id: string, readable: string, summary: string) => void;
   isActiveTimer: boolean; timerDisplay: string;
   onPatch: (issueId: string, field: string, value: string | null) => void;
@@ -95,6 +98,15 @@ function IssueRow({
     <tr className={pbStyles.issueRow} onClick={onClick} style={{ cursor: 'pointer' }}
       data-testid="ws-issue-row" data-issue-id={issue.idReadable}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {runwayWorkspaceId && (
+        <td className={`${pbStyles.cell} ${styles.runwayCell}`}>
+          <RunwayNumberCell
+            workspaceId={runwayWorkspaceId}
+            ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }}
+            displayKey={issue.idReadable}
+          />
+        </td>
+      )}
       <td className={`${pbStyles.cell} ${pbStyles.cellTask}`}>
         {isActiveTimer ? (
           <span className={pbStyles.timerBadge}>▶ {timerDisplay}</span>
@@ -289,7 +301,7 @@ export function WorkspaceBoard({
   const assignedToMe = filter.assignee.includes(ASSIGNEE_ME);
   // The search text has its own clear (Escape); Clear resets the pills only.
   const hasFilters = filterCount({ ...filter, search: '' }) > 0;
-  const colSpan = 1 + VISIBLE_COLS.length;
+  const colSpan = (workspaceId ? 2 : 1) + VISIBLE_COLS.length;
 
   return (
     <div className={pbStyles.board} style={{ position: 'relative' }} data-testid="workspace-board">
@@ -413,6 +425,8 @@ export function WorkspaceBoard({
             <table className={pbStyles.table}>
               <thead>
                 <tr className={pbStyles.headerRow}>
+                  {/* Runway # (VERM-90); its sort comes with VERM-91/92. */}
+                  {workspaceId && <th className={`${pbStyles.th} ${styles.thRunway}`} data-testid="ws-runway-header">Runway #</th>}
                   <SortTh field="summary"  label={COLUMN_LABELS.summary}  className={pbStyles.thTask} />
                   <SortTh field="status"   label={COLUMN_LABELS.status} />
                   <SortTh field="priority" label={COLUMN_LABELS.priority} />
@@ -441,6 +455,7 @@ export function WorkspaceBoard({
                             isActiveTimer={isActive}
                             timerDisplay={isActive && timer ? fmtMs(getTotalWorkMs(timer)) : ''}
                             onPatch={handlePatch}
+                            runwayWorkspaceId={workspaceId || null}
                           />
                         );
                       })}

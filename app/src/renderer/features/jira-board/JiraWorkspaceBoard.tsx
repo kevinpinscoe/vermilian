@@ -13,6 +13,7 @@ import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
 import { useRunwayItems, useRunwayTickets } from '../runway/api';
 import { allTasksEmptyNotice, runwayHasTickets, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { RunwayNumberCell } from '../runway/RunwayNumberCell';
 import { JiraFocusControl } from './JiraFocusControl';
 import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
 import { AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
@@ -310,6 +311,13 @@ export function JiraWorkspaceBoard({
                     >
                       <div className={styles.cardTop}>
                         <span className={styles.cardKey}>{issue.idReadable}</span>
+                        {/* Its Runway # on this workspace's Runway (VERM-90): local, not a Jira write. */}
+                        <RunwayNumberCell
+                          workspaceId={workspaceId}
+                          ticket={{ tracker: 'jira', keys: [issue.idReadable], entityId: null }}
+                          displayKey={issue.idReadable}
+                          className={styles.cardRunway}
+                        />
                         {/* Vermilian's own Runway metadata, kept locally (VERM-38): not a Jira write. */}
                         <JiraFocusControl workspaceId={workspaceId} issueKey={issue.idReadable} summaryOf={summaryOf} />
                       </div>

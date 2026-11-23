@@ -127,7 +127,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       under a key it has since moved from is found; Move and Remove then use the row's stored ID.
       Adds go through the Add box's gated add (duplicate check by every ID, cancelled by any
       workspace switch); moves and removes are the Runway view's edits.
-- [ ] All tasks has the same **Runway #** control (VERM-90).
+- [x] All tasks has the same **Runway #** control (VERM-90): its Runway # cell (YouTrack) or
+      card badge (Jira) opens a popover holding the detail panel's control, with the same
+      matching, gating, Retry and Remove confirmation. Clicks and keys in it never reach the row
+      or card underneath.
 - [ ] **Section** and **note** rows keep the structure of an imported schedule. They appear in the
       Runway view only, and the Runway # counts **tickets only** — a section or note never uses up
       a number.
@@ -194,7 +197,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       once, through that source (VERM-89).
 - [ ] In the zero-project All tasks, each ticket shows its Runway # and all three sorts work
       (VERM-90, VERM-91, VERM-92).
-- [ ] Both All tasks views (YouTrack and Jira) have a **Runway #** column.
+- [x] Both All tasks views (YouTrack and Jira) have a **Runway #** column (VERM-90). YouTrack's
+      table has a *Runway #* column; Jira's All tasks is a card board, so each card carries a
+      Runway # badge beside its key. Each shows the ticket's Runway # on the active workspace's
+      Runway, blank when it has none and *?* when its position cannot be verified.
 - [ ] A sort control offers three keys, each ascending or descending:
 
   | Sort key | Order |
