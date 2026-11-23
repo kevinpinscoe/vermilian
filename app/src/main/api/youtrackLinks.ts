@@ -25,7 +25,14 @@ export interface RawIssueLink {
  * a link means). Direction is as this issue sees it: an INWARD link reads
  * with the type's targetToSource wording ("depends on"), an OUTWARD one with
  * sourceToTarget ("is required for"); an undirected link (BOTH) reads
- * sourceToTarget ("relates to"). A link without a type name is skipped.
+ * sourceToTarget ("relates to"). When that direction has no wording the verb
+ * is the type's name — never the other direction's wording, which would make
+ * a prerequisite read "is required for". A link without a type name is
+ * skipped.
+ *
+ * The linked issue's `resolved` keeps three states apart: a time is resolved
+ * (true), an explicit null is open (false), and an omitted field is unknown
+ * (null) — never assumed open.
  */
 export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): IssueLink[] {
   const out: IssueLink[] = [];
@@ -35,7 +42,7 @@ export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): Is
     const directed = link.linkType.directed === true;
     const direction = link.direction === 'INWARD' ? 'inward' : link.direction === 'OUTWARD' ? 'outward' : 'both';
     const wording = direction === 'inward' ? link.linkType.targetToSource : link.linkType.sourceToTarget;
-    const verb = wording || link.linkType.sourceToTarget || type;
+    const verb = wording || type;
     for (const linked of link.issues ?? []) {
       out.push({
         type,
@@ -46,7 +53,7 @@ export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): Is
           id: linked.id ?? null,
           key: linked.idReadable,
           summary: linked.summary ?? '',
-          resolved: linked.resolved !== null && linked.resolved !== undefined,
+          resolved: resolvedState(linked.resolved),
         },
       });
     }
@@ -54,3 +61,10 @@ export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): Is
   return out;
 }
 
+
+/** A time: resolved. Explicit null: open. Omitted (or malformed): unknown. */
+function resolvedState(resolved: unknown): boolean | null {
+  if (resolved === null) return false;
+  if (typeof resolved === 'number') return true;
+  return null;
+}

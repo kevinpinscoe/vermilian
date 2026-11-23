@@ -24,8 +24,13 @@ export interface LinkedTicket {
   /** The readable key (READ-14, OPS-956). */
   key: string;
   summary: string;
-  /** Whether the linked ticket is resolved (YouTrack `resolved`, Jira status category Done). */
-  resolved: boolean;
+  /**
+   * Whether the linked ticket is resolved (YouTrack `resolved`, Jira status
+   * category Done): true or false when the tracker said, null when it did
+   * not — unknown, never assumed open, so a blocker is never reported on a
+   * prerequisite that may already be complete.
+   */
+  resolved: boolean | null;
 }
 
 export interface IssueLink {
@@ -35,7 +40,11 @@ export interface IssueLink {
   directed: boolean;
   /** As this ticket sees it; 'both' for an undirected link. */
   direction: IssueLinkDirection;
-  /** The link's wording from this ticket's side: "depends on", "is required for", "relates to". */
+  /**
+   * The link's wording from this ticket's side: "depends on", "is required
+   * for", "relates to". The link type's name when the tracker has no wording
+   * for that direction — never the other direction's wording.
+   */
   verb: string;
   issue: LinkedTicket;
 }

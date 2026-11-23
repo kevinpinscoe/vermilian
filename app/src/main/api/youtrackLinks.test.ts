@@ -8,6 +8,8 @@ const DEPEND = { name: 'Depend', sourceToTarget: 'is required for', targetToSour
 const RELATES = { name: 'Relates', sourceToTarget: 'relates to', targetToSource: '', directed: false };
 const SUBTASK = { name: 'Subtask', sourceToTarget: 'parent for', targetToSource: 'subtask of', directed: true };
 const linked = (key: string, resolved: number | null = null) => ({ id: `2-${key}`, idReadable: key, summary: `${key} summary`, resolved, customFields: [] });
+/** A linked issue whose response omits `resolved` altogether. */
+const linkedNoResolved = (key: string) => ({ id: `2-${key}`, idReadable: key, summary: `${key} summary`, customFields: [] });
 
 // READ-14 depends on SYNC-3 (open) and SYNC-2 (resolved); PLAT-41 depends on READ-14.
 const READ_14: RawIssueLink[] = [
@@ -50,10 +52,29 @@ describe('mapYouTrackLinks (VERM-94)', () => {
     expect(mapYouTrackLinks([{ direction: 'INWARD', linkType: { name: '' }, issues: [linked('SYNC-3')] }])).toEqual([]);
   });
 
-  it('falls back to the other wording, then the type name, when a side has none', () => {
-    const [l] = mapYouTrackLinks([{ direction: 'INWARD', linkType: { name: 'Custom', sourceToTarget: 'feeds', targetToSource: '', directed: true }, issues: [linked('SYNC-3')] }]);
-    expect(l.verb).toBe('feeds');
-    const [m] = mapYouTrackLinks([{ direction: 'OUTWARD', linkType: { name: 'Custom' }, issues: [linked('SYNC-3')] }]);
-    expect(m).toMatchObject({ verb: 'Custom', directed: false });
+  it('keeps the three resolution states apart: omitted is unknown, null is open, a time is resolved', () => {
+    const [omitted, open, resolved] = mapYouTrackLinks([
+      { direction: 'INWARD', linkType: DEPEND, issues: [linkedNoResolved('SYNC-1'), linked('SYNC-3', null), linked('SYNC-2', 1_790_000_000_000)] },
+    ]);
+    expect([omitted.issue.key, omitted.issue.resolved]).toEqual(['SYNC-1', null]);
+    expect([open.issue.key, open.issue.resolved]).toEqual(['SYNC-3', false]);
+    expect([resolved.issue.key, resolved.issue.resolved]).toEqual(['SYNC-2', true]);
+    // An unknown resolution is still a prerequisite; it is just not known to be done.
+    expect(linkRole(omitted)).toBe('prerequisite');
+  });
+
+  it("uses the type name, never the other direction's wording, when a direction has none", () => {
+    // Inward with no targetToSource: the prerequisite must not read "is required for".
+    const [inward] = mapYouTrackLinks([{ direction: 'INWARD', linkType: { name: 'Depend', sourceToTarget: 'is required for', targetToSource: '', directed: true }, issues: [linked('SYNC-3')] }]);
+    expect(inward).toMatchObject({ direction: 'inward', verb: 'Depend' });
+    expect(linkRole(inward)).toBe('prerequisite');
+    // Outward with no sourceToTarget: likewise never the inward wording.
+    const [outward] = mapYouTrackLinks([{ direction: 'OUTWARD', linkType: { name: 'Depend', sourceToTarget: null, targetToSource: 'depends on', directed: true }, issues: [linked('PLAT-41')] }]);
+    expect(outward).toMatchObject({ direction: 'outward', verb: 'Depend' });
+    // Undirected with no wording, and no type wording at all.
+    const [both] = mapYouTrackLinks([{ direction: 'BOTH', linkType: { name: 'Relates', sourceToTarget: '', directed: false }, issues: [linked('READ-9')] }]);
+    expect(both).toMatchObject({ direction: 'both', verb: 'Relates' });
+    const [bare] = mapYouTrackLinks([{ direction: 'OUTWARD', linkType: { name: 'Custom' }, issues: [linked('SYNC-3')] }]);
+    expect(bare).toMatchObject({ verb: 'Custom', directed: false });
   });
 });
