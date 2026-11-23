@@ -10,6 +10,9 @@ import { JiraReconnect } from './JiraReconnect';
 import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
 import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
+import { useRunwayItems, useRunwayTickets } from '../runway/api';
+import { allTasksEmptyNotice, runwayHasTickets, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
+import { useWorkspaceStore } from '../../stores/workspace';
 import { JiraFocusControl } from './JiraFocusControl';
 import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
 import { AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
@@ -71,7 +74,35 @@ export function JiraWorkspaceBoard({
   // Every source of the board's issues: the projects, then the boards.
   const sources = useMemo(() => jiraSourceIds(projectKeys, boards.map((b) => b.id)), [projectKeys, boards]);
   const sourceNames = useMemo(() => Object.fromEntries(boards.map((b) => [boardSourceId(b.id), `Board "${b.name}"`])), [boards]);
-  const { results, issues, priorities, loading, failures, notices, reconnect } = useJiraWorkspaceIssues(workspaceId, sources, showDone, sourceNames);
+  const { results, issues: sourceIssues, priorities, loading: sourcesLoading, failures, notices, reconnect } =
+    useJiraWorkspaceIssues(workspaceId, sources, showDone, sourceNames);
+
+  // Plus the tickets added to this workspace's Runway from outside its
+  // projects and boards (VERM-89), read on the workspace's own connection —
+  // the Runway view's own queries and cache. Each ticket once; a Done one
+  // follows Show done like any card; an unreadable one is left to the Runway
+  // view. A failed Runway read leaves the project and board cards as they are.
+  // Only reads of rows still saved count, so a removed ticket leaves at once.
+  const runwayItems = useRunwayItems(workspaceId);
+  const runwayTickets = useRunwayTickets(workspaceId);
+  const hasRunwayTickets = runwayHasTickets(runwayItems.data?.ok ? runwayItems.data.items : []);
+  const runwayReads = runwayTickets.data?.ok ? runwayTickets.data.tickets : null;
+  const savedIds = useMemo(
+    () => savedRunwayTicketIds(runwayItems.data?.ok ? runwayItems.data.items : null),
+    [runwayItems.data],
+  );
+  const { issues, hiddenResolved, unreadable } = useMemo(
+    () => withRunwayTickets(sourceIssues, runwayReads, showDone, savedIds),
+    [sourceIssues, runwayReads, showDone, savedIds],
+  );
+  const openRunway = useWorkspaceStore((s) => s.openRunway);
+  const emptyNotice = allTasksEmptyNotice({
+    hiddenResolved,
+    unreadable,
+    lookupFailed: hasRunwayTickets && runwayTickets.data?.ok === false,
+    closedWord: 'Done',
+  });
+  const loading = sourcesLoading || (hasRunwayTickets && runwayTickets.isPending);
 
   // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
   // visible, once a project's list has loaded. It merges what changed into
@@ -174,12 +205,17 @@ export function JiraWorkspaceBoard({
 
       {reconnect ? (
         <JiraReconnect workspaceName={workspaceName} failure={reconnect} onRetry={retry} onOpenSettings={onOpenSettings} />
-      ) : sources.length === 0 ? (
+      ) : sources.length === 0 && !hasRunwayTickets ? (
         <div className={styles.empty} data-testid="jira-workspace-projects">
           <Text type="text1">No Jira projects or boards chosen yet.</Text>
         </div>
       ) : (
         <>
+          {sources.length === 0 && (
+            // No projects or boards, but tickets on the Runway (VERM-89): say
+            // so, and show those tickets below.
+            <div className={styles.projects} data-testid="jira-workspace-projects">No Jira projects or boards chosen yet.</div>
+          )}
           {projectKeys.length > 0 && (
             <div className={styles.projects} data-testid="jira-workspace-projects">Jira projects: {projectKeys.join(', ')}</div>
           )}
@@ -289,7 +325,32 @@ export function JiraWorkspaceBoard({
                 );
               })}
               {columns.length === 0 && !loading && failures.length === 0 && (
-                <div className={styles.empty}><Text type="text1">No {showDone ? '' : 'open '}issues in these projects.</Text></div>
+                emptyNotice ? (
+                  // Runway tickets All tasks cannot show (VERM-89): Done ones
+                  // the toggle hides, unreadable ones, or a failed Runway
+                  // lookup, each with its way out.
+                  <div className={`${styles.empty} ${styles.emptyNotice}`} data-testid="jira-board-empty">
+                    {emptyNotice.lines.map((line) => <Text key={line} type="text1">{line}</Text>)}
+                    <div className={styles.emptyActions}>
+                      {emptyNotice.showToggle && (
+                        <Button kind="tertiary" size="small" data-testid="jira-empty-show-done" onClick={() => setShowDone(true)}>
+                          Show done
+                        </Button>
+                      )}
+                      {emptyNotice.openRunway && (
+                        <Button kind="tertiary" size="small" data-testid="jira-empty-open-runway" onClick={openRunway}>
+                          Open Runway
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.empty} data-testid="jira-board-empty">
+                    <Text type="text1">
+                      {sources.length === 0 ? `No ${showDone ? '' : 'open '}readable tickets on this Runway.` : `No ${showDone ? '' : 'open '}issues in these projects.`}
+                    </Text>
+                  </div>
+                )
               )}
             </div>
           )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Loader, Text, Heading, Button, Tooltip } from '@vibe/core';
 import { Wand, Play } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
@@ -17,6 +17,9 @@ import { DefaultAssigneeBar, useDefaultAssignee } from '../project-board/Default
 import { defaultAssigneeFilter } from '../project-board/defaultAssignee';
 import { BoardSearch } from '../search/BoardSearch';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
+import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../runway/api';
+import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
+import { useWorkspaceStore } from '../../stores/workspace';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
 
@@ -192,12 +195,40 @@ export function WorkspaceBoard({
     })),
   });
 
-  const isLoading = results.some((r) => r.isLoading) && results.every((r) => !r.data);
-  const allIssues: BoardIssue[] = useMemo(() =>
+  const projectIssues: BoardIssue[] = useMemo(() =>
     results.flatMap((r) => r.data ?? []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [results.map((r) => r.dataUpdatedAt).join(',')],
   );
+
+  // Plus the tickets added to this workspace's Runway from outside its
+  // projects (VERM-89), read on the workspace's own connection — the Runway
+  // view's own query and cache. Each ticket once; a resolved one follows
+  // Show closed like a project ticket; an unreadable one is left to the
+  // Runway view. A failed Runway read leaves the project issues as they are.
+  // Only reads of rows still saved count, so a removed ticket leaves at once.
+  const queryClient = useQueryClient();
+  const runwayItems = useRunwayItems(workspaceId || null);
+  const runwayTickets = useRunwayTickets(workspaceId || null);
+  const runwayReads = runwayTickets.data?.ok ? runwayTickets.data.tickets : null;
+  const savedIds = useMemo(
+    () => savedRunwayTicketIds(runwayItems.data?.ok ? runwayItems.data.items : null),
+    [runwayItems.data],
+  );
+  const { issues: allIssues, runwayOnlyIds, hiddenResolved, unreadable } = useMemo(
+    () => withRunwayTickets(projectIssues, runwayReads, showClosed, savedIds),
+    [projectIssues, runwayReads, showClosed, savedIds],
+  );
+  const openRunway = useWorkspaceStore((s) => s.openRunway);
+  const emptyNotice = allTasksEmptyNotice({
+    hiddenResolved,
+    unreadable,
+    lookupFailed: Boolean(savedIds && savedIds.size > 0) && runwayTickets.data?.ok === false,
+    closedWord: 'closed',
+  });
+  const isLoading = projectShortNames.length > 0
+    ? results.some((r) => r.isLoading) && results.every((r) => !r.data)
+    : Boolean(workspaceId) && runwayTickets.isPending;
 
   // The server already applied #Unresolved when showClosed=false.
   const { view: assigneeView, toggleShowAll } = useDefaultAssignee(workspaceId, defaultAssignee, allIssues, youtrackLogin);
@@ -217,7 +248,14 @@ export function WorkspaceBoard({
   const groups = useMemo(() => groupByStatus(filteredIssues), [filteredIssues]);
 
   function handlePatch(issueId: string, field: string, value: string | null) {
-    patchMutation.mutate({ issueId, field, value });
+    // A Runway ticket from outside the projects lives in the Runway's cache:
+    // re-read it once the edit is saved, so its row shows the new value.
+    const fromRunway = runwayOnlyIds.has(issueId);
+    patchMutation.mutate({ issueId, field, value }, {
+      onSettled: () => {
+        if (fromRunway) void queryClient.invalidateQueries({ queryKey: RUNWAY_TICKETS_QUERY_KEY(workspaceId) });
+      },
+    });
   }
 
   function handleSort(field: ColumnField) {
@@ -337,8 +375,39 @@ export function WorkspaceBoard({
       {!isLoading && (
         <div className={pbStyles.tableWrapper}>
           {groups.length === 0 ? (
-            <div className={pbStyles.emptyState}>
-              <Text>{projectShortNames.length === 0 ? 'No projects in this workspace.' : allIssues.length > 0 ? 'No tasks match your filters.' : 'No open tasks.'}</Text>
+            <div className={pbStyles.emptyState} data-testid="ws-empty">
+              {allIssues.length === 0 && emptyNotice ? (
+                // Runway tickets All tasks cannot show (VERM-89): closed ones
+                // the toggle hides, unreadable ones, or a failed Runway lookup,
+                // each with its way out.
+                <div className={styles.emptyNotice}>
+                  {emptyNotice.lines.map((line) => <Text key={line}>{line}</Text>)}
+                  <div className={styles.emptyActions}>
+                    {emptyNotice.showToggle && (
+                      <button
+                        type="button"
+                        className={styles.assignedBtn}
+                        data-testid="ws-empty-show-closed"
+                        onClick={() => setShowClosed(true)}
+                      >
+                        Show closed
+                      </button>
+                    )}
+                    {emptyNotice.openRunway && (
+                      <button
+                        type="button"
+                        className={styles.assignedBtn}
+                        data-testid="ws-empty-open-runway"
+                        onClick={openRunway}
+                      >
+                        Open Runway
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <Text>{allIssues.length > 0 ? 'No tasks match your filters.' : projectShortNames.length === 0 ? 'No projects in this workspace.' : 'No open tasks.'}</Text>
+              )}
             </div>
           ) : (
             <table className={pbStyles.table}>

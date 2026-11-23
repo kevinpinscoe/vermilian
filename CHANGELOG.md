@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Runway tickets in All tasks** (VERM-89). All tasks, YouTrack and Jira, lists the workspace's
+  project (and Jira board) issues plus the tickets added to its Runway from outside them, each
+  exactly once: a ticket both in a project and on the Runway appears once. A workspace with no
+  projects now has All tasks as soon as its Runway has tickets; *Select a project* is only for a
+  workspace with neither. A Jira workspace with no projects or boards says so above its Runway
+  cards. A closed Runway ticket follows **Show closed** / **Show done** like any other, and when
+  that hides every ticket the view says *All tickets are hidden by the current filter* and offers
+  the toggle. A Runway ticket the tracker cannot read stays in the Runway view only; if the Runway
+  lookup fails, the project and board tickets still show. When All tasks is empty because its
+  Runway tickets cannot be read, it says so and offers **Open Runway**, beside the toggle when
+  closed tickets are hidden too. A ticket removed from the Runway leaves All tasks at once (one in
+  a project stays, through its project). Inline edits to an outside Runway ticket show in its row.
 - **Runway # in the ticket detail panel** (VERM-88). The YouTrack and Jira detail panels show the
   ticket's **Runway #** on the active workspace's Runway. A ticket not on it offers **Add at end**
   and **Add at #**; one on it offers **Move to #** and **Remove**, which asks first
