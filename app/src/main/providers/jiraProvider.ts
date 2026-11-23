@@ -314,7 +314,7 @@ export function createJiraProvider(
     async getIssueDetail(key) {
       const options = settingsFor(jiraProjectKeyOf(key));
       const issue = await client.getIssue(base, email, token, key, jiraDetailFields(options));
-      return mapJiraIssueDetail(issue, settingsFor(jiraProjectKeyOf(issue.key ?? key)));
+      return mapJiraIssueDetail(issue, settingsFor(jiraProjectKeyOf(issue.key ?? key)), linkedStatusRoles);
     },
   };
 }

@@ -197,11 +197,11 @@ export function jiraProjectKeyOf(issueKey: string): string {
   return issueKey.replace(/-\d+$/, '');
 }
 
-export function mapJiraIssueDetail(issue: JiraIssue, options: JiraMappingOptions = {}): IssueDetail {
+export function mapJiraIssueDetail(issue: JiraIssue, options: JiraMappingOptions = {}, statusRolesFor?: JiraStatusRolesFor): IssueDetail {
   const project = (issue.fields?.project ?? null) as { id?: unknown; key?: unknown; name?: unknown } | null;
   const key = str(project?.key) ?? jiraProjectKeyOf(issue.key);
   return {
-    ...mapJiraIssue(issue, options),
+    ...mapJiraIssue(issue, options, statusRolesFor),
     project: { id: str(project?.id) ?? '', name: str(project?.name) ?? key, shortName: key },
   };
 }
