@@ -29,6 +29,7 @@
 //
 // Pure TypeScript: no Electron, no React. Safe in either process and in tests.
 
+import { NEVER_PREREQUISITE_LINK_TYPES, type PrerequisiteLinkType } from './issueLink';
 import {
   ALL_COLUMN_FIELDS,
   dismissalKey,
@@ -111,6 +112,11 @@ export interface WorkspaceDocument {
   // article by its readable ID (VERM-48, decision C5). Absent or null is
   // None: the Priority Desk then has no master plan for this workspace.
   masterPlan?: WorkspaceMasterPlanConfig;
+  // Optional, either backend: the link types whose linked ticket is a
+  // prerequisite of this one, each with the side that reads "what am I
+  // waiting on?" (VERM-96). Absent is the backend's default (YouTrack Depend,
+  // Jira Blocks, both inward); [] means no link type is a prerequisite.
+  prerequisiteLinkTypes?: PrerequisiteLinkType[];
 }
 
 export type WorkspaceValidationCode = 'invalid' | 'duplicate' | 'secret' | 'unsupported-schema' | 'malformed';
@@ -540,6 +546,25 @@ function validateJiraHiddenStatuses(c: Collector, statuses: unknown, backendKind
   });
 }
 
+// A link type name is free text in either tracker; this only bounds it.
+const LINK_TYPE_NAME_MAX_LENGTH = 255;
+
+function validatePrerequisiteLinkTypes(c: Collector, entries: unknown) {
+  if (entries === undefined) return;
+  if (!c.array(entries, 'prerequisiteLinkTypes')) return;
+  const seen = new Set<string>();
+  entries.forEach((e, i) => {
+    const p = `prerequisiteLinkTypes[${i}]`;
+    if (!c.object(e, p)) return;
+    if (e.side !== 'inward' && e.side !== 'outward') c.add(`${p}.side`, `${p}.side must be "inward" or "outward".`);
+    if (!c.string(e.type, `${p}.type`, { nonEmpty: true })) return;
+    if (e.type.length > LINK_TYPE_NAME_MAX_LENGTH) c.add(`${p}.type`, `${p}.type is longer than ${LINK_TYPE_NAME_MAX_LENGTH} characters.`);
+    if (NEVER_PREREQUISITE_LINK_TYPES.includes(e.type)) c.add(`${p}.type`, `${p}.type is a parent/child link type, which is never a prerequisite.`);
+    if (seen.has(e.type)) c.add(`${p}.type`, `${p}.type duplicates another prerequisite link type.`, 'duplicate');
+    seen.add(e.type);
+  });
+}
+
 function validateDismissals(c: Collector, dismissals: unknown, workspaceId: unknown) {
   if (!c.object(dismissals, 'dismissals')) return;
   for (const [key, d] of Object.entries(dismissals)) {
@@ -590,6 +615,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateJiraBoards(c, input.jiraBoards, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateJiraHiddenStatuses(c, input.jiraHiddenStatuses, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateMasterPlan(c, input.masterPlan, isPlainObject(input.backend) ? input.backend.kind : undefined);
+  validatePrerequisiteLinkTypes(c, input.prerequisiteLinkTypes);
   return [...c.errors, ...secrets];
 }
 
@@ -648,6 +674,7 @@ const DOCUMENT_SHAPE = struct({
   jiraBoards: { t: 'array', key: 'id', of: struct({ id: LEAF, name: LEAF }) },
   jiraHiddenStatuses: LEAF,
   masterPlan: struct({ articleId: LEAF }),
+  prerequisiteLinkTypes: LEAF,
 });
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));

@@ -114,6 +114,7 @@ const api: VermilianAPI = {
   runwayItemsMoveDown: (args: RunwayItemsItemArgs) => ipcRenderer.invoke(IPC.runwayItemsMoveDown, args),
   runwayItemsResolve: (args: RunwayItemsListArgs) => ipcRenderer.invoke(IPC.runwayItemsResolve, args),
   youtrackPriorityOrders: (args: YouTrackPriorityOrdersArgs) => ipcRenderer.invoke(IPC.youtrackPriorityOrders, args),
+  workspaceLinkTypes: (workspaceId: string) => ipcRenderer.invoke(IPC.workspaceLinkTypes, workspaceId),
   jiraPriorityOrders: (args: JiraPriorityOrdersArgs) => ipcRenderer.invoke(IPC.jiraPriorityOrders, args),
   runwayItemsAddByReference: (args: RunwayAddByReferenceArgs) => ipcRenderer.invoke(IPC.runwayItemsAddByReference, args),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),

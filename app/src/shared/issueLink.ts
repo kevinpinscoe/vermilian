@@ -49,8 +49,37 @@ export interface IssueLink {
   issue: LinkedTicket;
 }
 
-/** The prerequisite link types when a workspace has set none (VERM-96 makes them configurable). */
-export const DEFAULT_PREREQUISITE_LINK_TYPES: readonly string[] = ['Depend', 'Blocks'];
+/** Which side of a link makes the linked ticket a prerequisite of this one. */
+export type PrerequisiteSide = 'inward' | 'outward';
+
+/**
+ * One prerequisite link type (VERM-96): the type's name, exactly as the
+ * tracker spells it, and the side on which the linked ticket is what this
+ * ticket waits on — 'inward' for YouTrack Depend ("depends on") and Jira
+ * Blocks ("is blocked by"). A custom type worded the other way uses
+ * 'outward'.
+ */
+export interface PrerequisiteLinkType {
+  type: string;
+  side: PrerequisiteSide;
+}
+
+/** YouTrack's default: Depend, "depends on" is a prerequisite. */
+export const YOUTRACK_DEFAULT_PREREQUISITE_LINK_TYPES: readonly PrerequisiteLinkType[] = [{ type: 'Depend', side: 'inward' }];
+
+/** Jira's default: Blocks, "is blocked by" is a prerequisite. */
+export const JIRA_DEFAULT_PREREQUISITE_LINK_TYPES: readonly PrerequisiteLinkType[] = [{ type: 'Blocks', side: 'inward' }];
+
+/** Both trackers' defaults, for a caller that does not know the workspace's tracker. */
+export const DEFAULT_PREREQUISITE_LINK_TYPES: readonly PrerequisiteLinkType[] = [
+  ...YOUTRACK_DEFAULT_PREREQUISITE_LINK_TYPES,
+  ...JIRA_DEFAULT_PREREQUISITE_LINK_TYPES,
+];
+
+/** The default prerequisite link types for a workspace on this tracker. */
+export function defaultPrerequisiteLinkTypes(tracker: 'youtrack' | 'jira'): readonly PrerequisiteLinkType[] {
+  return tracker === 'jira' ? JIRA_DEFAULT_PREREQUISITE_LINK_TYPES : YOUTRACK_DEFAULT_PREREQUISITE_LINK_TYPES;
+}
 
 /** Link types that are never prerequisites, whatever a workspace configures: parent and child. */
 export const NEVER_PREREQUISITE_LINK_TYPES: readonly string[] = ['Subtask'];
@@ -58,20 +87,19 @@ export const NEVER_PREREQUISITE_LINK_TYPES: readonly string[] = ['Subtask'];
 export type LinkRole = 'prerequisite' | 'dependent' | null;
 
 /**
- * What the linked ticket is to this one: 'prerequisite' (this ticket depends
- * on it), 'dependent' (it depends on this ticket), or null when the link is
+ * What the linked ticket is to this one: 'prerequisite' (this ticket waits
+ * on it), 'dependent' (it waits on this ticket), or null when the link is
  * not of a prerequisite type, is undirected, or is a parent/child link.
  * Link type names compare exactly, as the tracker spells them.
  */
-export function linkRole(link: IssueLink, prerequisiteTypes: readonly string[] = DEFAULT_PREREQUISITE_LINK_TYPES): LinkRole {
-  if (NEVER_PREREQUISITE_LINK_TYPES.includes(link.type)) return null;
-  if (!prerequisiteTypes.includes(link.type) || !link.directed) return null;
-  if (link.direction === 'inward') return 'prerequisite';
-  if (link.direction === 'outward') return 'dependent';
-  return null;
+export function linkRole(link: IssueLink, prerequisiteTypes: readonly PrerequisiteLinkType[] = DEFAULT_PREREQUISITE_LINK_TYPES): LinkRole {
+  if (NEVER_PREREQUISITE_LINK_TYPES.includes(link.type) || !link.directed) return null;
+  const entry = prerequisiteTypes.find((p) => p.type === link.type);
+  if (!entry || link.direction === 'both') return null;
+  return link.direction === entry.side ? 'prerequisite' : 'dependent';
 }
 
 /** This ticket's prerequisites among its links, in link order. */
-export function prerequisitesOf(links: readonly IssueLink[], prerequisiteTypes?: readonly string[]): IssueLink[] {
+export function prerequisitesOf(links: readonly IssueLink[], prerequisiteTypes?: readonly PrerequisiteLinkType[]): IssueLink[] {
   return links.filter((l) => linkRole(l, prerequisiteTypes) === 'prerequisite');
 }

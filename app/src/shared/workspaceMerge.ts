@@ -131,6 +131,8 @@ function documentShape(
     jiraBoards: LEAF,
     // One choice, merged as a whole (VERM-60).
     jiraHiddenStatuses: LEAF,
+    // One choice, merged as a whole (VERM-96).
+    prerequisiteLinkTypes: LEAF,
   });
 }
 

@@ -76,6 +76,7 @@ export const IPC = {
   // Each YouTrack project's Priority bundle order (VERM-92), read-only.
   youtrackPriorityOrders: 'youtrack:priorityOrders',
   jiraPriorityOrders: 'jira:priorityOrders',
+  workspaceLinkTypes: 'workspace:linkTypes',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
@@ -828,6 +829,9 @@ export interface VermilianAPI {
   runwayItemsResolve(args: RunwayItemsListArgs): Promise<import('./runwayTicket').RunwayTicketsResult>;
   youtrackPriorityOrders(args: YouTrackPriorityOrdersArgs): Promise<YouTrackPriorityOrdersResult>;
   jiraPriorityOrders(args: JiraPriorityOrdersArgs): Promise<PriorityOrdersResult>;
+  // The workspace's tracker's issue link types, read on the workspace's own
+  // connection, for choosing its prerequisite link types (VERM-96).
+  workspaceLinkTypes(workspaceId: string): Promise<import('./workspacePrerequisites').TrackerLinkTypesResult>;
   // Add a ticket by key or link to the active workspace's Runway (VERM-86):
   // checked once on the workspace's own connection, then added through the
   // write gate. See shared/runwayAdd.ts.

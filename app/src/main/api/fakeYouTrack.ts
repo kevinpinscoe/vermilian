@@ -3,6 +3,7 @@
 // state is process-local, so each app launch (each test) starts from the same
 // deterministic fixtures and mutations never leave the process.
 
+import { mapYouTrackLinkTypes, type TrackerLinkType } from '../../shared/workspacePrerequisites';
 import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
@@ -235,6 +236,23 @@ export async function getPriorityOrder(_url: string, _token: string, projectShor
   const own = seeded[projectShortName];
   if (Array.isArray(own)) return own.filter((v): v is string => typeof v === 'string');
   return [...FIELD_DEFS.priority.options];
+}
+
+// The live server's four link types (checked 2026-11-23), plus a custom type
+// worded the other way round, for the prerequisite picker (VERM-96).
+// VERMILIAN_E2E_LINK_TYPES_FAIL=1 makes the read fail, as an unreachable
+// server would.
+const FAKE_LINK_TYPE_LIST = [
+  { name: 'Relates', directed: false, sourceToTarget: 'relates to', targetToSource: '' },
+  { name: 'Depend', directed: true, sourceToTarget: 'is required for', targetToSource: 'depends on' },
+  { name: 'Duplicate', directed: true, sourceToTarget: 'is duplicated by', targetToSource: 'duplicates' },
+  { name: 'Subtask', directed: true, sourceToTarget: 'parent for', targetToSource: 'subtask of' },
+  { name: 'Required by', directed: true, sourceToTarget: 'needs', targetToSource: 'is needed by' },
+];
+
+export async function getLinkTypes(_url: string, _token: string): Promise<TrackerLinkType[]> {
+  if (process.env.VERMILIAN_E2E_LINK_TYPES_FAIL === '1') throw new Error('YouTrack could not be reached.');
+  return mapYouTrackLinkTypes(FAKE_LINK_TYPE_LIST);
 }
 
 function toBoardIssue(i: FakeIssue): BoardIssue {

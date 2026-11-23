@@ -177,6 +177,7 @@ export function backendChangeProblem(base: WorkspaceDocument, edited: WorkspaceD
   if (workspaceProjectIds(base).length) held.push('projects');
   if (base.jiraBoards?.length) held.push('Jira boards');
   if (base.jiraHiddenStatuses?.length) held.push('hidden Jira columns');
+  if (base.prerequisiteLinkTypes !== undefined) held.push('prerequisite link types');
   if (Object.keys(base.boards ?? {}).length) held.push('board settings');
   if (Object.keys(base.jiraProjects ?? {}).length) held.push('Jira project settings');
   if (Object.keys(base.dismissals ?? {}).length) held.push('"Not this week" dismissals');
