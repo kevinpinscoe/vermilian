@@ -21,13 +21,38 @@ export function useRunwayItems(workspaceId: string | null) {
   });
 }
 
+/**
+ * The tracker reads of a workspace's Runway tickets. They are kept for a
+ * minute, but never behind the stored order: when the order (a local read,
+ * shared with every Runway surface) is newer than the reads and holds a ticket
+ * they did not read — a row added since, by any route — the reads are taken
+ * again (VERM-89). Reads newer than the order are left alone, so this settles.
+ */
 export function useRunwayTickets(workspaceId: string | null) {
-  return useQuery({
+  const items = useRunwayItems(workspaceId);
+  const tickets = useQuery({
     queryKey: RUNWAY_TICKETS_QUERY_KEY(workspaceId ?? ''),
     queryFn: () => window.vermilian.runwayItemsResolve({ workspaceId: workspaceId as string }),
     enabled: Boolean(workspaceId),
     staleTime: 60_000,
   });
+  const stale =
+    items.data?.ok === true &&
+    tickets.data?.ok === true &&
+    !tickets.isFetching &&
+    items.dataUpdatedAt > tickets.dataUpdatedAt &&
+    unreadTicket(items.data.items, tickets.data.tickets);
+  const { refetch } = tickets;
+  useEffect(() => {
+    if (stale) void refetch();
+  }, [stale, refetch]);
+  return tickets;
+}
+
+/** Whether a stored ticket row has no read in `reads`. */
+export function unreadTicket(items: readonly RunwayItem[], reads: readonly { itemId: string }[]): boolean {
+  const read = new Set(reads.map((r) => r.itemId));
+  return items.some((i) => i.kind === 'issue' && !read.has(i.itemId));
 }
 
 /**

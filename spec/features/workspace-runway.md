@@ -170,11 +170,25 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 
 ### All tasks
 
-- [ ] All tasks shows the workspace's project issues **plus** tickets added individually to the
-      Runway from outside those projects, de-duplicated by namespaced ID.
-- [ ] In a workspace with **zero** board projects, All tasks shows every ticket on its Runway,
-      each exactly once, with its Runway # and all three sorts working. It is never empty
-      while the Runway has tickets.
+- [x] All tasks shows the workspace's project issues **plus** tickets added individually to the
+      Runway from outside those projects, de-duplicated by namespaced ID (VERM-89): a ticket in a
+      project and on the Runway appears once, and so do two Runway rows that read as the same
+      ticket. YouTrack and Jira (projects and boards) alike, read on the workspace's own
+      connection. An inline edit to an outside Runway ticket shows in its row.
+- [x] Runway tickets make All tasks available in a workspace with **zero** board projects: it
+      shows every readable ticket on its Runway, each exactly once (VERM-89). *Select a project*
+      is shown only for a workspace with neither projects nor Runway tickets; a Jira workspace
+      with no projects or boards says so above its Runway tickets.
+- [x] **The filter decides which tickets are visible**, wherever a ticket came from (VERM-89). A
+      resolved ticket from the Runway follows **Show closed** / **Show done** exactly as one from a
+      project does. When that hides every ticket, All tasks stays open and says *All tickets are
+      hidden by the current filter*, with the Show closed or Show done control.
+- [x] A Runway ticket the tracker cannot read (*Missing*, *Not readable*, or a failed lookup) is
+      not listed in All tasks; the Runway view keeps its position and explains its state. A
+      failed Runway lookup still shows the tickets loaded from the workspace's projects or boards
+      (VERM-89).
+- [ ] In the zero-project All tasks, each ticket shows its Runway # and all three sorts work
+      (VERM-90, VERM-91, VERM-92).
 - [ ] Both All tasks views (YouTrack and Jira) have a **Runway #** column.
 - [ ] A sort control offers three keys, each ascending or descending:
 

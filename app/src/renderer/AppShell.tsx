@@ -34,6 +34,7 @@ import { JiraPriorityDesk } from './features/jira-board/JiraPriorityDesk';
 import { RunwayView } from './features/runway/RunwayView';
 import { useRunwayItems } from './features/runway/api';
 import { jiraRunwayKeys } from './features/runway/rows';
+import { runwayHasTickets } from './features/runway/allTasks';
 import { JiraIssueDetailPanel } from './features/jira-board/JiraIssueDetailPanel';
 import { jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import type { ActiveBackendContext } from '../shared/activeWorkspace';
@@ -211,10 +212,13 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
   // only while its workspace is the active Jira board and its project is still
   // one of that workspace's, so a switch or a project change closes it.
   const [selectedJiraIssue, setSelectedJiraIssue] = useState<{ workspaceId: string; issueKey: string } | null>(null);
-  // The active Jira workspace's Runway keys (VERM-85): a Runway ticket from
-  // outside its projects and boards opens too, as the main process admits it
-  // (VERM-83). The rows' order is shared with the Runway view's own query.
-  const activeRunwayItems = useRunwayItems(isJiraWorkspace ? (activeContext.data?.workspaceId ?? null) : null);
+  // The active workspace's Runway rows, a local read shared with the Runway
+  // view's own query. For Jira they give the Runway keys (VERM-85): a Runway
+  // ticket from outside its projects and boards opens too, as the main
+  // process admits it (VERM-83). For YouTrack, a workspace with Runway
+  // tickets has All tasks even with no projects (VERM-89).
+  const activeRunwayItems = useRunwayItems(activeContext.data?.workspaceId ?? null);
+  const activeRunwayHasTickets = runwayHasTickets(activeRunwayItems.data?.ok ? activeRunwayItems.data.items : []);
   const activeJiraRunwayKeys = useMemo(
     () => jiraRunwayKeys(activeRunwayItems.data?.ok ? activeRunwayItems.data.items : []),
     [activeRunwayItems.data],
@@ -684,7 +688,10 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
                 setCrossBoardDrop({ issue, targetProjectId, targetProjectName });
               }}
             />
-          ) : workspaceShortNames.length > 0 ? (
+          ) : workspaceShortNames.length > 0 || (activeRunwayHasTickets && !isJiraWorkspace) ? (
+            // All tasks: the workspace's projects plus its Runway tickets
+            // (VERM-89). "Select a project" is only for a workspace with
+            // neither projects nor Runway tickets.
             <WorkspaceBoard
               workspaceName={workspaceName}
               projectShortNames={workspaceShortNames}
