@@ -6,11 +6,16 @@
  * workspace with no projects but tickets on its Runway has All tasks; one
  * with neither keeps "Select a project". A Done Runway ticket follows Show
  * closed / Show done like any other, and when that hides every ticket the
- * view says so and offers the toggle.
+ * view says so and offers the toggle. When it is empty because its Runway
+ * tickets cannot be read, it says so and offers Open Runway, beside the
+ * toggle when closed tickets are hidden too. A removed Runway ticket leaves
+ * at once, even with the tracker reads still cached.
  *
  * Fake YouTrack: TEST (0-e1) issues 1..6, TST2 (0-e2) 1..2, INB (0-e3) 1 —
  * none of them resolved, so the hidden-by-toggle case runs on Jira (DEMO-109
  * is Done) and is unit-tested for both in allTasks.test.ts.
+ *
+ * GONE-1 (YouTrack) and DEMO-999 (Jira) do not exist: the trackers answer 404.
  *
  * Synthetic keys, names and hosts only.
  */
@@ -21,6 +26,15 @@ import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
 import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from '../src/shared/workspaceSchema';
 
 const tid = (page: Page, id: string) => page.locator(`[data-testid="${id}"]`);
+const runwayRow = (page: Page, itemId: string) =>
+  tid(page, 'runway-list').locator(`[data-testid="runway-row"][data-item-id="${itemId}"]`);
+
+/** Removes a ticket row in the Runway view, confirming the prompt. */
+async function removeInRunway(page: Page, itemId: string): Promise<void> {
+  await runwayRow(page, itemId).getByTestId('runway-remove').click();
+  await runwayRow(page, itemId).getByTestId('runway-remove-confirm').click();
+  await expect(runwayRow(page, itemId)).toHaveCount(0);
+}
 
 async function seed(page: Page, workspaceId: string, issueIds: string[]): Promise<void> {
   for (const issueId of issueIds) {
@@ -151,5 +165,92 @@ test.describe('All tasks with Runway tickets', () => {
     await expect(tid(page, 'jira-workspace-board')).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => jiraCards(page)).toEqual(['DEMO-101', 'DEMO-102', 'OPS-7']);
     await expect(tid(page, 'jira-issue-count')).toHaveText('3 issues');
+  });
+
+  test('YouTrack, no projects, only unreadable tickets: explains it and Open Runway shows them with the reason', async () => {
+    const page = await launchWith([YT_BASE], 'Runway Tasks');
+    await seed(page, YT_BASE.workspaceId, ['yt:GONE-1']);
+    await page.reload();
+    await tid(page, 'nav-all-tasks').click();
+    await expect(tid(page, 'ws-empty')).toContainText('1 Runway ticket could not be read. The Runway shows why.');
+    await expect(tid(page, 'ws-empty')).not.toContainText('No projects in this workspace');
+    await expect(tid(page, 'ws-empty-show-closed')).toHaveCount(0);
+
+    await tid(page, 'ws-empty-open-runway').click();
+    await expect(tid(page, 'runway-view')).toBeVisible();
+    await expect(tid(page, 'nav-runway')).toHaveAttribute('aria-current', 'true');
+    await expect(runwayRow(page, 'yt:GONE-1')).toHaveAttribute('data-state', 'missing-or-unreadable');
+    await expect(runwayRow(page, 'yt:GONE-1').getByTestId('runway-reason')).toContainText('the tracker answered 404');
+  });
+
+  test('Jira, no sources: unreadable only, then Done plus unreadable, each with its actions; Open Runway shows the unreadable one', async () => {
+    const doc: WorkspaceDocument = { ...YT_BASE, workspaceId: 'ws-e2ejr89u', name: 'Jira Runway Unread', backend: JIRA_BACKEND };
+    const page = await launchWith([doc], 'Jira Runway Unread');
+    await seed(page, doc.workspaceId, ['jira:DEMO-999']);
+    await page.reload();
+    await expect(tid(page, 'jira-board-empty')).toContainText('1 Runway ticket could not be read. The Runway shows why.', { timeout: 15_000 });
+    await expect(tid(page, 'jira-board-empty')).not.toContainText('No open readable tickets');
+    await expect(tid(page, 'jira-empty-open-runway')).toBeVisible();
+    await expect(tid(page, 'jira-empty-show-done')).toHaveCount(0);
+
+    // A Done ticket too: both reasons, both ways out.
+    await seed(page, doc.workspaceId, ['jira:DEMO-109']);
+    await page.reload();
+    const empty = tid(page, 'jira-board-empty');
+    await expect(empty).toContainText('1 Done ticket is hidden by the current filter.', { timeout: 15_000 });
+    await expect(empty).toContainText('1 Runway ticket could not be read. The Runway shows why.');
+    await expect(empty).not.toContainText('All tickets are hidden by the current filter');
+    await expect(tid(page, 'jira-empty-show-done')).toBeVisible();
+    await expect(tid(page, 'jira-empty-open-runway')).toBeVisible();
+
+    await tid(page, 'jira-empty-open-runway').click();
+    await expect(tid(page, 'runway-view')).toBeVisible();
+    await expect(tid(page, 'nav-runway')).toHaveAttribute('aria-current', 'true');
+    await expect(runwayRow(page, 'jira:DEMO-999')).toHaveAttribute('data-state', 'missing-or-unreadable');
+    await expect(runwayRow(page, 'jira:DEMO-109')).toHaveAttribute('data-state', 'resolved');
+
+    // Back in All tasks, Show done shows the Done ticket.
+    await tid(page, 'nav-all-tasks').click();
+    await tid(page, 'jira-empty-show-done').click();
+    await expect.poll(() => jiraCards(page)).toEqual(['DEMO-109']);
+  });
+
+  test('YouTrack: with the tracker reads cached, a removed outside ticket leaves All tasks at once; a removed project ticket stays', async () => {
+    const doc: WorkspaceDocument = {
+      ...YT_BASE,
+      folders: [{ id: 'folder-a', name: 'Projects', order: 0, parentId: null, projectIds: ['0-e1'] }],
+    };
+    const page = await launchWith([doc], 'Runway Tasks');
+    await seed(page, doc.workspaceId, ['yt:TEST-3', 'yt:INB-1']);
+    await page.reload();
+    await tid(page, 'nav-all-tasks').click();
+    await expect.poll(async () => (await ytRows(page)).sort()).toEqual(['INB-1', 'TEST-1', 'TEST-2', 'TEST-3', 'TEST-4', 'TEST-5', 'TEST-6']);
+
+    // Removed in the Runway view, which re-reads no ticket: the reads stay cached.
+    await tid(page, 'nav-runway').click();
+    await removeInRunway(page, 'yt:INB-1');
+    await removeInRunway(page, 'yt:TEST-3');
+    await tid(page, 'nav-all-tasks').click();
+    await expect.poll(async () => (await ytRows(page)).sort(), { timeout: 3_000 }).toEqual(['TEST-1', 'TEST-2', 'TEST-3', 'TEST-4', 'TEST-5', 'TEST-6']);
+  });
+
+  test('Jira: with the tracker reads cached, a removed outside ticket leaves All tasks at once; a removed project ticket stays', async () => {
+    const doc: WorkspaceDocument = {
+      ...YT_BASE,
+      workspaceId: 'ws-e2ejr89r',
+      name: 'Jira Runway Remove',
+      backend: JIRA_BACKEND,
+      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+    };
+    const page = await launchWith([doc], 'Jira Runway Remove');
+    await seed(page, doc.workspaceId, ['jira:DEMO-101', 'jira:OPS-7']);
+    await page.reload();
+    await expect.poll(() => jiraCards(page), { timeout: 15_000 }).toEqual(['DEMO-101', 'DEMO-102', 'OPS-7']);
+
+    await tid(page, 'nav-runway').click();
+    await removeInRunway(page, 'jira:OPS-7');
+    await removeInRunway(page, 'jira:DEMO-101');
+    await tid(page, 'nav-all-tasks').click();
+    await expect.poll(() => jiraCards(page), { timeout: 3_000 }).toEqual(['DEMO-101', 'DEMO-102']);
   });
 });

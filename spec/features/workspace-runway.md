@@ -186,7 +186,12 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [x] A Runway ticket the tracker cannot read (*Missing*, *Not readable*, or a failed lookup) is
       not listed in All tasks; the Runway view keeps its position and explains its state. A
       failed Runway lookup still shows the tickets loaded from the workspace's projects or boards
-      (VERM-89).
+      (VERM-89). When All tasks is empty because its Runway tickets cannot be read, it says so and
+      offers **Open Runway**, which opens the Runway view; when closed tickets are hidden too, it
+      gives both reasons and offers both Open Runway and the toggle.
+- [x] All tasks lists only tickets still saved on the Runway: a removed ticket leaves at once,
+      even while the tracker's answers are cached; one that is also in a project or board stays,
+      once, through that source (VERM-89).
 - [ ] In the zero-project All tasks, each ticket shows its Runway # and all three sorts work
       (VERM-90, VERM-91, VERM-92).
 - [ ] Both All tasks views (YouTrack and Jira) have a **Runway #** column.

@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cards. A closed Runway ticket follows **Show closed** / **Show done** like any other, and when
   that hides every ticket the view says *All tickets are hidden by the current filter* and offers
   the toggle. A Runway ticket the tracker cannot read stays in the Runway view only; if the Runway
-  lookup fails, the project and board tickets still show. Inline edits to an outside Runway ticket
-  show in its row.
+  lookup fails, the project and board tickets still show. When All tasks is empty because its
+  Runway tickets cannot be read, it says so and offers **Open Runway**, beside the toggle when
+  closed tickets are hidden too. A ticket removed from the Runway leaves All tasks at once (one in
+  a project stays, through its project). Inline edits to an outside Runway ticket show in its row.
 - **Runway # in the ticket detail panel** (VERM-88). The YouTrack and Jira detail panels show the
   ticket's **Runway #** on the active workspace's Runway. A ticket not on it offers **Add at end**
   and **Add at #**; one on it offers **Move to #** and **Remove**, which asks first

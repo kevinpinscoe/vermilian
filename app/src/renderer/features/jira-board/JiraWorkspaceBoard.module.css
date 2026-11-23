@@ -252,3 +252,14 @@
   text-decoration: underline dotted;
   cursor: pointer;
 }
+
+/* An empty All tasks explaining its Runway tickets (VERM-89). */
+.emptyNotice {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.emptyActions {
+  display: flex;
+  gap: 8px;
+}

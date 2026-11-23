@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunwayTicketRead } from '../../../shared/runwayTicket';
 import type { BoardIssue } from '../../../shared/workspace';
-import { runwayHasTickets, withRunwayTickets } from './allTasks';
+import { ALL_HIDDEN_BY_FILTER, RUNWAY_LOOKUP_FAILED, allTasksEmptyNotice, runwayHasTickets, savedRunwayTicketIds, withRunwayTickets } from './allTasks';
 import { unreadTicket } from './api';
 
 // Synthetic keys and names only.
@@ -65,6 +65,75 @@ describe('withRunwayTickets (VERM-89)', () => {
     ];
     expect(withRunwayTickets([read12], reads, false).issues).toEqual([read12]);
     expect(withRunwayTickets([read12], null, false).issues).toEqual([read12]);
+  });
+});
+
+describe('withRunwayTickets: only rows still saved (VERM-89 review)', () => {
+  const read12 = issue('READ-12', '2-12');
+  const plat40 = issue('PLAT-40', '2-240');
+
+  it('drops a cached read whose row was removed; an in-project ticket stays through its project', () => {
+    // The cached reads still hold PLAT-40 (outside) and READ-12 (in a project);
+    // both rows were removed from the Runway since.
+    const reads = [ok('yt:READ-12', read12), ok('yt:PLAT-40', plat40)];
+    const r = withRunwayTickets([read12], reads, false, new Set<string>());
+    expect(r.issues.map((i) => i.idReadable)).toEqual(['READ-12']);
+    expect(r.runwayOnlyIds.size).toBe(0);
+  });
+
+  it('keeps the reads of rows still saved, and every read while the rows are not known', () => {
+    const reads = [ok('yt:PLAT-40', plat40), { itemId: 'yt:GONE-1', state: 'missing-or-unreadable' } as RunwayTicketRead];
+    const saved = withRunwayTickets([], reads, false, new Set(['yt:PLAT-40']));
+    expect(saved.issues.map((i) => i.idReadable)).toEqual(['PLAT-40']);
+    expect(saved.unreadable).toBe(0); // GONE-1 was removed: not counted either
+    const unknown = withRunwayTickets([], reads, false, null);
+    expect(unknown.issues.map((i) => i.idReadable)).toEqual(['PLAT-40']);
+    expect(unknown.unreadable).toBe(1);
+  });
+
+  it('counts unreadable saved tickets, but not one a project already shows', () => {
+    const reads: RunwayTicketRead[] = [
+      { itemId: 'jira:DEMO-101', state: 'missing-or-unreadable' },
+      { itemId: 'jira:OPS-7', state: 'not-readable' },
+      { itemId: 'jira:OPS-9', state: 'missing' },
+    ];
+    const r = withRunwayTickets([issue('DEMO-101', '10001')], reads, false, new Set(['jira:DEMO-101', 'jira:OPS-7', 'jira:OPS-9']));
+    expect(r.unreadable).toBe(2);
+  });
+
+  it('savedRunwayTicketIds: ticket rows only, null while unknown', () => {
+    expect(savedRunwayTicketIds(null)).toBeNull();
+    expect([...(savedRunwayTicketIds([{ kind: 'issue', itemId: 'yt:A-1' }, { kind: 'section', itemId: 'sec:1' }]) ?? [])]).toEqual(['yt:A-1']);
+  });
+});
+
+describe('allTasksEmptyNotice (VERM-89 review)', () => {
+  const base = { hiddenResolved: 0, unreadable: 0, lookupFailed: false, closedWord: 'closed' };
+
+  it('nothing to explain: null', () => {
+    expect(allTasksEmptyNotice(base)).toBeNull();
+  });
+
+  it('only hidden by the toggle: the agreed message and the toggle, no Open Runway', () => {
+    expect(allTasksEmptyNotice({ ...base, hiddenResolved: 2 })).toEqual({ lines: [ALL_HIDDEN_BY_FILTER], showToggle: true, openRunway: false });
+  });
+
+  it('only unreadable: says so and offers Open Runway', () => {
+    const n = allTasksEmptyNotice({ ...base, unreadable: 2 });
+    expect(n).toEqual({ lines: ['2 Runway tickets could not be read. The Runway shows why.'], showToggle: false, openRunway: true });
+  });
+
+  it('closed and unreadable: both reasons and both actions', () => {
+    const n = allTasksEmptyNotice({ ...base, hiddenResolved: 1, unreadable: 1, closedWord: 'Done' });
+    expect(n).toEqual({
+      lines: ['1 Done ticket is hidden by the current filter.', '1 Runway ticket could not be read. The Runway shows why.'],
+      showToggle: true,
+      openRunway: true,
+    });
+  });
+
+  it('a failed lookup explains itself and offers Open Runway', () => {
+    expect(allTasksEmptyNotice({ ...base, lookupFailed: true, unreadable: 3 })).toEqual({ lines: [RUNWAY_LOOKUP_FAILED], showToggle: false, openRunway: true });
   });
 });
 

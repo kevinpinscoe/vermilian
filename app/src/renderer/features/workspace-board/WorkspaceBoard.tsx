@@ -17,8 +17,9 @@ import { DefaultAssigneeBar, useDefaultAssignee } from '../project-board/Default
 import { defaultAssigneeFilter } from '../project-board/defaultAssignee';
 import { BoardSearch } from '../search/BoardSearch';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
-import { RUNWAY_TICKETS_QUERY_KEY, useRunwayTickets } from '../runway/api';
-import { ALL_HIDDEN_BY_FILTER, withRunwayTickets } from '../runway/allTasks';
+import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../runway/api';
+import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
+import { useWorkspaceStore } from '../../stores/workspace';
 import pbStyles from '../project-board/ProjectBoard.module.css';
 import styles from './WorkspaceBoard.module.css';
 
@@ -205,13 +206,26 @@ export function WorkspaceBoard({
   // view's own query and cache. Each ticket once; a resolved one follows
   // Show closed like a project ticket; an unreadable one is left to the
   // Runway view. A failed Runway read leaves the project issues as they are.
+  // Only reads of rows still saved count, so a removed ticket leaves at once.
   const queryClient = useQueryClient();
+  const runwayItems = useRunwayItems(workspaceId || null);
   const runwayTickets = useRunwayTickets(workspaceId || null);
   const runwayReads = runwayTickets.data?.ok ? runwayTickets.data.tickets : null;
-  const { issues: allIssues, runwayOnlyIds, hiddenResolved } = useMemo(
-    () => withRunwayTickets(projectIssues, runwayReads, showClosed),
-    [projectIssues, runwayReads, showClosed],
+  const savedIds = useMemo(
+    () => savedRunwayTicketIds(runwayItems.data?.ok ? runwayItems.data.items : null),
+    [runwayItems.data],
   );
+  const { issues: allIssues, runwayOnlyIds, hiddenResolved, unreadable } = useMemo(
+    () => withRunwayTickets(projectIssues, runwayReads, showClosed, savedIds),
+    [projectIssues, runwayReads, showClosed, savedIds],
+  );
+  const openRunway = useWorkspaceStore((s) => s.openRunway);
+  const emptyNotice = allTasksEmptyNotice({
+    hiddenResolved,
+    unreadable,
+    lookupFailed: Boolean(savedIds && savedIds.size > 0) && runwayTickets.data?.ok === false,
+    closedWord: 'closed',
+  });
   const isLoading = projectShortNames.length > 0
     ? results.some((r) => r.isLoading) && results.every((r) => !r.data)
     : Boolean(workspaceId) && runwayTickets.isPending;
@@ -362,19 +376,35 @@ export function WorkspaceBoard({
         <div className={pbStyles.tableWrapper}>
           {groups.length === 0 ? (
             <div className={pbStyles.emptyState} data-testid="ws-empty">
-              {allIssues.length === 0 && hiddenResolved > 0 ? (
-                // Every ticket is closed and Show closed is off (VERM-89).
-                <>
-                  <Text>{ALL_HIDDEN_BY_FILTER}</Text>
-                  <button
-                    type="button"
-                    className={styles.assignedBtn}
-                    data-testid="ws-empty-show-closed"
-                    onClick={() => setShowClosed(true)}
-                  >
-                    Show closed
-                  </button>
-                </>
+              {allIssues.length === 0 && emptyNotice ? (
+                // Runway tickets All tasks cannot show (VERM-89): closed ones
+                // the toggle hides, unreadable ones, or a failed Runway lookup,
+                // each with its way out.
+                <div className={styles.emptyNotice}>
+                  {emptyNotice.lines.map((line) => <Text key={line}>{line}</Text>)}
+                  <div className={styles.emptyActions}>
+                    {emptyNotice.showToggle && (
+                      <button
+                        type="button"
+                        className={styles.assignedBtn}
+                        data-testid="ws-empty-show-closed"
+                        onClick={() => setShowClosed(true)}
+                      >
+                        Show closed
+                      </button>
+                    )}
+                    {emptyNotice.openRunway && (
+                      <button
+                        type="button"
+                        className={styles.assignedBtn}
+                        data-testid="ws-empty-open-runway"
+                        onClick={openRunway}
+                      >
+                        Open Runway
+                      </button>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <Text>{allIssues.length > 0 ? 'No tasks match your filters.' : projectShortNames.length === 0 ? 'No projects in this workspace.' : 'No open tasks.'}</Text>
               )}

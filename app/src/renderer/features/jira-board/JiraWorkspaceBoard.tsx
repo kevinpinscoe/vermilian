@@ -11,7 +11,8 @@ import { JIRA_POLL_INTERVAL_MS } from '../../../shared/jiraPoll';
 import { pollJiraProject, workspaceJiraIssuesPrefix, workspaceJiraPollQueryKey } from './jiraBoardSync';
 import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
 import { useRunwayItems, useRunwayTickets } from '../runway/api';
-import { ALL_HIDDEN_BY_FILTER, runwayHasTickets, withRunwayTickets } from '../runway/allTasks';
+import { allTasksEmptyNotice, runwayHasTickets, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
+import { useWorkspaceStore } from '../../stores/workspace';
 import { JiraFocusControl } from './JiraFocusControl';
 import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
 import { AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
@@ -81,14 +82,26 @@ export function JiraWorkspaceBoard({
   // the Runway view's own queries and cache. Each ticket once; a Done one
   // follows Show done like any card; an unreadable one is left to the Runway
   // view. A failed Runway read leaves the project and board cards as they are.
+  // Only reads of rows still saved count, so a removed ticket leaves at once.
   const runwayItems = useRunwayItems(workspaceId);
   const runwayTickets = useRunwayTickets(workspaceId);
   const hasRunwayTickets = runwayHasTickets(runwayItems.data?.ok ? runwayItems.data.items : []);
   const runwayReads = runwayTickets.data?.ok ? runwayTickets.data.tickets : null;
-  const { issues, hiddenResolved } = useMemo(
-    () => withRunwayTickets(sourceIssues, runwayReads, showDone),
-    [sourceIssues, runwayReads, showDone],
+  const savedIds = useMemo(
+    () => savedRunwayTicketIds(runwayItems.data?.ok ? runwayItems.data.items : null),
+    [runwayItems.data],
   );
+  const { issues, hiddenResolved, unreadable } = useMemo(
+    () => withRunwayTickets(sourceIssues, runwayReads, showDone, savedIds),
+    [sourceIssues, runwayReads, showDone, savedIds],
+  );
+  const openRunway = useWorkspaceStore((s) => s.openRunway);
+  const emptyNotice = allTasksEmptyNotice({
+    hiddenResolved,
+    unreadable,
+    lookupFailed: hasRunwayTickets && runwayTickets.data?.ok === false,
+    closedWord: 'Done',
+  });
   const loading = sourcesLoading || (hasRunwayTickets && runwayTickets.isPending);
 
   // The incremental poll, every JIRA_POLL_INTERVAL_MS while the window is
@@ -312,13 +325,24 @@ export function JiraWorkspaceBoard({
                 );
               })}
               {columns.length === 0 && !loading && failures.length === 0 && (
-                hiddenResolved > 0 ? (
-                  // Every ticket is Done and Show done is off (VERM-89).
-                  <div className={styles.empty} data-testid="jira-board-empty">
-                    <Text type="text1">{ALL_HIDDEN_BY_FILTER}</Text>
-                    <Button kind="tertiary" size="small" data-testid="jira-empty-show-done" onClick={() => setShowDone(true)}>
-                      Show done
-                    </Button>
+                emptyNotice ? (
+                  // Runway tickets All tasks cannot show (VERM-89): Done ones
+                  // the toggle hides, unreadable ones, or a failed Runway
+                  // lookup, each with its way out.
+                  <div className={`${styles.empty} ${styles.emptyNotice}`} data-testid="jira-board-empty">
+                    {emptyNotice.lines.map((line) => <Text key={line} type="text1">{line}</Text>)}
+                    <div className={styles.emptyActions}>
+                      {emptyNotice.showToggle && (
+                        <Button kind="tertiary" size="small" data-testid="jira-empty-show-done" onClick={() => setShowDone(true)}>
+                          Show done
+                        </Button>
+                      )}
+                      {emptyNotice.openRunway && (
+                        <Button kind="tertiary" size="small" data-testid="jira-empty-open-runway" onClick={openRunway}>
+                          Open Runway
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className={styles.empty} data-testid="jira-board-empty">
