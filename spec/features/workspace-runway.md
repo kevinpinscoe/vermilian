@@ -269,6 +269,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       Whether a link is a prerequisite is decided from its type and direction at display time
       (`linkRole`): an inward link of a prerequisite type (YouTrack `Depend` "depends on", Jira
       `Blocks` "is blocked by") makes the linked ticket a prerequisite.
+- [x] A linked Jira ticket counts as done when its own project's status mapping says so, if the
+      workspace maps that project's statuses; otherwise when Jira's status category is Done. A
+      linked ticket with no readable status is *unknown*. A Jira link type whose two wordings are
+      the same (`Relates`) is undirected (VERM-95).
 - [ ] A YouTrack `BLOCKED` status with no prerequisite link shows the reason
       *status BLOCKED, no linked prerequisite*.
 - [ ] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`

@@ -393,3 +393,33 @@ describe('createJiraProvider boards', () => {
     expect(client.searchBoardIssues).not.toHaveBeenCalled();
   });
 });
+
+describe('createJiraProvider — links (VERM-95)', () => {
+  it('requests issuelinks and judges each linked issue by its own project\'s status mapping', async () => {
+    // DEMO-1 is blocked by OPS-2 ("Shipped", an in-progress category that OPS
+    // maps to done) and by DEMO-3 (also "Shipped", but DEMO maps nothing).
+    const linked = (key: string) => ({
+      id: key, key, fields: { summary: key, status: { name: 'Shipped', statusCategory: { key: 'indeterminate' } } },
+    });
+    const BLOCKS = { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' };
+    const withLinks = {
+      ...ISSUE,
+      fields: { ...ISSUE.fields, issuelinks: [{ type: BLOCKS, inwardIssue: linked('OPS-2') }, { type: BLOCKS, inwardIssue: linked('DEMO-3') }] },
+    };
+    const searchProjectIssues = vi.fn(async (..._args: unknown[]) => [withLinks]);
+    const client = stubClient({ searchProjectIssues });
+    const settings = { OPS: { statusRoles: { Shipped: 'done' as const } } };
+    const [issue] = await createJiraProvider(client, CONN, settings).getIssues('DEMO', false);
+
+    expect(searchProjectIssues.mock.calls[0][4]).toMatchObject({ fields: expect.arrayContaining(['issuelinks']) });
+    expect(issue.links?.map((l) => [l.issue.key, l.direction, l.verb, l.issue.resolved])).toEqual([
+      ['OPS-2', 'inward', 'is blocked by', true],
+      ['DEMO-3', 'inward', 'is blocked by', false],
+    ]);
+  });
+
+  it('leaves links absent when the response has no issuelinks', async () => {
+    const [issue] = await createJiraProvider(stubClient(), CONN).getIssues('DEMO', false);
+    expect(issue.links).toBeUndefined();
+  });
+});

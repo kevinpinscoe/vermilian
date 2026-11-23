@@ -20,6 +20,8 @@
 //   isEpic           the issue's own type is an Epic
 //   updated          Jira's `updated` as epoch ms; null when absent or
 //                    unparseable (VERM-39 — never invented)
+//   links            `issuelinks` as provider-neutral IssueLinks (VERM-95,
+//                    jiraLinks.ts); absent when the response had none
 //
 // Every other BoardIssueFields entry is a YouTrack-only field (Category,
 // Ticket, Focus, …) and is null: such fields do not exist in Jira (proposal
@@ -31,6 +33,7 @@
 import { FIELD_KEYS, type BoardIssueFields, type FieldKey } from './fields';
 import type { BoardIssue, IssueDetail, ParentEpic } from './workspace';
 import { JIRA_SYSTEM_DUE_DATE_FIELD, jiraStatusRole, type JiraProjectSettings, type JiraStatusValue } from './jiraProjectSettings';
+import { mapJiraLinks, type JiraStatusRolesFor } from './jiraLinks';
 
 export { JIRA_SYSTEM_DUE_DATE_FIELD };
 
@@ -47,6 +50,8 @@ export const JIRA_BOARD_BASE_FIELDS = [
   'resolutiondate',
   'updated',
   'assignee',
+  // Links to other issues, for the blocker states (VERM-95).
+  'issuelinks',
 ] as const;
 
 /** The fields to request so mapJiraIssue has everything it reads. */
@@ -144,7 +149,12 @@ function parentEpicOf(fields: Record<string, unknown>, options: JiraMappingOptio
 // updated. Non-null and truthy, as every consumer of `resolved` expects.
 const RESOLVED_TIME_UNKNOWN = 1;
 
-export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {}): BoardIssue {
+/**
+ * `statusRolesFor` gives a linked issue's own project's status mapping, so a
+ * linked issue's done-ness follows that project (VERM-95); without it, Jira's
+ * status category decides.
+ */
+export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {}, statusRolesFor?: JiraStatusRolesFor): BoardIssue {
   const f = (issue.fields ?? {}) as Record<string, unknown>;
   const status = f.status as JiraStatusValue | null | undefined;
   const statusRole = jiraStatusRole(status, options.statusRoles);
@@ -170,6 +180,7 @@ export function mapJiraIssue(issue: JiraIssue, options: JiraMappingOptions = {})
     statusRole,
     updated: timestampMs(f.updated),
     assigneeName: fields.assignee ? (str(assignee?.displayName) ?? fields.assignee) : null,
+    links: mapJiraLinks(f.issuelinks, statusRolesFor),
   };
 }
 
