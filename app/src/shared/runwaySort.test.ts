@@ -16,16 +16,37 @@ const asc = (key: RunwaySort['key']): RunwaySort => ({ key, direction: 'asc' });
 const desc = (key: RunwaySort['key']): RunwaySort => ({ key, direction: 'desc' });
 
 describe('ticket ID sort (VERM-91)', () => {
-  it('is code-unit order, not numeric: OPS-4089 before OPS-956 before OPS-96 ascending', () => {
-    const list = [t('OPS-96'), t('OPS-956'), t('OPS-4089')];
-    expect(keys(list, asc('ticketId'))).toEqual(['OPS-4089', 'OPS-956', 'OPS-96']);
-    expect(keys(list, desc('ticketId'))).toEqual(['OPS-96', 'OPS-956', 'OPS-4089']);
+  it('compares the project prefix as text and the final number numerically', () => {
+    expect(keys([t('VERM-101'), t('VERM-90')], asc('ticketId'))).toEqual(['VERM-90', 'VERM-101']);
+    const ops = [t('OPS-4089'), t('OPS-96'), t('OPS-956')];
+    expect(keys(ops, asc('ticketId'))).toEqual(['OPS-96', 'OPS-956', 'OPS-4089']);
   });
 
-  it('compares code units, so case and punctuation follow their code points', () => {
-    expect(compareTicketIds('OPS-4089', 'OPS-956')).toBeLessThan(0);
+  it('descending reverses each sequence', () => {
+    expect(keys([t('VERM-90'), t('VERM-101')], desc('ticketId'))).toEqual(['VERM-101', 'VERM-90']);
+    expect(keys([t('OPS-96'), t('OPS-4089'), t('OPS-956')], desc('ticketId'))).toEqual(['OPS-4089', 'OPS-956', 'OPS-96']);
+  });
+
+  it('orders prefixes as text first, then numbers within a prefix', () => {
+    const list = [t('VERM-101'), t('OPS-4089'), t('VERM-90'), t('OPS-96'), t('INB-7')];
+    expect(keys(list, asc('ticketId'))).toEqual(['INB-7', 'OPS-96', 'OPS-4089', 'VERM-90', 'VERM-101']);
+    expect(keys(list, desc('ticketId'))).toEqual(['VERM-101', 'VERM-90', 'OPS-4089', 'OPS-96', 'INB-7']);
+  });
+
+  it('compares prefixes by code unit, with no locale', () => {
     expect(compareTicketIds('Ab-1', 'aB-1')).toBeLessThan(0); // 'A' (65) < 'a' (97)
+    expect(compareTicketIds('OPS-1', 'OPS2-1')).toBeLessThan(0); // '-' (45) < '2' (50)
+  });
+
+  it('numbers past the float range still compare exactly; equal keys compare 0', () => {
+    expect(compareTicketIds('A-9007199254740993', 'A-9007199254740992')).toBeGreaterThan(0);
     expect(compareTicketIds('A-1', 'A-1')).toBe(0);
+  });
+
+  it('a key with no number comes before its prefix\'s numbered keys; leading zeros fall back to text', () => {
+    expect(compareTicketIds('NOTE', 'NOTE1')).toBeLessThan(0);
+    expect(compareTicketIds('OPS-007', 'OPS-7')).toBeLessThan(0); // equal numbers: '0' < '7'
+    expect(compareTicketIds('OPS-7', 'OPS-007')).toBeGreaterThan(0);
   });
 
   it("matches the spec's worked example", () => {
@@ -47,8 +68,8 @@ describe('Runway # sort (VERM-91)', () => {
 
   it('with no ticket numbered, it is ticket ID ascending in both directions', () => {
     const none = [t('B-2'), t('A-10'), t('A-9')];
-    expect(keys(none, asc('runwayNumber'))).toEqual(['A-10', 'A-9', 'B-2']);
-    expect(keys(none, desc('runwayNumber'))).toEqual(['A-10', 'A-9', 'B-2']);
+    expect(keys(none, asc('runwayNumber'))).toEqual(['A-9', 'A-10', 'B-2']);
+    expect(keys(none, desc('runwayNumber'))).toEqual(['A-9', 'A-10', 'B-2']);
   });
 });
 
@@ -81,26 +102,40 @@ describe('tracker priority sort (VERM-91)', () => {
     expect(keys(list, desc('priority'))).toEqual(['A-1', 'A-4', 'A-2', 'A-3']);
   });
 
-  it('a value its order does not list ranks after every listed rank and flips with the direction; missing stays last', () => {
-    const list = [t('OPS-1', null, 'Blocker', OPS), t('OPS-2', null, 'P3', OPS), t('X-1', null, 'Urgent', null), t('OPS-3', null, null, OPS)];
-    expect(keys(list, asc('priority'))).toEqual(['OPS-2', 'OPS-1', 'X-1', 'OPS-3']);
-    expect(keys(list, desc('priority'))).toEqual(['OPS-1', 'X-1', 'OPS-2', 'OPS-3']);
+  it('an unknown rank is after every ranked ticket in both directions, before no priority; only known ranks reverse', () => {
+    const list = [
+      t('OPS-3', null, null, OPS),
+      t('X-1', null, 'Urgent', null), // its project's order is unknown
+      t('OPS-2', null, 'P3', OPS),
+      t('OPS-1', null, 'Blocker', OPS), // a value OPS's order does not list
+      t('OPS-4', null, 'P1', OPS),
+    ];
+    expect(keys(list, asc('priority'))).toEqual(['OPS-4', 'OPS-2', 'OPS-1', 'X-1', 'OPS-3']);
+    expect(keys(list, desc('priority'))).toEqual(['OPS-2', 'OPS-4', 'OPS-1', 'X-1', 'OPS-3']);
   });
 
-  it('priorityRank: index, unlisted after every index, none null', () => {
+  it('priorityRank: a known index, unknown, or none', () => {
     expect(priorityRank('P2', OPS)).toBe(1);
-    expect(priorityRank('P9', OPS)).toBe(Number.POSITIVE_INFINITY);
-    expect(priorityRank('P1', null)).toBe(Number.POSITIVE_INFINITY);
-    expect(priorityRank(null, OPS)).toBeNull();
-    expect(priorityRank('', OPS)).toBeNull();
+    expect(priorityRank('P9', OPS)).toBe('unknown');
+    expect(priorityRank('P1', null)).toBe('unknown');
+    expect(priorityRank(null, OPS)).toBe('none');
+    expect(priorityRank('', OPS)).toBe('none');
   });
 });
 
 describe('ties and determinism (VERM-91)', () => {
-  it('every sort breaks ties by ticket ID ascending, whatever its direction', () => {
-    const tied = [t('OPS-96', 1, 'Major'), t('OPS-4089', 1, 'Major'), t('OPS-956', 1, 'Major')];
+  it('Runway # and priority break ties by ascending ticket ID (prefix as text, number numerically), even descending', () => {
+    const tied = [t('VERM-101', 1, 'Major'), t('OPS-4089', 1, 'Major'), t('VERM-90', 1, 'Major'), t('OPS-96', 1, 'Major'), t('OPS-956', 1, 'Major')];
     for (const sort of [asc('runwayNumber'), desc('runwayNumber'), asc('priority'), desc('priority')]) {
-      expect(keys(tied, sort), `${sort.key} ${sort.direction}`).toEqual(['OPS-4089', 'OPS-956', 'OPS-96']);
+      expect(keys(tied, sort), `${sort.key} ${sort.direction}`).toEqual(['OPS-96', 'OPS-956', 'OPS-4089', 'VERM-90', 'VERM-101']);
+    }
+    // The same for the unnumbered, unknown and missing tiers.
+    const tails = [t('OPS-956', null, 'Blocker', OPS), t('OPS-96', null, 'Blocker', OPS), t('OPS-4089', null, null, OPS), t('OPS-100', null, null, OPS)];
+    for (const sort of [asc('priority'), desc('priority')]) {
+      expect(keys(tails, sort), sort.direction).toEqual(['OPS-96', 'OPS-956', 'OPS-100', 'OPS-4089']);
+    }
+    for (const sort of [asc('runwayNumber'), desc('runwayNumber')]) {
+      expect(keys(tails, sort), sort.direction).toEqual(['OPS-96', 'OPS-100', 'OPS-956', 'OPS-4089']);
     }
   });
 

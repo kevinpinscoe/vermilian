@@ -209,10 +209,12 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
   | Sort key | Order |
   | --- | --- |
   | **Runway #** | By Runway position. Tickets with no position come **last in both directions**, among themselves by ticket ID ascending. |
-  | **Tracker priority** | The tracker's own order — YouTrack's `Priority` bundle order; each Jira project's priority order from editmeta — never alphabetical. Applies to the **whole list**, positioned and unpositioned alike. **Ascending is the order the tracker lists, most urgent first.** Each ticket ranks by its position in **its own project's** order, so tickets from different Jira schemes compare by rank (`Highest` and `P1` are both rank 1). A value its project's order does not list, or a project whose order is unknown, ranks after every listed rank and flips with the direction. A missing priority sorts last in both directions. |
-  | **Ticket ID** | Plain text order of the displayed key, code unit by code unit, with no numeric awareness: `OPS-4089` < `OPS-956` < `OPS-96`. Applies to the **whole list**. |
+  | **Tracker priority** | The tracker's own order — YouTrack's `Priority` bundle order; each Jira project's priority order from editmeta — never alphabetical. Applies to the **whole list**, positioned and unpositioned alike. **Ascending is the order the tracker lists, most urgent first.** Each ticket ranks by its position in **its own project's** order, so tickets from different Jira schemes compare by rank (`Highest` and `P1` are both rank 1). Only **known** ranks follow the direction. A priority whose rank is unknown — a value its project's order does not list, or a project whose order is unknown — comes **after every ranked ticket in both directions**, followed by tickets with no priority, last in both directions. |
+  | **Ticket ID** | The displayed key's **project prefix as text** (code unit by code unit, no locale), then its **final number numerically**: ascending gives `VERM-90` → `VERM-101` and `OPS-96` → `OPS-956` → `OPS-4089`; descending reverses each. Applies to the **whole list**. |
 
-- [ ] Ties under every sort break by ticket ID ascending, so the order is fully deterministic.
+- [ ] Ties under **Runway #** and **Tracker priority** break by the ascending **Ticket ID** order
+      (prefix as text, number numerically), even when those sorts are descending, so the order is
+      fully deterministic.
 - [ ] **Sorting never writes Runway positions or tracker fields.** Switching sorts calls no
       Runway write and no tracker write, and Runway positions are identical afterwards.
 - [ ] The chosen sort is remembered **per workspace, on this computer only**. It is saved as a
