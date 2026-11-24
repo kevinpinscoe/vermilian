@@ -22,7 +22,10 @@ export function projectFieldValuesQueryKey(workspaceId: string, project: string)
 export interface ProjectFieldValuesState {
   /** Values per project (short name or id, as asked), once read. */
   byProject: ReadonlyMap<string, ProjectFieldValues>;
-  /** Read errors per project. */
+  /**
+   * Read errors per project. Set whenever the latest read failed — even when
+   * earlier values are still cached — and cleared only by a successful read.
+   */
   errors: ReadonlyMap<string, string>;
   /** Some project's values are still being read. */
   loading: boolean;
@@ -37,7 +40,20 @@ async function readValues(workspaceId: string, project: string): Promise<Project
   return r.values;
 }
 
-export function useProjectFieldValues(workspaceId: string, projects: readonly string[]): ProjectFieldValuesState {
+export interface ProjectFieldValuesOptions {
+  /**
+   * Re-read on every mount, even when cached values are fresh. The detail
+   * panel uses this: it is where a value is chosen, so it checks the project's
+   * current values each time it opens rather than trusting a cached list.
+   */
+  revalidateOnMount?: boolean;
+}
+
+export function useProjectFieldValues(
+  workspaceId: string,
+  projects: readonly string[],
+  options: ProjectFieldValuesOptions = {},
+): ProjectFieldValuesState {
   const unique = useMemo(() => [...new Set(projects.filter(Boolean))], [projects]);
   const results = useQueries({
     queries: unique.map((project) => ({
@@ -45,6 +61,7 @@ export function useProjectFieldValues(workspaceId: string, projects: readonly st
       queryFn: () => readValues(workspaceId, project),
       retry: false,
       staleTime: 60_000,
+      ...(options.revalidateOnMount ? { refetchOnMount: 'always' as const } : {}),
     })),
   });
 
@@ -57,7 +74,10 @@ export function useProjectFieldValues(workspaceId: string, projects: readonly st
       const r = results[i];
       if (!r) return;
       if (r.data) byProject.set(project, r.data);
-      if (r.isError && !r.isFetching) errors.set(project, (r.error as Error).message);
+      // The latest read failed: cached values may be out of date, so editors
+      // stay disabled (with Retry) until a read succeeds — including while a
+      // retry is in flight.
+      if (r.isError) errors.set(project, (r.error as Error).message);
       if (r.isFetching || r.isPending) loading = true;
     });
     return { byProject, errors, loading };

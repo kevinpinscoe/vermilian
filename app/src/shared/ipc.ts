@@ -1055,6 +1055,8 @@ export interface VermilianAPI {
   debugSetClaudeExtractDelay?(ms: number): Promise<void>;
   debugSetFieldMetadataDelay?(ms: number, project?: string): Promise<void>;
   debugFailFieldMetadata?(n: number, project?: string): Promise<void>;
+  // e2e only (VERM-117): change a fake project's field values while the app runs.
+  debugSetProjectField?(project: string, field: string, values: string[] | null): Promise<void>;
 }
 
 declare global {

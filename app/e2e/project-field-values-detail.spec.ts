@@ -6,6 +6,9 @@
  *     as the current value with the active values as replacements.
  *   - A failed read keeps the current value visible and offers Retry.
  *   - A field the project lacks (TST2 has no Project health) is not editable.
+ *   - A refresh that fails after a successful read disables editing, with
+ *     Retry, until a read succeeds (VERM-117 review).
+ *   - Only a field the project allows to be empty can be cleared.
  */
 
 import { test, expect, Page } from '@playwright/test';
@@ -28,8 +31,10 @@ async function openDetail(page: Page, idReadable: string) {
 }
 
 async function selectOptions(page: Page, key: string): Promise<string[]> {
-  await field(page, key).locator('[data-testid="detail-select-button"]').click();
-  return field(page, key).locator('[data-testid="detail-select"] option').allTextContents();
+  // Saving one field advances to the next and opens it, so it may already be open.
+  const select = field(page, key).locator('[data-testid="detail-select"]');
+  if ((await select.count()) === 0) await field(page, key).locator('[data-testid="detail-select-button"]').click();
+  return select.locator('option').allTextContents();
 }
 
 /** Leave an open dropdown without choosing (Escape would close the whole panel). */
@@ -58,7 +63,8 @@ test.describe('Detail dropdowns use the ticket project\'s own values (VERM-117)'
     expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
     // And Status is TST2's own workflow.
     await closeSelect(page, 'affectedHost');
-    expect(await selectOptions(page, 'status')).toEqual(['—', 'To do', 'In Progress', 'Consider', 'Fixed']);
+    // Status is required in the fake, so it offers no blank.
+    expect(await selectOptions(page, 'status')).toEqual(['To do', 'In Progress', 'Consider', 'Fixed']);
   });
 
   test('a saved archived value survives opening the panel and is offered replacements', async () => {
@@ -104,5 +110,65 @@ test.describe('Detail dropdowns use the ticket project\'s own values (VERM-117)'
     await openDetail(page, 'TST2-1');
     await expect(field(page, 'projectHealth').locator('[data-testid="detail-select-absent"]')).toBeVisible();
     await expect(field(page, 'projectHealth').locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+  });
+
+  test('a refresh that fails after a successful read disables editing until Retry succeeds', async () => {
+    await patch(page, 'TST2-1', 'affectedHost', 'web1');
+    await openDetail(page, 'TST2-1');
+    const host = field(page, 'affectedHost');
+    // First read succeeded.
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+    await closeSelect(page, 'affectedHost');
+
+    // The next read fails. Reopening the panel re-reads its project's values.
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(20, 'TST2'));
+    await page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-retry"]')).toBeVisible();
+    await expect(host.locator('[data-testid="detail-select-value"]')).toHaveText('web1');
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+
+    // The board's chips share the read: the cached list is not offered there either.
+    await page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    await page.locator('[data-testid="ws-issue-row"][data-issue-id="TST2-1"] [data-testid="chip-cell"][data-field="priority"]').click();
+    await expect(tid(page, 'chip-values-retry')).toBeVisible();
+    await expect(tid(page, 'chip-option')).toHaveCount(1);
+    await expect(tid(page, 'chip-option')).toHaveAttribute('data-current-inactive', 'true');
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 5);
+
+    // Still failing: the panel offers Retry. The project's list then changes,
+    // the next read succeeds, and Retry shows the new list.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-retry"]')).toBeVisible();
+    await page.evaluate(() => window.vermilian.debugSetProjectField!('TST2', 'Affected host', ['web1', 'mail1', 'obs']));
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(0));
+    await host.locator('[data-testid="detail-select-retry"]').click();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('web1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1', 'obs']);
+  });
+
+  test('a required field can be replaced but not cleared; an optional one can be cleared', async () => {
+    await patch(page, 'TEST-1', 'editHost', 'FLDW');
+    await patch(page, 'TEST-1', 'affectedHost', 'core');
+    await page.reload();
+    await expect(tid(page, 'ws-filter-bar')).toBeVisible({ timeout: 15_000 });
+    await openDetail(page, 'TEST-1');
+
+    // Edit host is required in TEST: no blank to choose, but replaceable.
+    expect(await selectOptions(page, 'editHost')).toEqual(['FLDW', 'core', 'mac']);
+    await field(page, 'editHost').locator('[data-testid="detail-select"]').selectOption('mac');
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.editHost).toBe('mac');
+
+    // Affected host is optional in TEST: the blank clears it.
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'FLDW', 'core']);
+    await field(page, 'affectedHost').locator('[data-testid="detail-select"]').selectOption('');
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.affectedHost).toBeNull();
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.editHost).toBe('mac');
+
+    // A required field with no value shows the blank only as a disabled placeholder.
+    await openDetail(page, 'TEST-2');
+    expect(await selectOptions(page, 'editHost')).toEqual(['—', 'FLDW', 'core', 'mac']);
+    await expect(field(page, 'editHost').locator('option[value=""]')).toBeDisabled();
   });
 });

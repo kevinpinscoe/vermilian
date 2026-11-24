@@ -8,7 +8,7 @@ import {
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { dropdownOptions, fieldChoices, isResolvedStatus } from '../../../shared/projectFieldValues';
+import { isResolvedStatus, selectEditorState } from '../../../shared/projectFieldValues';
 import type { FieldKey } from '../../../shared/fields';
 import { issueProject, useProjectFieldValuesLookup } from '../project-fields/ProjectFieldValuesContext';
 import { getContrastColor } from './colors';
@@ -48,15 +48,18 @@ export function ChipCell({ value, colorMap, field, project, onEdit }: ChipCellPr
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const dropdownRef = useRef<HTMLUListElement>(null);
   const lookup = useProjectFieldValuesLookup();
-  // The issue's own project's values — never a fixed list. Until they are
-  // known (or if the read failed) only the current value is shown; a field the
-  // project does not have is not editable.
-  const projectValues = project ? lookup.valuesFor(project) : undefined;
-  const readError = project && !projectValues ? lookup.errorFor(project) : undefined;
-  const choices = field ? fieldChoices(projectValues, field as FieldKey) : undefined;
-  const fieldAbsent = Boolean(projectValues && choices && !choices.present);
-  const { options, currentInactive } = choices ? dropdownOptions(choices, value) : { options: [] as string[], currentInactive: false };
-  const editable = Boolean(onEdit && field && project && !fieldAbsent);
+  // The issue's own project's values — never a fixed list (VERM-117). Values
+  // are offered only after a successful read: while they load, or after any
+  // failed read (even with earlier values cached, which may hold a retired
+  // value), the dropdown shows only the current value, with Retry on failure.
+  // A field the project does not have is not editable.
+  const readError = project ? lookup.errorFor(project) ?? null : null;
+  const editor = field && project
+    ? selectEditorState(lookup.valuesFor(project), readError, field as FieldKey, value)
+    : null;
+  const editable = Boolean(onEdit && editor && editor.mode !== 'absent');
+  const options = editor?.mode === 'editable' ? editor.options : value ? [value] : [];
+  const currentInactive = editor?.mode === 'editable' ? editor.currentInactive : Boolean(value);
 
   useEffect(() => {
     if (!open) return;
@@ -118,16 +121,16 @@ export function ChipCell({ value, colorMap, field, project, onEdit }: ChipCellPr
               </li>
             );
           })}
-          {!projectValues && !readError && (
+          {editor?.mode === 'loading' && (
             <li data-testid="chip-values-loading" className={styles.chipDropdownNote}>Loading values…</li>
           )}
-          {readError && (
+          {editor?.mode === 'error' && (
             <li>
               <button
                 type="button"
                 data-testid="chip-values-retry"
                 className={styles.chipDropdownOption}
-                title={readError}
+                title={readError ?? undefined}
                 onClick={(e) => { e.stopPropagation(); lookup.retry(project); }}
               >
                 Couldn't load values — Retry

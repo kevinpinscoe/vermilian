@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { parseYouTrackProjectFields } from './youtrackProjectFields';
 import {
   SELECT_FIELD_KEYS, dropdownOptions, fieldChoices, isResolvedStatus, mergedValueOrder, projectFieldValuesFromMetadata,
+  selectEditorState,
 } from './projectFieldValues';
 
 type V = { name: string; isResolved?: boolean; archived?: boolean };
-const field = (name: string, $type: string, values: V[]) => ({
-  field: { name }, $type, canBeEmpty: true, bundle: { values: values.map((v, ordinal) => ({ ...v, ordinal })) },
+const field = (name: string, $type: string, values: V[], canBeEmpty = true) => ({
+  field: { name }, $type, canBeEmpty, bundle: { values: values.map((v, ordinal) => ({ ...v, ordinal })) },
 });
 
 const vermLike = projectFieldValuesFromMetadata(parseYouTrackProjectFields([
   field('Status', 'StateProjectCustomField', [
     { name: 'Not yet started' }, { name: 'In Progress' }, { name: 'Consider' },
     { name: 'Done', isResolved: true }, { name: 'Wont do', isResolved: true }, { name: 'Legacy', archived: true },
-  ]),
+  ], false),
+  field('Edit host', 'EnumProjectCustomField', [{ name: 'FLDW' }, { name: 'core' }], false),
   field('Priority', 'EnumProjectCustomField', [{ name: 'Urgent' }, { name: 'Later' }]),
   field('Affected host', 'EnumProjectCustomField', [{ name: 'FLDW' }, { name: 'retired-vm', archived: true }]),
 ]));
@@ -37,6 +39,7 @@ describe('projectFieldValuesFromMetadata (VERM-117)', () => {
       values: ['Not yet started', 'In Progress', 'Consider', 'Done', 'Wont do'],
       archived: ['Legacy'],
       resolved: ['Done', 'Wont do'],
+      canBeEmpty: false,
     });
     expect(fieldChoices(vermLike, 'affectedHost').values).toEqual(['FLDW']);
     expect(fieldChoices(vermLike, 'affectedHost').archived).toEqual(['retired-vm']);
@@ -44,7 +47,7 @@ describe('projectFieldValuesFromMetadata (VERM-117)', () => {
   });
 
   it('marks a field the project lacks as absent, with nothing to offer', () => {
-    expect(fieldChoices(vermLike, 'category')).toEqual({ present: false, values: [], archived: [], resolved: [] });
+    expect(fieldChoices(vermLike, 'category')).toEqual({ present: false, values: [], archived: [], resolved: [], canBeEmpty: false });
     expect(fieldChoices(null, 'status').present).toBe(false);
   });
 });
@@ -76,5 +79,37 @@ describe('mergedValueOrder', () => {
   it('merges projects in first-seen order, each in its own bundle order', () => {
     expect(mergedValueOrder([vermLike, otherProject], 'affectedHost')).toEqual(['FLDW', 'retired-vm', 'web1']);
     expect(mergedValueOrder([otherProject, undefined, vermLike], 'status').slice(0, 4)).toEqual(['Triage', 'Fixed', 'Consider', 'Not yet started']);
+  });
+});
+
+describe('selectEditorState (VERM-117 review)', () => {
+  it('disables editing after a failed refresh even though earlier choices are cached', () => {
+    // The hook returns both: cached values from the earlier read, and the new error.
+    const state = selectEditorState(vermLike, 'Simulated field read failure', 'affectedHost', 'FLDW');
+    expect(state.mode).toBe('error');
+    expect(state.options).toEqual([]);
+    expect(state.clearable).toBe(false);
+  });
+
+  it('is loading, with nothing to choose, until the first read answers', () => {
+    expect(selectEditorState(undefined, null, 'status', 'In Progress').mode).toBe('loading');
+  });
+
+  it('is absent for a field the project lacks', () => {
+    expect(selectEditorState(vermLike, null, 'category', null).mode).toBe('absent');
+  });
+
+  it('offers clearing only where the project allows an empty value', () => {
+    const required = selectEditorState(vermLike, null, 'editHost', 'FLDW');
+    const optional = selectEditorState(vermLike, null, 'affectedHost', 'FLDW');
+    expect(required).toMatchObject({ mode: 'editable', clearable: false, options: ['FLDW', 'core'] });
+    expect(optional).toMatchObject({ mode: 'editable', clearable: true, options: ['FLDW'] });
+  });
+
+  it('marks an archived current value, offering the active values as replacements', () => {
+    expect(selectEditorState(vermLike, null, 'affectedHost', 'retired-vm')).toMatchObject({
+      mode: 'editable', options: ['retired-vm', 'FLDW'], currentInactive: true, currentArchived: true,
+    });
+    expect(selectEditorState(vermLike, null, 'affectedHost', 'gone')).toMatchObject({ currentInactive: true, currentArchived: false });
   });
 });

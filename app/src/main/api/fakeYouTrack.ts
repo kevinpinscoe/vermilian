@@ -540,13 +540,30 @@ export const FAKE_PRIORITY_VALUES = ['Show-stopper', 'Critical', 'Major', 'Norma
 
 const SEEDABLE_SELECT_FIELDS = ['Status', 'Priority', 'Category', ...Object.keys(FAKE_OTHER_SELECT_FIELDS)];
 
-interface FakeCreateField { values: string[]; default: string | null; archived?: string[] }
+interface FakeCreateField { values: string[]; default: string | null; archived?: string[]; canBeEmpty?: boolean }
 type FakeCreateFields = Partial<Record<string, FakeCreateField | null>> & {
   // `Date time entered`'s field type ("date and time" unless seeded); null removes it.
   dateTimeEntered?: string | null;
 };
 
+// e2e hook (VERM-117 review): change a project's field while the app runs, so
+// a spec can read values, fail a refresh, then retry into a changed list.
+// null removes the field; an override wins over VERMILIAN_E2E_YT_CREATE_FIELDS.
+const fieldOverrides = new Map<string, Map<string, FakeCreateField | null>>();
+export function setFakeProjectFieldForTests(project: string, field: string, values: string[] | null): void {
+  if (typeof project !== 'string' || typeof field !== 'string') return;
+  const own = fieldOverrides.get(project) ?? new Map<string, FakeCreateField | null>();
+  own.set(field, Array.isArray(values) ? { values: values.filter((v) => typeof v === 'string'), default: null } : null);
+  fieldOverrides.set(project, own);
+}
+
 function fakeCreateFields(projectShortName: string): FakeCreateFields {
+  const out = seededCreateFields(projectShortName);
+  for (const [name, f] of fieldOverrides.get(projectShortName) ?? []) out[name] = f;
+  return out;
+}
+
+function seededCreateFields(projectShortName: string): FakeCreateFields {
   let seeded: Record<string, unknown> = {};
   try {
     seeded = JSON.parse(process.env.VERMILIAN_E2E_YT_CREATE_FIELDS ?? '{}') as Record<string, unknown>;
@@ -564,10 +581,12 @@ function fakeCreateFields(projectShortName: string): FakeCreateFields {
     const f = (own as Record<string, unknown>)[name];
     if (f === null) { out[name] = null; continue; }
     const d = (f as { default?: unknown })?.default;
+    const empty = (f as { canBeEmpty?: unknown })?.canBeEmpty;
     out[name] = {
       values: strings((f as { values?: unknown })?.values),
       default: typeof d === 'string' ? d : null,
       archived: strings((f as { archived?: unknown })?.archived),
+      ...(typeof empty === 'boolean' ? { canBeEmpty: empty } : {}),
     };
   }
   return out;
@@ -616,7 +635,7 @@ async function readFakeFieldMetadata(url: string, token: string, projectIdOrShor
     raw.push({
       field: { name },
       $type,
-      canBeEmpty: name !== 'Status',
+      canBeEmpty: f.canBeEmpty ?? name !== 'Status',
       defaultValues: f.default ? [{ name: f.default }] : [],
       bundle: {
         values: [

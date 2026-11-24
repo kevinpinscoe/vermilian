@@ -33,7 +33,7 @@ test.describe('Project field values IPC (VERM-117)', () => {
     expect(test1).toMatchObject({ ok: true, project: 'TEST' });
     expect(test2).toMatchObject({ ok: true, project: 'TST2' });
 
-    expect(test1.values?.fields.affectedHost).toEqual({ present: true, values: ['FLDW', 'core'], archived: ['retired-vm'], resolved: [] });
+    expect(test1.values?.fields.affectedHost).toEqual({ present: true, values: ['FLDW', 'core'], archived: ['retired-vm'], resolved: [], canBeEmpty: true });
     expect(test2.values?.fields.affectedHost?.values).toEqual(['web1', 'mail1']);
 
     expect(test1.values?.fields.status?.resolved).toEqual(['Done', 'Wont do']);

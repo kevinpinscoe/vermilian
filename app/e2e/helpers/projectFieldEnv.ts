@@ -1,12 +1,16 @@
 // Fake YouTrack seeding for the per-project field value specs (VERM-117).
 //   - TEST: Status where "Consider" is open work, Done and Wont do resolve;
-//     Affected host [FLDW, core] plus an archived "retired-vm".
+//     Affected host [FLDW, core] plus an archived "retired-vm" (optional);
+//     Edit host [FLDW, core, mac], required (canBeEmpty false).
 //   - TST2: Status where "Consider" and "Fixed" resolve; its own Priority
 //     [P1, P2, P3] (so a fixture issue's "Normal" is outside it); Affected
 //     host [web1, mail1]; no Project health field at all.
 export const PROJECT_FIELD_ENV: Record<string, string> = {
   VERMILIAN_E2E_YT_CREATE_FIELDS: JSON.stringify({
-    TEST: { 'Affected host': { values: ['FLDW', 'core'], archived: ['retired-vm'] } },
+    TEST: {
+      'Affected host': { values: ['FLDW', 'core'], archived: ['retired-vm'] },
+      'Edit host': { values: ['FLDW', 'core', 'mac'], canBeEmpty: false },
+    },
     TST2: {
       Priority: { values: ['P1', 'P2', 'P3'], default: null },
       'Affected host': { values: ['web1', 'mail1'] },

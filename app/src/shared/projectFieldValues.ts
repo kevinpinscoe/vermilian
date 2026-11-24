@@ -24,6 +24,8 @@ export interface ProjectFieldChoices {
   archived: string[];
   /** State fields: the values (active or archived) that resolve an issue. */
   resolved: string[];
+  /** Whether the project lets the field be cleared; false for a required field. */
+  canBeEmpty: boolean;
 }
 
 export interface ProjectFieldValues {
@@ -32,7 +34,7 @@ export interface ProjectFieldValues {
   priorityOrder: string[];
 }
 
-const ABSENT: ProjectFieldChoices = { present: false, values: [], archived: [], resolved: [] };
+const ABSENT: ProjectFieldChoices = { present: false, values: [], archived: [], resolved: [], canBeEmpty: false };
 
 export function projectFieldValuesFromMetadata(meta: YouTrackProjectMetadata): ProjectFieldValues {
   const fields: Partial<Record<FieldKey, ProjectFieldChoices>> = {};
@@ -44,6 +46,7 @@ export function projectFieldValuesFromMetadata(meta: YouTrackProjectMetadata): P
           values: f.values.filter((v) => !v.archived).map((v) => v.name),
           archived: f.values.filter((v) => v.archived).map((v) => v.name),
           resolved: f.values.filter((v) => v.isResolved).map((v) => v.name),
+          canBeEmpty: f.canBeEmpty,
         }
       : { ...ABSENT };
   }
@@ -65,6 +68,44 @@ export function dropdownOptions(choices: ProjectFieldChoices, current: string | 
   const currentInactive = Boolean(current) && !options.includes(current as string);
   if (currentInactive) options.unshift(current as string);
   return { options, currentInactive };
+}
+
+export type SelectEditorMode = 'editable' | 'loading' | 'error' | 'absent';
+
+export interface SelectEditorState {
+  mode: SelectEditorMode;
+  /** What may be chosen (editable only): the current value first when it is inactive. */
+  options: string[];
+  /** The current value is archived or no longer in the project: shown, never re-sent. */
+  currentInactive: boolean;
+  /** The current value is one of the project's archived values. */
+  currentArchived: boolean;
+  /** The field may be cleared — only when the project allows it to be empty. */
+  clearable: boolean;
+}
+
+/**
+ * How a dropdown editor behaves for one field (VERM-117 review): editable only
+ * when the project's values are known and the latest read succeeded. A read
+ * error disables editing even if earlier choices are cached — they may include
+ * a value the project has since retired — and stays until a read succeeds; the
+ * current value stays visible throughout. A required field is never offered a
+ * way to clear it.
+ */
+export function selectEditorState(
+  values: ProjectFieldValues | null | undefined,
+  readError: string | null | undefined,
+  key: FieldKey,
+  current: string | null | undefined,
+): SelectEditorState {
+  const none = { options: [] as string[], currentInactive: false, currentArchived: false, clearable: false };
+  if (readError) return { mode: 'error', ...none };
+  if (!values) return { mode: 'loading', ...none };
+  const choices = fieldChoices(values, key);
+  if (!choices.present) return { mode: 'absent', ...none };
+  const { options, currentInactive } = dropdownOptions(choices, current);
+  const currentArchived = Boolean(current) && choices.archived.includes(current as string);
+  return { mode: 'editable', options, currentInactive, currentArchived, clearable: choices.canBeEmpty };
 }
 
 /** Whether `status` resolves an issue in this project. */
