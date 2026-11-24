@@ -651,6 +651,45 @@ accomplishment:
 To return a project to the defaults, delete its entry. A mapping editor in the
 app is a planned follow-up.
 
+## Task creation field values (VERM-115)
+
+New task and AI create take Status, Priority and Category from the selected
+project's own configuration in YouTrack. They read
+`/api/admin/projects/{id}/customFields` on the active workspace's connection,
+using the same reader the stand-up uses. Nothing is configured in Vermilian.
+To change what the form offers, change the project's fields or bundles in
+YouTrack. The form shows the project's active values, defaulting to its
+configured default or blank. A blank field is left out of the create request.
+
+Before sending, the main process re-reads the project and checks the
+workspace and every value. If any check fails, nothing is sent.
+
+| Message (contains) | Cause | What to do |
+| --- | --- | --- |
+| Could not load this project's fields … Retry | The field read failed (YouTrack unreachable, or the workspace credential cannot read the project) | Click **Retry**; the draft is kept. If it persists, check the workspace's YouTrack credential |
+| `<Field> "<value>" is not a value in this project` | The value is no longer offered (the bundle changed while the form was open), or a caller sent a stale value | Pick another value; **Refresh project options** re-reads the project |
+| AI suggested `<Field> "<value>"` … Cleared | Claude proposed a value the project does not have | Choose a value or leave it blank |
+| The active workspace changed before the task was created | The workspace was switched while the form was open | Reopen the form in the workspace you want |
+| YouTrack rejected the request but did not identify the field | YouTrack refused the create with its unfilled `({1})` template, and a fresh read still offers every value sent | Click **Refresh project options** and try again; if it repeats, compare the form's values with the project's fields in YouTrack |
+
+The `({1})` refusal recorded on 2026-11-24 read
+`An Open-type entity with the specified name ({1}) was not found`. Whether
+`Open` was the refused value is unconfirmed, and the word is never used to name
+a field. Vermilian names a field only when the response itself names it, or
+when a fresh read confirms the submitted value is no longer offered.
+
+The automatic `Date time entered` timestamp is sent only when the project
+defines that field as a `date` or `date and time` field. It is sent with the
+`$type` that field takes on issues: `DateIssueCustomField` for `date`,
+`SimpleIssueCustomField` for `date and time` (the type of `Date time entered`
+in every current project). A project without the field, or with another
+type, gets no timestamp, rather than a refused create.
+
+Every options read and create runs on the YouTrack connection of the
+workspace the form or AI request came from. A workspace switch cancels a
+pending read or create before anything is sent, and the AI create message
+"The active workspace changed while the AI was answering" means exactly this.
+
 ## OpenBao credential storage (VERM-64)
 
 ### What this is

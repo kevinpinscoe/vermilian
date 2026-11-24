@@ -13,6 +13,7 @@ import type {
   ReadWorkspaceArticleResult,
   SaveWorkspaceArticleResult,
 } from './workspaceArticle';
+import type { CreateFieldOptions } from './createFieldOptions';
 import type { ActivationResult, RollbackResult, StorageStatusView } from './storageActivation';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from './workspaceMigration';
 import type {
@@ -150,6 +151,9 @@ export const IPC = {
   getIssueDetail: 'youtrack:getIssueDetail',
   patchIssue: 'youtrack:patchIssue',
   createIssue: 'youtrack:createIssue',
+  // The selected project's own Status/Priority/Category values and defaults
+  // for the create forms (VERM-115), on the active workspace's connection.
+  getCreateFieldOptions: 'youtrack:getCreateFieldOptions',
   deleteIssue: 'youtrack:deleteIssue',
   moveIssue: 'youtrack:moveIssue',
   // Priority Desk "Ask for recommendation" (VERM-8, docs/requirements.md §
@@ -676,6 +680,9 @@ export interface DailyReviewGetResult {
 }
 
 export interface CreateIssueArgs {
+  // The workspace the form was filled in; refused if it is no longer the
+  // active one (VERM-115). Absent means the active workspace (quick add).
+  workspaceId?: string;
   projectId: string;
   summary: string;
   status: string | null;
@@ -694,11 +701,35 @@ export interface CreateIssueResult {
   id?: string;
   idReadable?: string;
   error?: string;
+  // Values the project does not offer, when the main-process check or the
+  // server's response identifies them (VERM-115).
+  rejected?: Array<{ field: string; value: string }>;
+  // The project's options may be stale: offer to refresh them.
+  refreshOptions?: boolean;
+}
+
+export interface CreateFieldOptionsArgs {
+  workspaceId?: string;
+  projectId: string;
+}
+
+// Always names the workspace and project it answers for, so a late answer
+// for a project the form has left is recognisable and dropped (VERM-115).
+export interface CreateFieldOptionsResult {
+  ok: boolean;
+  workspaceId: string;
+  projectId: string;
+  options?: CreateFieldOptions;
+  error?: string;
+  refused?: 'not-active';
 }
 
 export interface AiCreateTaskArgs {
   description: string;
   projects: { id: string; name: string }[];
+  // The project already selected when the request is made, if any. Claude is
+  // given that project's allowed values (VERM-115).
+  projectId?: string;
   // The workspace the request was made from; refused if it is no longer the
   // active one (VERM-47). Names the workspace, never a credential.
   workspaceId?: string;
@@ -715,6 +746,9 @@ export interface AiCreateTaskFields {
   notes: string | null;
   projectMatchError: boolean;
   clarificationNeeded: string | null;
+  // Suggestions cleared because the matched project does not offer them
+  // (VERM-115), for the review form to flag.
+  clearedSuggestions?: Array<{ field: string; value: string }>;
 }
 
 export interface AiCreateTaskResult {
@@ -910,6 +944,7 @@ export interface VermilianAPI {
   getIssueDetail(issueId: string): Promise<import('./workspace').IssueDetail>;
   patchIssue(args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }>;
   createIssue(args: CreateIssueArgs): Promise<CreateIssueResult>;
+  getCreateFieldOptions(args: CreateFieldOptionsArgs): Promise<CreateFieldOptionsResult>;
   deleteIssue(issueId: string): Promise<{ ok: boolean; error?: string }>;
   moveIssue(args: MoveIssueArgs): Promise<{ ok: boolean; error?: string }>;
   quitApp(): Promise<void>;
@@ -984,7 +1019,7 @@ export interface VermilianAPI {
   debugSetJiraSearchDelay?(ms: number): Promise<void>;
   debugSetJiraGetIssueDelay?(ms: number): Promise<void>;
   // e2e-only (VERM-47): the credential reference each fake Claude call used.
-  debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string }>>;
+  debugGetClaudeCalls?(): Promise<Array<{ fn: string; credentialRef: string; allowedStatus?: string[] }>>;
   // e2e-only (VERM-48): see main/api/fakeYouTrack.ts.
   debugGetStandupQueries?(): Promise<string[][]>;
   debugGetStandupCredentialRefs?(): Promise<string[]>;
@@ -992,6 +1027,14 @@ export interface VermilianAPI {
   debugSetArticleDelay?(ms: number): Promise<void>;
   debugSetStandupDelay?(ms: number, project?: string): Promise<void>;
   debugSetArticle?(articleId: string, value: { content: string } | { status: number }): Promise<void>;
+  // e2e-only (VERM-115): create requests that reached the fake YouTrack, a
+  // one-shot server refusal, and a held or failing project field read.
+  debugGetCreateRequests?(): Promise<Array<{ projectId: string; summary: string; status: string | null; priority: string | null; category: string | null; dateTimeEnteredType?: string | null }>>;
+  debugSetNextCreateError?(message: string | null): Promise<void>;
+  debugGetFieldMetadataRequests?(): Promise<Array<{ project: string; credentialRef: string }>>;
+  debugSetClaudeExtractDelay?(ms: number): Promise<void>;
+  debugSetFieldMetadataDelay?(ms: number, project?: string): Promise<void>;
+  debugFailFieldMetadata?(n: number, project?: string): Promise<void>;
 }
 
 declare global {

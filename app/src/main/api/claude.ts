@@ -13,6 +13,8 @@ import type { AiCreateTaskResult, RecommendationCandidateContext, Recommendation
 import type { Outcome } from '../../shared/masterPlan';
 import type { RecommendationIssue, StandupIssues } from './youtrack';
 import { matchProjectByName } from './aiExtract';
+import type { CreateFieldOptions } from '../../shared/createFieldOptions';
+import { buildExtractTool } from './extractTool';
 import { buildStandupSections } from './standupPrompt';
 import {
   buildRecommendationPrompt,
@@ -42,71 +44,12 @@ export async function testKey(key: string, model: string): Promise<TestClaudeRes
   }
 }
 
-const EXTRACT_TOOL: Anthropic.Tool = {
-  name: 'extract_task_fields',
-  description:
-    'Extract structured YouTrack task fields from a natural-language description. Call this tool with every field you can confidently extract.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      summary: {
-        type: 'string',
-        description: 'Short task title. Empty string if clarification is needed.',
-      },
-      project: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Project name exactly as mentioned by the user, or null.',
-      },
-      priority: {
-        type: ['string', 'null'] as unknown as 'string',
-        enum: ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor', null],
-        description: 'Task priority or null.',
-      },
-      status: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Task status or null.',
-      },
-      category: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Task category (e.g. OPS, COMPANY, INBOX) or null.',
-      },
-      due_date: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Due date in YYYY-MM-DD format, or null.',
-      },
-      ticket: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Jira or external ticket number (e.g. JIRA-123), or null.',
-      },
-      notes: {
-        type: ['string', 'null'] as unknown as 'string',
-        description: 'Additional notes or context, or null.',
-      },
-      clarification_needed: {
-        type: ['string', 'null'] as unknown as 'string',
-        description:
-          'If the description is too vague to extract a meaningful summary, describe what clarification is needed. Otherwise null.',
-      },
-    },
-    required: [
-      'summary',
-      'project',
-      'priority',
-      'status',
-      'category',
-      'due_date',
-      'ticket',
-      'notes',
-      'clarification_needed',
-    ],
-  },
-};
-
 export async function extractTaskFields(
   key: string,
   description: string,
   projects: { id: string; name: string }[],
   model: string,
+  allowed: CreateFieldOptions | null = null,
 ): Promise<AiCreateTaskResult> {
   try {
     const client = makeClient(key);
@@ -116,7 +59,7 @@ export async function extractTaskFields(
     const outcome = await callTool(client, {
       model,
       max_tokens: EXTRACT_MAX_TOKENS,
-      tool: EXTRACT_TOOL,
+      tool: buildExtractTool(allowed),
       system:
         'You are a task extraction assistant for a YouTrack project management app. ' +
         'Extract structured task fields from the user\'s natural-language description. ' +

@@ -343,10 +343,40 @@ export async function moveIssue(
   if (i && projectById(targetProjectId)) i.projectId = targetProjectId;
 }
 
+// e2e observation (VERM-115): every create request that reached the fake,
+// and an optional one-shot server refusal to exercise the explained error.
+const createRequests: CreateIssuePayload[] = [];
+let nextCreateError: string | null = null;
+
+export function getCreateRequestsForTests(): CreateIssuePayload[] {
+  return createRequests.map((p) => ({ ...p }));
+}
+export function setNextCreateErrorForTests(message: string | null): void {
+  nextCreateError = typeof message === 'string' && message ? message : null;
+}
+
+/** YouTrack's refusal of an unknown enum/state value, as recorded 2026-11-24 (VERM-111). */
+export const RECORDED_ENTITY_NOT_FOUND = 'An Open-type entity with the specified name ({1}) was not found';
+
 export async function createIssue(
-  _url: string, _token: string, payload: CreateIssuePayload,
+  url: string, token: string, payload: CreateIssuePayload,
 ): Promise<CreateIssueResult> {
+  createRequests.push({ ...payload });
+  if (nextCreateError) {
+    const message = nextCreateError;
+    nextCreateError = null;
+    throw { status: 400, message };
+  }
   const proj = projectById(payload.projectId) ?? PROJECTS[0];
+  // The server's own rule: a value outside the project's field is refused
+  // with the recorded, unfilled template.
+  const meta = await readFakeFieldMetadata(url, token, proj.id);
+  for (const [name, value] of [['Status', payload.status], ['Priority', payload.priority], ['Category', payload.category]] as const) {
+    if (!value) continue;
+    const field = meta.fields.find((f) => f.name === name);
+    if (!field || !field.values.some((v) => v.name === value)) throw { status: 400, message: RECORDED_ENTITY_NOT_FOUND };
+  }
+  const fieldDefault = (name: string) => meta.fields.find((f) => f.name === name)?.defaults[0] ?? null;
   const n = ++seq;
   const issue: FakeIssue = {
     id: `${proj.id}-${n}`,
@@ -355,7 +385,10 @@ export async function createIssue(
     resolved: null,
     projectId: proj.id,
     fields: emptyFields({
-      status: payload.status, priority: payload.priority, category: payload.category,
+      // An omitted field takes the project's configured default, as on the server.
+      status: payload.status ?? fieldDefault('Status'),
+      priority: payload.priority ?? fieldDefault('Priority'),
+      category: payload.category ?? fieldDefault('Category'),
       dueDate: payload.dueDate, ticket: payload.ticket, ticketLink: payload.ticketLink,
       relatedLink: payload.relatedLink, notes: payload.notes, repoUrl: payload.repoUrl,
     }),
@@ -455,6 +488,8 @@ export const FAKE_DEFAULT_STATUS_VALUES: ReadonlyArray<{ name: string; isResolve
 ];
 
 export function fakeStatusValues(projectShortName: string): Array<{ name: string; isResolved: boolean }> {
+  const created = fakeCreateFields(projectShortName).Status;
+  if (created) return created.values.map((name) => ({ name, isResolved: ['Done', 'Wont do', 'Fixed'].includes(name) }));
   let seeded: Record<string, unknown> = {};
   try {
     seeded = JSON.parse(process.env.VERMILIAN_E2E_YT_STATUS_BUNDLES ?? '{}') as Record<string, unknown>;
@@ -466,17 +501,106 @@ export function fakeStatusValues(projectShortName: string): Array<{ name: string
     .map((v) => ({ name: v.name, isResolved: v.isResolved === true }));
 }
 
-export async function getProjectFieldMetadata(url: string, token: string, projectShortName: string): Promise<YouTrackProjectMetadata> {
+// Each fake project's create-form fields (VERM-115). Seeded per project by
+// VERMILIAN_E2E_YT_CREATE_FIELDS as JSON
+//   { "<shortName>": { "Status": { "values": [...], "default": "Triage" },
+//                      "Category": null, "Priority": { "values": [...] } } }
+// where null removes the field from that project. Unseeded fields keep the
+// built-in values below (Category mirrors the live shared bundle 158-8).
+const FAKE_CATEGORY_VALUES = [
+  'PROJECT', 'OPS', 'COMPANY', 'SERVICE', 'PRODUCTIVITY', 'INBOX', 'ADMIN',
+  'RELEASE', 'FINOPS', 'SECURITY', 'INGEST', 'HACKATHON', 'Playbook',
+];
+
+interface FakeCreateField { values: string[]; default: string | null }
+type FakeCreateFields = Partial<Record<'Status' | 'Priority' | 'Category', FakeCreateField | null>> & {
+  // `Date time entered`'s field type ("date and time" unless seeded); null removes it.
+  dateTimeEntered?: string | null;
+};
+
+function fakeCreateFields(projectShortName: string): FakeCreateFields {
+  let seeded: Record<string, unknown> = {};
+  try {
+    seeded = JSON.parse(process.env.VERMILIAN_E2E_YT_CREATE_FIELDS ?? '{}') as Record<string, unknown>;
+  } catch { /* unseeded */ }
+  const own = seeded[projectShortName];
+  if (typeof own !== 'object' || own === null) return {};
+  const out: FakeCreateFields = {};
+  if ('Date time entered' in own) {
+    const t = (own as Record<string, unknown>)['Date time entered'];
+    out.dateTimeEntered = typeof t === 'string' ? t : null;
+  }
+  for (const name of ['Status', 'Priority', 'Category'] as const) {
+    if (!(name in own)) continue;
+    const f = (own as Record<string, unknown>)[name];
+    if (f === null) { out[name] = null; continue; }
+    const values = Array.isArray((f as { values?: unknown })?.values)
+      ? ((f as { values: unknown[] }).values.filter((v) => typeof v === 'string') as string[])
+      : [];
+    const d = (f as { default?: unknown })?.default;
+    out[name] = { values, default: typeof d === 'string' ? d : null };
+  }
+  return out;
+}
+
+// e2e hooks (VERM-115): hold or fail a project's field read, to test a
+// project switch while options load and the Retry path.
+let metadataDelay: { ms: number; project: string } = { ms: 0, project: '' };
+let metadataFailures: { n: number; project: string } = { n: 0, project: '' };
+
+export function setFieldMetadataDelayForTests(ms: number, project?: string): void {
+  metadataDelay = { ms: Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0, project: typeof project === 'string' ? project : '' };
+}
+export function failFieldMetadataForTests(n: number, project?: string): void {
+  metadataFailures = { n: Number.isFinite(n) && n > 0 ? n : 0, project: typeof project === 'string' ? project : '' };
+}
+
+// Every project field read: the project asked for and which credential
+// reference the token came from (never the token), so a spec can check a
+// read went to the right workspace's connection — or was never made.
+const fieldMetadataRequests: Array<{ project: string; credentialRef: string }> = [];
+export function getFieldMetadataRequestsForTests(): Array<{ project: string; credentialRef: string }> {
+  return fieldMetadataRequests.map((r) => ({ ...r }));
+}
+
+export async function getProjectFieldMetadata(url: string, token: string, projectIdOrShortName: string): Promise<YouTrackProjectMetadata> {
+  fieldMetadataRequests.push({ project: projectIdOrShortName, credentialRef: refFromE2eFakeYouTrackToken(token) ?? 'legacy' });
+  return readFakeFieldMetadata(url, token, projectIdOrShortName);
+}
+
+async function readFakeFieldMetadata(url: string, token: string, projectIdOrShortName: string): Promise<YouTrackProjectMetadata> {
+  // The real endpoint accepts a project's id or its short name.
+  const projectShortName = (projectById(projectIdOrShortName) ?? projectByShortName(projectIdOrShortName))?.shortName;
+  if (!projectShortName) throw { status: 404, message: `Entity with id ${projectIdOrShortName} not found` };
+  if (metadataDelay.ms > 0 && (!metadataDelay.project || metadataDelay.project === projectShortName)) {
+    await new Promise((r) => setTimeout(r, metadataDelay.ms));
+  }
+  if (metadataFailures.n > 0 && (!metadataFailures.project || metadataFailures.project === projectShortName)) {
+    metadataFailures.n--;
+    throw { status: 503, message: 'Simulated field read failure' };
+  }
+  const seeded = fakeCreateFields(projectShortName);
   const priority = await getPriorityOrder(url, token, projectShortName);
-  return parseYouTrackProjectFields([
-    { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: priority.map((name, ordinal) => ({ name, ordinal })) } },
-    {
-      field: { name: 'Status' },
-      $type: 'StateProjectCustomField',
-      defaultValues: [{ name: 'To do' }],
-      bundle: { values: fakeStatusValues(projectShortName).map((v, ordinal) => ({ ...v, ordinal })) },
-    },
-  ]);
+  const raw: unknown[] = [];
+  const add = (name: string, $type: string, f: FakeCreateField, extra: (v: string) => Record<string, unknown> = () => ({})) =>
+    raw.push({
+      field: { name },
+      $type,
+      canBeEmpty: name !== 'Status',
+      defaultValues: f.default ? [{ name: f.default }] : [],
+      bundle: { values: f.values.map((v, ordinal) => ({ name: v, ordinal, ...extra(v) })) },
+    });
+  if (seeded.Priority !== null) add('Priority', 'EnumProjectCustomField', seeded.Priority ?? { values: priority, default: null });
+  if (seeded.Status !== null) {
+    const status = fakeStatusValues(projectShortName);
+    const resolved = new Set(status.filter((v) => v.isResolved).map((v) => v.name));
+    add('Status', 'StateProjectCustomField', seeded.Status ?? { values: status.map((v) => v.name), default: 'To do' }, (v) => ({ isResolved: resolved.has(v) }));
+  }
+  if (seeded.Category !== null) add('Category', 'StateProjectCustomField', seeded.Category ?? { values: FAKE_CATEGORY_VALUES, default: null });
+  if (seeded.dateTimeEntered !== null) {
+    raw.push({ field: { name: 'Date time entered', fieldType: { id: seeded.dateTimeEntered ?? 'date and time' } }, $type: 'SimpleProjectCustomField', canBeEmpty: true });
+  }
+  return parseYouTrackProjectFields(raw);
 }
 
 /**

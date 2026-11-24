@@ -32,9 +32,9 @@ The AI task creation feature lets the user describe a task in plain English. The
   {
     "summary": "string (required)",
     "project": "string or null — matched to a known project name",
-    "priority": "Show-stopper | Critical | Major | Normal | Minor | null",
-    "status": "To do | In Progress | Done | ... | null",
-    "category": "OPS | COMPANY | ... | null",
+    "priority": "one of the known project's Priority values, or null",
+    "status": "one of the known project's Status values, or null",
+    "category": "one of the known project's Category values, or null",
     "due_date": "ISO 8601 date string or null",
     "ticket": "string or null",
     "notes": "string or null",
@@ -42,6 +42,9 @@ The AI task creation feature lets the user describe a task in plain English. The
   }
   ```
 
+- [ ] **Allowed values (VERM-115).** When a project is already selected before the request, its own Status/Priority/Category values become the tool schema's enums (a field the project lacks is limited to null). With no project known, the fields are free strings. No value list is hard-coded.
+- [ ] Every project-field read for AI create (the known project before the request, the matched project after) uses the originating workspace's own connection. If the user switches workspace while Claude is answering, the lookup for the matched project is cancelled before any request, and the answer is discarded with a message to try again.
+- [ ] Before the review form opens, the main process checks the suggested status, priority and category against the project the review will open on: the one Claude identified, else the known one. Any value outside it is cleared, never sent, and flagged on the review form ("AI suggested Status "Open", which this project does not offer. Cleared."). A cleared field stays blank; a field Claude left empty takes the project's default.
 - [ ] If `clarification_needed` is non-null, the input modal stays open and the clarification text is displayed beneath the text area as a Vibe `Banner` (info). The user can refine the description and re-generate.
 
 ### Review and edit form
@@ -52,7 +55,7 @@ The AI task creation feature lets the user describe a task in plain English. The
 - [ ] Fields Claude could not confidently extract are left blank (not filled with a guess).
 - [ ] If Claude extracts a project name that does not match any known YouTrack project, the Project field is left blank and a Vibe inline error is shown beneath it: "Could not match a project — please select one."
 - [ ] The user can go back to the description input by clicking a **← Re-describe** link.
-- [ ] Submission follows the same flow as the standard create-task form, including the `Date time entered` auto-stamp.
+- [ ] Submission follows the same flow as the standard create-task form, including the `Date time entered` auto-stamp and the main-process recheck of workspace, project and values.
 
 ### Error handling
 

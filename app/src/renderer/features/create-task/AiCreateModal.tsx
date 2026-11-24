@@ -6,6 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { TaskForm, validateForm } from './TaskForm';
 import type { FormState } from './TaskForm';
 import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
+import { useTaskFormOptions } from './useTaskFormOptions';
+import { CREATE_FIELD_KEYS, CREATE_FIELD_NAMES, type CreateFieldKey } from '../../../shared/createFieldOptions';
+import { clearedFlag, type FieldFlags } from './formOptions';
 import styles from './AiCreateModal.module.css';
 
 interface AiCreateModalProps {
@@ -36,11 +39,13 @@ function buildFormFromFields(
   const fallbackProjectId =
     defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '';
 
+  // No assumed defaults (VERM-115): a field Claude left empty takes the
+  // project's own default once its options are read, or stays empty.
   return {
     summary: fields.summary,
     projectId: fields.projectId ?? fallbackProjectId,
-    priority: fields.priority ?? 'Normal',
-    status: fields.status ?? 'To do',
+    priority: fields.priority ?? '',
+    status: fields.status ?? '',
     category: fields.category ?? '',
     dueDate: fields.dueDate ?? '',
     ticket: fields.ticket ?? '',
@@ -66,8 +71,8 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     summary: '',
     projectId:
       defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '',
-    priority: 'Normal',
-    status: 'To do',
+    priority: '',
+    status: '',
     category: '',
     dueDate: '',
     ticket: '',
@@ -77,8 +82,12 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     repoUrl: '',
   });
   const [projectMatchError, setProjectMatchError] = useState(false);
+  const [optionsReady, setOptionsReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitErrorRefresh, setSubmitErrorRefresh] = useState(false);
+  // What the AI chose and what was cleared, for the review form (VERM-115).
+  const [review, setReview] = useState<{ key: number; touched: CreateFieldKey[]; flags: FieldFlags }>({ key: 0, touched: [], flags: {} });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -97,6 +106,8 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     const result = await window.vermilian.aiCreateTask({
       description: description.trim(),
       projects: projects.map((p) => ({ id: p.id, name: p.name })),
+      // The project already chosen, if any, so Claude is given its values.
+      projectId: form.projectId || undefined,
       workspaceId: askedFrom,
     });
 
@@ -117,8 +128,19 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
     }
 
     // Successful extraction — switch to review step
-    setForm(buildFormFromFields(fields, projects, defaultProjectId));
+    const next = buildFormFromFields(fields, projects, defaultProjectId);
+    const flags: FieldFlags = {};
+    for (const c of fields.clearedSuggestions ?? []) {
+      const key = CREATE_FIELD_KEYS.find((k) => CREATE_FIELD_NAMES[k] === c.field);
+      if (key) flags[key] = clearedFlag(key, c.value, true);
+    }
+    setForm(next);
+    // A value the AI gave counts as chosen, and so does one cleared as
+    // invalid (it stays empty and flagged); one it left empty takes the default.
+    setReview((r) => ({ key: r.key + 1, touched: CREATE_FIELD_KEYS.filter((k) => next[k] !== '' || k in flags), flags }));
     setProjectMatchError(fields.projectMatchError);
+    setSubmitError(null);
+    setSubmitErrorRefresh(false);
     setStep('review');
   }
 
@@ -132,10 +154,12 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
 
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitErrorRefresh(false);
 
     const dueDate = form.dueDate ? new Date(form.dueDate).getTime() : null;
 
     const result = await window.vermilian.createIssue({
+      workspaceId: ai.workspaceId,
       projectId: form.projectId,
       summary: form.summary.trim(),
       status: form.status || null,
@@ -153,6 +177,7 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
 
     if (!result.ok || !result.idReadable) {
       setSubmitError(result.error ?? 'Failed to create task.');
+      setSubmitErrorRefresh(Boolean(result.refreshOptions));
       return;
     }
 
@@ -170,7 +195,7 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
   const { summaryEmpty, projectEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } =
     validateForm(form);
   const canCreate =
-    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !submitting;
+    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !submitting && optionsReady;
 
   // ─── Input step ─────────────────────────────────────────────────────────────
 
@@ -243,13 +268,19 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
           </div>
 
           <div className={styles.fields}>
-            <TaskForm
+            <ReviewForm
+              key={review.key}
+              workspaceId={ai.workspaceId}
               form={form}
-              onChange={setForm}
+              setForm={setForm}
               projects={projects}
-              loading={submitting}
-              apiError={submitError}
+              touched={review.touched}
+              flags={review.flags}
+              submitting={submitting}
+              submitError={submitError}
+              submitErrorRefresh={submitErrorRefresh}
               projectMatchError={projectMatchError}
+              onReadyChange={setOptionsReady}
             />
           </div>
 
@@ -273,5 +304,42 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
         </form>
       </ModalContent>
     </Modal>
+  );
+}
+
+// The review step's form. Remounted for each AI answer (its `key`), so the
+// options hook starts from that answer's chosen and cleared fields.
+function ReviewForm({
+  workspaceId, form, setForm, projects, touched, flags, submitting, submitError, submitErrorRefresh, projectMatchError, onReadyChange,
+}: {
+  workspaceId: string;
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  projects: YouTrackProject[];
+  touched: CreateFieldKey[];
+  flags: FieldFlags;
+  submitting: boolean;
+  submitError: string | null;
+  submitErrorRefresh: boolean;
+  projectMatchError: boolean;
+  onReadyChange: (ready: boolean) => void;
+}) {
+  const fieldOptions = useTaskFormOptions(workspaceId, projects, form, setForm, {
+    touched,
+    fromAi: touched,
+    flags,
+  });
+  useEffect(() => { onReadyChange(fieldOptions.ready); }, [fieldOptions.ready, onReadyChange]);
+  return (
+    <TaskForm
+      form={form}
+      onChange={setForm}
+      projects={projects}
+      fieldOptions={fieldOptions}
+      loading={submitting}
+      apiError={submitError}
+      apiErrorRefresh={submitErrorRefresh}
+      projectMatchError={projectMatchError}
+    />
   );
 }

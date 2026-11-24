@@ -17,10 +17,11 @@ import { youtrackPriorityOrder, type YouTrackProjectCustomField } from './priori
 
 /** The `fields=` selection for `/api/admin/projects/{id}/customFields`. */
 export const YOUTRACK_PROJECT_FIELDS_SELECTION =
-  'field(name),$type,canBeEmpty,defaultValues(name),bundle(values(name,isResolved,ordinal,archived))';
+  'field(name,fieldType(id)),$type,canBeEmpty,defaultValues(name),bundle(values(name,isResolved,ordinal,archived))';
 
 /** One project custom field as the request above returns it; every part optional. */
 export interface RawYouTrackProjectField extends YouTrackProjectCustomField {
+  field?: { name?: unknown; fieldType?: { id?: unknown } | null } | null;
   $type?: unknown;
   canBeEmpty?: unknown;
   defaultValues?: Array<{ name?: unknown } | null> | null;
@@ -40,6 +41,8 @@ export interface YouTrackProjectField {
   name: string;
   /** e.g. `StateProjectCustomField`, `EnumProjectCustomField`. */
   type: string;
+  /** The field's value type, e.g. `date`, `date and time`, `string`, `state[1]`; '' when not returned. */
+  fieldType: string;
   canBeEmpty: boolean;
   /** The project's configured default value names, in order. */
   defaults: string[];
@@ -78,9 +81,31 @@ export function parseYouTrackProjectFields(raw: unknown): YouTrackProjectMetadat
       if (!values.some((x) => x.name === v.name)) values.push({ name: v.name, isResolved: v.isResolved, archived: v.archived });
     }
     const defaults = (Array.isArray(f.defaultValues) ? f.defaultValues : []).map((d) => str(d?.name)).filter(Boolean);
-    fields.push({ name, type: str(f.$type), canBeEmpty: f.canBeEmpty === true, defaults, values });
+    fields.push({ name, type: str(f.$type), fieldType: str(f.field?.fieldType?.id), canBeEmpty: f.canBeEmpty === true, defaults, values });
   }
   return { fields, priorityOrder: youtrackPriorityOrder(list) ?? [] };
+}
+
+/** The automatic creation timestamp's field (VERM-115). */
+export const DATE_TIME_ENTERED_FIELD = 'Date time entered';
+
+/** The issue-level `$type` a timestamp is written with, per project field type. */
+export type DateTimeEnteredIssueType = 'DateIssueCustomField' | 'SimpleIssueCustomField';
+
+/**
+ * The issue-level `$type` for the automatic `Date time entered` timestamp
+ * (epoch milliseconds), from the selected project's own definition of the
+ * field (VERM-115). Read off the live instance on 2026-11-24: a `date` field
+ * (e.g. Due Date) is written as `DateIssueCustomField`, a `date and time`
+ * field (Date time entered in every current project) as
+ * `SimpleIssueCustomField`. null — send nothing — when the project has no
+ * such field, or defines it with any other type.
+ */
+export function dateTimeEnteredIssueType(meta: YouTrackProjectMetadata): DateTimeEnteredIssueType | null {
+  const f = meta.fields.find((x) => x.name === DATE_TIME_ENTERED_FIELD);
+  if (f?.fieldType === 'date') return 'DateIssueCustomField';
+  if (f?.fieldType === 'date and time') return 'SimpleIssueCustomField';
+  return null;
 }
 
 /**

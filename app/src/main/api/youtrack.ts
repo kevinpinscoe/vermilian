@@ -188,7 +188,7 @@ import { isValidLocalId } from '../../shared/tracker';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
-import { parseYouTrackProjectFields, YOUTRACK_PROJECT_FIELDS_SELECTION, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import { parseYouTrackProjectFields, YOUTRACK_PROJECT_FIELDS_SELECTION, type DateTimeEnteredIssueType, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
 import { buildStandupQuery, standupGroupFor, type StandupPlan } from '../../shared/youtrackStandup';
 import { mapYouTrackLinks, type RawIssueLink } from './youtrackLinks';
 import {
@@ -559,6 +559,12 @@ export interface CreateIssuePayload {
   relatedLink: string | null;
   notes: string | null;
   repoUrl: string | null;
+  /**
+   * The issue-level `$type` to send the automatic `Date time entered`
+   * timestamp with, taken from the selected project's own field definition
+   * (VERM-115, services/createTask.ts). Omitted or null: the field is not sent.
+   */
+  dateTimeEnteredType?: DateTimeEnteredIssueType | null;
 }
 
 export interface CreateIssueResult {
@@ -585,7 +591,9 @@ export async function createIssue(
     if (!include) continue;
     customFields.push({ name: def.ytName, $type: def.$type, value: toYouTrackValue(def, value) });
   }
-  customFields.push({ name: 'Date time entered', $type: 'DateIssueCustomField', value: Date.now() });
+  if (payload.dateTimeEnteredType) {
+    customFields.push({ name: 'Date time entered', $type: payload.dateTimeEnteredType, value: Date.now() });
+  }
 
   return request<CreateIssueResult>(url, token, '/api/issues?fields=id,idReadable', {
     method: 'POST',
