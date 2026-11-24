@@ -21,6 +21,7 @@ import { runwayEntryFor, useJiraRunway, type JiraRunwayIndex } from './jiraRunwa
 import { useJiraWorkspaceIssues } from './useJiraWorkspaceIssues';
 import { workspaceJiraIssuesPrefix } from './jiraBoardSync';
 import styles from '../priority-desk/PriorityDesk.module.css';
+import { RunwayNumberBadge } from '../runway/RunwayNumberBadge';
 
 interface JiraPriorityDeskProps {
   workspaceId: string;
@@ -133,6 +134,8 @@ function JiraDeskSlot({
         >
           <div className={styles.cardTop}>
             <span className={styles.cardId}>{issueKey}</span>
+            {/* Its Runway # in this workspace, read-only (VERM-99). */}
+            <RunwayNumberBadge workspaceId={workspaceId} ticket={{ tracker: 'jira', keys: [issueKey], entityId: null }} />
             {issue?.fields.priority && <ChipCell value={issue.fields.priority} colorMap={PRIORITY_COLORS} />}
           </div>
 

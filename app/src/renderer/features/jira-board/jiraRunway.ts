@@ -77,10 +77,12 @@ async function listEntries(workspaceId: string): Promise<RunwayEntry[]> {
   return result.entries;
 }
 
-export function useJiraRunway(workspaceId: string) {
+export function useJiraRunway(workspaceId: string, enabled = true) {
   const query = useQuery({
     queryKey: jiraRunwayQueryKey(workspaceId),
     queryFn: () => listEntries(workspaceId),
+    // Off for a YouTrack workspace, whose Desk is not kept here (VERM-99).
+    enabled,
     // Local and only ever changed through this app: no refetch timer.
     staleTime: Infinity,
   });

@@ -327,13 +327,23 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 
 ### Priority Desk (display only)
 
-- [ ] Priority Desk behavior and storage are unchanged for both trackers: YouTrack's `Focus`,
+- [x] Priority Desk behavior and storage are unchanged for both trackers: YouTrack's `Focus`,
       `Focus rank` and `Why now` fields; Jira's `runway_entry`; Choose next, *Not this week*, the
       AI adviser and Daily Review. Desk picks are not restricted to the Runway.
-- [ ] A Desk card shows the ticket's Runway # in the active workspace, when it has one.
-- [ ] Runway rows and All tasks rows show the ticket's Desk slot (Now, Next or Then), when it has
-      one.
-- [ ] Promoting or demoting a ticket on the Desk never changes a Runway position.
+- [x] A Desk card shows the ticket's Runway # in the active workspace, when it has one: the Now,
+      Next and Then cards for both trackers, and YouTrack's Choose next candidates (VERM-99). It is
+      read-only, blank when the ticket is not on this Runway, and `?` when its position cannot be
+      verified; the candidate order is unchanged.
+- [x] Runway rows and All tasks rows show the ticket's Desk slot (Now, Next or Then), when it has
+      one, as a read-only chip beside the Runway # (VERM-99). For YouTrack the slot shows only when
+      the ticket is on the active workspace's Desk — in its projects, open, Focus rank 1–3 — so a
+      ticket ranked on another workspace's Desk shows none; a rank two tickets share shows on both,
+      marked shared. For Jira it is the workspace's own Desk entry. A Runway row's stored tracker
+      is checked first, so a row stored for the other tracker shows none even when its key
+      matches; it is then matched by its stored ID and by the IDs the tracker returned, so a moved
+      Jira ticket keeps its slot under either key. Jira's All tasks has cards only, and they are
+      unchanged: their star and rank control already shows the rank.
+- [x] Promoting or demoting a ticket on the Desk never changes a Runway position.
 
 ### Markdown import
 
