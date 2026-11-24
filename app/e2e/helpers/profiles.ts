@@ -114,7 +114,7 @@ export function sharedTmpDir(): string {
 
 /** Points every temp-directory variable at `root`. Returns the previous temp directory. */
 export function redirectTmp(root: string): string {
-  const original = process.env[ORIGINAL_TMP_ENV] || os.tmpdir();
+  const original = os.tmpdir();
   process.env[ORIGINAL_TMP_ENV] = original;
   for (const name of TMP_VARS) process.env[name] = root;
   return original;
@@ -209,6 +209,70 @@ function evidenceFolders(root: string): string[] {
       .map((name) => path.join(root, name));
   } catch {
     return [];
+  }
+}
+
+/** The environment variables a run's setup changes, all restored by its teardown. */
+export const RUN_ENV_VARS = [RUN_ROOT_ENV, ORIGINAL_TMP_ENV, ...TMP_VARS] as const;
+
+/**
+ * Captures `names` as they are now and returns a function that puts them
+ * back, deleting any that were unset rather than leaving them as "" or the
+ * changed value.
+ */
+export function snapshotEnv(names: readonly string[]): () => void {
+  const saved = names.map((name) => [name, Object.prototype.hasOwnProperty.call(process.env, name), process.env[name]] as const);
+  return () => {
+    for (const [name, wasSet, value] of saved) {
+      if (wasSet) process.env[name] = value;
+      else delete process.env[name];
+    }
+  };
+}
+
+export interface StartRunOptions {
+  keep?: () => boolean;
+  remove?: (dir: string) => void;
+  log?: (line: string) => void;
+}
+
+/**
+ * The body of global-setup.ts: sweeps stale roots, creates this run's root,
+ * points the temp-directory variables at it, and returns the teardown. The
+ * teardown runs the end-of-run check and then, in a finally block, restores
+ * every variable in RUN_ENV_VARS to what it was before setup, whether the
+ * root was removed, kept, or could not be removed. So a second run in the
+ * same process starts from the real temp directory, not the first run's
+ * (deleted) root.
+ */
+export function startRun(opts: StartRunOptions = {}): () => void {
+  const log = opts.log ?? ((line: string) => console.log(line));
+  const restoreEnv = snapshotEnv(RUN_ENV_VARS);
+  try {
+    for (const dir of sweepStale()) log(`[e2e] removed stale profile directory ${dir}`);
+    const root = createRunRoot();
+    process.env[RUN_ROOT_ENV] = root;
+    const tmp = redirectTmp(root);
+    const before = listE2eFolders(tmp);
+    return () => {
+      try {
+        const report = endRun({
+          root,
+          tmp,
+          before,
+          keep: (opts.keep ?? keepProfiles)(),
+          evidenceDir: process.env[EVIDENCE_ENV],
+          remove: opts.remove,
+        });
+        for (const line of report.lines) log(line);
+        if (!report.ok) throw new Error(`e2e cleanup check failed: ${root} is still present`);
+      } finally {
+        restoreEnv();
+      }
+    };
+  } catch (err) {
+    restoreEnv();
+    throw err;
   }
 }
 

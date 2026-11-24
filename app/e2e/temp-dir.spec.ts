@@ -18,7 +18,10 @@ import {
   evidencePath,
   listE2eFolders,
   ORIGINAL_TMP_ENV,
+  RUN_ENV_VARS,
   RUN_ROOT_ENV,
+  snapshotEnv,
+  startRun,
 } from './helpers/profiles';
 
 function inside(child: string, parent: string): boolean {
@@ -123,5 +126,83 @@ test.describe('e2e temp directory', () => {
     expect(report.lines).toContain(`[e2e]   ${leaked}`);
     expect(report.lines.join('\n')).not.toContain(old);
     expect(fs.existsSync(leaked)).toBe(true);
+  });
+
+  // setup/teardown in this worker, as if it were a fresh Playwright process
+  // whose temp directory is `original`, with TMP, TEMP and both e2e
+  // variables unset. The worker's own environment is put back afterwards.
+  function asFreshProcess(fn: (original: string) => void): void {
+    const original = scratch();
+    const restoreWorker = snapshotEnv(RUN_ENV_VARS);
+    try {
+      for (const name of RUN_ENV_VARS) delete process.env[name];
+      process.env.TMPDIR = original;
+      fn(original);
+    } finally {
+      restoreWorker();
+    }
+  }
+
+  function expectEnvRestored(original: string): void {
+    expect(process.env.TMPDIR).toBe(original);
+    for (const name of RUN_ENV_VARS.filter((n) => n !== 'TMPDIR')) {
+      expect(Object.prototype.hasOwnProperty.call(process.env, name), `${name} stays unset`).toBe(false);
+    }
+    expect(os.tmpdir()).toBe(original);
+  }
+
+  const quiet = { log: () => {} };
+
+  test('setup then teardown twice in one process: the second root is under the original temp directory', () => {
+    asFreshProcess((original) => {
+      const roots: string[] = [];
+      for (let run = 0; run < 2; run++) {
+        const teardown = startRun({ ...quiet, keep: () => false });
+        const root = process.env[RUN_ROOT_ENV]!;
+        roots.push(root);
+        expect(path.dirname(root)).toBe(original);
+        expect(os.tmpdir()).toBe(root);
+        expect(process.env[ORIGINAL_TMP_ENV]).toBe(original);
+        teardown();
+        expect(fs.existsSync(root)).toBe(false);
+        expectEnvRestored(original);
+      }
+      expect(roots[1]).not.toBe(roots[0]);
+    });
+  });
+
+  test('teardown restores the environment in keep mode', () => {
+    asFreshProcess((original) => {
+      const teardown = startRun({ ...quiet, keep: () => true });
+      const root = process.env[RUN_ROOT_ENV]!;
+      teardown();
+      expect(fs.existsSync(root)).toBe(true);
+      expectEnvRestored(original);
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+  });
+
+  test('teardown restores the environment when the cleanup check fails', () => {
+    asFreshProcess((original) => {
+      const teardown = startRun({ ...quiet, keep: () => false, remove: () => {} });
+      const root = process.env[RUN_ROOT_ENV]!;
+      expect(() => teardown()).toThrow(`e2e cleanup check failed: ${root} is still present`);
+      expectEnvRestored(original);
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+  });
+
+  test('teardown restores variables that were set to their original values', () => {
+    asFreshProcess((original) => {
+      process.env.TMP = '/original-tmp';
+      process.env.TEMP = '';
+      const teardown = startRun({ ...quiet, keep: () => false });
+      expect(process.env.TMP).toBe(process.env[RUN_ROOT_ENV]);
+      teardown();
+      expect(process.env.TMPDIR).toBe(original);
+      expect(process.env.TMP).toBe('/original-tmp');
+      expect(process.env.TEMP).toBe('');
+      expect(Object.prototype.hasOwnProperty.call(process.env, RUN_ROOT_ENV)).toBe(false);
+    });
   });
 });
