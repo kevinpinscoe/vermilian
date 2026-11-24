@@ -58,6 +58,30 @@ async function list(page: Page, workspaceId: string): Promise<Array<{ issueId: s
     .sort((a, b) => a.issueId.localeCompare(b.issueId));
 }
 
+// VERM-109: every warning box in the import preview fits inside the modal.
+// Vibe's AttentionBox is width:100% plus horizontal padding; under the
+// default content-box sizing it ran 32px past ModalContent and its text was
+// clipped at the right edge. Measured in the real renderer, since unit tests
+// have no layout.
+async function expectWarningsInsideModal(page: Page): Promise<void> {
+  const overflow = await page.getByTestId('runway-import-modal').evaluate((modal) => {
+    const boxes = Array.from(modal.querySelectorAll<HTMLElement>('[data-vibe="AttentionBox"]'));
+    // ModalContent: the element the preview list is rendered into.
+    const content = modal.querySelector('dl')?.parentElement ?? modal;
+    const edge = content.getBoundingClientRect().right;
+    return {
+      boxes: boxes.length,
+      // Pixels by which each box's right edge passes the content's.
+      past: boxes.map((b) => Math.max(0, Math.round(b.getBoundingClientRect().right - edge))),
+      // Pixels by which each box's text is wider than the room it is given.
+      clipped: boxes.map((b) => Math.max(0, b.scrollWidth - b.clientWidth)),
+    };
+  });
+  expect(overflow.boxes).toBeGreaterThanOrEqual(2);
+  expect(overflow.past).toEqual(overflow.past.map(() => 0));
+  expect(overflow.clipped).toEqual(overflow.clipped.map(() => 0));
+}
+
 async function openAdvanced(page: Page): Promise<void> {
   await page.locator('[data-testid="topbar-settings-btn"]').click();
   await expect(page.getByRole('heading', { name: 'Advanced' })).toBeVisible();
@@ -179,6 +203,7 @@ test.describe('Runway snapshot import', () => {
     await expect(page.getByTestId('runway-import-replace-warning')).toContainText(
       'This computer has Runway changes newer than this snapshot.',
     );
+    await expectWarningsInsideModal(page);
     await expect(page.getByTestId('runway-import-backup-dir')).toHaveText(path.join(userDataDir, 'runway-backups'));
 
     await page.getByTestId('runway-import-confirm').click();
