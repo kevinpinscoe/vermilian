@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_DEFS } from './fields';
 import { compareTicketIds, priorityRank, runwaySortComparator, sortByRunwaySort, type RunwaySort, type SortableTicket } from './runwaySort';
 
 // Synthetic keys and names only.
 // YouTrack's one Priority bundle, most urgent first.
-const YT = FIELD_DEFS.priority.options as readonly string[];
+// A YouTrack Priority order as fixture data (no app constant since VERM-117).
+const YT: readonly string[] = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'];
 const DEMO = ['Highest', 'High', 'Medium', 'Low', 'Lowest'];
 const OPS = ['P1', 'P2', 'P3'];
 

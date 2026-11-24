@@ -3,13 +3,14 @@
 //     Affected host [FLDW, core] plus an archived "retired-vm".
 //   - TST2: Status where "Consider" and "Fixed" resolve; its own Priority
 //     [P1, P2, P3] (so a fixture issue's "Normal" is outside it); Affected
-//     host [web1, mail1].
+//     host [web1, mail1]; no Project health field at all.
 export const PROJECT_FIELD_ENV: Record<string, string> = {
   VERMILIAN_E2E_YT_CREATE_FIELDS: JSON.stringify({
     TEST: { 'Affected host': { values: ['FLDW', 'core'], archived: ['retired-vm'] } },
     TST2: {
       Priority: { values: ['P1', 'P2', 'P3'], default: null },
       'Affected host': { values: ['web1', 'mail1'] },
+      'Project health': null,
     },
   }),
   VERMILIAN_E2E_YT_STATUS_BUNDLES: JSON.stringify({

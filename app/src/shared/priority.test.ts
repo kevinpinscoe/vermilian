@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { comparePriority, isYouTrackShortName, jiraPriorityOrder, priorityOrdinal, youtrackPriorityOrder } from './priority';
-import { PRIORITY_OPTIONS } from './workspace';
+// The live shared Priority bundle's values as fixture data (no app constant since VERM-117).
+const PRIORITY_OPTIONS: readonly string[] = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'];
 
 // Fictional values only. A scheme shaped like a site's seven-value one, which
 // differs from the YouTrack list both in its values and in its order.

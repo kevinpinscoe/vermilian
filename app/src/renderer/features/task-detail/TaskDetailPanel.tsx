@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Loader, Text, AttentionBox, Button, IconButton } from '@vibe/core';
 import { CloseSmall, Delete, Play } from '@vibe/icons';
 import type { IssueDetail } from '../../../shared/workspace';
@@ -8,6 +8,9 @@ import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS, getContrastColor } fro
 import { FocusControl } from '../project-board/FocusControl';
 import { RunwayNumberControl } from '../runway/RunwayNumberControl';
 import { useIssueDetail, usePatchIssue, useDeleteIssue } from './api';
+import { dropdownOptions, fieldChoices, type ProjectFieldChoices } from '../../../shared/projectFieldValues';
+import { useProjectFieldValues } from '../project-fields/useProjectFieldValues';
+import { useWorkspaceStore } from '../../stores/workspace';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useQueryClient } from '@tanstack/react-query';
 import styles from './TaskDetailPanel.module.css';
@@ -109,41 +112,84 @@ function TextField({ value, placeholder, multiline, readOnly, onSave, onEnter }:
 
 interface SelectFieldProps {
   value: string | null;
-  options: string[];
+  /** The project's own values for this field (VERM-117), or null while unknown. */
+  choices: ProjectFieldChoices | null;
+  /** The read failed: the current value stays visible, with Retry. */
+  readError: string | null;
+  onRetry: () => void;
   colorMap?: Record<string, string>;
   onSave: (v: string | null) => void;
   onEnter?: () => void;
 }
 
-function SelectField({ value, options, colorMap, onSave, onEnter }: SelectFieldProps) {
+// A dropdown over the issue's own project's values (VERM-117). Opening an
+// issue never changes it: nothing is saved until the user picks a value. A
+// saved value that is archived (or no longer in the project) stays shown as
+// the current value and is never re-sent; the active values are offered as
+// its replacements. Until the values are known only the current value is
+// shown, and a failed read offers Retry rather than any fallback list.
+function SelectField({ value, choices, readError, onRetry, colorMap, onSave, onEnter }: SelectFieldProps) {
   const [editing, setEditing] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value || null;
     setEditing(false);
+    if (v === value) return;
     onSave(v);
     onEnter?.();
   }
 
   const bg = colorMap && value ? (colorMap[value] ?? '#C4C4C4') : undefined;
   const color = bg ? getContrastColor(bg) : undefined;
+  const { options, currentInactive } = choices ? dropdownOptions(choices, value) : { options: [] as string[], currentInactive: false };
+  const absent = Boolean(choices && !choices.present);
+  const archived = Boolean(value && choices?.archived.includes(value));
+  const canEdit = Boolean(choices && choices.present);
+
+  const display = (
+    <span className={`${styles.fieldValue} ${bg ? styles.chip : ''}`} style={bg ? { backgroundColor: bg, color } : undefined} data-testid="detail-select-value">
+      {value || <span className={styles.fieldPlaceholder}>—</span>}
+    </span>
+  );
+
+  if (!canEdit) {
+    return (
+      <span className={styles.selectState}>
+        {display}
+        {absent && <span className={styles.fieldNote} data-testid="detail-select-absent">Not a field in this project</span>}
+        {!choices && !readError && <span className={styles.fieldNote} data-testid="detail-select-loading">Loading values…</span>}
+        {!choices && readError && (
+          <button type="button" className={styles.fieldRetry} data-testid="detail-select-retry" title={readError} onClick={onRetry}>
+            Couldn't load values — Retry
+          </button>
+        )}
+      </span>
+    );
+  }
 
   if (!editing) {
     return (
-      <button
-        type="button"
-        className={`${styles.fieldValue} ${styles.fieldValueEditable} ${bg ? styles.chip : ''}`}
-        style={bg ? { backgroundColor: bg, color } : undefined}
-        onClick={() => setEditing(true)}
-      >
-        {value || <span className={styles.fieldPlaceholder}>—</span>}
-      </button>
+      <span className={styles.selectState}>
+        <button
+          type="button"
+          data-testid="detail-select-button"
+          className={`${styles.fieldValue} ${styles.fieldValueEditable} ${bg ? styles.chip : ''}`}
+          style={bg ? { backgroundColor: bg, color } : undefined}
+          onClick={() => setEditing(true)}
+        >
+          {value || <span className={styles.fieldPlaceholder}>—</span>}
+        </button>
+        {currentInactive && (
+          <span className={styles.fieldNote} data-testid="detail-select-inactive">{archived ? 'Archived' : 'Not in this project'}</span>
+        )}
+      </span>
     );
   }
 
   return (
     <select
       className={styles.fieldSelect}
+      data-testid="detail-select"
       value={value ?? ''}
       onChange={handleChange}
       onBlur={() => setEditing(false)}
@@ -151,7 +197,9 @@ function SelectField({ value, options, colorMap, onSave, onEnter }: SelectFieldP
     >
       <option value="">—</option>
       {options.map((o) => (
-        <option key={o} value={o}>{o}</option>
+        <option key={o} value={o} disabled={currentInactive && o === value}>
+          {currentInactive && o === value ? `${o} (${archived ? 'archived' : 'not in this project'})` : o}
+        </option>
       ))}
     </select>
   );
@@ -402,6 +450,12 @@ export function TaskDetailPanel({
   // of which view opened the panel. Falls back to the prop until the issue
   // loads, and stays on the prop for a caller that never had one to begin with.
   const effectiveProjectShortName = issue?.project.shortName ?? projectShortName;
+  // The ticket's own project's select-field values (VERM-117), on the active
+  // workspace's own connection.
+  const activeWorkspaceId = useWorkspaceStore((st) => st.activeWorkspaceId);
+  const projectKey = issue?.project.shortName ?? '';
+  const fieldValues = useProjectFieldValues(activeWorkspaceId, useMemo(() => (projectKey ? [projectKey] : []), [projectKey]));
+  const projectValues = projectKey ? fieldValues.byProject.get(projectKey) : undefined;
   const patchMutation = usePatchIssue(issueId, effectiveProjectShortName, runwayWorkspaceId);
   const deleteMutation = useDeleteIssue(effectiveProjectShortName);
   const queryClient = useQueryClient();
@@ -492,7 +546,9 @@ export function TaskDetailPanel({
                 <FieldRow key={key} label={def.label} fieldName={key}>
                   <SelectField
                     value={value as string | null}
-                    options={[...(def.options ?? [])]}
+                    choices={projectValues ? fieldChoices(projectValues, key) : null}
+                    readError={projectValues ? null : fieldValues.errors.get(projectKey) ?? null}
+                    onRetry={() => fieldValues.retry(projectKey)}
                     colorMap={SELECT_COLOR_MAPS[key]}
                     onSave={onSave}
                     onEnter={onEnter}
