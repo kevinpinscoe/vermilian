@@ -162,7 +162,10 @@ export const RECOMMENDATION_SYSTEM_PROMPT =
   'You never write, apply, or suggest applying any field change yourself; you only ' +
   'recommend. If the candidate set or outcome context genuinely is not enough to make a sound ' +
   'call, set clarification_needed to a concrete question instead of guessing, and leave ranked ' +
-  'and alternates empty. Never recommend an issue id that is not one of the given candidates.';
+  'and alternates empty. Never recommend an issue id that is not one of the given candidates. ' +
+  // tool_choice is "auto" (VERM-113), so the instruction to answer through the
+  // tool has to be in the prompt.
+  'Always answer by calling the recommend_priority tool, never in plain text.';
 
 // ─── Response parsing ───────────────────────────────────────────────────────
 
