@@ -1,16 +1,5 @@
 /* StandupModal */
 
-/*
- * ModalBasicLayout (VERM-116) gives the header and the scrollable content
- * width: 100% plus inline padding, and assumes a global border-box reset that
- * Vermilian does not have. Under the content-box default both ran 32px past
- * the dialog's right edge, so the heading overlapped the close button and the
- * Generate button was clipped. e2e/standup-dialog-layout.spec.ts measures it.
- */
-.layout > * {
-  box-sizing: border-box;
-}
-
 .configStep,
 .reportStep {
   display: flex;

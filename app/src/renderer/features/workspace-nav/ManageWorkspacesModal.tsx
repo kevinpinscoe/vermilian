@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, Workspace } from '../../../shared/workspace';
 import { setWorkspaceProjects } from '../../../shared/workspace';
 import type { WorkspaceStorageMode } from '../../../shared/activeWorkspace';
 import styles from './ManageWorkspacesModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 // Sentinel destination: leave the projects in no workspace at all. They keep
 // existing and resurface under "Unassigned" in the rail.
@@ -165,152 +166,154 @@ export function ManageWorkspacesModal({
 
   return (
     <Modal id="manage-workspaces-modal" show onClose={onClose} size="medium">
-      <ModalHeader title="Manage workspaces" />
-      <ModalContent>
-        <div className={styles.list}>
-          {sorted.map((ws, i) => {
-            const count = projectCount(ws);
-            return (
-              <div key={ws.id} className={styles.row} data-testid="workspace-row" data-ws-name={ws.name}>
-                <div className={styles.reorder}>
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title="Manage workspaces" />
+        <ModalContent>
+          <div className={styles.list}>
+            {sorted.map((ws, i) => {
+              const count = projectCount(ws);
+              return (
+                <div key={ws.id} className={styles.row} data-testid="workspace-row" data-ws-name={ws.name}>
+                  <div className={styles.reorder}>
+                    <button
+                      type="button" className={styles.iconBtn} aria-label="Move up"
+                      disabled={i === 0} onClick={() => handleMove(ws, -1)}
+                    >↑</button>
+                    <button
+                      type="button" className={styles.iconBtn} aria-label="Move down"
+                      disabled={i === sorted.length - 1} onClick={() => handleMove(ws, 1)}
+                    >↓</button>
+                  </div>
+
+                  {editingId === ws.id ? (
+                    <input
+                      autoFocus
+                      className={styles.nameInput}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onBlur={() => commitRename(ws)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRename(ws);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <button type="button" className={styles.name} onClick={() => startRename(ws)} title={`${ws.name} — click to rename`}>
+                      <span className={styles.nameText}>{ws.name}</span>
+                      {ws.id === config.activeWorkspaceId && <span className={styles.activeBadge}>active</span>}
+                    </button>
+                  )}
+
+                  <span className={styles.count}>{count} {count === 1 ? 'project' : 'projects'}</span>
+
+                  {storage === 'per-workspace' && onEditAiCredential && (
+                    <button
+                      type="button"
+                      data-testid="workspace-ai-btn"
+                      className={styles.deleteBtn}
+                      title="Choose the Anthropic credential this workspace's AI features use"
+                      onClick={() => onEditAiCredential(ws.id)}
+                    >AI credential…</button>
+                  )}
+
+                  {storage === 'per-workspace' && onEditMasterPlan && (
+                    <button
+                      type="button"
+                      data-testid="workspace-master-plan-btn"
+                      className={styles.deleteBtn}
+                      title="Choose the YouTrack article this workspace's Priority Desk uses as its master plan"
+                      onClick={() => onEditMasterPlan(ws.id)}
+                    >Master plan…</button>
+                  )}
+
+                  {storage === 'per-workspace' && onEditPrerequisites && (
+                    <button
+                      type="button"
+                      data-testid="workspace-prerequisites-btn"
+                      className={styles.deleteBtn}
+                      title="Choose which link types make a ticket wait on another in this workspace"
+                      onClick={() => onEditPrerequisites(ws.id)}
+                    >Prerequisites…</button>
+                  )}
+
                   <button
-                    type="button" className={styles.iconBtn} aria-label="Move up"
-                    disabled={i === 0} onClick={() => handleMove(ws, -1)}
-                  >↑</button>
-                  <button
-                    type="button" className={styles.iconBtn} aria-label="Move down"
-                    disabled={i === sorted.length - 1} onClick={() => handleMove(ws, 1)}
-                  >↓</button>
+                    type="button"
+                    data-testid="workspace-delete"
+                    className={styles.deleteBtn}
+                    disabled={onlyOne}
+                    title={onlyOne ? 'At least one workspace must exist' : undefined}
+                    onClick={() => requestDelete(ws)}
+                  >Delete</button>
                 </div>
-
-                {editingId === ws.id ? (
-                  <input
-                    autoFocus
-                    className={styles.nameInput}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onBlur={() => commitRename(ws)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') commitRename(ws);
-                      if (e.key === 'Escape') setEditingId(null);
-                    }}
-                  />
-                ) : (
-                  <button type="button" className={styles.name} onClick={() => startRename(ws)} title="Click to rename">
-                    <span className={styles.nameText}>{ws.name}</span>
-                    {ws.id === config.activeWorkspaceId && <span className={styles.activeBadge}>active</span>}
-                  </button>
-                )}
-
-                <span className={styles.count}>{count} {count === 1 ? 'project' : 'projects'}</span>
-
-                {storage === 'per-workspace' && onEditAiCredential && (
-                  <button
-                    type="button"
-                    data-testid="workspace-ai-btn"
-                    className={styles.deleteBtn}
-                    title="Choose the Anthropic credential this workspace's AI features use"
-                    onClick={() => onEditAiCredential(ws.id)}
-                  >AI credential…</button>
-                )}
-
-                {storage === 'per-workspace' && onEditMasterPlan && (
-                  <button
-                    type="button"
-                    data-testid="workspace-master-plan-btn"
-                    className={styles.deleteBtn}
-                    title="Choose the YouTrack article this workspace's Priority Desk uses as its master plan"
-                    onClick={() => onEditMasterPlan(ws.id)}
-                  >Master plan…</button>
-                )}
-
-                {storage === 'per-workspace' && onEditPrerequisites && (
-                  <button
-                    type="button"
-                    data-testid="workspace-prerequisites-btn"
-                    className={styles.deleteBtn}
-                    title="Choose which link types make a ticket wait on another in this workspace"
-                    onClick={() => onEditPrerequisites(ws.id)}
-                  >Prerequisites…</button>
-                )}
-
-                <button
-                  type="button"
-                  data-testid="workspace-delete"
-                  className={styles.deleteBtn}
-                  disabled={onlyOne}
-                  title={onlyOne ? 'At least one workspace must exist' : undefined}
-                  onClick={() => requestDelete(ws)}
-                >Delete</button>
-              </div>
-            );
-          })}
-        </div>
-
-        {deleteTarget && (
-          <div className={styles.confirm}>
-            {projectCount(deleteTarget) > 0 && (
-              <div className={styles.moveRow} data-testid="ws-delete-move">
-                <label className={styles.moveLabel} htmlFor="ws-delete-destination">
-                  Move its {projectCount(deleteTarget)}{' '}
-                  {projectCount(deleteTarget) === 1 ? 'project' : 'projects'} to
-                </label>
-                <select
-                  id="ws-delete-destination"
-                  data-testid="ws-delete-destination"
-                  className={styles.moveSelect}
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                >
-                  <option value={UNASSIGNED}>Unassigned</option>
-                  {sorted
-                    .filter((w) => w.id !== deleteTarget.id)
-                    .map((w) => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                </select>
-              </div>
-            )}
-            <div className={styles.confirmText}>
-              Type <strong>{deleteTarget.name}</strong> to confirm deletion.
-              {projectCount(deleteTarget) > 0
-                ? ' The workspace is removed — its projects are kept.'
-                : ' This cannot be undone.'}
-              {perWorkspace && ' Its configuration is permanently deleted from YouTrack for every computer, including its board settings.'}
-            </div>
-            <input
-              autoFocus
-              data-testid="ws-delete-confirm-input"
-              className={styles.confirmInput}
-              value={confirmText}
-              placeholder={deleteTarget.name}
-              onChange={(e) => setConfirmText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void confirmDelete();
-                if (e.key === 'Escape') cancelDelete();
-              }}
-            />
-            {deleteError && (
-              <div className={styles.confirmError} role="alert" data-testid="ws-delete-error">{deleteError}</div>
-            )}
-            <div className={styles.confirmActions}>
-              <Button kind="tertiary" size="small" onClick={cancelDelete}>
-                Cancel
-              </Button>
-              <Button
-                color="negative" size="small"
-                data-testid="ws-delete-confirm"
-                disabled={deleting || confirmText.trim() !== deleteTarget.name}
-                onClick={() => void confirmDelete()}
-              >{deleting ? 'Deleting…' : 'Delete workspace'}</Button>
-            </div>
+              );
+            })}
           </div>
-        )}
 
-        <div className={styles.footer}>
-          <Button kind="primary" onClick={onClose}>Done</Button>
-        </div>
-      </ModalContent>
+          {deleteTarget && (
+            <div className={styles.confirm}>
+              {projectCount(deleteTarget) > 0 && (
+                <div className={styles.moveRow} data-testid="ws-delete-move">
+                  <label className={styles.moveLabel} htmlFor="ws-delete-destination">
+                    Move its {projectCount(deleteTarget)}{' '}
+                    {projectCount(deleteTarget) === 1 ? 'project' : 'projects'} to
+                  </label>
+                  <select
+                    id="ws-delete-destination"
+                    data-testid="ws-delete-destination"
+                    className={styles.moveSelect}
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                  >
+                    <option value={UNASSIGNED}>Unassigned</option>
+                    {sorted
+                      .filter((w) => w.id !== deleteTarget.id)
+                      .map((w) => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                  </select>
+                </div>
+              )}
+              <div className={styles.confirmText}>
+                Type <strong>{deleteTarget.name}</strong> to confirm deletion.
+                {projectCount(deleteTarget) > 0
+                  ? ' The workspace is removed — its projects are kept.'
+                  : ' This cannot be undone.'}
+                {perWorkspace && ' Its configuration is permanently deleted from YouTrack for every computer, including its board settings.'}
+              </div>
+              <input
+                autoFocus
+                data-testid="ws-delete-confirm-input"
+                className={styles.confirmInput}
+                value={confirmText}
+                placeholder={deleteTarget.name}
+                onChange={(e) => setConfirmText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void confirmDelete();
+                  if (e.key === 'Escape') cancelDelete();
+                }}
+              />
+              {deleteError && (
+                <div className={styles.confirmError} role="alert" data-testid="ws-delete-error">{deleteError}</div>
+              )}
+              <div className={styles.confirmActions}>
+                <Button kind="tertiary" size="small" onClick={cancelDelete}>
+                  Cancel
+                </Button>
+                <Button
+                  color="negative" size="small"
+                  data-testid="ws-delete-confirm"
+                  disabled={deleting || confirmText.trim() !== deleteTarget.name}
+                  onClick={() => void confirmDelete()}
+                >{deleting ? 'Deleting…' : 'Delete workspace'}</Button>
+              </div>
+            </div>
+          )}
+
+          <div className={styles.footer}>
+            <Button kind="primary" onClick={onClose}>Done</Button>
+          </div>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }

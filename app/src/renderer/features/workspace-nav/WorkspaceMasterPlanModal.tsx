@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button, Loader } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import type { WorkspaceDocument } from '../../../shared/workspaceSchema';
 import { masterPlanArticleIdOf, parseMasterPlanArticleIdInput, withMasterPlanArticle } from '../../../shared/workspaceMasterPlan';
 import styles from './AddProjectsModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface WorkspaceMasterPlanModalProps {
   workspaceId: string;
@@ -62,53 +63,55 @@ export function WorkspaceMasterPlanModal({ workspaceId, onClose, onSaved }: Work
 
   return (
     <Modal id="workspace-master-plan-modal" show onClose={onClose} size="small">
-      <ModalHeader title={base ? `Master plan for “${base.name}”` : 'Master plan'} />
-      <ModalContent>
-        <div className={styles.intro}>
-          The YouTrack article this workspace&apos;s Priority Desk reads as its master plan, by article ID (shown
-          in the article&apos;s URL, such as VERM-A-12). It is read through this workspace&apos;s own YouTrack
-          connection. With None, the workspace has no master plan.
-        </div>
-
-        {loadError ? (
-          <div className={styles.empty} role="alert" data-testid="workspace-master-plan-error">{loadError}</div>
-        ) : !base ? (
-          <Loader size="small" />
-        ) : jira ? (
-          <div className={styles.empty} data-testid="workspace-master-plan-jira">
-            A Jira workspace has no YouTrack connection, so it cannot have a master plan.
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title={base ? `Master plan for “${base.name}”` : 'Master plan'} />
+        <ModalContent>
+          <div className={styles.intro}>
+            The YouTrack article this workspace&apos;s Priority Desk reads as its master plan, by article ID (shown
+            in the article&apos;s URL, such as VERM-A-12). It is read through this workspace&apos;s own YouTrack
+            connection. With None, the workspace has no master plan.
           </div>
-        ) : (
-          <>
-            <div data-testid="workspace-master-plan-current">Current: {current ?? 'None'}</div>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void save(draft); }}
-              placeholder="e.g. VERM-A-12"
-              aria-label="Master plan article ID"
-              data-testid="workspace-master-plan-input"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            {saveError && <div className={styles.empty} role="alert" data-testid="workspace-master-plan-save-error">{saveError}</div>}
-          </>
-        )}
 
-        <div className={styles.footer}>
-          <Button kind="tertiary" onClick={onClose}>{jira ? 'Close' : 'Cancel'}</Button>
-          {!jira && (
+          {loadError ? (
+            <div className={styles.empty} role="alert" data-testid="workspace-master-plan-error">{loadError}</div>
+          ) : !base ? (
+            <Loader size="small" />
+          ) : jira ? (
+            <div className={styles.empty} data-testid="workspace-master-plan-jira">
+              A Jira workspace has no YouTrack connection, so it cannot have a master plan.
+            </div>
+          ) : (
             <>
-              <Button kind="secondary" data-testid="workspace-master-plan-none" disabled={!base || saving} onClick={() => void save('')}>
-                Set to None
-              </Button>
-              <Button data-testid="workspace-master-plan-save" disabled={!base || saving} onClick={() => void save(draft)}>
-                Save
-              </Button>
+              <div data-testid="workspace-master-plan-current">Current: {current ?? 'None'}</div>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void save(draft); }}
+                placeholder="e.g. VERM-A-12"
+                aria-label="Master plan article ID"
+                data-testid="workspace-master-plan-input"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {saveError && <div className={styles.empty} role="alert" data-testid="workspace-master-plan-save-error">{saveError}</div>}
             </>
           )}
-        </div>
-      </ModalContent>
+
+          <div className={styles.footer}>
+            <Button kind="tertiary" onClick={onClose}>{jira ? 'Close' : 'Cancel'}</Button>
+            {!jira && (
+              <>
+                <Button kind="secondary" data-testid="workspace-master-plan-none" disabled={!base || saving} onClick={() => void save('')}>
+                  Set to None
+                </Button>
+                <Button data-testid="workspace-master-plan-save" disabled={!base || saving} onClick={() => void save(draft)}>
+                  Save
+                </Button>
+              </>
+            )}
+          </div>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }

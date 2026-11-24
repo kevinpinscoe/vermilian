@@ -4,12 +4,13 @@
 // on its own.
 
 import { useState } from 'react';
-import { Heading, Button, AttentionBox, Modal, ModalContent, ModalHeader, TextField } from '@vibe/core';
+import { Heading, Button, AttentionBox, Modal, ModalContent, ModalBasicLayout, ModalHeader, TextField } from '@vibe/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WorkspaceMigrationResult } from '../../../../shared/workspaceMigration';
 import { ACTIVE_WORKSPACE_QUERY_KEY, WORKSPACE_CONFIG_QUERY_KEY } from '../../workspace-nav/api';
 import { STORAGE_STATUS_QUERY_KEY, previewAllowsActivation, previewLines, storageSummary } from '../storageStatus';
 import styles from '../SettingsView.module.css';
+import modalLayout from '../../../components/ModalLayout.module.css';
 
 type Outcome = { tone: 'positive' | 'negative'; title: string; text: string } | null;
 
@@ -152,31 +153,34 @@ export function WorkspaceStorageSection() {
 
       {confirm && (
         <Modal id="storage-confirm-modal" data-testid="storage-confirm-modal" show onClose={() => { if (!busy) setConfirm(null); }} size="medium">
-          <ModalHeader title={confirm === 'activate' ? 'Activate per-workspace storage?' : 'Return to the shared configuration?'} />
-          <ModalContent>
-            <AttentionBox
-              type="warning"
-              title={confirm === 'activate' ? 'This changes where configuration is stored' : 'Other computers will stop saving configuration'}
-              text={
-                confirm === 'activate'
-                  ? 'After activation every computer still on the shared configuration stops saving configuration until it is activated too. Vermilian v1.2.10 and older cannot see this and keep writing _vermilian-config, which is then ignored.'
-                  : 'Per-workspace storage is retired for every computer. Computers still using it block configuration changes until they return too. The workspace articles are kept.'
-              }
-            />
-            <div className={styles.inline}>
-              <Button
-                data-testid="storage-confirm-btn"
-                kind="primary"
-                loading={busy}
-                onClick={() => void (confirm === 'activate' ? handleActivate() : handleReturn())}
-              >
-                {confirm === 'activate' ? 'Activate' : 'Return'}
-              </Button>
-              <Button data-testid="storage-cancel-btn" kind="tertiary" disabled={busy} onClick={() => setConfirm(null)}>
-                Cancel
-              </Button>
-            </div>
-          </ModalContent>
+          <ModalBasicLayout className={modalLayout.layout}>
+            <ModalHeader title={confirm === 'activate' ? 'Activate per-workspace storage?' : 'Return to the shared configuration?'} />
+            <ModalContent>
+              <AttentionBox
+                className={modalLayout.attention}
+                type="warning"
+                title={confirm === 'activate' ? 'This changes where configuration is stored' : 'Other computers will stop saving configuration'}
+                text={
+                  confirm === 'activate'
+                    ? 'After activation every computer still on the shared configuration stops saving configuration until it is activated too. Vermilian v1.2.10 and older cannot see this and keep writing _vermilian-config, which is then ignored.'
+                    : 'Per-workspace storage is retired for every computer. Computers still using it block configuration changes until they return too. The workspace articles are kept.'
+                }
+              />
+              <div className={styles.inline}>
+                <Button
+                  data-testid="storage-confirm-btn"
+                  kind="primary"
+                  loading={busy}
+                  onClick={() => void (confirm === 'activate' ? handleActivate() : handleReturn())}
+                >
+                  {confirm === 'activate' ? 'Activate' : 'Return'}
+                </Button>
+                <Button data-testid="storage-cancel-btn" kind="tertiary" disabled={busy} onClick={() => setConfirm(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </ModalContent>
+          </ModalBasicLayout>
         </Modal>
       )}
     </section>
