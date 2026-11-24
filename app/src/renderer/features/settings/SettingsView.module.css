@@ -108,6 +108,17 @@
 }
 
 /* Runway snapshot import confirmation (VERM-51) */
+/*
+ * The Runway import preview's warning boxes (VERM-109). Vibe's AttentionBox
+ * is width: 100% with 16px horizontal padding but sets no box-sizing, so
+ * under the content-box default it ran 32px past ModalContent and its text
+ * was clipped at the modal's right edge. e2e/runway-snapshot-import.spec.ts
+ * measures it at the modal's minimum width.
+ */
+.importWarning {
+  box-sizing: border-box;
+}
+
 .importPreview {
   display: grid;
   grid-template-columns: max-content 1fr;
