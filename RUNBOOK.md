@@ -597,9 +597,16 @@ Every other resolved value, including `Duplicate`, `Obsolete` and `Rejected`,
 counts as done unless the project's override maps it to a role with no
 stand-up group (`todo` or `deferred`); see the worked example below.
 
-Results are read in pages of 100 until YouTrack has no more. A stand-up that
-matches more than 5,000 issues stops with an error rather than showing a
-partial report.
+Results are read in pages of 100 until YouTrack has no more, with no upper
+limit: old completed issues match too and are dropped only after the read, so
+a project with years of history still gets today's report. If YouTrack returns
+the same page again instead of moving on, the stand-up stops with an error
+rather than showing a partial report.
+
+Daily Review reads only the active workspace. A request for any other
+workspace is refused before its credential is resolved; a review that started
+before you switched workspaces still finishes, and its result is kept with the
+workspace it was for.
 
 The query and the displayed groups are built from the same mapping, and the
 query names only values the project actually has. If a project has no value

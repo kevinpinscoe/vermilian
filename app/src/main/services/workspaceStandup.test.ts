@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StandupIssues } from '../api/youtrack';
 import { AI_WORKSPACE_CHANGED_MESSAGE, type WorkspaceAiOperation } from './workspaceAiKey';
 import type { WorkspaceYouTrackConnection } from './workspaceYouTrack';
-import { generateWorkspaceStandup, getWorkspaceDailyReview, type WorkspaceDailyReviewDeps, type WorkspaceStandupDeps } from './workspaceStandup';
+import { DAILY_REVIEW_NOT_ACTIVE_MESSAGE, generateWorkspaceStandup, getWorkspaceDailyReview, type WorkspaceDailyReviewDeps, type WorkspaceStandupDeps } from './workspaceStandup';
 import { parseYouTrackProjectFields } from '../../shared/youtrackProjectFields';
 import type { StandupPlan } from '../../shared/youtrackStandup';
 import type { StandupWorkspace } from '../../shared/standup';
@@ -217,7 +217,7 @@ describe('status discovery and mapping (VERM-114)', () => {
 describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => {
   function dailyDeps(activeId: string, over: Partial<WorkspaceDailyReviewDeps> = {}) {
     const { d, reads } = deps(activeId);
-    const dd: WorkspaceDailyReviewDeps = { ...d, isKnownWorkspace: async (id) => id in WORKSPACES || id === 'ws-broken', cutoffMs: 0, ...over };
+    const dd: WorkspaceDailyReviewDeps = { ...d, activeWorkspaceId: async () => activeId, cutoffMs: 0, ...over };
     return { d: dd, reads, id: activeId };
   }
 
@@ -270,9 +270,40 @@ describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => 
   it('Daily Review refuses a Jira workspace, no workspace, and a workspace that does not exist', async () => {
     await expect(getWorkspaceDailyReview(dailyDeps('ws-jira').d, 'ws-jira')).resolves.toEqual({ ok: false, workspaceId: 'ws-jira', error: JIRA_STANDUP_UNSUPPORTED_MESSAGE });
     await expect(getWorkspaceDailyReview(dailyDeps('').d, '')).resolves.toMatchObject({ ok: false });
-    const unknown = dailyDeps('ws-gone');
+    const unknown = dailyDeps('ws-home');
     await expect(getWorkspaceDailyReview(unknown.d, 'ws-gone')).resolves.toMatchObject({ ok: false, workspaceId: 'ws-gone' });
     expect(unknown.reads).toEqual([]);
+  });
+
+  // A read may only start for the active workspace (VERM-114 review, round
+  // 2): while B is active, a new request naming A is refused before A's
+  // workspace is loaded or its credential resolved, so A's connection is
+  // never used. A read that started while A was active still finishes.
+  it('Daily Review refuses a request for an inactive workspace before resolving any credential or calling the tracker', async () => {
+    for (const storage of ['per-workspace', 'legacy'] as const) {
+      const loadWorkspace = vi.fn(async (id: string) => WORKSPACES[id] ?? null);
+      const connectWorkspace = vi.fn(async (id: string) => TOKENS[id] ?? { ok: false as const, error: 'not found' });
+      const legacyConnection = vi.fn(async () => ({ ok: true as const, url: 'https://yt.example.com', token: 'fictional-settings-token' }));
+      const tracker = vi.fn();
+      const r = dailyDeps('ws-work', { storage, loadWorkspace, connectWorkspace, legacyConnection, tracker });
+      const out = await getWorkspaceDailyReview(r.d, 'ws-home');
+      expect(out).toEqual({ ok: false, workspaceId: 'ws-home', refused: 'not-active', error: DAILY_REVIEW_NOT_ACTIVE_MESSAGE });
+      expect(loadWorkspace).not.toHaveBeenCalled();
+      expect(connectWorkspace).not.toHaveBeenCalled();
+      expect(legacyConnection).not.toHaveBeenCalled();
+      expect(tracker).not.toHaveBeenCalled();
+      expect(r.reads).toEqual([]);
+    }
+  });
+
+  it('Daily Review checks the active workspace once, when the read starts, so a read already under way finishes', async () => {
+    let active = 'ws-home';
+    const r = dailyDeps('ws-home', { activeWorkspaceId: async () => active });
+    const inner = r.d.loadWorkspace;
+    // The user switches to B while A's workspace is being loaded.
+    r.d.loadWorkspace = async (id) => { active = 'ws-work'; return inner(id); };
+    await expect(getWorkspaceDailyReview(r.d, 'ws-home')).resolves.toMatchObject({ ok: true, workspaceId: 'ws-home' });
+    expect(new Set(r.reads.map((x) => x.token))).toEqual(new Set(['fictional-home-token']));
   });
 
   // The review is bound to the workspace it was asked for (VERM-114 review):

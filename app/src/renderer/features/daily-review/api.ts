@@ -34,6 +34,9 @@ export function dailyReviewCompletedQuery(
     queryFn: async (): Promise<DailyReviewGetResult> => {
       const result = await get({ workspaceId });
       if ((result.workspaceId ?? '') !== workspaceId) throw new Error(DAILY_REVIEW_WRONG_WORKSPACE_MESSAGE);
+      // Refused because the workspace was not active when the read started:
+      // an error, not an answer, so the entry is fetched again next time.
+      if (result.refused === 'not-active') throw new Error(result.error ?? 'That workspace is no longer active.');
       return result;
     },
     staleTime: 60_000,

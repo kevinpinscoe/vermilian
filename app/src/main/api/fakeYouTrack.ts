@@ -22,7 +22,7 @@ import type {
   WorkspaceArticleListing,
 } from './youtrack';
 // Same paging bounds as the real client (the fake reads one in-memory page).
-export { STANDUP_MAX_PAGES, STANDUP_PAGE_SIZE } from './youtrack';
+export { STANDUP_PAGE_SIZE } from './youtrack';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { STORAGE_MARKER_TITLE, serialiseStorageMarker } from '../../shared/storageActivation';
 

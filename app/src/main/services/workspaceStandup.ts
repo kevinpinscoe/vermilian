@@ -118,10 +118,13 @@ export async function generateWorkspaceStandup(d: WorkspaceStandupDeps): Promise
 }
 
 export interface WorkspaceDailyReviewDeps extends WorkspaceReportSourceDeps {
-  /** Whether `workspaceId` names a workspace this machine has. */
-  isKnownWorkspace(workspaceId: string): Promise<boolean>;
+  /** The active workspace's ID, or '' when there is none. */
+  activeWorkspaceId(): Promise<string>;
   cutoffMs: number;
 }
+
+export const DAILY_REVIEW_NOT_ACTIVE_MESSAGE =
+  'That workspace is no longer active, so its Daily Review was not loaded.';
 
 /**
  * The Daily Review's "recently completed" list (VERM-9) for one workspace,
@@ -129,15 +132,18 @@ export interface WorkspaceDailyReviewDeps extends WorkspaceReportSourceDeps {
  * discovery, same done mapping. Deterministic — no Claude call.
  *
  * The review is bound to the workspace the renderer asked for (VERM-114
- * review), not to whichever is active when the read finishes, and every
- * answer names that workspace. The renderer caches by it and refuses an
- * answer naming any other, so a slow answer for A can never fill B's view.
+ * review), and every answer names it; the renderer caches by it and refuses
+ * an answer naming any other. A read may only start for the active
+ * workspace: anything else is refused here, before the workspace is loaded or
+ * its credential resolved, so another workspace's connection is never used.
+ * The check is made once, at the start, so a read that began while its
+ * workspace was active still finishes — its answer lands in that
+ * workspace's own cache entry.
  */
 export async function getWorkspaceDailyReview(d: WorkspaceDailyReviewDeps, workspaceId: string): Promise<DailyReviewGetResult> {
-  if (!workspaceId) return { ok: false, error: 'There is no active workspace to review.' };
-  if (!(await d.isKnownWorkspace(workspaceId))) {
-    return { ok: false, workspaceId, error: 'That workspace no longer exists, so it cannot be reviewed.' };
-  }
+  const active = await d.activeWorkspaceId();
+  if (!workspaceId || !active) return { ok: false, ...(workspaceId ? { workspaceId } : {}), error: 'There is no active workspace to review.' };
+  if (workspaceId !== active) return { ok: false, workspaceId, refused: 'not-active', error: DAILY_REVIEW_NOT_ACTIVE_MESSAGE };
   const read = await readWorkspaceReportIssues(d, workspaceId, d.cutoffMs);
   if (!read.ok) return { ok: false, workspaceId, error: read.error };
   return {

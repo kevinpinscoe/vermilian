@@ -81,6 +81,19 @@ describe('Daily Review completed work, per workspace', () => {
     expect(qc.getQueryData(dailyReviewCompletedQueryKey('ws-b'))).toBeUndefined();
   });
 
+  it('a refusal for a workspace that was not active is an error, never cached as that workspace\'s answer', async () => {
+    const qc = client();
+    const refused = async (): Promise<DailyReviewGetResult> => ({ ok: false, workspaceId: 'ws-a', refused: 'not-active', error: 'That workspace is no longer active, so its Daily Review was not loaded.' });
+    await expect(qc.fetchQuery(dailyReviewCompletedQuery('ws-a', refused))).rejects.toThrow(/no longer active/);
+    expect(qc.getQueryData(dailyReviewCompletedQueryKey('ws-a'))).toBeUndefined();
+    // Next time A is opened while active, it is read afresh.
+    const backend = heldBackend();
+    const again = qc.fetchQuery(dailyReviewCompletedQuery('ws-a', backend.get));
+    backend.release('ws-a');
+    expect((await again).completed?.map((t) => t.idReadable)).toEqual(['HOME-1']);
+    expect(backend.calls).toEqual(['ws-a']);
+  });
+
   it('asks the main process for exactly the workspace the view is for', async () => {
     const asked: DailyReviewGetArgs[] = [];
     await client().fetchQuery(dailyReviewCompletedQuery('ws-b', async (args) => { asked.push(args); return ANSWERS['ws-b']; }));

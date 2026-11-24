@@ -665,6 +665,9 @@ export interface DailyReviewGetResult {
   error?: string;
   // The workspace this answer is for; absent only when none was named.
   workspaceId?: string;
+  // Set when the read was refused before it started because the workspace
+  // was not the active one (VERM-114 review); never cached as an answer.
+  refused?: 'not-active';
   // Present only when ok is true. Always the fixed active-workspace/48h
   // scope — see renderer/features/daily-review — never user-configurable.
   completed?: DailyReviewTask[];

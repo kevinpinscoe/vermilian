@@ -5,7 +5,6 @@ import {
   getCurrentUser,
   getWorklogTypes,
   getIssuesForStandup,
-  STANDUP_MAX_PAGES,
   STANDUP_PAGE_SIZE,
   patchIssue,
   createIssue,
@@ -610,11 +609,52 @@ describe('getIssuesForStandup paging (VERM-114 review)', () => {
     expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-901']);
   });
 
-  it('refuses rather than returning a partial result when the page cap is reached', async () => {
-    let n = 0;
-    fetchMock.mockImplementation(async () => jsonRes(fullPage((n++) * STANDUP_PAGE_SIZE + 1)));
-    await expect(getIssuesForStandup(URL, TOKEN, plan, 0)).rejects.toThrow(/more than \d+ issues/);
-    expect(fetchMock).toHaveBeenCalledTimes(STANDUP_MAX_PAGES);
+  // No fixed cap (VERM-114 review, round 2): the read ends only at a short
+  // page, however many issues match.
+  const pagesOf = (total: number, statusAt: (n: number) => string = () => 'In Progress') => {
+    const pages: ReturnType<typeof issue>[][] = [];
+    for (let from = 1; from <= total; from += STANDUP_PAGE_SIZE) {
+      pages.push(Array.from({ length: Math.min(STANDUP_PAGE_SIZE, total - from + 1) }, (_, i) => issue(from + i, statusAt(from + i))));
+    }
+    if (total % STANDUP_PAGE_SIZE === 0) pages.push([]);
+    return pages;
+  };
+  const serve = (pages: ReturnType<typeof issue>[][]) =>
+    fetchMock.mockImplementation(async (u: string) => {
+      const skip = Number(new globalThis.URL(u).searchParams.get('$skip'));
+      return jsonRes(pages[skip / STANDUP_PAGE_SIZE] ?? []);
+    });
+
+  it('exactly 5,000 matches: every one is read, ending at the empty page after the fiftieth', async () => {
+    serve(pagesOf(5000));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(out.inProgress).toHaveLength(5000);
+    expect(new Set(out.inProgress.map((t) => t.idReadable)).size).toBe(5000);
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+  });
+
+  it('a blocked ticket at match 5,001 is reported, exactly once', async () => {
+    serve(pagesOf(5001, (n) => (n === 5001 ? 'BLOCKED' : 'In Progress')));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-5001']);
+    expect(out.inProgress).toHaveLength(5000);
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+  });
+
+  it('old completed tickets beyond 5,000 do not stop a small report', async () => {
+    // Years of history: 6,000 old Done tickets, then today's one blocked ticket.
+    serve(pagesOf(6001, (n) => (n === 6001 ? 'BLOCKED' : 'Done')).map((p) => p.map((i) => ({ ...i, updated: 500 }))));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 1000);
+    expect(out.done).toEqual([]);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-6001']);
+  });
+
+  it('stops with a clear error when YouTrack keeps returning the same page', async () => {
+    fetchMock.mockImplementation(async () => jsonRes(fullPage(1)));
+    await expect(getIssuesForStandup(URL, TOKEN, plan, 0)).rejects.toMatchObject({
+      message: expect.stringMatching(/returned the same page of results again/),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

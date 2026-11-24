@@ -171,9 +171,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RUNBOOK *Stand-up status mapping*). A project with no state for a group is named, and the other
   groups are still reported. Results are now read page by page until YouTrack has no more, where
   one request used to stop at 500 issues without saying so. Under per-workspace storage, Daily
-  Review now reads through its workspace's own connection, as the stand-up already did, and its
-  completed work is cached per workspace, so a slow answer for one workspace can no longer appear
-  after you switch to another.
+  Review now reads through its workspace's own connection, as the stand-up already did. It starts
+  a read only for the active workspace, and its completed work is cached per workspace, so a slow
+  answer for one workspace can no longer appear after you switch to another.
 
 - **AI features work with newer Claude models** (VERM-113). AI create task and Recommendations
   no longer force the model to call their tool. Claude Opus 5.5, Claude Sonnet 5.5 and the

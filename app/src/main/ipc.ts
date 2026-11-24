@@ -1176,8 +1176,9 @@ export function registerIpc(): void {
   // and needs-attention are all derived client-side from that board cache
   // instead (renderer/features/daily-review/boardData.ts).
   ipcMain.handle(IPC.dailyReviewGet, async (_e, args: unknown): Promise<DailyReviewGetResult> => {
-    // The workspace the renderer's view is for (VERM-114 review): read that
-    // one and name it in the answer, never whichever is active by then.
+    // The workspace the renderer's view is for (VERM-114 review): refused
+    // unless it is the active workspace when the read starts; otherwise read
+    // that one and name it in the answer, even if the user switches away.
     const requested = (args as Partial<DailyReviewGetArgs> | null)?.workspaceId;
     const workspaceId = typeof requested === 'string' ? requested : '';
     try {
@@ -1188,7 +1189,8 @@ export function registerIpc(): void {
       return await getWorkspaceDailyReview(
         {
           ...workspaceReportSource(cfg),
-          isKnownWorkspace: async (id) => (await workspaceChoices()).choices.some((c) => c.id === id),
+          // Checked once, before the workspace's credential is resolved.
+          activeWorkspaceId: async () => (await activeWorkspaceContext()).workspaceId ?? '',
           cutoffMs: Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000,
         },
         workspaceId,

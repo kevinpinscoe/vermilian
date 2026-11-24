@@ -686,35 +686,43 @@ export interface StandupIssues {
 // Stand-up results are read page by page until a short page proves there
 // are no more (VERM-114 review). One bounded `$top=500` request used to drop
 // everything past the first 500 matches without saying so, which could hide a
-// blocked or in-progress ticket from a busy workspace. The cap only stops a
-// runaway read: reaching it is an error, never a silently partial stand-up.
+// blocked or in-progress ticket from a busy workspace. There is no fixed cap:
+// old completed tickets match the query too (the report's cutoff is applied
+// after the read), so a workspace with years of history must still produce
+// today's small report.
 export const STANDUP_PAGE_SIZE = 100;
-export const STANDUP_MAX_PAGES = 50;
 
 async function fetchAllStandupIssues(url: string, token: string, queryText: string): Promise<StandupRawIssue[]> {
   const all: StandupRawIssue[] = [];
   // An issue can move between pages while they are read (its position shifts
   // when another issue changes); each one is kept once, at its first sighting.
   const seen = new Set<string>();
-  for (let page = 0; page < STANDUP_MAX_PAGES; page++) {
+  for (let skip = 0; ; skip += STANDUP_PAGE_SIZE) {
     const batch = await request<StandupRawIssue[]>(
       url,
       token,
       `/api/issues?fields=${STANDUP_FIELDS}&query=${encodeURIComponent(queryText)}` +
-        `&$top=${STANDUP_PAGE_SIZE}&$skip=${page * STANDUP_PAGE_SIZE}`,
+        `&$top=${STANDUP_PAGE_SIZE}&$skip=${skip}`,
     );
+    let added = 0;
     for (const issue of batch) {
       if (seen.has(issue.idReadable)) continue;
       seen.add(issue.idReadable);
       all.push(issue);
+      added++;
     }
     if (batch.length < STANDUP_PAGE_SIZE) return all;
+    // A full page with nothing new means the server is not advancing through
+    // the results (it is ignoring $skip, or returning one page again): stop
+    // rather than loop forever or show an incomplete stand-up.
+    if (added === 0) {
+      const err: YouTrackError = {
+        status: 0,
+        message: `YouTrack returned the same page of results again (from result ${skip + 1}), so the stand-up was stopped rather than shown incomplete.`,
+      };
+      throw err;
+    }
   }
-  const err: YouTrackError = {
-    status: 0,
-    message: `The stand-up matched more than ${STANDUP_PAGE_SIZE * STANDUP_MAX_PAGES} issues, so it was stopped rather than shown incomplete.`,
-  };
-  throw err;
 }
 
 export async function getIssuesForStandup(
