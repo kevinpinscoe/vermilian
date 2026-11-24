@@ -88,6 +88,28 @@ updates:
         patterns:
           - "@dnd-kit/*"
 
+      # Everything else that is a compatible minor or patch update arrives as
+      # ONE weekly PR instead of one PR per package (VERM-55). By 2026-11-15
+      # eleven single-package PRs had piled up, most of them conflicting with
+      # each other on pnpm-lock.yaml, so none could merge without a rebase.
+      #
+      # Dependabot puts a dependency in the FIRST group that matches it, so the
+      # lockstep groups above keep their own PRs; this catch-all must stay last.
+      # Majors are not grouped: each still gets its own PR, because a major
+      # (Electron, Electron Forge) is a compatibility test, not routine upkeep.
+      #
+      # @anthropic-ai/sdk is excluded because it was on 0.x until 1.0, where a
+      # "minor" bump could change the API; keep it on its own PR so its runtime
+      # paths (AI create, recommendations, stand-up) are tested on their own.
+      npm-minor-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@anthropic-ai/sdk"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

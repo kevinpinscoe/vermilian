@@ -145,6 +145,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that Vermilian cannot tell whether this computer has newer Runway changes.
 - **Electron 45** (VERM-55). Electron 44.11.3 → 45.4.1, which also updates the bundled
   Chromium and Node.js.
+- **Routine dependency updates** (VERM-55). @tanstack/react-query 5.108.3, @vibe/core 4.5.39,
+  ESLint 10.15.0, globals 17.14.0, Playwright 1.65.1, and the `pnpm/action-setup` 6.1.1 and
+  `actions/setup-node` 7.1.0 CI actions. Dependabot now sends compatible minor and patch npm
+  updates as one weekly pull request. The dependency maintenance policy is in `RUNBOOK.md`.
 
 ### Fixed
 

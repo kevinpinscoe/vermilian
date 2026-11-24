@@ -663,6 +663,59 @@ to an empty directory and pass `-dev-no-store-token`, so it cannot replace a sto
 
 ---
 
+## Dependency maintenance (VERM-55)
+
+Dependabot (`.github/dependabot.yml`) checks `app/` (npm) and the workflows (GitHub
+Actions) weekly. To keep its queue from building up again, it groups updates:
+
+| Pull request | What it carries |
+| --- | --- |
+| One per lockstep group | `typescript-eslint`, `electron-forge`, `react`, `playwright`, `dnd-kit`. Each group's packages must move together |
+| `npm-minor-patch` | Every other compatible minor or patch npm update, in one weekly PR |
+| One per major | Any major update, e.g. Electron or Electron Forge, on its own |
+| `@anthropic-ai/sdk` | Always on its own; test AI create, recommendations and stand-up |
+| `github-actions` | Every action pin update, in one PR |
+
+The ignores for `@vitejs/plugin-react >=6`, vite majors and `typescript >=6.1.0` stay in
+place. "Dependency constraints worth knowing" in the repository's agent notes explains why.
+
+### Policy
+
+- **Weekly review.** Once a week, merge or close the open Dependabot PRs. Routine
+  (grouped minor/patch) PRs merge once CI passes and the packaged e2e suite has run
+  locally. Leave none open longer than two weeks: when PRs pile up they conflict with each
+  other on `pnpm-lock.yaml` and none of them can merge.
+- **Security updates at once.** A Dependabot security alert or security PR is handled
+  as soon as it is seen, outside the weekly cadence. Check with
+  `gh api 'repos/kevinpinscoe/vermilian/dependabot/alerts?state=open' --jq length`.
+- **Majors are compatibility work.** A major update to a runtime or build dependency
+  (Electron, Electron Forge, the Anthropic SDK) gets its own YouTrack issue when it needs
+  more than a version bump. Do not fold one into a routine PR.
+- **Consolidating by hand.** When several PRs conflict, bump them together on one branch
+  instead of rebasing each. Close the superseded Dependabot PRs with a comment, but only
+  after the replacement is merged and checked on `main`.
+- **Release age.** pnpm 11 will not install a version published less than a day ago
+  (`minimumReleaseAge`). If `pnpm add` writes a `minimumReleaseAgeExclude` list into
+  `app/pnpm-workspace.yaml`, revert it and choose the newest version that is old
+  enough. That exclusion list turns off the supply-chain age check for those packages.
+
+### Gate for every dependency PR
+
+```bash
+cd app
+pnpm install --frozen-lockfile
+pnpm lint && pnpm typecheck && pnpm test
+pnpm package
+pnpm test:e2e:fresh          # packaged e2e; not in CI, so run it locally
+```
+
+CI runs everything except e2e. The `SQLite packaged check` workflow, which tests the
+packaged SQLite module on every platform, runs by itself on any PR that changes
+`app/package.json` or `app/pnpm-lock.yaml`. To rerun it by hand:
+`gh workflow run sqlite-packaged-check.yml --ref <branch>`.
+
+---
+
 ## Rollback Procedure
 
 If `node_modules` becomes corrupt or the linker state is wrong:
