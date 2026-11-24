@@ -67,8 +67,8 @@
     "@vibe/core": "^4.5.39",
     "@vibe/icons": "^4.1.0",
     "electron-squirrel-startup": "^1.0.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
     "zustand": "^5.0.15"
