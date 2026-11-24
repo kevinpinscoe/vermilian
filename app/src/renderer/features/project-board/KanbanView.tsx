@@ -8,7 +8,9 @@ import {
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
+import { dropdownOptions, fieldChoices, isResolvedStatus } from '../../../shared/projectFieldValues';
+import type { FieldKey } from '../../../shared/fields';
+import { issueProject, useProjectFieldValuesLookup } from '../project-fields/ProjectFieldValuesContext';
 import { getContrastColor } from './colors';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useBoardDragStore } from '../../stores/boardDrag';
@@ -30,26 +32,31 @@ export function formatDate(epochMs: number | null): string {
   return new Date(epochMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-const FIELD_OPTIONS: Partial<Record<keyof BoardIssueFields, readonly string[]>> = {
-  status: STATUS_OPTIONS,
-  priority: PRIORITY_OPTIONS,
-  category: CATEGORY_OPTIONS,
-};
-
 // ─── ChipCell ─────────────────────────────────────────────────────────────────
 
 export interface ChipCellProps {
   value: string | null;
   colorMap: Record<string, string>;
   field?: keyof BoardIssueFields;
+  /** The issue's project (short name), whose own values the editor offers (VERM-117). */
+  project?: string;
   onEdit?: (value: string) => void;
 }
 
-export function ChipCell({ value, colorMap, field, onEdit }: ChipCellProps) {
+export function ChipCell({ value, colorMap, field, project, onEdit }: ChipCellProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const dropdownRef = useRef<HTMLUListElement>(null);
-  const options = field ? FIELD_OPTIONS[field] : undefined;
+  const lookup = useProjectFieldValuesLookup();
+  // The issue's own project's values — never a fixed list. Until they are
+  // known (or if the read failed) only the current value is shown; a field the
+  // project does not have is not editable.
+  const projectValues = project ? lookup.valuesFor(project) : undefined;
+  const readError = project && !projectValues ? lookup.errorFor(project) : undefined;
+  const choices = field ? fieldChoices(projectValues, field as FieldKey) : undefined;
+  const fieldAbsent = Boolean(projectValues && choices && !choices.present);
+  const { options, currentInactive } = choices ? dropdownOptions(choices, value) : { options: [] as string[], currentInactive: false };
+  const editable = Boolean(onEdit && field && project && !fieldAbsent);
 
   useEffect(() => {
     if (!open) return;
@@ -65,7 +72,7 @@ export function ChipCell({ value, colorMap, field, onEdit }: ChipCellProps) {
   const bg = value ? (colorMap[value] ?? '#C4C4C4') : '#C4C4C4';
   const fg = getContrastColor(bg);
 
-  if (!onEdit || !options) {
+  if (!editable || !onEdit) {
     return value
       ? <span className={styles.chip} style={{ background: bg, color: fg }}>{value}</span>
       : <span className={styles.emptyChip}>—</span>;
@@ -94,20 +101,39 @@ export function ChipCell({ value, colorMap, field, onEdit }: ChipCellProps) {
           {options.map((opt) => {
             const oBg = colorMap[opt] ?? '#C4C4C4';
             const oFg = getContrastColor(oBg);
+            // The saved value when it is archived or not yet confirmed: shown, not re-sent.
+            const isCurrentOnly = currentInactive && opt === value;
             return (
               <li key={opt}>
                 <button
                   type="button"
                   data-testid="chip-option"
                   data-value={opt}
+                  data-current-inactive={isCurrentOnly ? 'true' : undefined}
                   className={styles.chipDropdownOption}
-                  onClick={(e) => { e.stopPropagation(); onEdit(opt); setOpen(false); }}
+                  onClick={(e) => { e.stopPropagation(); if (!isCurrentOnly) onEdit(opt); setOpen(false); }}
                 >
                   <span className={styles.chip} style={{ background: oBg, color: oFg }}>{opt}</span>
                 </button>
               </li>
             );
           })}
+          {!projectValues && !readError && (
+            <li data-testid="chip-values-loading" className={styles.chipDropdownNote}>Loading values…</li>
+          )}
+          {readError && (
+            <li>
+              <button
+                type="button"
+                data-testid="chip-values-retry"
+                className={styles.chipDropdownOption}
+                title={readError}
+                onClick={(e) => { e.stopPropagation(); lookup.retry(project); }}
+              >
+                Couldn't load values — Retry
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </>
@@ -240,6 +266,7 @@ function KanbanCardInner({
               value={issue.fields.priority}
               colorMap={colors.Priority}
               field="priority"
+              project={issueProject(issue)}
               onEdit={(v) => onPatch(issue.id, 'priority', v)}
             />
           )}
@@ -248,6 +275,7 @@ function KanbanCardInner({
               value={issue.fields.category}
               colorMap={colors.Category}
               field="category"
+              project={issueProject(issue)}
               onEdit={(v) => onPatch(issue.id, 'category', v)}
             />
           )}
@@ -282,8 +310,10 @@ function KanbanCard(props: KanbanCardInnerProps) {
 
 function KanbanColumn({
   title, issues, colorDot, colors, projectShortName, onSelectIssue, onPatch, onStartTimer, onAdd, runwayWorkspaceId,
+  defaultCollapsed,
 }: {
   runwayWorkspaceId: string | null;
+  defaultCollapsed: boolean;
   title: string;
   issues: BoardIssue[];
   colorDot: string;
@@ -294,7 +324,11 @@ function KanbanColumn({
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
   onAdd: (summary: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(title === 'Done');
+  // Resolved columns start collapsed (VERM-117: by the project's own
+  // resolution, not the name "Done"); the user's own toggle wins.
+  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
+  const collapsed = userCollapsed ?? defaultCollapsed;
+  const setCollapsed = (update: (c: boolean) => boolean) => setUserCollapsed(update(collapsed));
   const timer = useTimerStore((s) => s.timer);
   const [tick, setTick] = useState(0);
   const { isOver, setNodeRef: setDropRef } = useDroppable({ id: title });
@@ -312,6 +346,7 @@ function KanbanColumn({
       className={`${styles.column} ${isOver ? styles.columnDropTarget : ''}`}
       data-testid="kanban-column"
       data-status={title}
+      data-collapsed={collapsed ? 'true' : 'false'}
     >
       <div className={styles.columnHeader}>
         <button
@@ -376,6 +411,7 @@ export function KanbanView({
   onSelectIssue, onPatch, onStartTimer, onAddTask, onCrossBoardDrop, runwayWorkspaceId,
 }: KanbanViewProps) {
   const [draggingIssue, setDraggingIssue] = useState<BoardIssue | null>(null);
+  const lookup = useProjectFieldValuesLookup();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const setBoardDragIssue = useBoardDragStore((s) => s.setDraggingIssue);
   const lastMouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -438,6 +474,7 @@ export function KanbanView({
           <KanbanColumn
             key={groupVal}
             title={groupVal}
+            defaultCollapsed={groupByField === 'status' && isResolvedStatus(lookup.valuesFor(projectShortName), groupVal)}
             issues={issues}
             colorDot={groupColorMap[groupVal] ?? '#C4C4C4'}
             colors={colors}

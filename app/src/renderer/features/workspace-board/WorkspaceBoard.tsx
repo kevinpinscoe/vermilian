@@ -3,14 +3,16 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Loader, Text, Heading, Button, Tooltip } from '@vibe/core';
 import { Wand, Play } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
+import { mergedValueOrder, type ProjectFieldValues } from '../../../shared/projectFieldValues';
+import { useProjectFieldValues } from '../project-fields/useProjectFieldValues';
+import { ProjectFieldValuesProvider, issueProject, issueProjects, lookupFrom, valuesForIssues } from '../project-fields/ProjectFieldValuesContext';
 import type { BoardSortConfig, ColumnField } from '../../../shared/boardConfig';
 import { COLUMN_LABELS } from '../../../shared/boardConfig';
 import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS } from '../project-board/colors';
 import { ChipCell, EffectiveColors, formatDate } from '../project-board/KanbanView';
 import { usePatchIssueOnBoard } from '../project-board/api';
 import {
-  ASSIGNEE_ME, EMPTY_FILTER, applyFilter, filterCount, type FilterState,
+  ASSIGNEE_ME, EMPTY_FILTER, applyFilter, filterCount, orderedUnique, type FilterState,
 } from '../project-board/grouping';
 import { FilterPills, AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
 import { DefaultAssigneeBar, useDefaultAssignee } from '../project-board/DefaultAssigneeBar';
@@ -38,18 +40,16 @@ import styles from './WorkspaceBoard.module.css';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const STATUS_ORDER = [
-  'To do', 'In Progress', 'Working on it', 'Waiting for IT', 'BLOCKED',
-  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource', 'Done',
-];
-
 const COLORS: EffectiveColors = {
   Status:   STATUS_COLORS,
   Priority: PRIORITY_COLORS,
   Category: CATEGORY_COLORS,
 };
 
-function groupByStatus(issues: BoardIssue[]): Array<[string, BoardIssue[]]> {
+// Grouped in the order of the issues' own projects' Status values (VERM-117),
+// merged across projects; values not yet known follow in first-seen order.
+function groupByStatus(issues: BoardIssue[], projectValues: ProjectFieldValues[]): Array<[string, BoardIssue[]]> {
+  const order = mergedValueOrder(projectValues, 'status');
   const map = new Map<string, BoardIssue[]>();
   for (const issue of issues) {
     const key = issue.fields.status ?? '(No status)';
@@ -57,11 +57,11 @@ function groupByStatus(issues: BoardIssue[]): Array<[string, BoardIssue[]]> {
     map.get(key)!.push(issue);
   }
   const result: Array<[string, BoardIssue[]]> = [];
-  for (const s of STATUS_ORDER) {
+  for (const s of order) {
     if (map.has(s)) result.push([s, map.get(s)!]);
   }
   for (const [s, g] of map) {
-    if (!STATUS_ORDER.includes(s)) result.push([s, g]);
+    if (!order.includes(s)) result.push([s, g]);
   }
   return result;
 }
@@ -139,15 +139,15 @@ function IssueRow({
         <Text type="text2" className={pbStyles.issueSummary}>{issue.summary}</Text>
       </td>
       <td className={pbStyles.cell}>
-        <ChipCell value={issue.fields.status} colorMap={COLORS.Status} field="status"
+        <ChipCell value={issue.fields.status} colorMap={COLORS.Status} field="status" project={issueProject(issue)}
           onEdit={(v) => onPatch(issue.id, 'status', v)} />
       </td>
       <td className={pbStyles.cell}>
-        <ChipCell value={issue.fields.priority} colorMap={COLORS.Priority} field="priority"
+        <ChipCell value={issue.fields.priority} colorMap={COLORS.Priority} field="priority" project={issueProject(issue)}
           onEdit={(v) => onPatch(issue.id, 'priority', v)} />
       </td>
       <td className={pbStyles.cell}>
-        <ChipCell value={issue.fields.category} colorMap={COLORS.Category} field="category"
+        <ChipCell value={issue.fields.category} colorMap={COLORS.Category} field="category" project={issueProject(issue)}
           onEdit={(v) => onPatch(issue.id, 'category', v)} />
       </td>
       <td className={pbStyles.cell}>
@@ -279,7 +279,14 @@ export function WorkspaceBoard({
     [allIssues, filter.search, assigneeView, youtrackLogin],
   );
 
-  const groups = useMemo(() => groupByStatus(filteredIssues), [filteredIssues]);
+  // Each project's own select-field values (VERM-117) — the workspace's
+  // projects and any Runway ticket's project — on the workspace's connection.
+  const fieldValues = useProjectFieldValues(workspaceId, useMemo(() => [...new Set([...projectShortNames, ...issueProjects(allIssues)])], [projectShortNames, allIssues]));
+  const fieldValuesLookup = lookupFrom(fieldValues);
+  const issueValues = valuesForIssues(fieldValuesLookup, allIssues);
+  const groups = useMemo(() => groupByStatus(filteredIssues, issueValues),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredIssues, fieldValues.byProject]);
 
   function handlePatch(issueId: string, field: string, value: string | null) {
     // A Runway ticket from outside the projects lives in the Runway's cache:
@@ -367,15 +374,18 @@ export function WorkspaceBoard({
     );
   }
 
-  const statusVals = [...new Set(allIssues.map((i) => i.fields.status).filter(Boolean) as string[])];
-  const priorityVals = [...new Set(allIssues.map((i) => i.fields.priority).filter(Boolean) as string[])];
-  const categoryVals = [...new Set(allIssues.map((i) => i.fields.category).filter(Boolean) as string[])];
+  // Every value the issues carry — none dropped for being outside a fixed list
+  // (VERM-117) — in their projects' own order.
+  const statusVals = orderedUnique(allIssues.map((i) => i.fields.status), mergedValueOrder(issueValues, 'status'));
+  const priorityVals = orderedUnique(allIssues.map((i) => i.fields.priority), mergedValueOrder(issueValues, 'priority'));
+  const categoryVals = orderedUnique(allIssues.map((i) => i.fields.category), mergedValueOrder(issueValues, 'category'));
   const assignedToMe = filter.assignee.includes(ASSIGNEE_ME);
   // The search text has its own clear (Escape); Clear resets the pills only.
   const hasFilters = filterCount({ ...filter, search: '' }) > 0;
   const colSpan = (workspaceId ? 2 : 1) + VISIBLE_COLS.length;
 
   return (
+    <ProjectFieldValuesProvider value={fieldValuesLookup}>
     <div className={pbStyles.board} style={{ position: 'relative' }} data-testid="workspace-board">
       {/* Header */}
       <div className={pbStyles.boardHeader}>
@@ -446,11 +456,11 @@ export function WorkspaceBoard({
       {/* Filter bar */}
       {allIssues.length > 0 && (
         <div className={pbStyles.filterBar} data-testid="ws-filter-bar">
-          <FilterPills label="Status"   values={statusVals.filter((v) => STATUS_OPTIONS.includes(v as never))} active={filter.status}   colorMap={COLORS.Status}   onToggle={(v) => toggle('status', v)} />
+          <FilterPills label="Status"   values={statusVals} active={filter.status}   colorMap={COLORS.Status}   onToggle={(v) => toggle('status', v)} />
           {statusVals.length > 0 && priorityVals.length > 0 && <span className={pbStyles.filterSep} />}
-          <FilterPills label="Priority" values={priorityVals.filter((v) => PRIORITY_OPTIONS.includes(v as never))} active={filter.priority} colorMap={COLORS.Priority} onToggle={(v) => toggle('priority', v)} />
+          <FilterPills label="Priority" values={priorityVals} active={filter.priority} colorMap={COLORS.Priority} onToggle={(v) => toggle('priority', v)} />
           {priorityVals.length > 0 && categoryVals.length > 0 && <span className={pbStyles.filterSep} />}
-          <FilterPills label="Category" values={categoryVals.filter((v) => CATEGORY_OPTIONS.includes(v as never))} active={filter.category} colorMap={COLORS.Category} onToggle={(v) => toggle('category', v)} />
+          <FilterPills label="Category" values={categoryVals} active={filter.category} colorMap={COLORS.Category} onToggle={(v) => toggle('category', v)} />
           <span className={pbStyles.filterSep} />
           {assigneeView.mode === 'mine' ? (
             <DefaultAssigneePill issues={allIssues} value={assigneeView.value} onToggle={toggleShowAll} />
@@ -542,5 +552,6 @@ export function WorkspaceBoard({
         </div>
       )}
     </div>
+    </ProjectFieldValuesProvider>
   );
 }

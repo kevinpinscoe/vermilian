@@ -19,7 +19,6 @@ import React, { useState } from 'react';
 import { Heading, Text, Button, AttentionBox } from '@vibe/core';
 import { Play } from '@vibe/icons';
 import type { BoardIssue, ParentEpic } from '../../../shared/workspace';
-import { STATUS_OPTIONS } from '../../../shared/workspace';
 import type { ConfirmationAction, RecommendationItem, RecommendationResult } from '../../../shared/ipc';
 import { ChipCell } from '../project-board/KanbanView';
 import { PRIORITY_COLORS } from '../project-board/colors';
@@ -67,9 +66,6 @@ const SLOTS: SlotDef[] = [
   { rank: 3, label: 'Then' },
 ];
 
-// Statuses a candidate could plausibly have — Done is excluded from the filter
-// options because it is already excluded from eligibility itself.
-const CANDIDATE_STATUS_OPTIONS = STATUS_OPTIONS.filter((s) => s !== 'Done');
 
 export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps) {
   // Mode, the Status filter, and the Epic filter are per-session UI state
@@ -81,7 +77,7 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
 
   const { byRank, isLoading: nowLoading } = useWorkspaceFocusRankHolders();
   const {
-    candidates, isLoading: candidatesLoading, isError: candidatesError, epicOptions,
+    candidates, isLoading: candidatesLoading, isError: candidatesError, epicOptions, statusOptions,
   } = useChooseNextCandidates(statusFilter, epicFilter);
   const projects = useProjects();
 
@@ -141,6 +137,7 @@ export function PriorityDesk({ onSelectIssue, onStartTimer }: PriorityDeskProps)
             isError={candidatesError}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            statusOptions={statusOptions}
             epicFilter={epicFilter}
             epicOptions={epicOptions}
             onEpicFilterChange={setEpicFilter}
@@ -337,7 +334,7 @@ function DeskCard({
 
 function ChooseNext({
   candidates, isLoading, isError, statusFilter, onStatusFilterChange,
-  epicFilter, epicOptions, onEpicFilterChange, projectNameFor, onSelectIssue,
+  epicFilter, epicOptions, onEpicFilterChange, projectNameFor, onSelectIssue, statusOptions,
 }: {
   candidates: Candidate[];
   isLoading: boolean;
@@ -346,6 +343,8 @@ function ChooseNext({
   onStatusFilterChange: (v: string | null) => void;
   epicFilter: string | null;
   epicOptions: ParentEpic[];
+  /** Statuses that are open work in at least one workspace project (VERM-117). */
+  statusOptions: string[];
   onEpicFilterChange: (v: string | null) => void;
   projectNameFor: (shortName: string) => string;
   onSelectIssue: (id: string) => void;
@@ -359,7 +358,7 @@ function ChooseNext({
 
   return (
     <div data-testid="priority-desk-choose-next">
-      <StatusFilter value={statusFilter} onChange={onStatusFilterChange} />
+      <StatusFilter value={statusFilter} options={statusOptions} onChange={onStatusFilterChange} />
       {epicOptions.length > 0 && (
         <EpicFilter value={epicFilter} options={epicOptions} onChange={onEpicFilterChange} />
       )}
@@ -688,7 +687,7 @@ function RecommendationRow({
 // to "All". The workspace scope is implicit (Priority Desk is already scoped
 // to the active workspace) and needs no control here.
 
-function StatusFilter({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+function StatusFilter({ value, options, onChange }: { value: string | null; options: string[]; onChange: (v: string | null) => void }) {
   return (
     <div className={styles.statusFilter} data-testid="priority-desk-status-filter">
       <button
@@ -700,7 +699,7 @@ function StatusFilter({ value, onChange }: { value: string | null; onChange: (v:
       >
         All
       </button>
-      {CANDIDATE_STATUS_OPTIONS.map((opt) => (
+      {options.map((opt) => (
         <button
           key={opt}
           type="button"

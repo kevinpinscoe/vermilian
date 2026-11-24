@@ -13,23 +13,8 @@
 import { test, expect, Page } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { launchAppWithEnv } from './helpers/launch';
+import { PROJECT_FIELD_ENV } from './helpers/projectFieldEnv';
 
-const PROJECT_FIELD_ENV = {
-  VERMILIAN_E2E_YT_CREATE_FIELDS: JSON.stringify({
-    TEST: { 'Affected host': { values: ['FLDW', 'core'], archived: ['retired-vm'] } },
-    TST2: { 'Affected host': { values: ['web1', 'mail1'] } },
-  }),
-  VERMILIAN_E2E_YT_STATUS_BUNDLES: JSON.stringify({
-    TEST: [
-      { name: 'To do' }, { name: 'In Progress' }, { name: 'Consider' },
-      { name: 'Done', isResolved: true }, { name: 'Wont do', isResolved: true },
-    ],
-    TST2: [
-      { name: 'Triage' }, { name: 'In Progress' },
-      { name: 'Consider', isResolved: true }, { name: 'Fixed', isResolved: true },
-    ],
-  }),
-};
 
 test.describe('Project field values IPC (VERM-117)', () => {
   let app: ElectronApplication;

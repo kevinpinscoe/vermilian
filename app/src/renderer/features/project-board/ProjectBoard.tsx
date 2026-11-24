@@ -11,8 +11,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { Loader, Text, Heading, AttentionBox, Button, Tooltip } from '@vibe/core';
 import { Wand, Play, Settings } from '@vibe/icons';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
 import { getFieldDef, type ColumnFieldKey } from '../../../shared/fields';
+import { mergedValueOrder } from '../../../shared/projectFieldValues';
+import { useProjectFieldValues } from '../project-fields/useProjectFieldValues';
+import {
+  ProjectFieldValuesProvider, issueProject, lookupFrom, useProjectFieldValuesLookup, valuesForIssues,
+} from '../project-fields/ProjectFieldValuesContext';
 import type { BoardColumnConfig, BoardColors, BoardSortConfig, ColumnField } from '../../../shared/boardConfig';
 import { COLUMN_LABELS, defaultBoardConfig, defaultBoardView, defaultKanbanView } from '../../../shared/boardConfig';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
@@ -28,7 +32,7 @@ import {
 import { FocusControl } from './FocusControl';
 import { FocusRankRepairBanner } from './FocusRankRepairBanner';
 import {
-  STATUS_ORDER, GROUP_FIELD_MAP, groupIssues, getGroupColorMap,
+  GROUP_FIELD_MAP, groupIssues, groupValueOrder, getGroupColorMap,
   applyFilter, filterCount, sortIssues, applyManualOrder, orderedUnique,
   EMPTY_FILTER, type FilterState, type DueDateMode,
   assigneeOptions, assigneeLabel,
@@ -89,9 +93,11 @@ interface FilterBarProps {
 }
 
 function FilterBar({ issues, filter, colors, onChange, searchRef, myLogin }: FilterBarProps) {
-  const statusVals   = orderedUnique(issues.map((i) => i.fields.status),   STATUS_ORDER);
-  const priorityVals = orderedUnique(issues.map((i) => i.fields.priority), PRIORITY_OPTIONS);
-  const categoryVals = orderedUnique(issues.map((i) => i.fields.category), CATEGORY_OPTIONS);
+  // Every value the issues carry, in their projects' own order (VERM-117).
+  const projectValues = valuesForIssues(useProjectFieldValuesLookup(), issues);
+  const statusVals   = orderedUnique(issues.map((i) => i.fields.status),   mergedValueOrder(projectValues, 'status'));
+  const priorityVals = orderedUnique(issues.map((i) => i.fields.priority), mergedValueOrder(projectValues, 'priority'));
+  const categoryVals = orderedUnique(issues.map((i) => i.fields.category), mergedValueOrder(projectValues, 'category'));
   const assigneeVals = assigneeOptions(issues, myLogin);
 
   const hasFilters = filterCount(filter) > 0;
@@ -411,6 +417,7 @@ function renderCell(
           value={value as string | null}
           colorMap={colorKey ? colors[colorKey] : {}}
           field={field}
+          project={issueProject(issue)}
           onEdit={onPatch ? (v) => save(v) : undefined}
         />
       );
@@ -899,7 +906,7 @@ function MainTableView({
     onColumnReorder(arrayMove(visibleColumns, fromIdx, toIdx));
   }
 
-  const groups = groupIssues(issues, groupBy);
+  const groups = groupIssues(issues, groupBy, groupValueOrder(groupBy, valuesForIssues(useProjectFieldValuesLookup(), issues)));
   const groupColorMap = getGroupColorMap(groupBy, colors);
   const groupByField = GROUP_FIELD_MAP[groupBy]?.key ?? null;
   const nonSummaryCols = visibleColumns.filter((c) => c.field !== 'summary');
@@ -1083,6 +1090,9 @@ export function ProjectBoard({
   }, [showFilter, pendingSearchFocus]);
 
   const { data: issues, isLoading, isError, error, refetch } = useIssues(projectShortName, showClosed);
+  // This project's own select-field values (VERM-117), on the workspace's connection.
+  const fieldValues = useProjectFieldValues(workspaceId, [projectShortName]);
+  const fieldValuesLookup = lookupFrom(fieldValues);
   const { data: boardConfig } = useBoardConfig(projectId);
   const myLogin = useConfig().data?.youtrackLogin ?? '';
   const saveBoardConfig = useSaveBoardConfig();
@@ -1238,7 +1248,7 @@ export function ProjectBoard({
     [projectShortName],
     kanbanSorting && kanbanSort.saved?.key === 'priority',
   );
-  const rawGroups = groupIssues(filteredIssues, effectiveGroupBy);
+  const rawGroups = groupIssues(filteredIssues, effectiveGroupBy, groupValueOrder(effectiveGroupBy, [fieldValues.byProject.get(projectShortName)]));
   const groups: typeof rawGroups = kanbanSorting
     ? rawGroups.map(([status, list]) => [status, sortAllTasksFlat(list, kanbanSort.saved!, runwayNumberOf, kanbanPriorityOrders)])
     : rawGroups;
@@ -1248,6 +1258,7 @@ export function ProjectBoard({
   }
 
   return (
+    <ProjectFieldValuesProvider value={fieldValuesLookup}>
     <div className={styles.board} style={{ position: 'relative' }}>
       {/* Header */}
       <div className={styles.boardHeader}>
@@ -1490,5 +1501,6 @@ export function ProjectBoard({
         />
       )}
     </div>
+    </ProjectFieldValuesProvider>
   );
 }
