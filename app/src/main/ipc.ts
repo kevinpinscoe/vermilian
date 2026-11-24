@@ -2284,6 +2284,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.runwayItemsAddNote, (_e, args) => runwayItems.addNote(args));
   ipcMain.handle(IPC.runwayItemsRemove, (_e, args) => runwayItems.remove(args));
   ipcMain.handle(IPC.runwayItemsMove, (_e, args) => runwayItems.move(args));
+  ipcMain.handle(IPC.runwayItemsAddIssueAbove, (_e, args) => runwayItems.addIssueAbove(args));
+  ipcMain.handle(IPC.runwayItemsMoveAbove, (_e, args) => runwayItems.moveAbove(args));
   ipcMain.handle(IPC.runwayItemsMoveToNumber, (_e, args) => runwayItems.moveToNumber(args));
   ipcMain.handle(IPC.runwayItemsMoveUp, (_e, args) => runwayItems.moveUp(args));
   ipcMain.handle(IPC.runwayItemsMoveDown, (_e, args) => runwayItems.moveDown(args));

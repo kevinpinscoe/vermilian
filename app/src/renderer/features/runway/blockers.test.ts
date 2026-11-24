@@ -6,12 +6,11 @@ import type { IssueLink } from '../../../shared/issueLink';
 import { FIELD_KEYS, type FieldKey } from '../../../shared/fields';
 import { buildRunwayRows } from './rows';
 import {
-  addAbovePlan,
   blockerBadge,
+  blockerAliases,
   blockerIssueId,
   issueBlockers,
   linkedEntityId,
-  moveAbovePlan,
   prerequisiteTypesFor,
   rowForKey,
   runwayBlockers,
@@ -126,20 +125,19 @@ describe('blockerBadge (All tasks)', () => {
   });
 });
 
-describe('Add to Runway: immediately above the dependent', () => {
-  it('goes in at the dependent\'s row position, so every existing row keeps its relative order', () => {
-    expect(addAbovePlan(ITEMS, 'yt:2-107', 'yt:2-240')).toEqual({ issueId: 'yt:2-240', position: 5 });
-  });
-
-  it('is refused for a dependent that is not saved', () => {
-    expect(addAbovePlan(ITEMS, 'yt:2-999', 'yt:2-240')).toBeNull();
-  });
-
+describe('Add to Runway: the IDs the blocker goes by', () => {
   it('names a YouTrack blocker by the entity ID its link carries, else its key; a Jira blocker by its key', () => {
     expect(blockerIssueId('youtrack', 'PLAT-40', '2-77')).toBe('yt:2-77');
     expect(blockerIssueId('youtrack', 'PLAT-40', null)).toBe('yt:PLAT-40');
     expect(blockerIssueId('jira', 'OPS-4089', '14089')).toBe('jira:OPS-4089');
     expect(blockerIssueId('jira', 'not a key', null)).toBeNull();
+  });
+
+  it('aliases: the ID it is added under first, then every other ID it goes by, so the gate can refuse a duplicate', () => {
+    expect(blockerAliases('youtrack', 'PLAT-40', '2-240')).toEqual(['yt:2-240', 'yt:PLAT-40']);
+    expect(blockerAliases('youtrack', 'PLAT-40', null)).toEqual(['yt:PLAT-40']);
+    expect(blockerAliases('jira', 'OPS-4089', '14089')).toEqual(['jira:OPS-4089']);
+    expect(blockerAliases('jira', 'not a key', null)).toEqual([]);
   });
 
   it('reads the blocker\'s entity ID off the dependent\'s links', () => {
@@ -148,7 +146,7 @@ describe('Add to Runway: immediately above the dependent', () => {
   });
 });
 
-describe('Move prerequisite above: immediately above the dependent, in one move', () => {
+describe('Move prerequisite above: the conflict is reported, and the prerequisite\'s row is found', () => {
   // SYNC-3 moved below READ-14: READ-14 is #2, SYNC-3 is #4.
   const conflicted = [
     item('sec:1', 'section', 1),
@@ -159,20 +157,11 @@ describe('Move prerequisite above: immediately above the dependent, in one move'
     item('yt:2-20', 'issue', 6),
   ];
 
-  it('the order conflict is reported and nothing is planned until the action is taken', () => {
+  it('the order conflict is reported; nothing here plans a write', () => {
     const rows = buildRunwayRows(conflicted, reads());
     const report = runwayBlockers(rows, YT).get('yt:2-14');
     expect(report?.orderConflicts).toEqual([{ key: 'SYNC-3', prerequisiteNumber: 4, dependentNumber: 2, certain: true }]);
     expect(rowForKey(rows, 'SYNC-3')?.itemId).toBe('yt:2-103');
-  });
-
-  it('moves the prerequisite to the dependent\'s row position', () => {
-    expect(moveAbovePlan(conflicted, 'yt:2-103', 'yt:2-14')).toEqual({ itemId: 'yt:2-103', position: 3 });
-  });
-
-  it('plans nothing when the prerequisite is already above, or a row is not saved', () => {
-    expect(moveAbovePlan(ITEMS, 'yt:2-103', 'yt:2-14')).toBeNull();
-    expect(moveAbovePlan(ITEMS, 'yt:2-999', 'yt:2-14')).toBeNull();
   });
 });
 

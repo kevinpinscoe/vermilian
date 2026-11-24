@@ -10,6 +10,10 @@
 //     every existing row keeps its relative order.
 //   - Move prerequisite above moves the prerequisite immediately above its
 //     dependent in one transaction; every other row keeps its relative order.
+//   - Both name the dependent by its stored itemId and leave its position to
+//     the main process, which reads it inside the transaction (Kevin's
+//     review): a dependent that moved still gets the row above it, and one
+//     that was removed leaves the Runway untouched.
 //   - A refresh only re-reads tickets: nothing here ever writes on its own.
 
 import {
@@ -20,7 +24,6 @@ import {
 } from '../../../shared/blockerState';
 import { defaultPrerequisiteLinkTypes, type PrerequisiteLinkType } from '../../../shared/issueLink';
 import { decodeIssueId, encodeIssueId, isValidLocalId, type TrackerKind } from '../../../shared/tracker';
-import type { RunwayItem } from '../../../shared/runwayItem';
 import type { BoardIssue, Workspace } from '../../../shared/workspace';
 import type { RunwayRow } from './rows';
 
@@ -115,38 +118,16 @@ export function blockerIssueId(tracker: TrackerKind, key: string, entityId: stri
   return isValidLocalId(tracker, key) ? encodeIssueId(tracker, key) : null;
 }
 
-/** The stored row of an itemId, or null. */
-function itemOf(items: readonly RunwayItem[], itemId: string): RunwayItem | null {
-  return items.find((i) => i.itemId === itemId) ?? null;
-}
-
 /**
- * Add to Runway: the external blocker goes in at its dependent's own row
- * position, which puts it immediately above the dependent; every existing
- * row keeps its relative order. Null when the dependent is not saved.
+ * Every namespaced ID a blocker ticket goes by, the one it is added under
+ * first: a YouTrack ticket by its entity ID (when the link carried a valid
+ * one) and its readable key; a Jira ticket by its key. The write gate refuses
+ * the add when a row already holds any of them.
  */
-export function addAbovePlan(
-  items: readonly RunwayItem[],
-  dependentItemId: string,
-  issueId: string,
-): { issueId: string; position: number } | null {
-  const dependent = itemOf(items, dependentItemId);
-  return dependent ? { issueId, position: dependent.position } : null;
-}
-
-/**
- * Move prerequisite above: the prerequisite moves to its dependent's row
- * position, which puts it immediately above the dependent (the rows between
- * shift down by one, keeping their relative order). Null unless the
- * prerequisite is saved below the dependent.
- */
-export function moveAbovePlan(
-  items: readonly RunwayItem[],
-  prerequisiteItemId: string,
-  dependentItemId: string,
-): { itemId: string; position: number } | null {
-  const prerequisite = itemOf(items, prerequisiteItemId);
-  const dependent = itemOf(items, dependentItemId);
-  if (!prerequisite || !dependent || prerequisite.position <= dependent.position) return null;
-  return { itemId: prerequisiteItemId, position: dependent.position };
+export function blockerAliases(tracker: TrackerKind, key: string, entityId: string | null): string[] {
+  const out: string[] = [];
+  const first = blockerIssueId(tracker, key, entityId);
+  if (first) out.push(first);
+  if (isValidLocalId(tracker, key)) out.push(encodeIssueId(tracker, key));
+  return [...new Set(out)];
 }

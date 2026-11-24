@@ -306,7 +306,12 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [x] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
       In Progress)*, or *Blocked by PLAT-40 (external)* when no status name is known, with an
       explicit **Add to Runway** action, which inserts it immediately above its dependent; every
-      existing row keeps its relative order (VERM-98).
+      existing row keeps its relative order (VERM-98). The action names the dependent by its
+      stored ID, and its position is read inside the store transaction: a dependent that moved
+      still gets the blocker immediately above it, and one that was removed leaves the Runway
+      untouched. A switch of the active workspace while the add waits (A → B → A included)
+      cancels it, and a ticket already on the Runway under its readable key or its tracker ID is
+      refused inside the write gate.
 - [x] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.
       *Order conflict — SYNC-3 is #5, after this (#2)*, with an explicit
       **Move prerequisite above** action. Nothing moves until it is clicked. Raised only when
@@ -315,6 +320,8 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       status role is unknown, never open, and a saved Runway row is found by entity ID or key even
       when its tracker read failed. **Move prerequisite above** moves the prerequisite immediately
       above its dependent in one transaction; every other row keeps its relative order (VERM-98).
+      It too names the dependent by its stored ID, finds it inside the transaction, leaves the
+      Runway untouched when the dependent was removed, and is cancelled by a workspace switch.
 - [x] Blocker state is computed on each refresh and held only in the renderer cache. A refresh
       never writes the Runway order.
 

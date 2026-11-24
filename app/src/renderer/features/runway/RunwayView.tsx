@@ -51,10 +51,8 @@ import {
 } from '../../../shared/blockerState';
 import {
   BLOCKER_STATE_LABEL,
-  addAbovePlan,
-  blockerIssueId,
+  blockerAliases,
   linkedEntityId,
-  moveAbovePlan,
   rowForKey,
   runwayBlockers,
 } from './blockers';
@@ -134,20 +132,24 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
     void act({ op: 'move', itemId, position }, movedItems(stored, itemId, position));
   }
 
-  /** Add to Runway: the external blocker goes in immediately above its dependent. */
+  /**
+   * Add to Runway: the external blocker goes in immediately above its
+   * dependent. The dependent is named by its stored ID; the main process
+   * finds where it is inside the transaction and refuses a ticket already on
+   * the Runway under any of its IDs, or a workspace switch while it waits.
+   */
   function addBlocker(dependent: RunwayRow, key: string) {
     if (dependent.kind !== 'ticket' || !dependent.issue) return;
-    const issueId = blockerIssueId(tracker, key, linkedEntityId(dependent.issue, key));
-    const plan = issueId ? addAbovePlan(stored, dependent.itemId, issueId) : null;
-    if (plan) void act({ op: 'addIssue', ...plan });
+    const aliases = blockerAliases(tracker, key, linkedEntityId(dependent.issue, key));
+    if (aliases.length === 0) return;
+    void act({ op: 'addAbove', issueId: aliases[0], aliases, dependentItemId: dependent.itemId });
   }
 
-  /** Move prerequisite above: the prerequisite moves immediately above its dependent. */
+  /** Move prerequisite above: the prerequisite moves immediately above its dependent, wherever that is then. */
   function movePrerequisiteAbove(dependent: RunwayRow, key: string) {
     if (dependent.kind !== 'ticket' || !dependent.issue) return;
     const prerequisite = rowForKey(rows, key, linkedEntityId(dependent.issue, key));
-    const plan = prerequisite ? moveAbovePlan(stored, prerequisite.itemId, dependent.itemId) : null;
-    if (plan) void act({ op: 'move', ...plan }, movedItems(stored, plan.itemId, plan.position));
+    if (prerequisite) void act({ op: 'moveAbove', itemId: prerequisite.itemId, dependentItemId: dependent.itemId });
   }
 
   const error = inputError ?? edit.error;
