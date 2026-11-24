@@ -49,14 +49,14 @@ function issue(key: string, opts: IssueOpts = {}): BoardIssue {
 function link(
   key: string,
   resolved: boolean | null,
-  { type = 'Depend', direction = 'inward', status }: { type?: string; direction?: 'inward' | 'outward' | 'both'; status?: string | null } = {},
+  { type = 'Depend', direction = 'inward', status, id }: { type?: string; direction?: 'inward' | 'outward' | 'both'; status?: string | null; id?: string } = {},
 ): IssueLink {
   return {
     type,
     directed: direction !== 'both',
     direction,
     verb: direction === 'inward' ? 'depends on' : 'is required for',
-    issue: { id: `2-${key}`, key, summary: `${key} summary`, resolved, ...(status !== undefined ? { status } : {}) },
+    issue: { id: id ?? `2-${key}`, key, summary: `${key} summary`, resolved, ...(status !== undefined ? { status } : {}) },
   };
 }
 
@@ -258,7 +258,7 @@ describe('blockerStateOf: prerequisites scheduled after their dependent', () => 
     const r14 = issue('READ-14', { links: [link('SYNC-3', null)] });
     const r = blockerStateOf(r14, yt([place(2, r14), place(5, null, '2-SYNC-3')]));
     expect(r.orderConflicts).toEqual([{ key: 'SYNC-3', prerequisiteNumber: 5, dependentNumber: 2, certain: false }]);
-    expect(describeOrderConflict(r.orderConflicts[0])).toBe('Possible order conflict — SYNC-3 is #5, after this (#2); its status is unknown');
+    expect(describeOrderConflict(r.orderConflicts[0])).toBe('Possible order conflict — SYNC-3 is #5, after this (#2); not both known to be open');
   });
 
   it('a ticket that is not on the Runway (All tasks) gets no order conflicts', () => {
@@ -286,5 +286,44 @@ describe('blockerStateOf: workspace prerequisite link types', () => {
     const before = JSON.stringify({ r14, runway });
     blockerStateOf(r14, yt(runway));
     expect(JSON.stringify({ r14, runway })).toBe(before);
+  });
+});
+
+describe('regression: Kevin\'s VERM-97 review scenarios', () => {
+  const jira = (runway: RunwayPlace[]): BlockerContext => ({ prerequisiteTypes: JIRA_DEFAULT_PREREQUISITE_LINK_TYPES, runway });
+  /** A Jira board issue: its entity ID differs from its key. */
+  const jiraIssue = (key: string, entityId: string, opts: IssueOpts) => ({ ...issue(key, opts), id: entityId });
+
+  it('1. a saved Runway row whose tracker read failed is found by key, whatever the link\'s entity ID', () => {
+    const dependent = jiraIssue('OPS-956', '10956', { statusRole: 'inProgress', links: [link('OPS-2', false, { type: 'Blocks', id: '10002' })] });
+    const r = blockerStateOf(dependent, jira([place(2, dependent), { localId: 'OPS-2', runwayNumber: 5, issue: null }]));
+    expect(r.state).toBe('blocked');
+    expect(r.blockers).toEqual([{ key: 'OPS-2', summary: 'OPS-2 summary', runwayNumber: 5, status: null }]);
+    expect(describePrerequisite(r.blockers[0])).toBe('OPS-2 (#5 here)');
+    expect(r.orderConflicts).toEqual([{ key: 'OPS-2', prerequisiteNumber: 5, dependentNumber: 2, certain: true }]);
+  });
+
+  it('1b. the same saved row is found by entity ID when that is what the row holds', () => {
+    const dependent = jiraIssue('OPS-956', '10956', { statusRole: 'inProgress', links: [link('OPS-2', false, { type: 'Blocks', id: '10002' })] });
+    const r = blockerStateOf(dependent, jira([place(2, dependent), { localId: '10002', runwayNumber: 5, issue: null }]));
+    expect(r.blockers[0].runwayNumber).toBe(5);
+    expect(r.orderConflicts).toEqual([{ key: 'OPS-2', prerequisiteNumber: 5, dependentNumber: 2, certain: true }]);
+  });
+
+  it('2. unknown resolution stays unknown: the link says null and the prerequisite\'s Jira row has no resolution and no usable status role', () => {
+    const dependent = jiraIssue('OPS-956', '10956', { statusRole: 'inProgress', links: [link('OPS-2', null, { type: 'Blocks', id: '10002' })] });
+    const ops2 = jiraIssue('OPS-2', '10002', { status: 'Mystery', statusRole: null, resolved: null });
+    const r = blockerStateOf(dependent, jira([place(2, dependent), place(5, ops2)]));
+    expect(r.state).toBe('unknown');
+    expect(r.blockers).toEqual([]);
+    expect(r.unknownPrerequisites.map((p) => p.key)).toEqual(['OPS-2']);
+    expect(r.orderConflicts).toEqual([{ key: 'OPS-2', prerequisiteNumber: 5, dependentNumber: 2, certain: false }]);
+  });
+
+  it('2b. a known-open prerequisite below a dependent whose own status is unknown is only a possible conflict', () => {
+    const dependent = jiraIssue('OPS-956', '10956', { status: 'Mystery', statusRole: null, links: [link('OPS-2', false, { type: 'Blocks', id: '10002' })] });
+    const ops2 = jiraIssue('OPS-2', '10002', { statusRole: 'inProgress' });
+    const r = blockerStateOf(dependent, jira([place(2, dependent), place(5, ops2)]));
+    expect(r.orderConflicts).toEqual([{ key: 'OPS-2', prerequisiteNumber: 5, dependentNumber: 2, certain: false }]);
   });
 });

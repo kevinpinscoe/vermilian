@@ -302,8 +302,10 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 - [ ] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.
       *Order conflict — SYNC-3 is #5, after this (#2)*, with an explicit
       **Move prerequisite above** action. Nothing moves until it is clicked. Raised only when
-      both tickets are known to be open on this Runway; when the prerequisite's state is unknown,
-      that uncertainty is shown instead (VERM-97).
+      both tickets are known to be open on this Runway; when either one's state is unknown, that
+      uncertainty is shown instead (VERM-97). A Jira ticket with no resolution and no usable
+      status role is unknown, never open, and a saved Runway row is found by entity ID or key even
+      when its tracker read failed.
 - [ ] Blocker state is computed on each refresh and held only in the renderer cache. A refresh
       never writes the Runway order.
 

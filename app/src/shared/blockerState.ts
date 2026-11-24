@@ -24,7 +24,9 @@
 //
 // A prerequisite's resolved state is the link's (the tracker's answer when
 // the link was read). When the link did not say and the prerequisite's own
-// Runway row was read, that row's state is used. Its status name is the
+// Runway row was read, that row's state is used — and a row with no
+// resolution and no usable status role is unknown, never open. Runway rows
+// are matched by entity ID or key, so a row whose read failed still counts. Its status name is the
 // row's for a prerequisite on this Runway, else the one supplied with the
 // link, else none; the name is display only and never decides a state.
 
@@ -77,8 +79,9 @@ export interface OrderConflict {
   /** The dependent's own Runway #. */
   dependentNumber: number;
   /**
-   * true when the prerequisite is known to be open: an order conflict.
-   * false when its state is unknown: shown as uncertainty, not a conflict.
+   * true when both tickets are known to be open: an order conflict.
+   * false when either one's state is unknown: shown as uncertainty, not a
+   * conflict (Kevin, VERM-97 review).
    */
   certain: boolean;
 }
@@ -117,6 +120,18 @@ export function isIssueDone(issue: BoardIssue): boolean {
 }
 
 /**
+ * A board issue's resolution as three states: true when resolved, false when
+ * known to be open, null when unknown. A YouTrack issue (no statusRole) with
+ * no resolved time is open. A Jira issue whose status has no usable role
+ * (statusRole null) and no resolution time is unknown — never assumed open
+ * (Kevin, VERM-97 review).
+ */
+export function issueResolution(issue: BoardIssue): boolean | null {
+  if (isIssueDone(issue)) return true;
+  return issue.statusRole === null ? null : false;
+}
+
+/**
  * Whether the ticket's own status says it is blocked: a Jira status mapped to
  * blocked (statusRole), or — for YouTrack, which carries no statusRole and
  * whose shared status vocabulary is read by name — the BLOCKED status.
@@ -126,17 +141,23 @@ export function isStatusBlocked(issue: BoardIssue): boolean {
   return issue.fields.status === 'BLOCKED';
 }
 
-function placeOf(link: IssueLink, runway: readonly RunwayPlace[]): RunwayPlace | null {
+/**
+ * The Runway row for a ticket, by entity ID or by key: a row's localId may be
+ * either (a Jira row can be saved under its key), and a row whose tracker
+ * read failed has no issue to compare, so its localId is matched against
+ * both (Kevin, VERM-97 review).
+ */
+function placeFor(id: string | null, key: string, runway: readonly RunwayPlace[]): RunwayPlace | null {
   return (
-    runway.find((p) => link.issue.id !== null && p.localId === link.issue.id) ??
-    runway.find((p) => p.issue?.idReadable === link.issue.key) ??
+    runway.find((p) => (id !== null && p.localId === id) || p.localId === key) ??
+    runway.find((p) => p.issue !== null && (p.issue.idReadable === key || (id !== null && p.issue.id === id))) ??
     null
   );
 }
 
 function resolvedOf(link: IssueLink, place: RunwayPlace | null): boolean | null {
   if (link.issue.resolved !== null) return link.issue.resolved;
-  return place?.issue ? isIssueDone(place.issue) : null;
+  return place?.issue ? issueResolution(place.issue) : null;
 }
 
 /**
@@ -163,13 +184,15 @@ export function blockerStateOf(issue: BoardIssue, ctx: BlockerContext, options: 
   report.linksUnreadable = linksUnreadable;
 
   // Only links that were read and can be trusted name prerequisites.
-  const own = ctx.runway.find((p) => p.localId === issue.id || p.issue?.idReadable === issue.idReadable) ?? null;
+  const own = placeFor(issue.id, issue.idReadable, ctx.runway);
+  // A definite order conflict needs both tickets known to be open.
+  const ownOpen = issueResolution(issue) === false;
   const seen = new Set<string>([issue.idReadable]);
   const prerequisites = linksUnreadable === null ? prerequisitesOf(issue.links ?? [], ctx.prerequisiteTypes) : [];
   for (const link of prerequisites) {
     if (seen.has(link.issue.key)) continue;
     seen.add(link.issue.key);
-    const place = placeOf(link, ctx.runway);
+    const place = placeFor(link.issue.id, link.issue.key, ctx.runway);
     const resolved = resolvedOf(link, place);
     if (resolved === true) continue;
     const entry: Prerequisite = {
@@ -184,7 +207,7 @@ export function blockerStateOf(issue: BoardIssue, ctx: BlockerContext, options: 
         key: entry.key,
         prerequisiteNumber: place.runwayNumber,
         dependentNumber: own.runwayNumber,
-        certain: resolved === false,
+        certain: resolved === false && ownOpen,
       });
     }
   }
@@ -226,7 +249,7 @@ export function describeStatusBlock(block: StatusBlock | null): string | null {
 export function describeOrderConflict(c: OrderConflict): string {
   return c.certain
     ? `Order conflict — ${c.key} is #${c.prerequisiteNumber}, after this (#${c.dependentNumber})`
-    : `Possible order conflict — ${c.key} is #${c.prerequisiteNumber}, after this (#${c.dependentNumber}); its status is unknown`;
+    : `Possible order conflict — ${c.key} is #${c.prerequisiteNumber}, after this (#${c.dependentNumber}); not both known to be open`;
 }
 
 /** The one-line summary a row shows: "Ready", "Blocked by SYNC-3 (#2 here).", "Unknown: Links were not read". */
