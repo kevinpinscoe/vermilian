@@ -188,7 +188,7 @@ import { isValidLocalId } from '../../shared/tracker';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
-import { parseYouTrackProjectFields, YOUTRACK_PROJECT_FIELDS_SELECTION, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import { parseYouTrackProjectFields, YOUTRACK_PROJECT_FIELDS_SELECTION, type DateTimeEnteredIssueType, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
 import { buildStandupQuery, standupGroupFor, type StandupPlan } from '../../shared/youtrackStandup';
 import { mapYouTrackLinks, type RawIssueLink } from './youtrackLinks';
 import {
@@ -560,11 +560,11 @@ export interface CreateIssuePayload {
   notes: string | null;
   repoUrl: string | null;
   /**
-   * Send the automatic `Date time entered` timestamp. Set only when the
-   * project defines a compatible date field (VERM-115, decided from its
-   * metadata by services/createTask.ts); otherwise the field is omitted.
+   * The issue-level `$type` to send the automatic `Date time entered`
+   * timestamp with, taken from the selected project's own field definition
+   * (VERM-115, services/createTask.ts). Omitted or null: the field is not sent.
    */
-  dateTimeEntered?: boolean;
+  dateTimeEnteredType?: DateTimeEnteredIssueType | null;
 }
 
 export interface CreateIssueResult {
@@ -591,8 +591,8 @@ export async function createIssue(
     if (!include) continue;
     customFields.push({ name: def.ytName, $type: def.$type, value: toYouTrackValue(def, value) });
   }
-  if (payload.dateTimeEntered === true) {
-    customFields.push({ name: 'Date time entered', $type: 'DateIssueCustomField', value: Date.now() });
+  if (payload.dateTimeEnteredType) {
+    customFields.push({ name: 'Date time entered', $type: payload.dateTimeEnteredType, value: Date.now() });
   }
 
   return request<CreateIssueResult>(url, token, '/api/issues?fields=id,idReadable', {

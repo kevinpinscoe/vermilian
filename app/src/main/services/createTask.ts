@@ -15,7 +15,7 @@
 //     every submitted value must be one the project offers — otherwise
 //     nothing is sent. Empty fields are omitted so YouTrack applies its own
 //     defaults, and `Date time entered` is stamped only when the project
-//     defines it as a compatible date field.
+//     defines it as a date field, with the $type that field takes.
 //   - aiCreate: AI extraction with the known project's allowed values, then
 //     validation against the project Claude chose — both reads on the
 //     originating workspace's connection, and the second cancelled if the
@@ -33,7 +33,7 @@ import {
   sanitizeCreateSuggestions,
   type CreateFieldOptions,
 } from '../../shared/createFieldOptions';
-import { acceptsDateTimeEntered, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import { dateTimeEnteredIssueType, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
 import type { CreateIssuePayload, CreateIssueResult as YouTrackCreateResult } from '../api/youtrack';
 
 export const CREATE_WORKSPACE_CHANGED_MESSAGE =
@@ -162,8 +162,8 @@ export function createTaskService(deps: CreateTaskDeps) {
       relatedLink: args.relatedLink,
       notes: args.notes,
       repoUrl: args.repoUrl,
-      // Only where the project defines a compatible date field.
-      dateTimeEntered: acceptsDateTimeEntered(meta),
+      // The project's own $type for the timestamp, or null to omit it.
+      dateTimeEnteredType: dateTimeEnteredIssueType(meta),
     };
     try {
       const result = await conn.create(payload);

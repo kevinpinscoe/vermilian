@@ -679,8 +679,11 @@ a field. Vermilian names a field only when the response itself names it, or
 when a fresh read confirms the submitted value is no longer offered.
 
 The automatic `Date time entered` timestamp is sent only when the project
-defines that field as a `date` or `date and time` field. A project without it
-gets no timestamp, rather than a refused create.
+defines that field as a `date` or `date and time` field. It is sent with the
+`$type` that field takes on issues: `DateIssueCustomField` for `date`,
+`SimpleIssueCustomField` for `date and time` (the type of `Date time entered`
+in every current project). A project without the field, or with another
+type, gets no timestamp, rather than a refused create.
 
 Every options read and create runs on the YouTrack connection of the
 workspace the form or AI request came from. A workspace switch cancels a

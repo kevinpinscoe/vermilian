@@ -35,7 +35,7 @@ A lighter **inline quick-add** path also exists at the bottom of each group on t
 - [ ] **No value list is hard-coded on the create path (VERM-115).** Status, Priority and Category are read from the selected project's field configuration (`/api/admin/projects/{id}/customFields`, VERM-114's reader) on the active workspace's own YouTrack connection. Archived values are not offered. No value, such as `To do` or `Normal`, is assumed to exist.
 - [ ] A blank field is omitted from the `POST`, so YouTrack applies the project's own default.
 - [ ] While the project's options load, those three dropdowns and **Create** are disabled. If the read fails, the draft is kept and the form shows the error with a **Retry** action.
-- [ ] `Date time entered` is **not** shown in the form. It is set automatically to the current client timestamp on submission and sent as a custom field, **only when the selected project defines `Date time entered` as a `date` or `date and time` field** (VERM-115). When the field is absent, or has any other type, it is left out of the payload.
+- [ ] `Date time entered` is **not** shown in the form. It is set automatically to the current client timestamp on submission and sent as a custom field, **only when the selected project defines `Date time entered` as a `date` or `date and time` field** (VERM-115). It is sent with the issue-level `$type` that field takes: `DateIssueCustomField` for `date`, and `SimpleIssueCustomField` for `date and time`. These are the types the live instance reports on issues (checked 2026-11-24). When the field is absent, or has any other type, it is left out of the payload.
 
 ### Validation
 

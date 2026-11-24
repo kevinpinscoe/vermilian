@@ -89,14 +89,23 @@ export function parseYouTrackProjectFields(raw: unknown): YouTrackProjectMetadat
 /** The automatic creation timestamp's field (VERM-115). */
 export const DATE_TIME_ENTERED_FIELD = 'Date time entered';
 
+/** The issue-level `$type` a timestamp is written with, per project field type. */
+export type DateTimeEnteredIssueType = 'DateIssueCustomField' | 'SimpleIssueCustomField';
+
 /**
- * Whether the project defines `Date time entered` as a field that accepts the
- * automatic timestamp (epoch milliseconds): a `date` or `date and time` field.
- * Absent, or any other type, means the timestamp is not sent (VERM-115).
+ * The issue-level `$type` for the automatic `Date time entered` timestamp
+ * (epoch milliseconds), from the selected project's own definition of the
+ * field (VERM-115). Read off the live instance on 2026-11-24: a `date` field
+ * (e.g. Due Date) is written as `DateIssueCustomField`, a `date and time`
+ * field (Date time entered in every current project) as
+ * `SimpleIssueCustomField`. null — send nothing — when the project has no
+ * such field, or defines it with any other type.
  */
-export function acceptsDateTimeEntered(meta: YouTrackProjectMetadata): boolean {
+export function dateTimeEnteredIssueType(meta: YouTrackProjectMetadata): DateTimeEnteredIssueType | null {
   const f = meta.fields.find((x) => x.name === DATE_TIME_ENTERED_FIELD);
-  return Boolean(f && (f.fieldType === 'date' || f.fieldType === 'date and time'));
+  if (f?.fieldType === 'date') return 'DateIssueCustomField';
+  if (f?.fieldType === 'date and time') return 'SimpleIssueCustomField';
+  return null;
 }
 
 /**

@@ -79,7 +79,7 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await expect(page.locator(SUMMARY)).toBeHidden();
     expect(await createRequests(page)).toEqual([
       // TST2 has no Date time entered field, so no timestamp is asked for.
-      expect.objectContaining({ projectId: '0-e2', status: 'Doing', priority: 'P2', category: null, dateTimeEntered: false }),
+      expect.objectContaining({ projectId: '0-e2', status: 'Doing', priority: 'P2', category: null, dateTimeEnteredType: null }),
     ]);
   });
 
@@ -89,7 +89,7 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await expect(page.locator(STATUS)).toHaveValue('');
     await page.locator(CREATE).click();
     await expect(page.locator(SUMMARY)).toBeHidden();
-    expect(await createRequests(page)).toEqual([expect.objectContaining({ projectId: '0-e4', status: null, dateTimeEntered: true })]);
+    expect(await createRequests(page)).toEqual([expect.objectContaining({ projectId: '0-e4', status: null, dateTimeEnteredType: 'SimpleIssueCustomField' })]);
   });
 
   test("a user's choice the next project lacks is cleared and flagged", async () => {

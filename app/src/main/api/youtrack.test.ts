@@ -754,7 +754,7 @@ describe('patchIssue', () => {
 // ─── createIssue ──────────────────────────────────────────────────────────────
 
 describe('createIssue', () => {
-  it('omits null custom fields and stamps Date time entered when asked to', async () => {
+  it('omits null custom fields and stamps Date time entered with the given $type', async () => {
     fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
     const result = await createIssue(URL, TOKEN, {
       projectId: '0-1',
@@ -768,7 +768,7 @@ describe('createIssue', () => {
       relatedLink: null,
       notes: 'note body',
       repoUrl: null,
-      dateTimeEntered: true,
+      dateTimeEnteredType: 'SimpleIssueCustomField',
     });
     expect(result).toEqual({ id: '5', idReadable: 'TST-5' });
 
@@ -778,12 +778,12 @@ describe('createIssue', () => {
     const names = body.customFields.map((f: { name: string }) => f.name);
     expect(names).toContain('Status');
     expect(names).toContain('Notes');
-    expect(names).toContain('Date time entered');
+    expect(body.customFields.find((f: { name: string }) => f.name === 'Date time entered')).toMatchObject({ $type: 'SimpleIssueCustomField' });
     expect(names).not.toContain('Priority');
     expect(names).not.toContain('Category');
   });
 
-  it('omits Date time entered unless asked to stamp it (VERM-115)', async () => {
+  it('omits Date time entered when no $type is given (VERM-115)', async () => {
     fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
     await createIssue(URL, TOKEN, {
       projectId: '0-1', summary: 'New task', status: 'To do', priority: null, category: null, dueDate: null,

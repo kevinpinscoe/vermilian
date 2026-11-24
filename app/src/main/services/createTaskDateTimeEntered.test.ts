@@ -64,20 +64,27 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+const stampOf = (body: Record<string, unknown>) =>
+  (body.customFields as Array<{ name: string; $type: string; value: unknown }>).find((f) => f.name === 'Date time entered');
+
 describe('Date time entered on create (VERM-115)', () => {
-  it('is included when the project defines it as a date-and-time field', async () => {
+  // The $type each project field type takes, as the live instance reports it
+  // on issues (2026-11-24): `date and time` → SimpleIssueCustomField,
+  // `date` → DateIssueCustomField.
+  it("is sent as SimpleIssueCustomField when the project's field is date and time", async () => {
     serve([STATUS, dateTimeEntered('date and time')]);
+    const before = Date.now();
     expect((await service().create(ARGS)).ok).toBe(true);
     expect(posted).toHaveLength(1);
-    const stamp = (posted[0].customFields as Array<{ name: string; $type: string; value: unknown }>).find((f) => f.name === 'Date time entered');
-    expect(stamp).toMatchObject({ $type: 'DateIssueCustomField' });
-    expect(typeof stamp?.value).toBe('number');
+    const stamp = stampOf(posted[0]);
+    expect(stamp).toEqual({ name: 'Date time entered', $type: 'SimpleIssueCustomField', value: expect.any(Number) });
+    expect(stamp?.value as number).toBeGreaterThanOrEqual(before);
   });
 
-  it('is included for a plain date field too', async () => {
+  it("is sent as DateIssueCustomField when the project's field is date", async () => {
     serve([STATUS, dateTimeEntered('date')]);
-    await service().create(ARGS);
-    expect(names(posted[0])).toContain('Date time entered');
+    expect((await service().create(ARGS)).ok).toBe(true);
+    expect(stampOf(posted[0])).toEqual({ name: 'Date time entered', $type: 'DateIssueCustomField', value: expect.any(Number) });
   });
 
   it('is omitted when the project has no such field', async () => {

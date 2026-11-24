@@ -175,7 +175,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and sends nothing if one fails. Every read and create runs on the YouTrack connection of the
   workspace the request came from. Switching workspace while the AI is answering cancels the
   lookup for the project it chose, and nothing is created. The automatic `Date time entered`
-  stamp is sent only when the project defines that field as a date field. YouTrack's unfilled
+  stamp is sent only when the project defines that field as a date field, with the `$type`
+  that field takes (`SimpleIssueCustomField` for date and time, `DateIssueCustomField` for
+  date). Before, it was always sent as `DateIssueCustomField`. YouTrack's unfilled
   `({1})` message is never shown raw. A field and value are named only when the response
   names them or a fresh read confirms the value is no longer offered. Otherwise it says
   "YouTrack rejected the request but did not identify the field" and offers **Refresh project
