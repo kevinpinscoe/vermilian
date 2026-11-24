@@ -197,6 +197,7 @@ export function AdvancedSection({ onReset }: Props) {
           <ModalHeader title="Replace all Runway metadata?" />
           <ModalContent>
             <AttentionBox
+              className={styles.importWarning}
               type="warning"
               title="This replaces Runway data for every workspace"
               text="The Runway order of every workspace, and Focus, rank, Why now and dismissals for Jira issues in all workspaces on this computer, will be replaced by the snapshot. Records not in the snapshot are removed."
@@ -204,7 +205,13 @@ export function AdvancedSection({ onReset }: Props) {
             {importPreview.warnings.length > 0 && (
               <div data-testid="runway-import-replace-warning">
                 {importWarningTexts(importPreview).map((text) => (
-                  <AttentionBox key={text} type="negative" title="Local Runway changes may be lost" text={text} />
+                  <AttentionBox
+                    key={text}
+                    className={styles.importWarning}
+                    type="negative"
+                    title="Local Runway changes may be lost"
+                    text={text}
+                  />
                 ))}
               </div>
             )}

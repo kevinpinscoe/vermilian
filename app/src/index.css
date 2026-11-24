@@ -9,13 +9,3 @@ body,
 body {
   font-family: var(--font-family, 'Figtree', Roboto, sans-serif);
 }
-
-/*
- * Vibe's AttentionBox is width: 100% with horizontal padding, but sets no
- * box-sizing, so under the browser's content-box default it is 32px wider
- * than its container. In a modal that clipped the warning text at the right
- * edge (VERM-109); e2e/runway-snapshot-import.spec.ts measures it.
- */
-[data-vibe='AttentionBox'] {
-  box-sizing: border-box;
-}

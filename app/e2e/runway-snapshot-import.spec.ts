@@ -58,28 +58,98 @@ async function list(page: Page, workspaceId: string): Promise<Array<{ issueId: s
     .sort((a, b) => a.issueId.localeCompare(b.issueId));
 }
 
-// VERM-109: every warning box in the import preview fits inside the modal.
-// Vibe's AttentionBox is width:100% plus horizontal padding; under the
-// default content-box sizing it ran 32px past ModalContent and its text was
-// clipped at the right edge. Measured in the real renderer, since unit tests
-// have no layout.
-async function expectWarningsInsideModal(page: Page): Promise<void> {
-  const overflow = await page.getByTestId('runway-import-modal').evaluate((modal) => {
-    const boxes = Array.from(modal.querySelectorAll<HTMLElement>('[data-vibe="AttentionBox"]'));
+// VERM-109: the import preview's warnings stay whole and readable at the
+// modal's minimum width. Vibe's medium Modal is a fixed 540px whenever the
+// viewport is narrower than 1280px (580px at 1280px and wider) and has no
+// max-width, so 540px is the narrowest it renders. The app sets no window
+// minimum, so the window is set to 1024px wide, below that breakpoint, and the
+// modal's rendered width is checked before anything is measured.
+const MIN_WINDOW_WIDTH = 1024;
+const MIN_MODAL_WIDTH = 540;
+
+async function setMinimumWindowWidth(app: ElectronApplication, page: Page): Promise<void> {
+  await app.evaluate(({ BrowserWindow }, width) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win.setContentSize(width, win.getContentSize()[1]);
+  }, MIN_WINDOW_WIDTH);
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(MIN_WINDOW_WIDTH);
+}
+
+// Vibe's AttentionBox is width: 100% with 16px horizontal padding but sets no
+// box-sizing; under content-box it ran 32px past ModalContent and the text
+// was clipped at the right edge. This checks each warning's box edges, and
+// then every line of its text against every element that could clip it, so
+// text cut off inside a child element fails too. Measured in the packaged
+// renderer, since unit tests have no layout.
+async function expectWarningsReadableAtMinimumWidth(page: Page): Promise<void> {
+  const modal = page.getByTestId('runway-import-modal');
+  // The dialog element inside the Modal root carries the fixed width.
+  await expect
+    .poll(() => modal.evaluate((root) => Math.round((root.querySelector('[role="dialog"]') ?? root).getBoundingClientRect().width)))
+    .toBe(MIN_MODAL_WIDTH);
+
+  const report = await modal.evaluate((root) => {
+    const dialog = root.querySelector<HTMLElement>('[role="dialog"]') ?? root;
     // ModalContent: the element the preview list is rendered into.
-    const content = modal.querySelector('dl')?.parentElement ?? modal;
-    const edge = content.getBoundingClientRect().right;
-    return {
-      boxes: boxes.length,
-      // Pixels by which each box's right edge passes the content's.
-      past: boxes.map((b) => Math.max(0, Math.round(b.getBoundingClientRect().right - edge))),
-      // Pixels by which each box's text is wider than the room it is given.
-      clipped: boxes.map((b) => Math.max(0, b.scrollWidth - b.clientWidth)),
-    };
+    const content = root.querySelector('dl')?.parentElement as HTMLElement;
+    const contentRect = content.getBoundingClientRect();
+    const px = (n: number) => Math.round(n * 10) / 10;
+
+    return Array.from(content.querySelectorAll<HTMLElement>('[data-vibe="AttentionBox"]')).map((box) => {
+      const boxRect = box.getBoundingClientRect();
+      const style = getComputedStyle(box);
+      // The box's own text area: inside its padding.
+      const textLeft = boxRect.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+      const textRight = boxRect.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+      const problems: string[] = [];
+      if (boxRect.left < contentRect.left - 0.5) problems.push(`box starts ${px(contentRect.left - boxRect.left)}px before the content`);
+      if (boxRect.right > contentRect.right + 0.5) problems.push(`box ends ${px(boxRect.right - contentRect.right)}px past the content`);
+
+      let text = '';
+      let lines = 0;
+      const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        text += node.textContent;
+        // Every element between this text and the dialog that clips overflow.
+        const clippers: HTMLElement[] = [];
+        for (let el = node.parentElement; el && el !== root.parentElement; el = el.parentElement) {
+          const s = getComputedStyle(el);
+          if (s.overflowX !== 'visible' || s.textOverflow === 'ellipsis') clippers.push(el);
+          if (el === dialog) break;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const r of Array.from(range.getClientRects())) {
+          if (r.width === 0) continue;
+          lines++;
+          const where = `"${node.textContent.trim().slice(0, 30)}…" line ${lines}`;
+          if (r.left < textLeft - 0.5 || r.right > textRight + 0.5) problems.push(`${where} leaves the box's text area`);
+          for (const el of clippers) {
+            const c = el.getBoundingClientRect();
+            const name = el.className || el.tagName.toLowerCase();
+            if (r.left < c.left - 0.5 || r.right > c.right + 0.5) problems.push(`${where} is clipped by ${name}`);
+          }
+        }
+        for (const el of clippers) {
+          if (el.scrollWidth > el.clientWidth) problems.push(`${el.className || el.tagName.toLowerCase()} overflows by ${el.scrollWidth - el.clientWidth}px`);
+        }
+      }
+      return { title: box.querySelector('[class*="title"]')?.textContent ?? '', chars: text.trim().length, lines, problems };
+    });
   });
-  expect(overflow.boxes).toBeGreaterThanOrEqual(2);
-  expect(overflow.past).toEqual(overflow.past.map(() => 0));
-  expect(overflow.clipped).toEqual(overflow.clipped.map(() => 0));
+
+  // Both warnings: the replace-everything warning and the newer-local-changes one.
+  expect(report.map((w) => w.title)).toEqual([
+    'This replaces Runway data for every workspace',
+    'Local Runway changes may be lost',
+  ]);
+  for (const warning of report) {
+    expect(warning.chars, warning.title).toBeGreaterThan(40);
+    // The body text wraps onto more than one line at this width.
+    expect(warning.lines, warning.title).toBeGreaterThan(2);
+    expect(warning.problems, warning.title).toEqual([]);
+  }
 }
 
 async function openAdvanced(page: Page): Promise<void> {
@@ -187,6 +257,7 @@ test.describe('Runway snapshot import', () => {
     const beforeImport = await list(page, 'workspace-default');
 
     await stubOpenDialog(app, snapshot);
+    await setMinimumWindowWidth(app, page);
     await openAdvanced(page);
     await page.locator('[data-testid="runway-import-btn"]').click();
 
@@ -203,7 +274,7 @@ test.describe('Runway snapshot import', () => {
     await expect(page.getByTestId('runway-import-replace-warning')).toContainText(
       'This computer has Runway changes newer than this snapshot.',
     );
-    await expectWarningsInsideModal(page);
+    await expectWarningsReadableAtMinimumWidth(page);
     await expect(page.getByTestId('runway-import-backup-dir')).toHaveText(path.join(userDataDir, 'runway-backups'));
 
     await page.getByTestId('runway-import-confirm').click();
