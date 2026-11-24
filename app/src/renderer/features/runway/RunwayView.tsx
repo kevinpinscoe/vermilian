@@ -16,6 +16,14 @@
 //   - ticket rows also: Move to #N, and typing a number in the row's # field.
 // Removing takes the row off this workspace's Runway only: the tracker
 // ticket, and its rows on other workspaces' Runways, are untouched.
+//
+// Blockers (VERM-98): each read ticket shows its state — Ready, Blocked,
+// Unknown or Done — from the VERM-97 engine, with its open blockers (#N here
+// or external) and any order conflict. Two explicit actions, each one store
+// transaction: Add to Runway puts an external blocker immediately above its
+// dependent, and Move prerequisite above moves a prerequisite immediately
+// above its dependent; every other row keeps its relative order. Refresh
+// re-reads the tickets past the one-minute cache and never writes the order.
 
 import React, { useMemo, useState } from 'react';
 import { AttentionBox, Button, Heading, Text } from '@vibe/core';
@@ -35,6 +43,22 @@ import type { TrackerKind } from '../../../shared/tracker';
 import type { SearchScope } from '../search/api';
 import { useRunwayEdit, useRunwayItems, useRunwayTickets, type RunwayEdit } from './api';
 import { RunwayAddBox } from './RunwayAddBox';
+import {
+  describeBlockerReport,
+  describeOrderConflict,
+  describePrerequisite,
+  type BlockerReport,
+} from '../../../shared/blockerState';
+import {
+  BLOCKER_STATE_LABEL,
+  addAbovePlan,
+  blockerIssueId,
+  linkedEntityId,
+  moveAbovePlan,
+  rowForKey,
+  runwayBlockers,
+} from './blockers';
+import { usePrerequisiteTypes } from './useBlockers';
 import {
   buildRunwayRows,
   dropPosition,
@@ -76,6 +100,8 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
     () => buildRunwayRows(stored, tickets.data?.ok ? tickets.data.tickets : null, readError),
     [stored, tickets.data, readError],
   );
+  const prerequisiteTypes = usePrerequisiteTypes(workspaceId, tracker);
+  const blockers = useMemo(() => runwayBlockers(rows, prerequisiteTypes), [rows, prerequisiteTypes]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -108,6 +134,22 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
     void act({ op: 'move', itemId, position }, movedItems(stored, itemId, position));
   }
 
+  /** Add to Runway: the external blocker goes in immediately above its dependent. */
+  function addBlocker(dependent: RunwayRow, key: string) {
+    if (dependent.kind !== 'ticket' || !dependent.issue) return;
+    const issueId = blockerIssueId(tracker, key, linkedEntityId(dependent.issue, key));
+    const plan = issueId ? addAbovePlan(stored, dependent.itemId, issueId) : null;
+    if (plan) void act({ op: 'addIssue', ...plan });
+  }
+
+  /** Move prerequisite above: the prerequisite moves immediately above its dependent. */
+  function movePrerequisiteAbove(dependent: RunwayRow, key: string) {
+    if (dependent.kind !== 'ticket' || !dependent.issue) return;
+    const prerequisite = rowForKey(rows, key, linkedEntityId(dependent.issue, key));
+    const plan = prerequisite ? moveAbovePlan(stored, prerequisite.itemId, dependent.itemId) : null;
+    if (plan) void act({ op: 'move', ...plan }, movedItems(stored, plan.itemId, plan.position));
+  }
+
   const error = inputError ?? edit.error;
 
   return (
@@ -119,6 +161,17 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
         <Text type="text2" className={styles.subtitle}>
           {workspaceName}
         </Text>
+        {/* Re-reads the tickets past the one-minute cache; never writes the order (VERM-98). */}
+        <Button
+          size="small"
+          kind="tertiary"
+          className={styles.refresh}
+          data-testid="runway-refresh"
+          disabled={tickets.isFetching}
+          onClick={() => void tickets.refetch()}
+        >
+          {tickets.isFetching ? 'Refreshing…' : 'Refresh'}
+        </Button>
       </div>
 
       <RunwayAddBox key={workspaceId} workspaceId={workspaceId} tracker={tracker} searchScope={searchScope} />
@@ -167,6 +220,9 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
                 onEdit={(change) => void act(change)}
                 onMoveToTyped={(text) => moveToTyped(row.itemId, text)}
                 onOpenTicket={onOpenTicket}
+                blocker={blockers.get(row.itemId) ?? null}
+                onAddBlocker={(key) => addBlocker(row, key)}
+                onMovePrerequisiteAbove={(key) => movePrerequisiteAbove(row, key)}
               />
             ))}
           </SortableContext>
@@ -186,6 +242,10 @@ interface RowProps {
   onEdit(change: RunwayEdit): void;
   onMoveToTyped(text: string): void;
   onOpenTicket(issue: BoardIssue): void;
+  /** The ticket's blocker report; null for a row the tracker did not read. */
+  blocker: BlockerReport | null;
+  onAddBlocker(key: string): void;
+  onMovePrerequisiteAbove(key: string): void;
 }
 
 /** Stops a control's click from also opening the row's ticket. */
@@ -194,7 +254,9 @@ const own = (fn: () => void) => (e: React.SyntheticEvent) => {
   fn();
 };
 
-function RunwayRowView({ row, first, last, busy, mode, setMode, onEdit, onMoveToTyped, onOpenTicket }: RowProps) {
+function RunwayRowView({
+  row, first, last, busy, mode, setMode, onEdit, onMoveToTyped, onOpenTicket, blocker, onAddBlocker, onMovePrerequisiteAbove,
+}: RowProps) {
   const sortable = useSortable({ id: row.itemId, disabled: busy || mode !== null });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(sortable.transform),
@@ -358,8 +420,51 @@ function RunwayRowView({ row, first, last, busy, mode, setMode, onEdit, onMoveTo
           {details}
         </div>
       )}
+      {blocker && (
+        <BlockerView report={blocker} busy={busy} onAddBlocker={onAddBlocker} onMovePrerequisiteAbove={onMovePrerequisiteAbove} />
+      )}
       {controls}
     </div>
+  );
+}
+
+/** A ticket's blocker state, its reason, and its two explicit actions. */
+function BlockerView({ report, busy, onAddBlocker, onMovePrerequisiteAbove }: {
+  report: BlockerReport;
+  busy: boolean;
+  onAddBlocker(key: string): void;
+  onMovePrerequisiteAbove(key: string): void;
+}) {
+  const external = report.blockers.filter((b) => b.runwayNumber === null);
+  const detail = report.state === 'blocked' || report.state === 'unknown' ? describeBlockerReport(report) : null;
+  return (
+    <span className={styles.blocker} data-testid="runway-blocker" data-blocker-state={report.state} onClick={(e) => e.stopPropagation()}>
+      <span className={`${styles.blockerState} ${styles[`blocker_${report.state}`] ?? ''}`} data-testid="runway-blocker-state">
+        {BLOCKER_STATE_LABEL[report.state]}
+      </span>
+      {detail && (
+        <span className={styles.blockerText} data-testid="runway-blocker-text">
+          {detail}
+        </span>
+      )}
+      {external.map((b) => (
+        <button key={b.key} type="button" className={styles.control} data-testid="runway-add-blocker" data-key={b.key}
+          disabled={busy} title={`Add ${describePrerequisite(b)} immediately above this ticket`}
+          onClick={own(() => onAddBlocker(b.key))}>
+          Add {b.key} to Runway
+        </button>
+      ))}
+      {report.orderConflicts.map((c) => (
+        <span key={c.key} className={styles.conflict} data-testid="runway-order-conflict" data-key={c.key} data-certain={String(c.certain)}>
+          <span className={c.certain ? styles.conflictText : styles.blockerText}>{describeOrderConflict(c)}</span>
+          <button type="button" className={styles.control} data-testid="runway-move-prerequisite" data-key={c.key}
+            disabled={busy} title={`Move ${c.key} immediately above this ticket`}
+            onClick={own(() => onMovePrerequisiteAbove(c.key))}>
+            Move prerequisite above
+          </button>
+        </span>
+      ))}
+    </span>
   );
 }
 

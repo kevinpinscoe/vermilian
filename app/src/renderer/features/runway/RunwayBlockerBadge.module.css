@@ -1,0 +1,51 @@
+/* The All tasks blocker badge (VERM-98). */
+.badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: default;
+  color: var(--primary-text-color, #323338);
+}
+
+.blocked {
+  background: var(--negative-color-selected, #fbd8dd);
+}
+
+.unknown {
+  background: var(--ui-background-color, #e6e9ef);
+}
+
+.badge:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}
+
+/* The full reason, on hover and on keyboard focus. */
+.reason {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 320px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--inverted-color-background, #323338);
+  color: var(--text-color-on-inverted, #fff);
+  font-weight: 400;
+  white-space: normal;
+}
+
+.badge:hover .reason,
+.badge:focus-visible .reason,
+.badge:focus .reason {
+  display: block;
+}

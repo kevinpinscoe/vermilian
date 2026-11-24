@@ -21,6 +21,7 @@ import { RUNWAY_TICKETS_QUERY_KEY, useRunwayItems, useRunwayTickets } from '../r
 import { allTasksEmptyNotice, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { RunwayNumberCell } from '../runway/RunwayNumberCell';
+import { RunwayBlockerBadge } from '../runway/RunwayBlockerBadge';
 import { useRememberedSort } from '../runway/rememberedSort';
 import { useRunwayNumberOf } from '../runway/useRunwayNumberOf';
 import { useYouTrackPriorityOrders } from '../runway/usePriorityOrders';
@@ -113,6 +114,8 @@ function IssueRow({
             ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }}
             displayKey={issue.idReadable}
           />
+          {/* Blocked or Unknown only, beside the Runway # (VERM-98). */}
+          <RunwayBlockerBadge workspaceId={runwayWorkspaceId} tracker="youtrack" issue={issue} />
         </td>
       )}
       <td className={`${pbStyles.cell} ${pbStyles.cellTask}`}>
@@ -274,10 +277,13 @@ export function WorkspaceBoard({
   function handlePatch(issueId: string, field: string, value: string | null) {
     // A Runway ticket from outside the projects lives in the Runway's cache:
     // re-read it once the edit is saved, so its row shows the new value.
+    // A successful status edit can change any Runway ticket's blocker state —
+    // a dependent's too — so it re-reads the Runway's tickets as well (VERM-98).
     const fromRunway = runwayOnlyIds.has(issueId);
     patchMutation.mutate({ issueId, field, value }, {
-      onSettled: () => {
-        if (fromRunway) void queryClient.invalidateQueries({ queryKey: RUNWAY_TICKETS_QUERY_KEY(workspaceId) });
+      onSettled: (result) => {
+        const statusSaved = field === 'status' && Boolean(result && (result as { ok?: boolean }).ok);
+        if (fromRunway || statusSaved) void queryClient.invalidateQueries({ queryKey: RUNWAY_TICKETS_QUERY_KEY(workspaceId) });
       },
     });
   }

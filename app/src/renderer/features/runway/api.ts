@@ -64,7 +64,9 @@ export type RunwayEdit =
   | { op: 'moveUp'; itemId: string }
   | { op: 'moveDown'; itemId: string }
   | { op: 'moveToNumber'; itemId: string; runwayNumber: number }
-  | { op: 'move'; itemId: string; position: number };
+  | { op: 'move'; itemId: string; position: number }
+  /** Add to Runway for an external blocker (VERM-98): a ticket at a row position. */
+  | { op: 'addIssue'; issueId: string; position: number };
 
 function send(workspaceId: string, edit: RunwayEdit): Promise<RunwayItemsResult> {
   const v = window.vermilian;
@@ -79,6 +81,8 @@ function send(workspaceId: string, edit: RunwayEdit): Promise<RunwayItemsResult>
       return v.runwayItemsMoveToNumber({ workspaceId, itemId: edit.itemId, runwayNumber: edit.runwayNumber });
     case 'move':
       return v.runwayItemsMove({ workspaceId, itemId: edit.itemId, position: edit.position });
+    case 'addIssue':
+      return v.runwayItemsAddIssue({ workspaceId, issueId: edit.issueId, position: edit.position });
   }
 }
 

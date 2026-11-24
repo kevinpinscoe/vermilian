@@ -29,6 +29,10 @@ export interface Workspace {
   jiraBoards?: WorkspaceJiraBoard[];
   // Read-only here too: status columns the Jira board hides (VERM-60).
   jiraHiddenStatuses?: string[];
+  // Read-only here too: the workspace's prerequisite link types (VERM-96),
+  // for the blocker states (VERM-98). Absent is the tracker's default; []
+  // means no link type is a prerequisite.
+  prerequisiteLinkTypes?: import('./issueLink').PrerequisiteLinkType[];
 }
 
 export interface VermilianConfig {

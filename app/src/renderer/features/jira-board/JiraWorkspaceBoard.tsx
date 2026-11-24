@@ -14,6 +14,7 @@ import { useRunwayItems, useRunwayTickets } from '../runway/api';
 import { allTasksEmptyNotice, runwayHasTickets, savedRunwayTicketIds, withRunwayTickets } from '../runway/allTasks';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { RunwayNumberCell } from '../runway/RunwayNumberCell';
+import { RunwayBlockerBadge } from '../runway/RunwayBlockerBadge';
 import { JiraFocusControl } from './JiraFocusControl';
 import { EMPTY_FILTER, applyFilter, type FilterState } from '../project-board/grouping';
 import { AssigneePills, DefaultAssigneePill } from '../project-board/FilterPills';
@@ -362,6 +363,8 @@ export function JiraWorkspaceBoard({
                           displayKey={issue.idReadable}
                           className={styles.cardRunway}
                         />
+                        {/* Blocked or Unknown only, beside the Runway # (VERM-98). */}
+                        <RunwayBlockerBadge workspaceId={workspaceId} tracker="jira" issue={issue} />
                         {/* Vermilian's own Runway metadata, kept locally (VERM-38): not a Jira write. */}
                         <JiraFocusControl workspaceId={workspaceId} issueKey={issue.idReadable} summaryOf={summaryOf} />
                       </div>
