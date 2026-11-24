@@ -14,7 +14,7 @@ source_path: /home/kinscoe/Projects/public/vermilian/RUNBOOK.md
 | Field | Value |
 | --- | --- |
 | **Owner** | Kevin P. Inscoe |
-| **Last Updated** | 2026-11-15 |
+| **Last Updated** | 2026-11-24 |
 | **Last Tested** | 2026-05-22 |
 | **Expected Duration** | 2–5 min (first run); 15–30 s (subsequent runs) |
 | **Risk Level** | Low |
@@ -48,7 +48,7 @@ Day-to-day development operations for Vermilian — starting, building, packagin
 
 | Component | Details |
 | --- | --- |
-| **App shell** | Electron 42 via electron-forge 7 |
+| **App shell** | Electron 45 via electron-forge 7 |
 | **Renderer** | React 18 + TypeScript 5 + Vite 5 |
 | **Design system** | monday.com Vibe (`@vibe/core` 4, `@vibe/icons` 4) |
 | **Package manager** | pnpm 11 (hoisted linker — see note below) |
