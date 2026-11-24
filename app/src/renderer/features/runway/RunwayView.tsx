@@ -58,7 +58,7 @@ import {
 } from './blockers';
 import { usePrerequisiteTypes } from './useBlockers';
 import { DeskSlotChip } from './DeskSlotChip';
-import { deskSlotOf, type DeskSlot } from './deskSlot';
+import { runwayRowDeskSlot, type DeskSlot } from './deskSlot';
 import { useDeskSlots } from './useDeskSlots';
 import {
   buildRunwayRows,
@@ -227,7 +227,7 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
                 onMoveToTyped={(text) => moveToTyped(row.itemId, text)}
                 onOpenTicket={onOpenTicket}
                 blocker={blockers.get(row.itemId) ?? null}
-                deskSlot={row.kind === 'ticket' ? deskSlotOf(deskSlots, [row.issue?.id, row.issue?.idReadable, row.ticketId]) : null}
+                deskSlot={runwayRowDeskSlot(deskSlots, tracker, row)}
                 onAddBlocker={(key) => addBlocker(row, key)}
                 onMovePrerequisiteAbove={(key) => movePrerequisiteAbove(row, key)}
               />

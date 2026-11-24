@@ -12,6 +12,8 @@
 
 import type { FocusRank, FocusRankHolder } from '../project-board/focus';
 import type { RunwayRank } from '../../../shared/runway';
+import { decodeIssueId, type TrackerKind } from '../../../shared/tracker';
+import type { RunwayRow } from './rows';
 
 export type DeskSlotLabel = 'Now' | 'Next' | 'Then';
 
@@ -55,6 +57,20 @@ export function deskSlotOf(slots: DeskSlots, ids: ReadonlyArray<string | null | 
     if (slot) return slot;
   }
   return null;
+}
+
+/**
+ * A Runway row's slot on the workspace's Desk (Kevin's review, VERM-99). The
+ * row's stored tracker is verified first: a row stored for another tracker
+ * gets none, even when its key matches. Then it is matched by its stored ID
+ * and by the IDs the tracker returned for it — entity ID and current key —
+ * so a moved Jira ticket keeps its slot under either key.
+ */
+export function runwayRowDeskSlot(slots: DeskSlots, tracker: TrackerKind, row: RunwayRow): DeskSlot | null {
+  if (row.kind !== 'ticket') return null;
+  const stored = decodeIssueId(row.itemId);
+  if (!stored || stored.kind !== tracker) return null;
+  return deskSlotOf(slots, [stored.localId, row.issue?.id, row.issue?.idReadable]);
 }
 
 /** The chip's tooltip and accessible name. */

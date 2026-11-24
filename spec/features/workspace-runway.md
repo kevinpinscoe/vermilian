@@ -338,8 +338,11 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       one, as a read-only chip beside the Runway # (VERM-99). For YouTrack the slot shows only when
       the ticket is on the active workspace's Desk — in its projects, open, Focus rank 1–3 — so a
       ticket ranked on another workspace's Desk shows none; a rank two tickets share shows on both,
-      marked shared. For Jira it is the workspace's own Desk entry. Jira's All tasks has cards
-      only, and they are unchanged: their star and rank control already shows the rank.
+      marked shared. For Jira it is the workspace's own Desk entry. A Runway row's stored tracker
+      is checked first, so a row stored for the other tracker shows none even when its key
+      matches; it is then matched by its stored ID and by the IDs the tracker returned, so a moved
+      Jira ticket keeps its slot under either key. Jira's All tasks has cards only, and they are
+      unchanged: their star and rank control already shows the rank.
 - [x] Promoting or demoting a ticket on the Desk never changes a Runway position.
 
 ### Markdown import

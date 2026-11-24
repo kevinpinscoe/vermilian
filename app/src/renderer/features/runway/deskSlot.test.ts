@@ -3,7 +3,10 @@ import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../../shared/fields';
 import { groupFocusRankHolders, type FocusRank } from '../project-board/focus';
 import type { RunwayRank } from '../../../shared/runway';
-import { deskSlotOf, deskSlotTitle, jiraDeskSlots, youtrackDeskSlots } from './deskSlot';
+import type { RunwayItem } from '../../../shared/runwayItem';
+import type { RunwayTicketRead } from '../../../shared/runwayTicket';
+import { buildRunwayRows } from './rows';
+import { deskSlotOf, deskSlotTitle, jiraDeskSlots, runwayRowDeskSlot, youtrackDeskSlots } from './deskSlot';
 
 // Synthetic keys only: the spec's worked example sets READ-12 Now, SYNC-3
 // Next and READ-20 Then.
@@ -67,5 +70,41 @@ describe('jiraDeskSlots: the workspace\'s own Desk entries', () => {
     expect(deskSlotOf(slots, ['OPS-4089'])?.label).toBe('Then');
     expect(deskSlotOf(slots, ['OPS-12'])).toBeNull();
     expect(deskSlotTitle(deskSlotOf(slots, ['OPS-956'])!)).toBe('Priority Desk: Now');
+  });
+});
+
+describe('runwayRowDeskSlot: the stored tracker first, then the stored and returned IDs (Kevin\'s review)', () => {
+  const item = (itemId: string, position: number): RunwayItem => ({
+    workspaceId: 'ws-e2ejd99', itemId, kind: 'issue', position, runwayNumber: null, depth: 0, text: null, addedAt: '', updatedAt: '',
+  });
+  const row = (itemId: string, read: RunwayTicketRead) => buildRunwayRows([item(itemId, 1)], [read])[0];
+  // OPS-12 moved to OPS-956: the row is stored as jira:OPS-12, and Jira answers with the new key.
+  const moved = row('jira:OPS-12', { itemId: 'jira:OPS-12', state: 'resolved', issue: { ...issue('OPS-956', '10956', null), fields: { ...EMPTY, status: 'To Do' } } });
+
+  it('a moved Jira ticket keeps its chip, whether its Desk entry is under the stored key or the new one', () => {
+    expect(moved.kind === 'ticket' && moved.ticketId).toBe('OPS-956');
+    const underOld = jiraDeskSlots(new Map<RunwayRank, string>([[1, 'OPS-12']]));
+    const underNew = jiraDeskSlots(new Map<RunwayRank, string>([[2, 'OPS-956']]));
+    expect(runwayRowDeskSlot(underOld, 'jira', moved)).toEqual({ rank: 1, label: 'Now', shared: false });
+    expect(runwayRowDeskSlot(underNew, 'jira', moved)?.label).toBe('Next');
+  });
+
+  it('a row stored for the other tracker gets no chip, even with the same key', () => {
+    const desk = jiraDeskSlots(new Map<RunwayRank, string>([[1, 'OPS-956']]));
+    const wrong = row('yt:OPS-956', { itemId: 'yt:OPS-956', state: 'wrong-tracker', reason: 'a YouTrack ticket on a Jira workspace' });
+    expect(runwayRowDeskSlot(desk, 'jira', wrong)).toBeNull();
+    // The same key stored for this workspace's tracker does get it.
+    expect(runwayRowDeskSlot(desk, 'jira', row('jira:OPS-956', { itemId: 'jira:OPS-956', state: 'missing' }))?.label).toBe('Now');
+  });
+
+  it('a YouTrack row stored under its entity ID matches the Desk by that ID before it is read', () => {
+    const desk = deskOf([{ projectShortName: 'READ', issues: [issue('READ-12', '2-12', 1)] }]);
+    expect(runwayRowDeskSlot(desk, 'youtrack', buildRunwayRows([item('yt:2-12', 1)], null)[0])?.label).toBe('Now');
+    expect(runwayRowDeskSlot(desk, 'jira', buildRunwayRows([item('yt:2-12', 1)], null)[0])).toBeNull();
+  });
+
+  it('section and note rows have none', () => {
+    const section = buildRunwayRows([{ ...item('sec:1', 1), kind: 'section', text: 'Later' }], [])[0];
+    expect(runwayRowDeskSlot(new Map(), 'jira', section)).toBeNull();
   });
 });
