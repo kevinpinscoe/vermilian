@@ -134,6 +134,9 @@ function documentShape(
     // Per field, as the schema's shape has it (VERM-48). Omitting it here
     // dropped the Master plan from every merged result (found in VERM-96).
     masterPlan: struct({ articleId: LEAF }),
+    // Per status, like jiraProjects (VERM-114). Omitting it would drop the
+    // overrides from every merged result, as masterPlan once was.
+    youtrackProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF } }) },
     // One choice, merged as a whole (VERM-96).
     prerequisiteLinkTypes: LEAF,
   });

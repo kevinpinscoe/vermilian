@@ -1,7 +1,7 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import type { TrackerLinkTypesResult } from '../shared/workspacePrerequisites';
 import type { StandupWorkspace } from '../shared/standup';
-import { generateWorkspaceStandup } from './services/workspaceStandup';
+import { generateWorkspaceStandup, getWorkspaceDailyReview, type WorkspaceReportSourceDeps } from './services/workspaceStandup';
 import { randomUUID } from 'node:crypto';
 import { NO_WORKSPACE_MESSAGE, resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
 import {
@@ -66,6 +66,7 @@ import {
   type GetRecommendationResult,
   type PostRecommendationAuditArgs,
   type PostRecommendationAuditResult,
+  type DailyReviewGetArgs,
   type DailyReviewGetResult,
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
@@ -367,33 +368,6 @@ function runwayFailure(e: unknown): { ok: false; error: string; code?: string } 
     // RunwayStoreError / RunwayDbError codes ('rank-taken', 'newer-schema', ...).
     code: typeof err.code === 'string' ? err.code : undefined,
   };
-}
-
-// Project short names in the active workspace, resolved the same way
-// standupGenerate's scope: 'active-workspace' branch does. Daily Review
-// (VERM-9) only ever needs this one scope — unlike Stand-up it has no
-// scope/window config step (PLAN.md "Scope and window — fixed, not
-// configurable") — so this is its own small helper rather than exposing
-// standupGenerate's three-way scope switch for one branch of it.
-async function activeWorkspaceProjectShortNames(url: string, token: string): Promise<string[]> {
-  const allProjects = await youtrackTracker(url, token).getProjects();
-  const wsConfig = await readWorkspaceConfig();
-  const activeWs = await localActiveWorkspace(wsConfig);
-  const projectIds = new Set(activeWs?.folders.flatMap((f) => f.projectIds) ?? []);
-  return allProjects.filter((p) => projectIds.has(p.id)).map((p) => p.shortName);
-}
-
-// The active workspace in a legacy VermilianConfig, chosen by this machine's
-// local setting (VERM-46) — never by the activeWorkspaceId the shared
-// _vermilian-config article carries, which is only a fallback hint.
-async function localActiveWorkspace(wsConfig: VermilianConfig | null) {
-  if (!wsConfig) return undefined;
-  const id = resolveActiveWorkspaceId(
-    wsConfig.workspaces,
-    await readStoredActiveWorkspaceId(),
-    wsConfig.activeWorkspaceId,
-  );
-  return wsConfig.workspaces.find((w) => w.id === id);
 }
 
 // The import preview's replacement warnings (VERM-79), computed through the
@@ -796,11 +770,26 @@ export function registerIpc(): void {
   async function standupWorkspace(workspaceId: string): Promise<StandupWorkspace | null> {
     if (workspaceStorageMode() === 'per-workspace') {
       const doc = await perWorkspaceDocument(workspaceId);
-      return doc ? { id: doc.workspaceId, backend: backendContextOf(doc), folders: doc.folders } : null;
+      return doc ? { id: doc.workspaceId, backend: backendContextOf(doc), folders: doc.folders, youtrackProjects: doc.youtrackProjects } : null;
     }
     const legacy = await loadLegacyWorkspaceConfig();
     const ws = legacy?.workspaces.find((w) => w.id === workspaceId);
     return ws ? { id: ws.id, backend: null, folders: ws.folders } : null;
+  }
+
+  // The stand-up and Daily Review data source (VERM-114,
+  // services/workspaceStandup.ts): one connection rule for both callers.
+  function workspaceReportSource(cfg: AppConfig): WorkspaceReportSourceDeps {
+    return {
+      storage: workspaceStorageMode(),
+      loadWorkspace: standupWorkspace,
+      connectWorkspace: async (id) => resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(id), cfg, credentialSourceIO, IS_E2E),
+      legacyConnection: async () => {
+        const token = await loadYtToken(cfg);
+        return cfg.youtrackUrl && token ? { ok: true, url: cfg.youtrackUrl, token } : { ok: false, error: 'YouTrack not configured.' };
+      },
+      tracker: (url, token) => youtrackTracker(url, token),
+    };
   }
 
   // One per-workspace document by ID, or null.
@@ -1186,23 +1175,29 @@ export function registerIpc(): void {
   // (that cache excludes resolved issues); Now/Next/Then, blocked-focused,
   // and needs-attention are all derived client-side from that board cache
   // instead (renderer/features/daily-review/boardData.ts).
-  ipcMain.handle(IPC.dailyReviewGet, async (): Promise<DailyReviewGetResult> => {
+  ipcMain.handle(IPC.dailyReviewGet, async (_e, args: unknown): Promise<DailyReviewGetResult> => {
+    // The workspace the renderer's view is for (VERM-114 review): refused
+    // unless it is the active workspace when the read starts; otherwise read
+    // that one and name it in the answer, even if the user switches away.
+    const requested = (args as Partial<DailyReviewGetArgs> | null)?.workspaceId;
+    const workspaceId = typeof requested === 'string' ? requested : '';
     try {
       const cfg = await readConfig();
-      const yt = await trackerConnection(cfg);
-      if (!yt.ok) return { ok: false, error: yt.error };
-
-      const projectShortNames = await activeWorkspaceProjectShortNames(yt.url, yt.token);
-      const cutoffMs = Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000;
-      const { done } = await youtrackTracker(yt.url, yt.token).getIssuesForStandup(projectShortNames, cutoffMs);
-
-      return {
-        ok: true,
-        completed: done.map((t) => ({ idReadable: t.idReadable, summary: t.summary, priority: t.priority })),
-      };
+      // Read exactly as a stand-up reads (VERM-114): under per-workspace
+      // storage the workspace's own connection for discovery and the issue
+      // read, never the Settings connection; legacy keeps the shared one.
+      return await getWorkspaceDailyReview(
+        {
+          ...workspaceReportSource(cfg),
+          // Checked once, before the workspace's credential is resolved.
+          activeWorkspaceId: async () => (await activeWorkspaceContext()).workspaceId ?? '',
+          cutoffMs: Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000,
+        },
+        workspaceId,
+      );
     } catch (e) {
       const err = e as { message?: string };
-      return { ok: false, error: err.message ?? 'Daily Review failed to load.' };
+      return { ok: false, workspaceId, error: err.message ?? 'Daily Review failed to load.' };
     }
   });
 
@@ -1240,7 +1235,7 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
     ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());
     ipcMain.handle('e2e:articleDelay', (_e, ms: number) => fakeYouTrackForE2E.setArticleDelayForTests(ms));
-    ipcMain.handle('e2e:standupDelay', (_e, ms: number) => fakeYouTrackForE2E.setStandupDelayForTests(ms));
+    ipcMain.handle('e2e:standupDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setStandupDelayForTests(ms, project));
     ipcMain.handle('e2e:setArticle', (_e, articleId: string, value: { content: string } | { status: number }) =>
       fakeYouTrackForE2E.setArticleForTests(articleId, value),
     );
@@ -2098,15 +2093,8 @@ export function registerIpc(): void {
         // one workspace identity for the Anthropic key, the projects and the
         // YouTrack connection. Any scope a caller sends is ignored.
         return await generateWorkspaceStandup({
-          storage: workspaceStorageMode(),
+          ...workspaceReportSource(cfg),
           beginAi: () => beginAi(args.workspaceId),
-          loadWorkspace: standupWorkspace,
-          connectWorkspace: async (id) => resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(id), cfg, credentialSourceIO, IS_E2E),
-          legacyConnection: async () => {
-            const token = await loadYtToken(cfg);
-            return cfg.youtrackUrl && token ? { ok: true, url: cfg.youtrackUrl, token } : { ok: false, error: 'YouTrack not configured.' };
-          },
-          tracker: (url, token) => youtrackTracker(url, token),
           generate: (key, issues) => claude.generateStandupReport(key, issues, cfg.modelForStandup),
           cutoffMs: Date.now() - windowHours * 60 * 60 * 1000,
         });

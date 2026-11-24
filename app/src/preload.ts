@@ -16,6 +16,7 @@ import {
   type GetIssuesArgs,
   type SearchIssuesArgs,
   type PatchIssueArgs,
+  type DailyReviewGetArgs,
   type RunwayGetArgs,
   type RunwayUpdateArgs,
   type RunwayListArgs,
@@ -145,7 +146,7 @@ const api: VermilianAPI = {
   getRecommendation: (args: GetRecommendationArgs) => ipcRenderer.invoke(IPC.getRecommendation, args),
   postRecommendationAudit: (args: PostRecommendationAuditArgs) =>
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
-  dailyReviewGet: () => ipcRenderer.invoke(IPC.dailyReviewGet),
+  dailyReviewGet: (args: DailyReviewGetArgs) => ipcRenderer.invoke(IPC.dailyReviewGet, args),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
   listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
   readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),
@@ -206,7 +207,7 @@ const api: VermilianAPI = {
   debugGetStandupCredentialRefs: () => ipcRenderer.invoke('e2e:standupCredentialRefs'),
   debugGetArticleFetches: () => ipcRenderer.invoke('e2e:articleFetches'),
   debugSetArticleDelay: (ms: number) => ipcRenderer.invoke('e2e:articleDelay', ms),
-  debugSetStandupDelay: (ms: number) => ipcRenderer.invoke('e2e:standupDelay', ms),
+  debugSetStandupDelay: (ms: number, project?: string) => ipcRenderer.invoke('e2e:standupDelay', ms, project),
   debugSetArticle: (articleId: string, value: unknown) => ipcRenderer.invoke('e2e:setArticle', articleId, value),
 };
 

@@ -77,6 +77,8 @@ export function StandupModal({
   const [markdown, setMarkdown] = useState('');
   const [genError, setGenError] = useState<string | null>(null);
   const [noTasks, setNoTasks] = useState(false);
+  // Incomplete status mappings from the last generate (VERM-114).
+  const [mappingWarnings, setMappingWarnings] = useState<string[]>([]);
 
   const [copyLabel, setCopyLabel] = useState('Copy to clipboard');
   const [saveLabel, setSaveLabel] = useState('Save to daily notes');
@@ -107,6 +109,7 @@ export function StandupModal({
       setStep('config');
       return;
     }
+    setMappingWarnings(result.warnings ?? []);
 
     if (result.taskCount === 0 || !result.markdown) {
       setNoTasks(true);
@@ -138,6 +141,7 @@ export function StandupModal({
       setGenError(result.error ?? 'Regeneration failed.');
       return;
     }
+    setMappingWarnings(result.warnings ?? []);
     if (result.taskCount === 0 || !result.markdown) {
       setNoTasks(true);
       return;
@@ -193,6 +197,7 @@ export function StandupModal({
                 </Text>
               </div>
             )}
+            <MappingWarnings warnings={mappingWarnings} />
 
             {/* Covers the active workspace only (VERM-48). */}
             <div className={styles.fieldset} data-testid="standup-workspace">
@@ -293,6 +298,7 @@ export function StandupModal({
               <Text type="text2">No recent activity found. The previous report is shown.</Text>
             </div>
           )}
+          <MappingWarnings warnings={mappingWarnings} />
 
           <div
             data-testid="standup-report-body"
@@ -332,5 +338,25 @@ export function StandupModal({
         </div>
       </ModalContent>
     </Modal>
+  );
+}
+
+// Projects whose status mapping leaves a group empty (VERM-114). The groups
+// that do have valid states are still reported; this says which are missing.
+function MappingWarnings({ warnings }: { warnings: readonly string[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className={styles.banner} data-kind="warning" data-testid="standup-mapping-warnings">
+      <div>
+        <Text type="text2">Some status mappings are incomplete, so part of this stand-up is missing:</Text>
+        <ul className={styles.warningList}>
+          {warnings.map((w) => (
+            <li key={w}>
+              <Text type="text2">{w}</Text>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }

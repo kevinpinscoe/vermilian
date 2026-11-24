@@ -575,6 +575,82 @@ credentials. Keep them in the user-data directory; never commit them.
 
 ---
 
+## Stand-up status mapping (VERM-114)
+
+Stand-ups and the Priority Desk Daily Review read each YouTrack project's own
+**Status** field and never use a built-in list of status names. For every
+project in the active workspace, Vermilian reads the project's field
+configuration (`/api/admin/projects/<shortName>/customFields`) on the
+workspace's own connection, then decides what each Status value means:
+
+| Value | Default role | Stand-up group |
+| --- | --- | --- |
+| Resolved (`isResolved`), e.g. `Done`, `Fixed`, `Duplicate` | `done` | Done |
+| `Wont do` (also spelt `Won't do`, any case) | none | Not reported |
+| `In Progress`, `Working on it`, `Doing`, `In development`, `In review` | `inProgress` | In progress |
+| Any name starting `Waiting` | `waiting` | In progress |
+| `Blocked`, `Impeded` (any case) | `blocked` | Blocked |
+| Anything else | `todo` | Not reported |
+
+`Wont do` is the only resolved value left out of completed work by default.
+Every other resolved value, including `Duplicate`, `Obsolete` and `Rejected`,
+counts as done unless the project's override maps it to a role with no
+stand-up group (`todo` or `deferred`); see the worked example below.
+
+Results are read in pages of 100 until YouTrack has no more, with no upper
+limit: old completed issues match too and are dropped only after the read, so
+a project with years of history still gets today's report. If YouTrack returns
+the same page again instead of moving on, the stand-up stops with an error
+rather than showing a partial report.
+
+Daily Review reads only the active workspace. A request for any other
+workspace is refused before its credential is resolved; a review that started
+before you switched workspaces still finishes, and its result is kept with the
+workspace it was for.
+
+The query and the displayed groups are built from the same mapping, and the
+query names only values the project actually has. If a project has no value
+for a group, the stand-up names the project and the group it is missing
+("OPS: no Status value is mapped to blocked …") and still reports the other
+groups.
+
+### Overriding the mapping for one project
+
+Per-workspace storage only: legacy storage always uses the defaults above.
+Overrides live in the workspace's own `_vermilian-ws-<workspaceId>` article
+in the VERM project, under `youtrackProjects`, keyed by project short name.
+Each entry maps an exact Status value to one of `todo`, `inProgress`,
+`waiting`, `blocked`, `deferred` or `done`. Values not named keep their
+default.
+
+Worked example: project `OPS` uses `Stuck` for blocked work, its team wants
+`Wont do` listed as completed, and it does not want `Duplicate` counted as an
+accomplishment:
+
+```json
+"youtrackProjects": {
+  "OPS": {
+    "statusRoles": {
+      "Stuck": "blocked",
+      "Wont do": "done",
+      "Duplicate": "deferred"
+    }
+  }
+}
+```
+
+1. Stop Vermilian on every machine that uses the workspace, so none of them
+   writes the article while you edit it.
+2. In YouTrack, open the article `_vermilian-ws-<workspaceId>`, add the
+   `youtrackProjects` block at the top level of the JSON, and save.
+3. Start Vermilian and generate a stand-up. `Stuck` issues now appear under
+   Blocked, recently closed `Wont do` issues under Done, and `Duplicate`
+   issues nowhere. A name that is not
+   one of the project's Status values is ignored, and the stand-up says so.
+
+To return a project to the defaults, delete its entry. A mapping editor in the
+app is a planned follow-up.
+
 ## OpenBao credential storage (VERM-64)
 
 ### What this is

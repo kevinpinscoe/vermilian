@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   getWorklogTypes,
   getIssuesForStandup,
+  STANDUP_PAGE_SIZE,
   patchIssue,
   createIssue,
   findMasterPlanArticle,
@@ -12,7 +13,12 @@ import {
   postComment,
   getIssuesByIds,
   getBoardIssue,
+  getProjectFieldMetadata,
+  getPriorityOrder,
 } from './youtrack';
+import { rejectInvalidStandupQuery } from './fakeYouTrack';
+import { buildStandupPlan, buildStandupQuery } from '../../shared/youtrackStandup';
+import { parseYouTrackProjectFields } from '../../shared/youtrackProjectFields';
 
 const URL = 'https://yt.example.com/';
 const TOKEN = 'tok';
@@ -482,28 +488,192 @@ describe('request error handling', () => {
 
 // ─── getIssuesForStandup ──────────────────────────────────────────────────────
 
-describe('getIssuesForStandup', () => {
-  it('returns empty buckets without a network call when no projects are given', async () => {
-    const out = await getIssuesForStandup(URL, TOKEN, [], 0);
+describe('getIssuesForStandup (VERM-114)', () => {
+  // Two projects with different workflows. BETA has no "In Progress", no
+  // "BLOCKED" and no "Done"; ALPHA has none of BETA's names.
+  const field = (values: Array<[string, boolean]>, priority: string[] = []) => [
+    { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: priority.map((name, ordinal) => ({ name, ordinal })) } },
+    { field: { name: 'Status' }, $type: 'StateProjectCustomField', bundle: { values: values.map(([name, isResolved], ordinal) => ({ name, isResolved, ordinal })) } },
+  ];
+  const ALPHA = field([['To do', false], ['In Progress', false], ['Waiting for IT', false], ['BLOCKED', false], ['Done', true], ['Wont do', true]], ['Critical', 'Normal']);
+  const BETA = field([['Open', false], ['Doing', false], ['Stuck', false], ['Fixed', true], ['Duplicate', true]]);
+  const BUNDLES: Record<string, string[]> = {
+    ALPHA: ['To do', 'In Progress', 'Waiting for IT', 'BLOCKED', 'Done', 'Wont do'],
+    BETA: ['Open', 'Doing', 'Stuck', 'Fixed', 'Duplicate'],
+  };
+  const plan = () =>
+    buildStandupPlan(
+      [
+        { shortName: 'ALPHA', metadata: parseYouTrackProjectFields(ALPHA) },
+        { shortName: 'BETA', metadata: parseYouTrackProjectFields(BETA) },
+      ],
+      // BETA names its own blocked state.
+      { BETA: { statusRoles: { Stuck: 'blocked' } } },
+    );
+  const emittedQuery = () => new globalThis.URL(lastCall()[0]).searchParams.get('query') ?? '';
+  const issue = (key: string, project: string, status: string, updated = 9) => ({
+    id: key, idReadable: key, summary: key, updated, project: { shortName: project },
+    customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: status } }],
+  });
+
+  it('returns empty buckets without a network call when the plan has no projects', async () => {
+    const out = await getIssuesForStandup(URL, TOKEN, { projects: [] }, 0);
     expect(out).toEqual({ done: [], inProgress: [], blocked: [] });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('buckets issues by status and drops Done issues older than the cutoff', async () => {
-    const cutoff = 1000;
+  it('emits one clause per project naming only that project\'s own discovered values', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes([]));
+    await getIssuesForStandup(URL, TOKEN, plan(), 0);
+    expect(emittedQuery()).toBe(
+      '(project: {ALPHA} and {Status}: {In Progress},{Waiting for IT},{BLOCKED},{Done})' +
+        ' or (project: {BETA} and {Status}: {Doing},{Stuck},{Fixed},{Duplicate})',
+    );
+    expect(emittedQuery()).not.toMatch(/Working on it/);
+    // The fake applies the live server's rule to the emitted text and accepts it.
+    expect(() => rejectInvalidStandupQuery(emittedQuery(), (p) => BUNDLES[p] ?? [])).not.toThrow();
+  });
+
+  it('the fake rejects a value that belongs only to the other project, as the live server does', () => {
+    const wrong = plan();
+    // Put BETA's "Fixed" into ALPHA's clause.
+    wrong.projects[0].groups.Fixed = 'done';
+    expect(() => rejectInvalidStandupQuery(buildStandupQuery(wrong), (p) => BUNDLES[p] ?? [])).toThrow(
+      expect.objectContaining({ status: 400, message: expect.stringMatching(/"Fixed" isn't used for the Status field/) }),
+    );
+  });
+
+  it('groups each issue by its own project\'s mapping and drops done issues older than the cutoff', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonRes([
-        { id: '1', idReadable: 'T-1', summary: 'recent done', updated: 2000, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Done' } }] },
-        { id: '2', idReadable: 'T-2', summary: 'stale done', updated: 500, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Done' } }] },
-        { id: '3', idReadable: 'T-3', summary: 'wip', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'In Progress' } }] },
-        { id: '4', idReadable: 'T-4', summary: 'blocked', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'BLOCKED' } }] },
-        { id: '5', idReadable: 'T-5', summary: 'waiting', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Waiting for IT' } }] },
+        issue('ALPHA-1', 'ALPHA', 'Done', 2000),
+        issue('ALPHA-2', 'ALPHA', 'Done', 500),
+        issue('ALPHA-3', 'ALPHA', 'In Progress'),
+        issue('ALPHA-4', 'ALPHA', 'Waiting for IT'),
+        issue('ALPHA-5', 'ALPHA', 'BLOCKED'),
+        issue('ALPHA-6', 'ALPHA', 'Wont do', 2000),
+        issue('BETA-1', 'BETA', 'Fixed', 2000),
+        issue('BETA-2', 'BETA', 'Doing'),
+        issue('BETA-3', 'BETA', 'Stuck'),
+        issue('BETA-4', 'BETA', 'Duplicate', 2000),
       ]),
     );
-    const out = await getIssuesForStandup(URL, TOKEN, ['TST'], cutoff);
-    expect(out.done.map((t) => t.idReadable)).toEqual(['T-1']);
-    expect(out.inProgress.map((t) => t.idReadable)).toEqual(['T-3', 'T-5']);
-    expect(out.blocked.map((t) => t.idReadable)).toEqual(['T-4']);
+    const out = await getIssuesForStandup(URL, TOKEN, plan(), 1000);
+    // Wont do is the only default exclusion; BETA's Duplicate counts as done.
+    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-1', 'BETA-1', 'BETA-4']);
+    expect(out.inProgress.map((t) => t.idReadable)).toEqual(['ALPHA-3', 'ALPHA-4', 'BETA-2']);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-5', 'BETA-3']);
+  });
+});
+
+describe('getIssuesForStandup paging (VERM-114 review)', () => {
+  const plan = buildStandupPlan(
+    [{ shortName: 'ALPHA', metadata: parseYouTrackProjectFields([
+      { field: { name: 'Status' }, $type: 'StateProjectCustomField', bundle: { values: [['In Progress', false], ['BLOCKED', false], ['Done', true]].map(([name, isResolved], ordinal) => ({ name, isResolved, ordinal })) } },
+    ]) }],
+    undefined,
+  );
+  const issue = (n: number, status: string, updated = 9) => ({
+    id: `ALPHA-${n}`, idReadable: `ALPHA-${n}`, summary: `ALPHA-${n}`, updated, project: { shortName: 'ALPHA' },
+    customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: status } }],
+  });
+  const fullPage = (from: number, status = 'In Progress') =>
+    Array.from({ length: STANDUP_PAGE_SIZE }, (_, i) => issue(from + i, status));
+  const skips = () => fetchMock.mock.calls.map(([u]) => new globalThis.URL(String(u)).searchParams.get('$skip'));
+
+  it('reads every page, so a blocked ticket on page two is reported, exactly once', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(fullPage(1)))
+      // Page two repeats page one's last issue (results shifted between
+      // requests) and carries the blocked ticket.
+      .mockResolvedValueOnce(jsonRes([issue(STANDUP_PAGE_SIZE, 'In Progress'), issue(900, 'BLOCKED')]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(skips()).toEqual(['0', String(STANDUP_PAGE_SIZE)]);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-900']);
+    expect(out.inProgress).toHaveLength(STANDUP_PAGE_SIZE);
+    expect(new Set(out.inProgress.map((t) => t.idReadable)).size).toBe(STANDUP_PAGE_SIZE);
+  });
+
+  it('a full last page is followed by one more request, and stops at the empty page', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes(fullPage(1))).mockResolvedValueOnce(jsonRes([]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(skips()).toEqual(['0', String(STANDUP_PAGE_SIZE)]);
+    expect(out.inProgress).toHaveLength(STANDUP_PAGE_SIZE);
+  });
+
+  it('keeps the completed-work cutoff on every page', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes([...fullPage(1, 'Done').map((i) => ({ ...i, updated: 500 }))]))
+      .mockResolvedValueOnce(jsonRes([issue(901, 'Done', 2000), issue(902, 'Done', 500)]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 1000);
+    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-901']);
+  });
+
+  // No fixed cap (VERM-114 review, round 2): the read ends only at a short
+  // page, however many issues match.
+  const pagesOf = (total: number, statusAt: (n: number) => string = () => 'In Progress') => {
+    const pages: ReturnType<typeof issue>[][] = [];
+    for (let from = 1; from <= total; from += STANDUP_PAGE_SIZE) {
+      pages.push(Array.from({ length: Math.min(STANDUP_PAGE_SIZE, total - from + 1) }, (_, i) => issue(from + i, statusAt(from + i))));
+    }
+    if (total % STANDUP_PAGE_SIZE === 0) pages.push([]);
+    return pages;
+  };
+  const serve = (pages: ReturnType<typeof issue>[][]) =>
+    fetchMock.mockImplementation(async (u: string) => {
+      const skip = Number(new globalThis.URL(u).searchParams.get('$skip'));
+      return jsonRes(pages[skip / STANDUP_PAGE_SIZE] ?? []);
+    });
+
+  it('exactly 5,000 matches: every one is read, ending at the empty page after the fiftieth', async () => {
+    serve(pagesOf(5000));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(out.inProgress).toHaveLength(5000);
+    expect(new Set(out.inProgress.map((t) => t.idReadable)).size).toBe(5000);
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+  });
+
+  it('a blocked ticket at match 5,001 is reported, exactly once', async () => {
+    serve(pagesOf(5001, (n) => (n === 5001 ? 'BLOCKED' : 'In Progress')));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-5001']);
+    expect(out.inProgress).toHaveLength(5000);
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+  });
+
+  it('old completed tickets beyond 5,000 do not stop a small report', async () => {
+    // Years of history: 6,000 old Done tickets, then today's one blocked ticket.
+    serve(pagesOf(6001, (n) => (n === 6001 ? 'BLOCKED' : 'Done')).map((p) => p.map((i) => ({ ...i, updated: 500 }))));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 1000);
+    expect(out.done).toEqual([]);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-6001']);
+  });
+
+  it('stops with a clear error when YouTrack keeps returning the same page', async () => {
+    fetchMock.mockImplementation(async () => jsonRes(fullPage(1)));
+    await expect(getIssuesForStandup(URL, TOKEN, plan, 0)).rejects.toMatchObject({
+      message: expect.stringMatching(/returned the same page of results again/),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('getProjectFieldMetadata / getPriorityOrder (VERM-114, VERM-92)', () => {
+  it('reads the project\'s fields once, and the Priority order comes from the same read', async () => {
+    fetchMock.mockResolvedValue(
+      jsonRes([
+        { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: [{ name: 'Minor', ordinal: 2 }, { name: 'Major', ordinal: 0 }] } },
+        { field: { name: 'Status' }, $type: 'StateProjectCustomField', canBeEmpty: false, defaultValues: [{ name: 'Open' }], bundle: { values: [{ name: 'Open', isResolved: false, ordinal: 0 }, { name: 'Fixed', isResolved: true, ordinal: 1 }] } },
+      ]),
+    );
+    const meta = await getProjectFieldMetadata(URL, TOKEN, 'BETA');
+    expect(lastCall()[0]).toContain('/api/admin/projects/BETA/customFields?fields=');
+    expect(lastCall()[0]).toContain('bundle(values(name,isResolved,ordinal,archived))');
+    expect(meta.fields.find((f) => f.name === 'Status')).toEqual({
+      name: 'Status', type: 'StateProjectCustomField', canBeEmpty: false, defaults: ['Open'],
+      values: [{ name: 'Open', isResolved: false, archived: false }, { name: 'Fixed', isResolved: true, archived: false }],
+    });
+    await expect(getPriorityOrder(URL, TOKEN, 'BETA')).resolves.toEqual(['Major', 'Minor']);
   });
 });
 

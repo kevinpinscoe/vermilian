@@ -44,7 +44,13 @@ describe('createYouTrackProvider', () => {
       [{ projectId: '0-1', summary: 'S' }],
     ],
     ['getIssuesForRecommendation', (p) => p.getIssuesForRecommendation(['DEMO-1']), 'getIssuesForRecommendation', [['DEMO-1']]],
-    ['getIssuesForStandup', (p) => p.getIssuesForStandup(['DEMO'], 1000), 'getIssuesForStandup', [['DEMO'], 1000]],
+    [
+      'getIssuesForStandup',
+      (p) => p.getIssuesForStandup({ projects: [{ shortName: 'DEMO', statusField: 'Status', groups: { Done: 'done' } }] }, 1000),
+      'getIssuesForStandup',
+      [{ projects: [{ shortName: 'DEMO', statusField: 'Status', groups: { Done: 'done' } }] }, 1000],
+    ],
+    ['getProjectFieldMetadata', (p) => p.getProjectFieldMetadata('DEMO'), 'getProjectFieldMetadata', ['DEMO']],
     ['getPriorityValues', (p) => p.getPriorityValues('DEMO'), 'getPriorityOrder', ['DEMO']],
   ];
 

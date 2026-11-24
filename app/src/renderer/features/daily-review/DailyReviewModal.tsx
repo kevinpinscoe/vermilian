@@ -41,7 +41,7 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
   }
 
   const isLoading = focusLoading || boardLoading || completedQuery.isPending;
-  const isError = boardError || (completedQuery.isSuccess && !completedQuery.data.ok);
+  const isError = boardError || completedQuery.isError || (completedQuery.isSuccess && !completedQuery.data.ok);
 
   return (
     <Modal id="daily-review-modal" show onClose={onClose} size="large">
@@ -56,7 +56,7 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
                 text={
                   boardError
                     ? "One or more projects in this workspace failed to load."
-                    : (completedQuery.data?.error ?? 'Failed to load recently completed work.')
+                    : (completedQuery.error?.message ?? completedQuery.data?.error ?? 'Failed to load recently completed work.')
                 }
               />
             </div>
@@ -98,6 +98,14 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
 
               <Section title="Recently completed" testId="daily-review-completed">
                 <CompletedList tasks={completedQuery.data?.completed ?? []} />
+                {(completedQuery.data?.warnings ?? []).length > 0 && (
+                  <div data-testid="daily-review-mapping-warnings">
+                    <AttentionBox
+                      type="warning"
+                      text={`Some status mappings are incomplete: ${(completedQuery.data?.warnings ?? []).join(' ')}`}
+                    />
+                  </div>
+                )}
               </Section>
 
               <Section title="Agent work awaiting review" testId="daily-review-agent-awaiting-review">

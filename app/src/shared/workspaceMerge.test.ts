@@ -292,3 +292,14 @@ describe('mergeWorkspaceEdit — every known field survives an unrelated remote 
     expect(out).toEqual({ ...edited, name: 'Renamed' });
   });
 });
+
+describe('mergeWorkspaceEdit — youtrackProjects (VERM-114)', () => {
+  const yt = (youtrackProjects?: WorkspaceDocument['youtrackProjects']) => doc({ ...(youtrackProjects ? { youtrackProjects } : {}) });
+
+  it('keeps both sides when each maps a different status of one project', () => {
+    const base = yt({ VERM: { statusRoles: {} } });
+    const edited = yt({ VERM: { statusRoles: { 'Wont do': 'done' } } });
+    const remote = yt({ VERM: { statusRoles: { Stuck: 'blocked' } } });
+    expect(merged(base, edited, remote).youtrackProjects).toEqual({ VERM: { statusRoles: { Stuck: 'blocked', 'Wont do': 'done' } } });
+  });
+});

@@ -13,6 +13,7 @@
 
 import type { ActiveBackendContext } from './activeWorkspace';
 import type { WorkspaceFolder } from './workspace';
+import type { YouTrackProjectSettingsMap } from './youtrackStandup';
 
 export const JIRA_STANDUP_UNSUPPORTED_MESSAGE =
   'Stand-ups are not available for Jira workspaces yet: Phase 1 supports them for YouTrack workspaces only.';
@@ -33,6 +34,8 @@ export interface StandupWorkspace {
   id: string;
   backend: ActiveBackendContext | null;
   folders: readonly Pick<WorkspaceFolder, 'projectIds'>[];
+  /** Per-workspace storage only: per-project Status overrides (VERM-114). */
+  youtrackProjects?: YouTrackProjectSettingsMap;
 }
 
 export type StandupProjects = { ok: true; shortNames: string[] } | { ok: false; error: string };

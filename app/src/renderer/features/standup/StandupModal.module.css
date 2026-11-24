@@ -156,6 +156,17 @@
   color: var(--primary-text-color, var(--primary-text-color, #111111));
 }
 
+.banner[data-kind='warning'] {
+  background: var(--warning-color-selected, #fff6e5);
+  border-color: var(--warning-color, #ffcb00);
+  color: var(--primary-text-color, #111111);
+}
+
+.warningList {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 /* Actions */
 .actions {
   display: flex;

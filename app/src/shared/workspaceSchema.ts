@@ -38,6 +38,7 @@ import {
 } from './boardConfig';
 import { normaliseSiteUrl, type JiraProfile } from './jiraProfile';
 import { jiraProjectSettingsProblems, type JiraProjectSettingsMap } from './jiraProjectSettings';
+import { youtrackProjectSettingsProblems, type YouTrackProjectSettingsMap } from './youtrackStandup';
 import { isTrackerKind } from './tracker';
 import type { WorkspaceFolder, WorkspaceJiraBoard } from './workspace';
 
@@ -112,6 +113,11 @@ export interface WorkspaceDocument {
   // article by its readable ID (VERM-48, decision C5). Absent or null is
   // None: the Priority Desk then has no master plan for this workspace.
   masterPlan?: WorkspaceMasterPlanConfig;
+  // YouTrack workspaces only, optional: per-project overrides keyed by
+  // project short name (VERM-114, shared/youtrackStandup.ts) — today the
+  // Status value → role mapping stand-ups and Daily Review use. A project
+  // with no entry uses the defaults derived from its own Status field.
+  youtrackProjects?: YouTrackProjectSettingsMap;
   // Optional, either backend: the link types whose linked ticket is a
   // prerequisite of this one, each with the side that reads "what am I
   // waiting on?" (VERM-96). Absent is the backend's default (YouTrack Depend,
@@ -499,6 +505,19 @@ function validateJiraProjects(c: Collector, jiraProjects: unknown, backendKind: 
   }
 }
 
+function validateYouTrackProjects(c: Collector, youtrackProjects: unknown, backendKind: unknown) {
+  if (youtrackProjects === undefined) return;
+  if (!c.object(youtrackProjects, 'youtrackProjects')) return;
+  if (backendKind !== 'youtrack' && Object.keys(youtrackProjects).length > 0) {
+    c.add('youtrackProjects', 'youtrackProjects is for YouTrack workspaces only.');
+    return;
+  }
+  for (const problem of youtrackProjectSettingsProblems(youtrackProjects)) {
+    const at = `youtrackProjects${problem.path}`;
+    c.add(at, `${at} ${problem.message}`);
+  }
+}
+
 function isIsoDate(s: unknown): boolean {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const d = new Date(`${s}T00:00:00Z`);
@@ -615,6 +634,7 @@ export function validateWorkspaceDocument(input: unknown): WorkspaceValidationEr
   validateJiraBoards(c, input.jiraBoards, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateJiraHiddenStatuses(c, input.jiraHiddenStatuses, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validateMasterPlan(c, input.masterPlan, isPlainObject(input.backend) ? input.backend.kind : undefined);
+  validateYouTrackProjects(c, input.youtrackProjects, isPlainObject(input.backend) ? input.backend.kind : undefined);
   validatePrerequisiteLinkTypes(c, input.prerequisiteLinkTypes);
   return [...c.errors, ...secrets];
 }
@@ -674,6 +694,7 @@ const DOCUMENT_SHAPE = struct({
   jiraBoards: { t: 'array', key: 'id', of: struct({ id: LEAF, name: LEAF }) },
   jiraHiddenStatuses: LEAF,
   masterPlan: struct({ articleId: LEAF }),
+  youtrackProjects: { t: 'record', of: struct({ statusRoles: { t: 'record', of: LEAF } }) },
   prerequisiteLinkTypes: LEAF,
 });
 

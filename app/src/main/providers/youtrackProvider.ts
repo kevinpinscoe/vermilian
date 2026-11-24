@@ -12,13 +12,17 @@
 import type * as YouTrackClient from '../api/youtrack';
 import type { WritableTrackerProvider } from '../../shared/tracker';
 import type { BoardIssue } from '../../shared/workspace';
+import type { YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import type { StandupPlan } from '../../shared/youtrackStandup';
 
 export interface YouTrackProvider extends WritableTrackerProvider {
   readonly kind: 'youtrack';
   getWorklogTypes(): Promise<string[]>;
   createIssue(payload: YouTrackClient.CreateIssuePayload): Promise<YouTrackClient.CreateIssueResult>;
   getIssuesForRecommendation(issueIds: string[]): Promise<YouTrackClient.RecommendationIssue[]>;
-  getIssuesForStandup(projectShortNames: string[], cutoffMs: number): Promise<YouTrackClient.StandupIssues>;
+  /** A project's own field configuration (VERM-114); the Priority order is read from the same call. */
+  getProjectFieldMetadata(projectShortName: string): Promise<YouTrackProjectMetadata>;
+  getIssuesForStandup(plan: Pick<StandupPlan, 'projects'>, cutoffMs: number): Promise<YouTrackClient.StandupIssues>;
   /** Runway tickets by ID, one query (VERM-84); fails whole if one ID is unknown. */
   getIssuesByIds(issueIds: readonly string[]): Promise<BoardIssue[]>;
   /** One issue as a board row (VERM-84). */
@@ -50,8 +54,8 @@ export function createYouTrackProvider(
     getWorklogTypes: () => client.getWorklogTypes(url, token),
     createIssue: (payload) => client.createIssue(url, token, payload),
     getIssuesForRecommendation: (issueIds) => client.getIssuesForRecommendation(url, token, issueIds),
-    getIssuesForStandup: (projectShortNames, cutoffMs) =>
-      client.getIssuesForStandup(url, token, projectShortNames, cutoffMs),
+    getProjectFieldMetadata: (projectShortName) => client.getProjectFieldMetadata(url, token, projectShortName),
+    getIssuesForStandup: (plan, cutoffMs) => client.getIssuesForStandup(url, token, plan, cutoffMs),
     getIssuesByIds: (issueIds) => client.getIssuesByIds(url, token, issueIds),
     getBoardIssue: (issueId) => client.getBoardIssue(url, token, issueId),
   };

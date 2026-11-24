@@ -180,6 +180,7 @@ export function backendChangeProblem(base: WorkspaceDocument, edited: WorkspaceD
   if (base.prerequisiteLinkTypes !== undefined) held.push('prerequisite link types');
   if (Object.keys(base.boards ?? {}).length) held.push('board settings');
   if (Object.keys(base.jiraProjects ?? {}).length) held.push('Jira project settings');
+  if (Object.keys(base.youtrackProjects ?? {}).length) held.push('YouTrack status mappings');
   if (Object.keys(base.dismissals ?? {}).length) held.push('"Not this week" dismissals');
   if (!held.length) return null;
   const from = base.backend.kind === 'jira' ? 'Jira' : 'YouTrack';

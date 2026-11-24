@@ -718,3 +718,23 @@ describe('jiraHiddenStatuses', () => {
     );
   });
 });
+
+describe('youtrackProjects — per-project Status overrides (VERM-114)', () => {
+  const settings = { VERM: { statusRoles: { 'Wont do': 'done', BLOCKED: 'blocked' } } } as const;
+
+  it('accepts valid overrides on a YouTrack workspace and round-trips them', () => {
+    const doc = youtrackDoc({ youtrackProjects: structuredClone(settings) as never });
+    expect(validateWorkspaceDocument(doc)).toEqual([]);
+    const parsed = parseWorkspaceDocument(serialiseNewWorkspaceDocument(doc));
+    expect(parsed.ok && parsed.document.youtrackProjects).toEqual(settings);
+  });
+
+  it('rejects overrides on a Jira workspace', () => {
+    expect(paths(validateWorkspaceDocument(jiraDoc({ youtrackProjects: { VERM: {} } })))).toEqual(['youtrackProjects']);
+  });
+
+  it('rejects an unknown role at its path', () => {
+    const errors = validateWorkspaceDocument(youtrackDoc({ youtrackProjects: { VERM: { statusRoles: { Done: 'finished' } } } as never }));
+    expect(paths(errors)).toEqual(['youtrackProjects["VERM"].statusRoles["Done"]']);
+  });
+});
