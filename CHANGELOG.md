@@ -149,6 +149,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ESLint 10.15.0, globals 17.14.0, Playwright 1.65.1, and the `pnpm/action-setup` 6.1.1 and
   `actions/setup-node` 7.1.0 CI actions. Dependabot now sends compatible minor and patch npm
   updates as one weekly pull request. The dependency maintenance policy is in `RUNBOOK.md`.
+- **Anthropic SDK 1.x** (VERM-55). `@anthropic-ai/sdk` 0.128.0 → 1.12.0. Claude requests now
+  use API version `2026-10-21` and send the API key as `Authorization: Bearer` instead of
+  `x-api-key`. Vermilian sends no sampling parameters, documents or citations, so nothing
+  that version rejects.
 
 ### Fixed
 
