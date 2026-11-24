@@ -162,6 +162,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stand-up and Daily Review no longer fail with "Can't parse search query"** (VERM-114). The
+  stand-up query named hard-coded statuses, including `Working on it`, which had been removed from
+  YouTrack, and YouTrack rejects a whole query when one value is unknown; the Priority Desk Daily
+  Review shared that read and failed the same way. Both now read each project's own Status values
+  from its configuration and query only those. Resolved states count as done, except those that
+  close an issue without completing it, such as `Wont do`, and a project can override any value in its workspace document
+  (`youtrackProjects`, see RUNBOOK *Stand-up status mapping*). A project with no state for a group
+  is named, and the other groups are still reported. Under per-workspace storage, Daily Review now
+  reads through the active workspace's own connection, as the stand-up already did.
+
 - **AI features work with newer Claude models** (VERM-113). AI create task and Recommendations
   no longer force the model to call their tool. Claude Opus 5.5, Claude Sonnet 5.5 and the
   Fable and Mythos 5.1 and later models reject a forced tool call, so both features failed when

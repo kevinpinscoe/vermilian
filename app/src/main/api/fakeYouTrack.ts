@@ -9,6 +9,8 @@ import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
 import type { IssueLink } from '../../shared/issueLink';
 import { FIELD_DEFS, FIELD_KEYS, type FieldKey } from '../../shared/fields';
+import { parseYouTrackProjectFields, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import { buildStandupQuery, standupGroupFor, type StandupPlan } from '../../shared/youtrackStandup';
 import type {
   YouTrackProject,
   CreateIssuePayload,
@@ -437,8 +439,71 @@ export async function postWorklog(
   // otherwise a no-op in the fake
 }
 
+// Each fake project's Status field (VERM-114). The built-in values below
+// unless VERMILIAN_E2E_YT_STATUS_BUNDLES seeds a project's own, as JSON
+// { "<shortName>": [{ "name": "Fixed", "isResolved": true }, …] }, so a test
+// can give two projects different workflows.
+export const FAKE_DEFAULT_STATUS_VALUES: ReadonlyArray<{ name: string; isResolved: boolean }> = [
+  { name: 'To do', isResolved: false },
+  { name: 'In Progress', isResolved: false },
+  { name: 'Waiting for IT', isResolved: false },
+  { name: 'BLOCKED', isResolved: false },
+  { name: 'Done', isResolved: true },
+  { name: 'Wont do', isResolved: true },
+];
+
+export function fakeStatusValues(projectShortName: string): Array<{ name: string; isResolved: boolean }> {
+  let seeded: Record<string, unknown> = {};
+  try {
+    seeded = JSON.parse(process.env.VERMILIAN_E2E_YT_STATUS_BUNDLES ?? '{}') as Record<string, unknown>;
+  } catch { /* unseeded */ }
+  const own = seeded[projectShortName];
+  if (!Array.isArray(own)) return FAKE_DEFAULT_STATUS_VALUES.map((v) => ({ ...v }));
+  return own
+    .filter((v): v is { name: string; isResolved?: unknown } => typeof v === 'object' && v !== null && typeof (v as { name?: unknown }).name === 'string')
+    .map((v) => ({ name: v.name, isResolved: v.isResolved === true }));
+}
+
+export async function getProjectFieldMetadata(url: string, token: string, projectShortName: string): Promise<YouTrackProjectMetadata> {
+  const priority = await getPriorityOrder(url, token, projectShortName);
+  return parseYouTrackProjectFields([
+    { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: priority.map((name, ordinal) => ({ name, ordinal })) } },
+    {
+      field: { name: 'Status' },
+      $type: 'StateProjectCustomField',
+      defaultValues: [{ name: 'To do' }],
+      bundle: { values: fakeStatusValues(projectShortName).map((v, ordinal) => ({ ...v, ordinal })) },
+    },
+  ]);
+}
+
+/**
+ * The live server's rule for a stand-up query, applied to the exact text the
+ * client emits (VERM-114): every clause's values must be values of that
+ * project's own Status field, or the whole query is rejected — as YouTrack
+ * rejects `{Status}: {Working on it}` once that value is gone. `values` maps a
+ * project short name to its Status value names.
+ */
+export function rejectInvalidStandupQuery(query: string, values: (shortName: string) => readonly string[]): void {
+  const clause = /\(project: \{([^}]+)\} and \{([^}]+)\}: ((?:\{[^}]*\},?)+)\)/g;
+  let rest = query;
+  for (const m of query.matchAll(clause)) {
+    const known = new Set(values(m[1]));
+    for (const v of m[3].split(',').map((x) => x.replace(/^\{|\}$/g, ''))) {
+      if (!known.has(v)) {
+        throw {
+          status: 400,
+          message: `Can't parse search query, please check and update query syntax: The value "${v}" isn't used for the ${m[2]} field.`,
+        };
+      }
+    }
+    rest = rest.replace(m[0], '');
+  }
+  if (rest.replace(/\bor\b/g, '').trim()) throw { status: 400, message: "Can't parse search query, please check and update query syntax" };
+}
+
 export async function getIssuesForStandup(
-  _url: string, token: string, projectShortNames: string[], _cutoffMs: number,
+  _url: string, token: string, plan: Pick<StandupPlan, 'projects'>, _cutoffMs: number,
 ): Promise<StandupIssues> {
   // Set VERMILIAN_E2E_DAILY_REVIEW_ERROR=1 to simulate this fetch failing —
   // used by Daily Review's (VERM-9) e2e error-state coverage. Shared with
@@ -447,6 +512,7 @@ export async function getIssuesForStandup(
   if (process.env.VERMILIAN_E2E_DAILY_REVIEW_ERROR === '1') {
     throw { status: 500, message: 'Simulated Daily Review fetch failure' };
   }
+  const projectShortNames = plan.projects.map((p) => p.shortName);
   // e2e observation (VERM-48): which projects each stand-up asked for, and
   // an optional hold to put a stand-up "in flight" while its issues load.
   standupQueries.push([...projectShortNames]);
@@ -454,19 +520,22 @@ export async function getIssuesForStandup(
   // 'legacy' for the Settings token's stand-in. Never the token itself.
   standupCredentialRefs.push(refFromE2eFakeYouTrackToken(token) ?? 'legacy');
   if (standupDelayMs > 0) await new Promise((r) => setTimeout(r, standupDelayMs));
-  if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
-  // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has data.
-  return {
-    done: [
-      { idReadable: 'TEST-1', summary: 'Finished the login flow', status: 'Done', priority: 'Normal', notes: null, updatedMs: 0, loggedMinutesToday: 85 },
-    ],
-    inProgress: [
-      { idReadable: 'TEST-5', summary: 'Refactoring the API client', status: 'In Progress', priority: 'Critical', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
-    ],
-    blocked: [
-      { idReadable: 'TST2-2', summary: 'Waiting on a vendor response', status: 'BLOCKED', priority: 'Major', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
-    ],
-  };
+  const query = buildStandupQuery(plan);
+  if (!query) return { done: [], inProgress: [], blocked: [] };
+  rejectInvalidStandupQuery(query, (shortName) => fakeStatusValues(shortName).map((v) => v.name));
+  // Deterministic fixtures (window/cutoff ignored) so the stand-up flow has
+  // data, grouped by the plan exactly as the real client groups them.
+  const fixtures: StandupIssues['done'] = [
+    { idReadable: 'TEST-1', summary: 'Finished the login flow', status: 'Done', priority: 'Normal', notes: null, updatedMs: 0, loggedMinutesToday: 85 },
+    { idReadable: 'TEST-5', summary: 'Refactoring the API client', status: 'In Progress', priority: 'Critical', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
+    { idReadable: 'TST2-2', summary: 'Waiting on a vendor response', status: 'BLOCKED', priority: 'Major', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
+  ];
+  const out: StandupIssues = { done: [], inProgress: [], blocked: [] };
+  for (const t of fixtures) {
+    const group = standupGroupFor(plan, t.idReadable.replace(/-\d+$/, ''), t.status);
+    if (group) out[group].push({ ...t });
+  }
+  return out;
 }
 
 const standupQueries: string[][] = [];

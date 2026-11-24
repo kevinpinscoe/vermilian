@@ -98,6 +98,14 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
 
               <Section title="Recently completed" testId="daily-review-completed">
                 <CompletedList tasks={completedQuery.data?.completed ?? []} />
+                {(completedQuery.data?.warnings ?? []).length > 0 && (
+                  <div data-testid="daily-review-mapping-warnings">
+                    <AttentionBox
+                      type="warning"
+                      text={`Some status mappings are incomplete: ${(completedQuery.data?.warnings ?? []).join(' ')}`}
+                    />
+                  </div>
+                )}
               </Section>
 
               <Section title="Agent work awaiting review" testId="daily-review-agent-awaiting-review">

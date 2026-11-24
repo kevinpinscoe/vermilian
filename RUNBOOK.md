@@ -556,6 +556,63 @@ credentials. Keep them in the user-data directory; never commit them.
 
 ---
 
+## Stand-up status mapping (VERM-114)
+
+Stand-ups and the Priority Desk Daily Review read each YouTrack project's own
+**Status** field and never use a built-in list of status names. For every
+project in the active workspace, Vermilian reads the project's field
+configuration (`/api/admin/projects/<shortName>/customFields`) on the
+workspace's own connection, then decides what each Status value means:
+
+| Value | Default role | Stand-up group |
+| --- | --- | --- |
+| Resolved (`isResolved`), e.g. `Done`, `Fixed` | `done` | Done |
+| Resolved but not completed: `Wont do`, `Won't fix`, `Duplicate`, `Obsolete`, `Cancelled`, `Rejected`, `Invalid` | none | Not reported |
+| `In Progress`, `Working on it`, `Doing`, `In development`, `In review` | `inProgress` | In progress |
+| Any name starting `Waiting` | `waiting` | In progress |
+| `Blocked`, `Impeded` (any case) | `blocked` | Blocked |
+| Anything else | `todo` | Not reported |
+
+The query and the displayed groups are built from the same mapping, and the
+query names only values the project actually has. If a project has no value
+for a group, the stand-up names the project and the group it is missing
+("OPS: no Status value is mapped to blocked …") and still reports the other
+groups.
+
+### Overriding the mapping for one project
+
+Per-workspace storage only: legacy storage always uses the defaults above.
+Overrides live in the workspace's own `_vermilian-ws-<workspaceId>` article
+in the VERM project, under `youtrackProjects`, keyed by project short name.
+Each entry maps an exact Status value to one of `todo`, `inProgress`,
+`waiting`, `blocked`, `deferred` or `done`. Values not named keep their
+default.
+
+Worked example: project `OPS` uses `Stuck` for blocked work, and its team
+wants `Wont do` listed as completed:
+
+```json
+"youtrackProjects": {
+  "OPS": {
+    "statusRoles": {
+      "Stuck": "blocked",
+      "Wont do": "done"
+    }
+  }
+}
+```
+
+1. Stop Vermilian on every machine that uses the workspace, so none of them
+   writes the article while you edit it.
+2. In YouTrack, open the article `_vermilian-ws-<workspaceId>`, add the
+   `youtrackProjects` block at the top level of the JSON, and save.
+3. Start Vermilian and generate a stand-up. `Stuck` issues now appear under
+   Blocked and recently closed `Wont do` issues under Done. A name that is not
+   one of the project's Status values is ignored, and the stand-up says so.
+
+To return a project to the defaults, delete its entry. A mapping editor in the
+app is a planned follow-up.
+
 ## OpenBao credential storage (VERM-64)
 
 ### What this is

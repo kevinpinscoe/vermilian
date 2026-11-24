@@ -660,6 +660,8 @@ export interface DailyReviewGetResult {
   // Present only when ok is true. Always the fixed active-workspace/48h
   // scope — see renderer/features/daily-review — never user-configurable.
   completed?: DailyReviewTask[];
+  // Incomplete status mappings, one plain-language line each (VERM-114).
+  warnings?: string[];
 }
 
 export interface CreateIssueArgs {
@@ -725,6 +727,10 @@ export interface StandupGenerateResult {
   markdown?: string;
   taskCount?: number;
   error?: string;
+  // Incomplete status mappings, one plain-language line each (VERM-114): the
+  // project and the group it has no valid status for. The other groups are
+  // still reported.
+  warnings?: string[];
 }
 
 export interface StandupSaveArgs {

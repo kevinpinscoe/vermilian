@@ -12,7 +12,12 @@ import {
   postComment,
   getIssuesByIds,
   getBoardIssue,
+  getProjectFieldMetadata,
+  getPriorityOrder,
 } from './youtrack';
+import { rejectInvalidStandupQuery } from './fakeYouTrack';
+import { buildStandupPlan, buildStandupQuery } from '../../shared/youtrackStandup';
+import { parseYouTrackProjectFields } from '../../shared/youtrackProjectFields';
 
 const URL = 'https://yt.example.com/';
 const TOKEN = 'tok';
@@ -482,28 +487,99 @@ describe('request error handling', () => {
 
 // ─── getIssuesForStandup ──────────────────────────────────────────────────────
 
-describe('getIssuesForStandup', () => {
-  it('returns empty buckets without a network call when no projects are given', async () => {
-    const out = await getIssuesForStandup(URL, TOKEN, [], 0);
+describe('getIssuesForStandup (VERM-114)', () => {
+  // Two projects with different workflows. BETA has no "In Progress", no
+  // "BLOCKED" and no "Done"; ALPHA has none of BETA's names.
+  const field = (values: Array<[string, boolean]>, priority: string[] = []) => [
+    { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: priority.map((name, ordinal) => ({ name, ordinal })) } },
+    { field: { name: 'Status' }, $type: 'StateProjectCustomField', bundle: { values: values.map(([name, isResolved], ordinal) => ({ name, isResolved, ordinal })) } },
+  ];
+  const ALPHA = field([['To do', false], ['In Progress', false], ['Waiting for IT', false], ['BLOCKED', false], ['Done', true], ['Wont do', true]], ['Critical', 'Normal']);
+  const BETA = field([['Open', false], ['Doing', false], ['Stuck', false], ['Fixed', true], ['Duplicate', true]]);
+  const BUNDLES: Record<string, string[]> = {
+    ALPHA: ['To do', 'In Progress', 'Waiting for IT', 'BLOCKED', 'Done', 'Wont do'],
+    BETA: ['Open', 'Doing', 'Stuck', 'Fixed', 'Duplicate'],
+  };
+  const plan = () =>
+    buildStandupPlan(
+      [
+        { shortName: 'ALPHA', metadata: parseYouTrackProjectFields(ALPHA) },
+        { shortName: 'BETA', metadata: parseYouTrackProjectFields(BETA) },
+      ],
+      // BETA names its own blocked state.
+      { BETA: { statusRoles: { Stuck: 'blocked' } } },
+    );
+  const emittedQuery = () => new globalThis.URL(lastCall()[0]).searchParams.get('query') ?? '';
+  const issue = (key: string, project: string, status: string, updated = 9) => ({
+    id: key, idReadable: key, summary: key, updated, project: { shortName: project },
+    customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: status } }],
+  });
+
+  it('returns empty buckets without a network call when the plan has no projects', async () => {
+    const out = await getIssuesForStandup(URL, TOKEN, { projects: [] }, 0);
     expect(out).toEqual({ done: [], inProgress: [], blocked: [] });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('buckets issues by status and drops Done issues older than the cutoff', async () => {
-    const cutoff = 1000;
+  it('emits one clause per project naming only that project\'s own discovered values', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes([]));
+    await getIssuesForStandup(URL, TOKEN, plan(), 0);
+    expect(emittedQuery()).toBe(
+      '(project: {ALPHA} and {Status}: {In Progress},{Waiting for IT},{BLOCKED},{Done})' +
+        ' or (project: {BETA} and {Status}: {Doing},{Stuck},{Fixed})',
+    );
+    expect(emittedQuery()).not.toMatch(/Working on it/);
+    // The fake applies the live server's rule to the emitted text and accepts it.
+    expect(() => rejectInvalidStandupQuery(emittedQuery(), (p) => BUNDLES[p] ?? [])).not.toThrow();
+  });
+
+  it('the fake rejects a value that belongs only to the other project, as the live server does', () => {
+    const wrong = plan();
+    // Put BETA's "Fixed" into ALPHA's clause.
+    wrong.projects[0].groups.Fixed = 'done';
+    expect(() => rejectInvalidStandupQuery(buildStandupQuery(wrong), (p) => BUNDLES[p] ?? [])).toThrow(
+      expect.objectContaining({ status: 400, message: expect.stringMatching(/"Fixed" isn't used for the Status field/) }),
+    );
+  });
+
+  it('groups each issue by its own project\'s mapping and drops done issues older than the cutoff', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonRes([
-        { id: '1', idReadable: 'T-1', summary: 'recent done', updated: 2000, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Done' } }] },
-        { id: '2', idReadable: 'T-2', summary: 'stale done', updated: 500, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Done' } }] },
-        { id: '3', idReadable: 'T-3', summary: 'wip', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'In Progress' } }] },
-        { id: '4', idReadable: 'T-4', summary: 'blocked', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'BLOCKED' } }] },
-        { id: '5', idReadable: 'T-5', summary: 'waiting', updated: 9, customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: 'Waiting for IT' } }] },
+        issue('ALPHA-1', 'ALPHA', 'Done', 2000),
+        issue('ALPHA-2', 'ALPHA', 'Done', 500),
+        issue('ALPHA-3', 'ALPHA', 'In Progress'),
+        issue('ALPHA-4', 'ALPHA', 'Waiting for IT'),
+        issue('ALPHA-5', 'ALPHA', 'BLOCKED'),
+        issue('ALPHA-6', 'ALPHA', 'Wont do', 2000),
+        issue('BETA-1', 'BETA', 'Fixed', 2000),
+        issue('BETA-2', 'BETA', 'Doing'),
+        issue('BETA-3', 'BETA', 'Stuck'),
+        issue('BETA-4', 'BETA', 'Duplicate', 2000),
       ]),
     );
-    const out = await getIssuesForStandup(URL, TOKEN, ['TST'], cutoff);
-    expect(out.done.map((t) => t.idReadable)).toEqual(['T-1']);
-    expect(out.inProgress.map((t) => t.idReadable)).toEqual(['T-3', 'T-5']);
-    expect(out.blocked.map((t) => t.idReadable)).toEqual(['T-4']);
+    const out = await getIssuesForStandup(URL, TOKEN, plan(), 1000);
+    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-1', 'BETA-1']);
+    expect(out.inProgress.map((t) => t.idReadable)).toEqual(['ALPHA-3', 'ALPHA-4', 'BETA-2']);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-5', 'BETA-3']);
+  });
+});
+
+describe('getProjectFieldMetadata / getPriorityOrder (VERM-114, VERM-92)', () => {
+  it('reads the project\'s fields once, and the Priority order comes from the same read', async () => {
+    fetchMock.mockResolvedValue(
+      jsonRes([
+        { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: [{ name: 'Minor', ordinal: 2 }, { name: 'Major', ordinal: 0 }] } },
+        { field: { name: 'Status' }, $type: 'StateProjectCustomField', canBeEmpty: false, defaultValues: [{ name: 'Open' }], bundle: { values: [{ name: 'Open', isResolved: false, ordinal: 0 }, { name: 'Fixed', isResolved: true, ordinal: 1 }] } },
+      ]),
+    );
+    const meta = await getProjectFieldMetadata(URL, TOKEN, 'BETA');
+    expect(lastCall()[0]).toContain('/api/admin/projects/BETA/customFields?fields=');
+    expect(lastCall()[0]).toContain('bundle(values(name,isResolved,ordinal,archived))');
+    expect(meta.fields.find((f) => f.name === 'Status')).toEqual({
+      name: 'Status', type: 'StateProjectCustomField', canBeEmpty: false, defaults: ['Open'],
+      values: [{ name: 'Open', isResolved: false, archived: false }, { name: 'Fixed', isResolved: true, archived: false }],
+    });
+    await expect(getPriorityOrder(URL, TOKEN, 'BETA')).resolves.toEqual(['Major', 'Minor']);
   });
 });
 

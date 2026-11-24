@@ -120,17 +120,28 @@ export async function getProjects(url: string, token: string): Promise<YouTrackP
 }
 
 /**
- * A project's Priority values in its own bundle's order (VERM-92); [] when it
- * has no Priority field. Readable by any user who can read the project.
+ * A project's own field configuration (VERM-114): every custom field with its
+ * values (and whether each resolves the issue), its default and whether it
+ * may be empty, from one read. Readable by any user who can read the project.
+ * The Priority order (VERM-92) and the stand-up Status mapping both come from
+ * this one reader.
  */
-export async function getPriorityOrder(url: string, token: string, projectShortName: string): Promise<string[]> {
-  const fields = await request<YouTrackProjectCustomField[]>(
+export async function getProjectFieldMetadata(url: string, token: string, projectShortName: string): Promise<YouTrackProjectMetadata> {
+  const fields = await request<unknown>(
     url,
     token,
     `/api/admin/projects/${encodeURIComponent(projectShortName)}/customFields` +
-      '?fields=field(name),bundle(values(name,ordinal))&$top=200',
+      `?fields=${YOUTRACK_PROJECT_FIELDS_SELECTION}&$top=200`,
   );
-  return youtrackPriorityOrder(fields) ?? [];
+  return parseYouTrackProjectFields(fields);
+}
+
+/**
+ * A project's Priority values in its own bundle's order (VERM-92); [] when it
+ * has no Priority field. Read through getProjectFieldMetadata.
+ */
+export async function getPriorityOrder(url: string, token: string, projectShortName: string): Promise<string[]> {
+  return (await getProjectFieldMetadata(url, token, projectShortName)).priorityOrder;
 }
 
 /**
@@ -177,7 +188,8 @@ import { isValidLocalId } from '../../shared/tracker';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { CONFIG_ARTICLE_TITLE, JIRA_PROFILE_ARTICLE_TITLE } from '../../shared/workspaceMigration';
 import { STORAGE_MARKER_TITLE } from '../../shared/storageActivation';
-import { youtrackPriorityOrder, type YouTrackProjectCustomField } from '../../shared/priority';
+import { parseYouTrackProjectFields, YOUTRACK_PROJECT_FIELDS_SELECTION, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
+import { buildStandupQuery, standupGroupFor, type StandupPlan } from '../../shared/youtrackStandup';
 import { mapYouTrackLinks, type RawIssueLink } from './youtrackLinks';
 import {
   FIELD_DEFS,
@@ -643,6 +655,7 @@ interface StandupRawIssue {
   idReadable: string;
   summary: string;
   updated: number;
+  project?: { shortName?: string } | null;
   customFields: RawCustomField[];
   timeTracking?: {
     workItems?: Array<{
@@ -653,7 +666,7 @@ interface StandupRawIssue {
 }
 
 const STANDUP_FIELDS =
-  'id,idReadable,summary,updated,' +
+  'id,idReadable,summary,updated,project(shortName),' +
   'customFields(name,$type,value(name,isResolved)),' +
   'timeTracking(workItems(date,duration(minutes)))';
 
@@ -663,23 +676,27 @@ export interface StandupIssues {
   blocked: StandupTask[];
 }
 
+/**
+ * The issues a stand-up (and Daily Review) reports, grouped by the plan
+ * (VERM-114, shared/youtrackStandup.ts). The query names only each project's
+ * own Status values, and each issue is grouped by the same mapping, so a
+ * hard-coded status name can never reach YouTrack. Done issues older than the
+ * cutoff are dropped.
+ */
 export async function getIssuesForStandup(
   url: string,
   token: string,
-  projectShortNames: string[],
+  plan: Pick<StandupPlan, 'projects'>,
   cutoffMs: number,
 ): Promise<StandupIssues> {
-  if (!projectShortNames.length) return { done: [], inProgress: [], blocked: [] };
-
-  const projectPart = projectShortNames.map((s) => `{${s}}`).join(',');
-  const query = encodeURIComponent(
-    `project: ${projectPart} Status: Done,{In Progress},BLOCKED,{Working on it}`,
-  );
+  const empty: StandupIssues = { done: [], inProgress: [], blocked: [] };
+  const queryText = buildStandupQuery(plan);
+  if (!queryText) return empty;
 
   const raw = await request<StandupRawIssue[]>(
     url,
     token,
-    `/api/issues?fields=${STANDUP_FIELDS}&query=${query}&$top=500`,
+    `/api/issues?fields=${STANDUP_FIELDS}&query=${encodeURIComponent(queryText)}&$top=500`,
   );
 
   const todayStart = (() => {
@@ -687,47 +704,32 @@ export async function getIssuesForStandup(
     return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   })();
 
-  function toTask(issue: StandupRawIssue): StandupTask {
+  for (const issue of raw) {
+    const shortName = issue.project?.shortName ?? issue.idReadable.replace(/-\d+$/, '');
+    const projectPlan = plan.projects.find((p) => p.shortName === shortName);
+    if (!projectPlan) continue;
+    const statusField = (issue.customFields ?? []).find((f) => f.name === projectPlan.statusField);
+    const status = statusField ? parseFieldStringValue(statusField) : null;
+    const group = standupGroupFor(plan, shortName, status);
+    if (!group) continue;
     const fields = extractFields(issue.customFields ?? []);
-    const workItems = issue.timeTracking?.workItems ?? [];
-    const loggedMinutesToday = workItems
+    const loggedMinutesToday = (issue.timeTracking?.workItems ?? [])
       .filter((wi) => wi.date >= todayStart)
       .reduce((acc, wi) => acc + (wi.duration?.minutes ?? 0), 0);
-    return {
+    const task: StandupTask = {
       idReadable: issue.idReadable,
       summary: issue.summary,
-      status: fields.status ?? '',
+      status: status ?? '',
       priority: fields.priority,
       notes: fields.notes,
       updatedMs: issue.updated ?? 0,
       loggedMinutesToday,
     };
+    if (group === 'done' && task.updatedMs < cutoffMs) continue;
+    empty[group].push(task);
   }
 
-  const done: StandupTask[] = [];
-  const inProgress: StandupTask[] = [];
-  const blocked: StandupTask[] = [];
-
-  for (const issue of raw) {
-    const task = toTask(issue);
-    const status = task.status.toLowerCase();
-    if (status === 'done') {
-      if (task.updatedMs >= cutoffMs) done.push(task);
-    } else if (
-      status === 'in progress' ||
-      status === 'working on it' ||
-      status === 'waiting for it' ||
-      status === 'waiting for approval' ||
-      status === 'waiting for customer' ||
-      status === 'waiting on external resource'
-    ) {
-      inProgress.push(task);
-    } else if (status === 'blocked') {
-      blocked.push(task);
-    }
-  }
-
-  return { done, inProgress, blocked };
+  return empty;
 }
 
 // --- _vermilian-config and _vermilian-master-plan Knowledge Base Articles ---
