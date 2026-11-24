@@ -48,7 +48,7 @@ Day-to-day development operations for Vermilian — starting, building, packagin
 
 | Component | Details |
 | --- | --- |
-| **App shell** | Electron 45 via electron-forge 7 |
+| **App shell** | Electron 45 via electron-forge 8 |
 | **Renderer** | React 18 + TypeScript 5 + Vite 5 |
 | **Design system** | monday.com Vibe (`@vibe/core` 4, `@vibe/icons` 4) |
 | **Package manager** | pnpm 11 (hoisted linker — see note below) |
@@ -755,6 +755,7 @@ None yet. Future runbooks for the YouTrack Go CLI and packaging pipeline will be
 | `Cannot find package 'tinyglobby'` on `pnpm test` | hoisted linker didn't bring this transitive dep of Vitest's Vite | `pnpm add -D tinyglobby` |
 | Electron window doesn't open, log stops after Vite builds | Electron binary not yet in `~/.cache/electron` for this version | Wait — first run downloads ~100 MB; subsequent runs use cache |
 | `pnpm config get node-linker` returns `undefined` even with `.npmrc` set | `nodeLinker` must be in `pnpm-workspace.yaml`, not `.npmrc` | Move the setting to `pnpm-workspace.yaml` |
+| `node_modules/.bin/electron-forge: Permission denied` on `pnpm package` | The local pnpm store holds `@electron-forge/cli`'s bin file without its execute bit. The published files are mode 0644, and pnpm normally sets the bit when it links the bin. A fresh store, as in CI, installs it 0755 | Confirm with `stat -c %A "$(readlink -f node_modules/.bin/electron-forge)"`. Reinstall from a clean store, e.g. `rm -rf node_modules && pnpm install --frozen-lockfile --store-dir <empty dir>`. Do not `chmod` the store copy without understanding why it lost the bit |
 
 ---
 
@@ -780,7 +781,7 @@ tail -f /tmp/vermilian.log
 
 ## pnpm + electron-forge compatibility notes
 
-electron-forge 7 has three pnpm 11 requirements that are not obvious from the error messages alone. All three must be in place:
+electron-forge 7 had three pnpm 11 requirements that are not obvious from the error messages alone. They were kept unchanged for electron-forge 8 (VERM-55), and the build works with them in place:
 
 | Setting | File | Value | Why |
 | --- | --- | --- | --- |

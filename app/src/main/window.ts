@@ -12,7 +12,7 @@ export function createWindow(): BrowserWindow {
     height: 800,
     icon: path.join(process.resourcesPath, 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 

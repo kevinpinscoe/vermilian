@@ -33,7 +33,8 @@ updates:
       # package.json disagreeing with the installed tree — PR #24 did exactly
       # that, claiming vite 8 while the lockfile resolved 6.4.3. A genuine
       # upgrade means editing the override, lifting the plugin-react ignore
-      # above, and checking @electron-forge/plugin-vite (vite peer ^5.0.12).
+      # above, and checking @electron-forge/plugin-vite (8.0.1 declares no vite
+      # peer or dependency; check again before a vite major).
       - dependency-name: "vite"
         update-types: ["version-update:semver-major"]
 

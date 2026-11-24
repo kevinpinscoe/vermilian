@@ -3,7 +3,7 @@ import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerAppImage } from '@reforged/maker-appimage';
-import { PublisherGithub } from '@electron-forge/publisher-github';
+import { PublisherGitHub } from '@electron-forge/publisher-github';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -38,7 +38,7 @@ const config: ForgeConfig = {
     ),
   ],
   publishers: [
-    new PublisherGithub({
+    new PublisherGitHub({
       repository: { owner: 'kevinpinscoe', name: 'vermilian' },
       // Each OS runner uploads to the same draft release; the channels job
       // flips it to published only after all platform builds succeed.
