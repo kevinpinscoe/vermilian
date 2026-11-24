@@ -55,6 +55,8 @@ import {
   type CreateIssueResult,
   type CreateFieldOptionsArgs,
   type CreateFieldOptionsResult,
+  type ProjectFieldValuesArgs,
+  type ProjectFieldValuesResult,
   type AiCreateTaskArgs,
   type AiCreateTaskResult,
   type StandupGenerateArgs,
@@ -1128,6 +1130,20 @@ export function registerIpc(): void {
     },
   );
 
+  // Select-field values for the boards, Priority Desk and detail dropdowns
+  // (VERM-117), on the named workspace's own connection.
+  ipcMain.handle(
+    IPC.getProjectFieldValues,
+    async (_e, args: unknown): Promise<ProjectFieldValuesResult> => {
+      try {
+        return await createTask.getFieldValues(args);
+      } catch (e) {
+        const a = (args ?? {}) as Partial<ProjectFieldValuesArgs>;
+        return { ok: false, workspaceId: a.workspaceId ?? '', project: a.project ?? '', error: (e as { message?: string }).message ?? 'Could not read the project fields.' };
+      }
+    },
+  );
+
   ipcMain.handle(
     IPC.deleteIssue,
     async (_e, issueId: string): Promise<{ ok: boolean; error?: string }> => {
@@ -1283,6 +1299,10 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:nextCreateError', (_e, message: string | null) => fakeYouTrackForE2E.setNextCreateErrorForTests(message));
     ipcMain.handle('e2e:fieldMetadataDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setFieldMetadataDelayForTests(ms, project));
     ipcMain.handle('e2e:failFieldMetadata', (_e, n: number, project?: string) => fakeYouTrackForE2E.failFieldMetadataForTests(n, project));
+    ipcMain.handle('e2e:holdFieldMetadata', (_e, project: string) => fakeYouTrackForE2E.holdFieldMetadataForTests(project));
+    ipcMain.handle('e2e:releaseFieldMetadata', () => fakeYouTrackForE2E.releaseFieldMetadataForTests());
+    ipcMain.handle('e2e:getPatchRequests', () => fakeYouTrackForE2E.getPatchRequestsForTests());
+    ipcMain.handle('e2e:setProjectField', (_e, project: string, field: string, values: string[] | null) => fakeYouTrackForE2E.setFakeProjectFieldForTests(project, field, values));
     ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
     ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
     ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());

@@ -51,6 +51,12 @@
   text-align: left;
 }
 
+.chipDropdownNote {
+  padding: 4px 6px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
 .chipDropdownOption:hover {
   background: var(--primary-hover-color, rgba(0, 0, 0, 0.04));
 }

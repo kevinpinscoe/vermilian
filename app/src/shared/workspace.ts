@@ -2,7 +2,7 @@
 // VermilianConfig is cached in userData/workspace-config.json (local, offline-safe)
 // and synced to the _vermilian-config YouTrack Article (see services/articleConfig.ts).
 
-import { FIELD_DEFS, type BoardIssueFields } from './fields';
+import type { BoardIssueFields } from './fields';
 export type { BoardIssueFields };
 
 export interface WorkspaceFolder {
@@ -52,13 +52,6 @@ export interface YouTrackProject {
 // board and the detail panel) is now derived from FIELD_DEFS — see
 // shared/fields.ts. notes and dateTimeEntered are null in the board query
 // (not requested) and populated by the detail query.
-
-// Known dropdown values, re-exported from FIELD_DEFS for the existing import
-// sites (TaskForm, WorkspaceBoard, grouping, TaskDetailPanel, KanbanView,
-// ProjectBoard) — unchanged shape, still `as const` string tuples.
-export const STATUS_OPTIONS = FIELD_DEFS.status.options;
-export const PRIORITY_OPTIONS = FIELD_DEFS.priority.options;
-export const CATEGORY_OPTIONS = FIELD_DEFS.category.options;
 
 // Native YouTrack Epic → Subtask issue-link metadata, resolved server-side in
 // api/youtrack.ts (see rawToBoardIssue). Deliberately not a BoardIssueFields /

@@ -13,7 +13,8 @@
 // rule below.
 import { useQueries } from '@tanstack/react-query';
 import type { BoardIssue, ParentEpic } from '../../../shared/workspace';
-import { PRIORITY_OPTIONS } from '../../../shared/workspace';
+import { fieldChoices, isResolvedStatus, type ProjectFieldValues } from '../../../shared/projectFieldValues';
+import { useProjectFieldValues } from '../project-fields/useProjectFieldValues';
 import type { Dismissals } from '../../../shared/boardConfig';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { isFocusRank, useActiveWorkspaceProjectShortNames } from '../project-board/focus';
@@ -24,14 +25,16 @@ export const MAX_CANDIDATES = 7;
 export interface Candidate {
   issue: BoardIssue;
   projectShortName: string;
+  /** Its project's own Priority values, most urgent first (VERM-117); [] when unknown. */
+  priorityOrder?: readonly string[];
 }
 
 // ─── Pure logic ─────────────────────────────────────────────────────────────
 
-function priorityOrdinal(priority: string | null): number {
-  if (!priority) return PRIORITY_OPTIONS.length; // no Priority set sorts last
-  const idx = (PRIORITY_OPTIONS as readonly string[]).indexOf(priority);
-  return idx === -1 ? PRIORITY_OPTIONS.length : idx;
+/** A priority's rank in its own project's order; none, or one not in it, sorts last. */
+function priorityOrdinal(priority: string | null, order: readonly string[] = []): number {
+  const idx = priority ? order.indexOf(priority) : -1;
+  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
 }
 
 /**
@@ -39,7 +42,8 @@ function priorityOrdinal(priority: string | null): number {
  * never a blended or weighted score. Every step reads an existing field's own
  * value or ordinal directly:
  *   1. Due Date ascending (no Due Date sorts last);
- *   2. Priority's own ordinal, descending urgency (Show-stopper first);
+ *   2. Priority's ordinal in the issue's own project, most urgent first
+ *      (VERM-117: each project's own order, not a fixed list);
  *   3. idReadable ascending, the final, always-unique tiebreak.
  */
 export function compareCandidates(a: Candidate, b: Candidate): number {
@@ -49,8 +53,8 @@ export function compareCandidates(a: Candidate, b: Candidate): number {
   if (aDue !== null && bDue === null) return -1;
   if (aDue !== null && bDue !== null && aDue !== bDue) return aDue - bDue;
 
-  const aPriority = priorityOrdinal(a.issue.fields.priority);
-  const bPriority = priorityOrdinal(b.issue.fields.priority);
+  const aPriority = priorityOrdinal(a.issue.fields.priority, a.priorityOrder);
+  const bPriority = priorityOrdinal(b.issue.fields.priority, b.priorityOrder);
   if (aPriority !== bPriority) return aPriority - bPriority;
 
   if (a.issue.idReadable < b.issue.idReadable) return -1;
@@ -65,6 +69,8 @@ export interface ComputeCandidatesArgs {
   weekOf: string;
   statusFilter: string | null;
   epicFilter: string | null; // parentEpic.id; null = no Epic-membership restriction
+  /** Each project's select-field values (VERM-117): resolution and Priority order. */
+  fieldValuesByProject?: ReadonlyMap<string, ProjectFieldValues | undefined>;
 }
 
 export interface ComputeCandidatesResult {
@@ -77,7 +83,10 @@ export interface ComputeCandidatesResult {
  * "Choose-next eligibility"): belongs to a project in the active workspace
  * (enforced by the caller only ever passing that workspace's projects), is
  * not itself an Epic (VERM-7 review finding, 2026-09-16 — an Epic is a
- * container, never a single actionable task), Status is not Done, no
+ * container, never a single actionable task), not resolved — by YouTrack's
+ * own resolution of the ticket, or because its project marks its Status as
+ * resolving (VERM-117; so Wont do and Fixed count, and the same name may be
+ * open in one project and resolved in another) — no
  * existing Focus rank 1-3 (a ranked issue shows in Now mode instead), not
  * under an unexpired "Not this week" dismissal, matches the selected Status
  * filter when one is set, and matches the selected active-Epic filter when
@@ -87,23 +96,44 @@ export interface ComputeCandidatesResult {
  * criterion.
  */
 export function computeCandidates(args: ComputeCandidatesArgs): ComputeCandidatesResult {
-  const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter, epicFilter } = args;
+  const { issuesByProject, dismissals, workspaceId, weekOf, statusFilter, epicFilter, fieldValuesByProject } = args;
   const eligible: Candidate[] = [];
 
   for (const [projectShortName, issues] of issuesByProject) {
+    const values = fieldValuesByProject?.get(projectShortName);
+    const priorityOrder = values?.priorityOrder ?? [];
     for (const issue of issues) {
       if (issue.isEpic) continue;
-      if (issue.fields.status === 'Done') continue;
+      if (issue.resolved != null || isResolvedStatus(values, issue.fields.status)) continue;
       if (isFocusRank(issue.fields.focusRank)) continue;
       if (isDismissedThisWeek(dismissals, workspaceId, issue.id, weekOf)) continue;
       if (statusFilter && issue.fields.status !== statusFilter) continue;
       if (epicFilter && issue.parentEpic?.id !== epicFilter) continue;
-      eligible.push({ issue, projectShortName });
+      eligible.push({ issue, projectShortName, priorityOrder });
     }
   }
 
   eligible.sort(compareCandidates);
   return { candidates: eligible.slice(0, MAX_CANDIDATES), totalEligible: eligible.length };
+}
+
+/**
+ * The Status filter's options (VERM-117): every Status that is open work —
+ * an active value its project does not mark as resolving — in at least one of
+ * the workspace's projects, in the projects' own order. A name resolved in one
+ * project but open in another is offered, and matches only where it is open,
+ * because resolved tickets are never candidates.
+ */
+export function deriveStatusFilterOptions(
+  projectShortNames: readonly string[],
+  fieldValuesByProject: ReadonlyMap<string, ProjectFieldValues | undefined>,
+): string[] {
+  const out: string[] = [];
+  for (const sn of projectShortNames) {
+    const status = fieldChoices(fieldValuesByProject.get(sn), 'status');
+    for (const v of status.values) if (!status.resolved.includes(v) && !out.includes(v)) out.push(v);
+  }
+  return out;
 }
 
 /**
@@ -166,10 +196,14 @@ export function candidateSetReadiness(
 export function useChooseNextCandidates(
   statusFilter: string | null,
   epicFilter: string | null,
-): ComputeCandidatesResult & CandidateSetReadiness & { epicOptions: ParentEpic[] } {
+): ComputeCandidatesResult & CandidateSetReadiness & { epicOptions: ParentEpic[]; statusOptions: string[] } {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const projectShortNames = useActiveWorkspaceProjectShortNames();
   const dismissalsQuery = useDismissals();
+  // Each project's own Status resolution and Priority order (VERM-117), on
+  // the workspace's own connection. Choose next waits for them: without a
+  // project's resolution data it cannot tell open work from resolved.
+  const fieldValues = useProjectFieldValues(activeWorkspaceId, projectShortNames);
 
   const results = useQueries({
     queries: projectShortNames.map((sn) => ({
@@ -180,12 +214,15 @@ export function useChooseNextCandidates(
   });
 
   const { isLoading, isError } = candidateSetReadiness(
-    results.map((r) => ({ hasData: r.data !== undefined, isError: r.isError })),
+    [
+      ...results.map((r) => ({ hasData: r.data !== undefined, isError: r.isError })),
+      ...projectShortNames.map((sn) => ({ hasData: fieldValues.byProject.has(sn), isError: fieldValues.errors.has(sn) })),
+    ],
     { hasData: dismissalsQuery.data !== undefined, isError: dismissalsQuery.isError },
   );
 
   if (isLoading || isError) {
-    return { candidates: [], totalEligible: 0, isLoading, isError, epicOptions: [] };
+    return { candidates: [], totalEligible: 0, isLoading, isError, epicOptions: [], statusOptions: [] };
   }
 
   const issuesByProject = new Map<string, BoardIssue[]>();
@@ -200,10 +237,12 @@ export function useChooseNextCandidates(
     weekOf: currentWeekMonday(),
     statusFilter,
     epicFilter,
+    fieldValuesByProject: fieldValues.byProject,
   });
 
   return {
     candidates, totalEligible, isLoading: false, isError: false,
     epicOptions: deriveEpicFilterOptions(issuesByProject),
+    statusOptions: deriveStatusFilterOptions(projectShortNames, fieldValues.byProject),
   };
 }

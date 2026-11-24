@@ -1,6 +1,7 @@
 // Priority values and their sort order, per project (VERM-30).
 //
-// YouTrack has one shared Priority bundle (FIELD_DEFS.priority.options). A
+// A YouTrack project's Priority values come from its own field (VERM-92,
+// VERM-117), most urgent first. A
 // Jira project's values come from its priority scheme, which only a site
 // admin controls and which differs by project (proposal §3, "Ticket
 // priority"): the order is the scheme's own, most urgent first, as editmeta's

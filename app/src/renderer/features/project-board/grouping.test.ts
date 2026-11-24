@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
 import { FIELD_KEYS, type FieldKey } from '../../../shared/fields';
 import type { EffectiveColors } from './KanbanView';
+import { parseYouTrackProjectFields } from '../../../shared/youtrackProjectFields';
+import { projectFieldValuesFromMetadata } from '../../../shared/projectFieldValues';
 import {
-  STATUS_ORDER,
   groupIssues,
+  groupValueOrder,
   getGroupColorMap,
   applyFilter,
   filterCount,
@@ -40,28 +42,55 @@ function issue(id: string, fields: Partial<BoardIssueFields> = {}, summary = id)
   };
 }
 
+// A project's own values (VERM-117): not the old fixed lists.
+function project(status: string[], priority: string[] = []) {
+  const f = (name: string, $type: string, values: string[]) => ({ field: { name }, $type, bundle: { values: values.map((n, ordinal) => ({ name: n, ordinal })) } });
+  return projectFieldValuesFromMetadata(parseYouTrackProjectFields([
+    f('Status', 'StateProjectCustomField', status),
+    ...(priority.length ? [f('Priority', 'EnumProjectCustomField', priority)] : []),
+  ]));
+}
+const STATUS_ORDER = ['Not yet started', 'To do', 'Consider', 'Done', 'Wont do'];
+
 // ─── groupIssues ──────────────────────────────────────────────────────────────
 
 describe('groupIssues', () => {
-  it('groups by status in canonical STATUS_ORDER, skipping empty groups', () => {
+  it("groups by status in the project's own order, skipping empty groups", () => {
     const issues = [
       issue('a', { status: 'Done' }),
       issue('b', { status: 'To do' }),
       issue('c', { status: 'To do' }),
     ];
-    const groups = groupIssues(issues, 'Status');
+    const groups = groupIssues(issues, 'Status', groupValueOrder('Status', [project(STATUS_ORDER)]));
     expect(groups.map(([label]) => label)).toEqual(['To do', 'Done']);
     expect(groups[0][1].map((i) => i.id)).toEqual(['b', 'c']);
     expect(groups[1][1].map((i) => i.id)).toEqual(['a']);
   });
 
-  it('appends unknown group values after the canonical order', () => {
+  it("appends values outside the project's order after it", () => {
     const issues = [
       issue('a', { status: 'Custom State' }),
       issue('b', { status: 'To do' }),
     ];
-    const groups = groupIssues(issues, 'Status');
+    const groups = groupIssues(issues, 'Status', STATUS_ORDER);
     expect(groups.map(([label]) => label)).toEqual(['To do', 'Custom State']);
+  });
+
+  it('keeps first-seen order when no project values are known yet — no fixed list', () => {
+    const issues = [issue('a', { status: 'Done' }), issue('b', { status: 'To do' })];
+    expect(groupIssues(issues, 'Status').map(([label]) => label)).toEqual(['Done', 'To do']);
+  });
+
+  it('orders values that are not in the old fixed lists (Not yet started, Consider, Wont do)', () => {
+    const issues = [issue('a', { status: 'Wont do' }), issue('b', { status: 'Consider' }), issue('c', { status: 'Not yet started' })];
+    const groups = groupIssues(issues, 'Status', groupValueOrder('Status', [project(STATUS_ORDER)]));
+    expect(groups.map(([label]) => label)).toEqual(['Not yet started', 'Consider', 'Wont do']);
+  });
+
+  it('merges several projects in first-seen order', () => {
+    const order = groupValueOrder('Status', [project(['Triage', 'Done']), undefined, project(['To do', 'Triage', 'Shipped'])]);
+    expect(order).toEqual(['Triage', 'Done', 'To do', 'Shipped']);
+    expect(groupValueOrder('Nope', [project(['x'])])).toEqual([]);
   });
 
   it('buckets null field values under "(No value)"', () => {
@@ -82,7 +111,7 @@ describe('groupIssues', () => {
       issue('a', { priority: 'Minor' }),
       issue('b', { priority: 'Critical' }),
     ];
-    const groups = groupIssues(issues, 'Priority');
+    const groups = groupIssues(issues, 'Priority', groupValueOrder('Priority', [project(['To do'], ['Critical', 'Major', 'Minor'])]));
     expect(groups.map(([label]) => label)).toEqual(['Critical', 'Minor']);
   });
 });

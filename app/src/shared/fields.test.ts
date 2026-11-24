@@ -16,25 +16,11 @@ describe('FIELD_DEFS', () => {
     expect(FIELD_KEYS).toHaveLength(29);
   });
 
-  it('the 3 host/domain fields match the live enum bundles', () => {
+  it('the 3 host/domain fields have the live enum shapes', () => {
     expect(FIELD_DEFS.issueDomain.$type).toBe('SingleEnumIssueCustomField');
     expect(FIELD_DEFS.issueDomain.wire).toBe('enum');
-    expect(FIELD_DEFS.issueDomain.options).toHaveLength(3);
     expect(FIELD_DEFS.editHost.$type).toBe('SingleEnumIssueCustomField');
-    expect(FIELD_DEFS.editHost.options).toHaveLength(4);
     expect(FIELD_DEFS.affectedHost.$type).toBe('SingleEnumIssueCustomField');
-    // One per row of the service catalog's Fleet Hosts table.
-    expect(FIELD_DEFS.affectedHost.options).toHaveLength(21);
-  });
-
-  it('status and project health options match the live bundles', () => {
-    // Statuses bundle 161-31 — 'Working on it' is not a live value.
-    expect(FIELD_DEFS.status.options).toHaveLength(10);
-    expect(FIELD_DEFS.status.options).toContain('Backlog');
-    expect(FIELD_DEFS.status.options).toContain('Scheduled');
-    expect(FIELD_DEFS.status.options).not.toContain('Working on it');
-    // Project health bundle 159-52 — Yellow was renamed to Amber on 2026-08-01.
-    expect(FIELD_DEFS.projectHealth.options).toEqual(['Green', 'Amber', 'Red']);
   });
 
   it('the 13 fields added later have the confirmed live $type/wire shapes', () => {
@@ -86,12 +72,9 @@ describe('FIELD_DEFS', () => {
     expect(FIELD_DEFS.relatedLink.ytName).toBe('Related link');
   });
 
-  it('every select-editor field declares a non-empty options list', () => {
+  it('no field carries a fixed list of values — every dropdown reads its project (VERM-117)', () => {
     for (const key of FIELD_KEYS) {
-      const def = getFieldDef(key);
-      if (def.editor === 'select') {
-        expect(def.options?.length).toBeGreaterThan(0);
-      }
+      expect(getFieldDef(key)).not.toHaveProperty('options');
     }
   });
 
@@ -116,10 +99,10 @@ describe('FIELD_DEFS', () => {
     expect(getFieldDef('focusRank').detailOrder).toBeUndefined();
   });
 
-  it('focus is a single-value enum whose only option is Yes', () => {
+  it('focus is a single-value enum with no dropdown (the star writes Yes, ADR-0007)', () => {
     expect(FIELD_DEFS.focus.$type).toBe('SingleEnumIssueCustomField');
     expect(FIELD_DEFS.focus.wire).toBe('enum');
-    expect(FIELD_DEFS.focus.options).toEqual(['Yes']);
+    expect(getFieldDef('focus').editor).toBeUndefined();
   });
 
   it('focusRank is an integer field, not creatable', () => {

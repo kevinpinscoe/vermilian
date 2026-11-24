@@ -1,0 +1,225 @@
+/**
+ * The task detail dropdowns take the ticket's own project's values (VERM-117,
+ * commit 3), against the fake projects in helpers/projectFieldEnv:
+ *   - Affected host offers [FLDW, core] in TEST and [web1, mail1] in TST2.
+ *   - A saved archived value ("retired-vm") survives opening the panel, shown
+ *     as the current value with the active values as replacements.
+ *   - A failed read keeps the current value visible and offers Retry.
+ *   - A field the project lacks (TST2 has no Project health) is not editable.
+ *   - A refresh that fails after a successful read disables editing, with
+ *     Retry, until a read succeeds (VERM-117 review).
+ *   - Only a field the project allows to be empty can be cleared.
+ *   - While a reopened panel re-reads its project, the saved value shows and
+ *     editing holds for that project only, so a retired option cannot be sent.
+ */
+
+import { test, expect, Page } from '@playwright/test';
+import type { ElectronApplication } from '@playwright/test';
+import { launchAppWithEnv } from './helpers/launch';
+import { PROJECT_FIELD_ENV } from './helpers/projectFieldEnv';
+
+const tid = (page: Page, id: string) => page.locator(`[data-testid="${id}"]`);
+const field = (page: Page, key: string) => page.locator(`[data-testid="task-detail-panel"] [data-field="${key}"]`);
+
+async function patch(page: Page, issueId: string, f: string, value: string | null) {
+  const r = await page.evaluate((a) => window.vermilian.patchIssue(a), { issueId, field: f, value });
+  expect(r.ok).toBe(true);
+}
+
+async function openDetail(page: Page, idReadable: string) {
+  await page.locator(`[data-testid="ws-issue-row"][data-issue-id="${idReadable}"]`).click();
+  await expect(tid(page, 'task-detail-panel')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-testid="task-detail-panel"]')).toContainText(idReadable);
+}
+
+async function selectOptions(page: Page, key: string): Promise<string[]> {
+  // Saving one field advances to the next and opens it, so it may already be open.
+  const select = field(page, key).locator('[data-testid="detail-select"]');
+  if ((await select.count()) === 0) await field(page, key).locator('[data-testid="detail-select-button"]').click();
+  return select.locator('option').allTextContents();
+}
+
+/** Leave an open dropdown without choosing (Escape would close the whole panel). */
+async function closeSelect(page: Page, key: string) {
+  await field(page, key).locator('[data-testid="detail-select"]').evaluate((el) => (el as HTMLElement).blur());
+  await expect(field(page, key).locator('[data-testid="detail-select"]')).toHaveCount(0);
+}
+
+test.describe('Detail dropdowns use the ticket project\'s own values (VERM-117)', () => {
+  let app: ElectronApplication;
+  let page: Page;
+
+  test.beforeEach(async () => {
+    app = await launchAppWithEnv(PROJECT_FIELD_ENV);
+    page = await app.firstWindow();
+    await expect(tid(page, 'ws-filter-bar')).toBeVisible({ timeout: 15_000 });
+  });
+  test.afterEach(async () => { await app.close(); });
+
+  test('Affected host offers different choices in two projects', async () => {
+    await openDetail(page, 'TEST-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'FLDW', 'core']);
+    await closeSelect(page, 'affectedHost');
+
+    await openDetail(page, 'TST2-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+    // And Status is TST2's own workflow.
+    await closeSelect(page, 'affectedHost');
+    // Status is required in the fake, so it offers no blank.
+    expect(await selectOptions(page, 'status')).toEqual(['To do', 'In Progress', 'Consider', 'Fixed']);
+  });
+
+  test('a saved archived value survives opening the panel and is offered replacements', async () => {
+    await patch(page, 'TEST-1', 'affectedHost', 'retired-vm');
+    await page.reload();
+    await expect(tid(page, 'ws-filter-bar')).toBeVisible({ timeout: 15_000 });
+    await openDetail(page, 'TEST-1');
+
+    const host = field(page, 'affectedHost');
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('retired-vm');
+    await expect(host.locator('[data-testid="detail-select-inactive"]')).toHaveText('Archived');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'retired-vm (archived)', 'FLDW', 'core']);
+    await expect(host.locator('option', { hasText: 'retired-vm (archived)' })).toBeDisabled();
+
+    // Opening the panel and the dropdown saved nothing: the stored value is unchanged.
+    const stored = await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'));
+    expect(stored.fields.affectedHost).toBe('retired-vm');
+
+    // Choosing a replacement saves it.
+    await host.locator('[data-testid="detail-select"]').selectOption('core');
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.affectedHost).toBe('core');
+  });
+
+  test('a failed read keeps the current value visible and offers Retry', async () => {
+    await patch(page, 'TST2-1', 'affectedHost', 'web1');
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(20, 'TST2'));
+    await page.reload();
+    await expect(tid(page, 'ws-filter-bar')).toBeVisible({ timeout: 15_000 });
+    await openDetail(page, 'TST2-1');
+
+    const host = field(page, 'affectedHost');
+    await expect(host.locator('[data-testid="detail-select-value"]')).toHaveText('web1');
+    await expect(host.locator('[data-testid="detail-select-retry"]')).toBeVisible();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(0));
+    await host.locator('[data-testid="detail-select-retry"]').click();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('web1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+  });
+
+  test("a field the ticket's project does not have is shown, not editable", async () => {
+    await openDetail(page, 'TST2-1');
+    await expect(field(page, 'projectHealth').locator('[data-testid="detail-select-absent"]')).toBeVisible();
+    await expect(field(page, 'projectHealth').locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+  });
+
+  test('a refresh that fails after a successful read disables editing until Retry succeeds', async () => {
+    await patch(page, 'TST2-1', 'affectedHost', 'web1');
+    await openDetail(page, 'TST2-1');
+    const host = field(page, 'affectedHost');
+    // First read succeeded.
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+    await closeSelect(page, 'affectedHost');
+
+    // The next read fails. Reopening the panel re-reads its project's values.
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(20, 'TST2'));
+    await page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-retry"]')).toBeVisible();
+    await expect(host.locator('[data-testid="detail-select-value"]')).toHaveText('web1');
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+
+    // The board's chips share the read: the cached list is not offered there either.
+    await page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    await page.locator('[data-testid="ws-issue-row"][data-issue-id="TST2-1"] [data-testid="chip-cell"][data-field="priority"]').click();
+    await expect(tid(page, 'chip-values-retry')).toBeVisible();
+    await expect(tid(page, 'chip-option')).toHaveCount(1);
+    await expect(tid(page, 'chip-option')).toHaveAttribute('data-current-inactive', 'true');
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 5);
+
+    // Still failing: the panel offers Retry. The project's list then changes,
+    // the next read succeeds, and Retry shows the new list.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-retry"]')).toBeVisible();
+    await page.evaluate(() => window.vermilian.debugSetProjectField!('TST2', 'Affected host', ['web1', 'mail1', 'obs']));
+    await page.evaluate(() => window.vermilian.debugFailFieldMetadata!(0));
+    await host.locator('[data-testid="detail-select-retry"]').click();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('web1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1', 'obs']);
+  });
+
+  test('a required field can be replaced but not cleared; an optional one can be cleared', async () => {
+    await patch(page, 'TEST-1', 'editHost', 'FLDW');
+    await patch(page, 'TEST-1', 'affectedHost', 'core');
+    await page.reload();
+    await expect(tid(page, 'ws-filter-bar')).toBeVisible({ timeout: 15_000 });
+    await openDetail(page, 'TEST-1');
+
+    // Edit host is required in TEST: no blank to choose, but replaceable.
+    expect(await selectOptions(page, 'editHost')).toEqual(['FLDW', 'core', 'mac']);
+    await field(page, 'editHost').locator('[data-testid="detail-select"]').selectOption('mac');
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.editHost).toBe('mac');
+
+    // Affected host is optional in TEST: the blank clears it.
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'FLDW', 'core']);
+    await field(page, 'affectedHost').locator('[data-testid="detail-select"]').selectOption('');
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.affectedHost).toBeNull();
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getIssueDetail('TEST-1'))).fields.editHost).toBe('mac');
+
+    // A required field with no value shows the blank only as a disabled placeholder.
+    await openDetail(page, 'TEST-2');
+    expect(await selectOptions(page, 'editHost')).toEqual(['—', 'FLDW', 'core', 'mac']);
+    await expect(field(page, 'editHost').locator('option[value=""]')).toBeDisabled();
+  });
+
+  test("while the panel's refresh is pending, editing holds for that project only and nothing retired can be sent", async () => {
+    await patch(page, 'TST2-1', 'affectedHost', 'web1');
+    const host = field(page, 'affectedHost');
+    const closePanel = () => page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    const patchCount = async () => (await page.evaluate(() => window.vermilian.debugGetPatchRequests!())).length;
+
+    // Warm the cache: TST2 offers web1 and mail1.
+    await openDetail(page, 'TST2-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+    await closeSelect(page, 'affectedHost');
+    await closePanel();
+
+    // The tracker retires mail1, and TST2's next metadata response is held.
+    await page.evaluate(() => window.vermilian.debugSetProjectField!('TST2', 'Affected host', ['web1']));
+    await page.evaluate(() => window.vermilian.debugHoldFieldMetadata!('TST2'));
+    const before = await patchCount();
+
+    // Reopening re-reads TST2: the saved value shows, and there is nothing to edit.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-value"]')).toHaveText('web1');
+    await expect(host.locator('[data-testid="detail-select-loading"]')).toBeVisible();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+    await expect(host.locator('[data-testid="detail-select"]')).toHaveCount(0);
+
+    // Project TEST is not held: its panel is editable meanwhile.
+    await openDetail(page, 'TEST-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'FLDW', 'core']);
+    await closeSelect(page, 'affectedHost');
+    await closePanel();
+
+    // TST2's board chips hold too: only the saved value, which is not sent when clicked.
+    await page.locator('[data-testid="ws-issue-row"][data-issue-id="TST2-1"] [data-testid="chip-cell"][data-field="priority"]').click();
+    await expect(tid(page, 'chip-values-loading')).toBeVisible();
+    await expect(tid(page, 'chip-option')).toHaveCount(1);
+    await tid(page, 'chip-option').click();
+    await page.mouse.click(5, 5);
+
+    // Still held when reopened; nothing was sent while it was.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-loading"]')).toBeVisible();
+    expect(await patchCount()).toBe(before);
+
+    // Release the response: the updated choices become editable, without mail1.
+    await page.evaluate(() => window.vermilian.debugReleaseFieldMetadata!());
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('web1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1']);
+    expect(await patchCount()).toBe(before);
+  });
+});

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Loader, Text, AttentionBox, Button, IconButton } from '@vibe/core';
 import { CloseSmall, Delete, Play } from '@vibe/icons';
 import type { IssueDetail } from '../../../shared/workspace';
@@ -8,6 +8,9 @@ import { STATUS_COLORS, PRIORITY_COLORS, CATEGORY_COLORS, getContrastColor } fro
 import { FocusControl } from '../project-board/FocusControl';
 import { RunwayNumberControl } from '../runway/RunwayNumberControl';
 import { useIssueDetail, usePatchIssue, useDeleteIssue } from './api';
+import { selectEditorState, type SelectEditorState } from '../../../shared/projectFieldValues';
+import { useProjectFieldValues } from '../project-fields/useProjectFieldValues';
+import { useWorkspaceStore } from '../../stores/workspace';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useQueryClient } from '@tanstack/react-query';
 import styles from './TaskDetailPanel.module.css';
@@ -109,49 +112,93 @@ function TextField({ value, placeholder, multiline, readOnly, onSave, onEnter }:
 
 interface SelectFieldProps {
   value: string | null;
-  options: string[];
+  /** How the editor behaves, from the project's values and the latest read (VERM-117). */
+  state: SelectEditorState;
+  /** The latest read's error, when there is one (shown as Retry's tooltip). */
+  readError: string | null;
+  onRetry: () => void;
   colorMap?: Record<string, string>;
   onSave: (v: string | null) => void;
   onEnter?: () => void;
 }
 
-function SelectField({ value, options, colorMap, onSave, onEnter }: SelectFieldProps) {
+// A dropdown over the issue's own project's values (VERM-117). Opening an
+// issue never changes it: nothing is saved until the user picks a value. A
+// saved value that is archived (or no longer in the project) stays shown as
+// the current value and is never re-sent; the active values are offered as
+// its replacements. Editing is only possible after a successful read: while
+// values load or are being re-read (the panel re-reads on every open), or
+// after any failed read (even with earlier values cached),
+// the current value stays visible and editing is disabled, with Retry. Only a
+// field the project allows to be empty can be cleared.
+function SelectField({ value, state, readError, onRetry, colorMap, onSave, onEnter }: SelectFieldProps) {
   const [editing, setEditing] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value || null;
     setEditing(false);
+    if (v === value) return;
+    if (v === null && !state.clearable) return;
     onSave(v);
     onEnter?.();
   }
 
   const bg = colorMap && value ? (colorMap[value] ?? '#C4C4C4') : undefined;
   const color = bg ? getContrastColor(bg) : undefined;
+  const { mode, options, currentInactive, clearable } = state;
+
+  if (mode !== 'editable') {
+    return (
+      <span className={styles.selectState}>
+        <span className={`${styles.fieldValue} ${bg ? styles.chip : ''}`} style={bg ? { backgroundColor: bg, color } : undefined} data-testid="detail-select-value">
+          {value || <span className={styles.fieldPlaceholder}>—</span>}
+        </span>
+        {mode === 'absent' && <span className={styles.fieldNote} data-testid="detail-select-absent">Not a field in this project</span>}
+        {mode === 'loading' && <span className={styles.fieldNote} data-testid="detail-select-loading">Loading values…</span>}
+        {mode === 'error' && (
+          <button type="button" className={styles.fieldRetry} data-testid="detail-select-retry" title={readError ?? undefined} onClick={onRetry}>
+            Couldn't load values — Retry
+          </button>
+        )}
+      </span>
+    );
+  }
 
   if (!editing) {
     return (
-      <button
-        type="button"
-        className={`${styles.fieldValue} ${styles.fieldValueEditable} ${bg ? styles.chip : ''}`}
-        style={bg ? { backgroundColor: bg, color } : undefined}
-        onClick={() => setEditing(true)}
-      >
-        {value || <span className={styles.fieldPlaceholder}>—</span>}
-      </button>
+      <span className={styles.selectState}>
+        <button
+          type="button"
+          data-testid="detail-select-button"
+          className={`${styles.fieldValue} ${styles.fieldValueEditable} ${bg ? styles.chip : ''}`}
+          style={bg ? { backgroundColor: bg, color } : undefined}
+          onClick={() => setEditing(true)}
+        >
+          {value || <span className={styles.fieldPlaceholder}>—</span>}
+        </button>
+        {currentInactive && (
+          <span className={styles.fieldNote} data-testid="detail-select-inactive">{state.currentArchived ? 'Archived' : 'Not in this project'}</span>
+        )}
+      </span>
     );
   }
 
   return (
     <select
       className={styles.fieldSelect}
+      data-testid="detail-select"
       value={value ?? ''}
       onChange={handleChange}
       onBlur={() => setEditing(false)}
       autoFocus
     >
-      <option value="">—</option>
+      {/* Clearing only where the project allows an empty value; a required
+          field with no value shows the blank as a disabled placeholder. */}
+      {(clearable || !value) && <option value="" disabled={!clearable}>—</option>}
       {options.map((o) => (
-        <option key={o} value={o}>{o}</option>
+        <option key={o} value={o} disabled={currentInactive && o === value}>
+          {currentInactive && o === value ? `${o} (${state.currentArchived ? 'archived' : 'not in this project'})` : o}
+        </option>
       ))}
     </select>
   );
@@ -402,6 +449,19 @@ export function TaskDetailPanel({
   // of which view opened the panel. Falls back to the prop until the issue
   // loads, and stays on the prop for a caller that never had one to begin with.
   const effectiveProjectShortName = issue?.project.shortName ?? projectShortName;
+  // The ticket's own project's select-field values (VERM-117), on the active
+  // workspace's own connection.
+  const activeWorkspaceId = useWorkspaceStore((st) => st.activeWorkspaceId);
+  const projectKey = issue?.project.shortName ?? '';
+  const fieldValues = useProjectFieldValues(
+    activeWorkspaceId,
+    useMemo(() => (projectKey ? [projectKey] : []), [projectKey]),
+    { revalidateOnMount: true },
+  );
+  const projectValues = projectKey ? fieldValues.byProject.get(projectKey) : undefined;
+  const readError = projectKey ? fieldValues.errors.get(projectKey) ?? null : null;
+  // Re-read on every open: until it finishes, the saved values show and editing holds.
+  const refreshing = Boolean(projectKey) && fieldValues.refreshing.has(projectKey);
   const patchMutation = usePatchIssue(issueId, effectiveProjectShortName, runwayWorkspaceId);
   const deleteMutation = useDeleteIssue(effectiveProjectShortName);
   const queryClient = useQueryClient();
@@ -492,7 +552,9 @@ export function TaskDetailPanel({
                 <FieldRow key={key} label={def.label} fieldName={key}>
                   <SelectField
                     value={value as string | null}
-                    options={[...(def.options ?? [])]}
+                    state={selectEditorState(projectValues, readError, key, value as string | null, refreshing)}
+                    readError={readError}
+                    onRetry={() => fieldValues.retry(projectKey)}
                     colorMap={SELECT_COLOR_MAPS[key]}
                     onSave={onSave}
                     onEnter={onEnter}

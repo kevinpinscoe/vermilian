@@ -2,16 +2,11 @@
 // Extracted from ProjectBoard.tsx so it can be unit-tested without React/dnd-kit.
 
 import type { BoardIssue, BoardIssueFields } from '../../../shared/workspace';
-import { PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
 import type { BoardSortConfig } from '../../../shared/boardConfig';
+import { mergedValueOrder, type ProjectFieldValues } from '../../../shared/projectFieldValues';
 import type { EffectiveColors } from './KanbanView';
 
 // ─── Grouping ─────────────────────────────────────────────────────────────────
-
-export const STATUS_ORDER = [
-  'To do', 'In Progress', 'Working on it', 'Waiting for IT', 'BLOCKED',
-  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource', 'Done',
-];
 
 export const GROUP_FIELD_MAP: Record<string, { key: keyof BoardIssueFields; colorKey: keyof EffectiveColors }> = {
   Status:   { key: 'status',   colorKey: 'Status'   },
@@ -19,15 +14,20 @@ export const GROUP_FIELD_MAP: Record<string, { key: keyof BoardIssueFields; colo
   Category: { key: 'category', colorKey: 'Category' },
 };
 
-const GROUP_ORDER: Record<string, readonly string[]> = {
-  Status:   STATUS_ORDER,
-  Priority: PRIORITY_OPTIONS,
-  Category: CATEGORY_OPTIONS,
-};
+/**
+ * The order groups appear in (VERM-117): each project's own values in its
+ * bundle order, merged across projects. Nothing is assumed when a project's
+ * values are not known yet; its groups then follow in first-seen order.
+ */
+export function groupValueOrder(groupBy: string, perProject: Iterable<ProjectFieldValues | null | undefined>): string[] {
+  const mapping = GROUP_FIELD_MAP[groupBy];
+  return mapping ? mergedValueOrder(perProject, mapping.key) : [];
+}
 
 export function groupIssues(
   issues: BoardIssue[],
   groupBy: string,
+  order: readonly string[] = [],
 ): Array<[string, BoardIssue[]]> {
   const mapping = GROUP_FIELD_MAP[groupBy];
   if (!mapping) return [['All', issues]];
@@ -39,13 +39,12 @@ export function groupIssues(
     map.get(val)!.push(issue);
   }
 
-  const order = GROUP_ORDER[groupBy] ?? [];
   const result: Array<[string, BoardIssue[]]> = [];
   for (const val of order) {
     if (map.has(val)) result.push([val, map.get(val)!]);
   }
   for (const [val, grp] of map) {
-    if (!(order as readonly string[]).includes(val)) result.push([val, grp]);
+    if (!order.includes(val)) result.push([val, grp]);
   }
   return result;
 }

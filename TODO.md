@@ -162,10 +162,14 @@ Acceptance criteria:
 
 ### Detect YouTrack schema drift instead of discovering it on a failed write
 
-`FIELD_DEFS` (`app/src/shared/fields.ts`) is an **allowlist**, and every `options:` list is a
-hand-maintained copy of a YouTrack bundle. Nothing checks either against the live instance, so
-drift is invisible until a user picks a value and the write fails with *"An X-type entity with the
-specified name ({1}) was not found"*.
+`FIELD_DEFS` (`app/src/shared/fields.ts`) is an **allowlist** of fields with a hand-maintained
+`$type` each. Nothing checks it against the live instance, so drift is invisible until a write
+fails with *"An X-type entity with the specified name ({1}) was not found"*.
+
+**Value drift is gone (VERM-117).** `FIELD_DEFS` no longer carries any `options:` list: the create
+form (VERM-115), the boards, the Priority Desk and the detail dropdowns all offer the values the
+issue's own project has, read live. The two value rows in the table below are history. What remains
+is `$type` drift and fields missing from the allowlist.
 
 That is not hypothetical — three separate instances of it are already on record:
 
@@ -178,9 +182,9 @@ That is not hypothetical — three separate instances of it are already on recor
 The instance had **32** custom fields while Vermilian knew **24**. The gap itself is fine — the
 board query is a wildcard, so unknown fields are ignored — but nothing surfaced it.
 
-- [ ] Add a script or test that reads the live bundles and diffs them against `FIELD_DEFS`
-      (`$type`, and each `options:` list). Every list now carries its bundle id and the date it
-      was verified, which is what makes this mechanical.
+- [ ] Add a script or test that reads the live fields and diffs them against `FIELD_DEFS`
+      (`$type`, and fields present in YouTrack but absent from the allowlist). Values need no
+      diff since VERM-117 reads them live.
 - [ ] Decide where it runs — a dev-only script, a CI job with a reachable instance, or an in-app
       Settings diagnostic. The instance is tailnet-only, so CI cannot reach it without help.
 - [ ] Decide the failure mode for a field present in YouTrack but absent from `FIELD_DEFS`.
@@ -201,8 +205,10 @@ Adding a k-fed host now touches **four** value lists across two repos — this o
 and `migrate.py`'s `FALLBACK_BUNDLE_VALUES`). `~/ai/directives/when-adding-a-host-to-the-kfed.md`
 Step 8 covers the other three but does **not** mention Vermilian.
 
-- [ ] Either add Vermilian to that directive's Step 8, or fold this list into the drift check above
-      so a missing host is reported rather than remembered.
+- [x] ~~Either add Vermilian to that directive's Step 8, or fold this list into the drift check above
+      so a missing host is reported rather than remembered.~~ Obsolete since VERM-117 (2026-11-24):
+      `AFFECTED_HOST_VALUES` is gone and the Affected host dropdown reads the project's live values,
+      so a new k-fed host needs no Vermilian change and the directive's Step 8 needs no Vermilian line.
 
 ### Housekeeping found 2026-08-01
 

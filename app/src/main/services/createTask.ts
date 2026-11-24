@@ -16,6 +16,9 @@
 //     nothing is sent. Empty fields are omitted so YouTrack applies its own
 //     defaults, and `Date time entered` is stamped only when the project
 //     defines it as a date field, with the $type that field takes.
+//   - getFieldValues: every select field's values for one project (VERM-117),
+//     for the boards, the Priority Desk and the detail dropdowns, read the
+//     same way and with the same workspace checks as getOptions.
 //   - aiCreate: AI extraction with the known project's allowed values, then
 //     validation against the project Claude chose — both reads on the
 //     originating workspace's connection, and the second cancelled if the
@@ -24,7 +27,8 @@
 // Dependencies are injected so the whole decision is unit-tested without
 // Electron (createTask.test.ts).
 
-import type { AiCreateTaskResult, CreateFieldOptionsResult, CreateIssueArgs, CreateIssueResult } from '../../shared/ipc';
+import type { AiCreateTaskResult, CreateFieldOptionsResult, CreateIssueArgs, CreateIssueResult, ProjectFieldValuesResult } from '../../shared/ipc';
+import { projectFieldValuesFromMetadata } from '../../shared/projectFieldValues';
 import {
   createFieldOptionsFromMetadata,
   explainCreateError,
@@ -120,6 +124,19 @@ export function createTaskService(deps: CreateTaskDeps) {
     if (!r.ok) return { ok: false, workspaceId, projectId, error: r.error, ...(r.cancelled ? { refused: 'not-active' as const } : {}) };
     if (!(await stillCurrent(b.origin))) return { ok: false, workspaceId, projectId, error: CREATE_WORKSPACE_CHANGED_MESSAGE, refused: 'not-active' };
     return { ok: true, workspaceId, projectId, options: r.value };
+  }
+
+  async function getFieldValues(args: unknown): Promise<ProjectFieldValuesResult> {
+    const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+    const project = typeof a.project === 'string' ? a.project : '';
+    const workspaceId = typeof a.workspaceId === 'string' ? a.workspaceId : '';
+    if (!project) return { ok: false, workspaceId, project, error: 'A project is required.' };
+    const b = await origin(a.workspaceId);
+    if (!b.ok) return { ok: false, workspaceId, project, error: CREATE_WORKSPACE_CHANGED_MESSAGE, refused: 'not-active' };
+    const r = await readMetadata(b.origin, project);
+    if (!r.ok) return { ok: false, workspaceId, project, error: r.error, ...(r.cancelled ? { refused: 'not-active' as const } : {}) };
+    if (!(await stillCurrent(b.origin))) return { ok: false, workspaceId, project, error: CREATE_WORKSPACE_CHANGED_MESSAGE, refused: 'not-active' };
+    return { ok: true, workspaceId, project, values: projectFieldValuesFromMetadata(r.value.meta) };
   }
 
   async function create(args: CreateIssueArgs): Promise<CreateIssueResult> {
@@ -223,5 +240,5 @@ export function createTaskService(deps: CreateTaskDeps) {
     };
   }
 
-  return { getOptions, create, aiCreate, origin };
+  return { getOptions, getFieldValues, create, aiCreate, origin };
 }

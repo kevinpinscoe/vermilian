@@ -46,7 +46,6 @@ export interface FieldDef {
   wire: FieldWire; // drives toYouTrackValue and extraction parsing
   label: string;
   editor?: FieldEditor; // undefined only for assignee — no UI surface
-  options?: readonly string[]; // only for editor: 'select'
   column: boolean; // member of ALL_COLUMN_FIELDS
   creatable: boolean; // included in CreateIssuePayload / TaskForm
   patchable: boolean; // metadata only — patchIssue does not enforce this
@@ -58,87 +57,30 @@ export function isValidUrl(s: string): string | null {
   return /^https?:\/\//i.test(s) ? null : 'Must be a valid URL.';
 }
 
-// Matches the live "Statuses" StateBundle (161-31), shared across every project
-// — read directly from the API on 2026-08-01.
-//
-// Corrected on that date after drifting from the instance: 'Working on it' is
-// not a live value (selecting it failed with YouTrack's "An X-type entity with
-// the specified name ({1}) was not found"), and 'Backlog' and 'Scheduled' were
-// live but unreachable from the UI. Bundle order is preserved, so the dropdown
-// reads in the same order as YouTrack's own.
-const STATUS_VALUES = [
-  'To do', 'In Progress', 'Done', 'Waiting for IT', 'BLOCKED',
-  'Waiting for approval', 'Waiting for customer', 'Waiting on external resource',
-  'Backlog', 'Scheduled',
-] as const;
-
-const PRIORITY_VALUES = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'] as const;
-
-// Matches the live "Category" StateBundle (id 158-8), shared across every
-// project — verified directly against the YouTrack API 2026-07-22. This is
-// an area/domain tag, not an issue-type classification; the old
-// INBOX/BUG/FEATURE/TASK list didn't correspond to any real bundle value
-// except INBOX, so task creation failed with YouTrack's
-// "An X-type entity with the specified name ({1}) was not found" error.
-const CATEGORY_VALUES = [
-  'PROJECT', 'OPS', 'COMPANY', 'SERVICE', 'PRODUCTIVITY', 'INBOX', 'ADMIN',
-  'RELEASE', 'FINOPS', 'SECURITY', 'INGEST', 'HACKATHON', 'Playbook',
-] as const;
-
-// 'Yellow' was renamed to 'Amber' in the live bundle (159-52) on 2026-08-01,
-// adopting standard RAG nomenclature. One rename on the shared bundle covered
-// every project; no issue data changed, because Green was the only value in use.
-// Sending 'Yellow' now fails with YouTrack's "An X-type entity with the
-// specified name ({1}) was not found".
-const PROJECT_HEALTH_VALUES = ['Green', 'Amber', 'Red'] as const;
-
-const REPORTING_CADENCE_VALUES = ['Daily', 'Sprint', 'Monthly', 'Annual', 'On demand'] as const;
-
-// Matches the live "Issue domains" EnumBundle (159-60), shared across every
-// project. Classifies whose work an issue is. Empty is valid and normal —
-// canBeEmpty = true with no default.
-const ISSUE_DOMAIN_VALUES = ['Personal', 'Employer work', 'Client work'] as const;
-
-// Matches the live "Edit hosts" EnumBundle (159-64). Where the work is being
-// performed FROM — single-value, because you edit from one machine at a time.
-const EDIT_HOST_VALUES = ['FLDW', 'core', 'mac', 'mac-container'] as const;
-
-// Matches the live "Affected hosts" EnumBundle (159-68). The host an issue is
-// ABOUT, which is often not the host it is worked from. One value per row of
-// the service catalog's "Fleet Hosts" table — the catalog
-// (~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md)
-// stays the source of truth and this list mirrors it. Adding a k-fed host means
-// adding a value here too; see the youtrack.kevininscoe.com repo's
-// docs/custom-fields.md.
-// Matches the live "Focus values" EnumBundle, added under VERM-4 (ADR-0007,
-// docs/adr/0007-priority-desk-field-model.md). The only defined value is
-// "Yes" — unset/null means not focused, deliberately with no separate empty
-// enum value. See scripts/add-priority-desk-fields for the schema migration.
-const FOCUS_VALUES = ['Yes'] as const;
-
-const AFFECTED_HOST_VALUES = [
-  'FLDW', 'core', 'mac', 'mac-container', 'web1', 'mail1', 'john', 'obs',
-  'postgres', 'wazuh', 'aws-agent-1', 'home-k3s-dev', 'home-k3s-lab',
-  'home-k3s-prod', 'dev-agents-1', 'dev-servers-1', 'lab-agents-1',
-  'lab-agents-2', 'lab-servers-1', 'prod-agents-1', 'prod-servers-1',
-] as const;
+// No field here carries a list of values (VERM-117). Every dropdown — the
+// create form (VERM-115), the boards, the Priority Desk and the detail panel
+// — offers the values the issue's own project has, read with VERM-114's
+// metadata reader (shared/projectFieldValues.ts). A fixed list drifted from
+// the live instance more than once (the "Working on it" and "Yellow" values
+// both broke writes after being renamed or removed there), and projects need
+// not share one bundle.
 
 export const FIELD_DEFS = {
   status: {
     key: 'status', ytName: 'Status', $type: 'StateIssueCustomField', wire: 'state',
-    label: 'Status', editor: 'select', options: STATUS_VALUES,
+    label: 'Status', editor: 'select',
     column: true, creatable: true, patchable: true, detailOrder: 1,
   },
   priority: {
     key: 'priority', ytName: 'Priority', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Priority', editor: 'select', options: PRIORITY_VALUES,
+    label: 'Priority', editor: 'select',
     column: true, creatable: true, patchable: true, detailOrder: 2,
   },
   category: {
     // $type corrected from SingleEnumIssueCustomField — the live field is a
     // StateIssueCustomField (BUG-005; writes were sending the wrong shape).
     key: 'category', ytName: 'Category', $type: 'StateIssueCustomField', wire: 'state',
-    label: 'Category', editor: 'select', options: CATEGORY_VALUES,
+    label: 'Category', editor: 'select',
     column: true, creatable: true, patchable: true, detailOrder: 3,
   },
   dueDate: {
@@ -216,7 +158,7 @@ export const FIELD_DEFS = {
   },
   projectHealth: {
     key: 'projectHealth', ytName: 'Project health', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Project health', editor: 'select', options: PROJECT_HEALTH_VALUES,
+    label: 'Project health', editor: 'select',
     column: true, creatable: false, patchable: true, detailOrder: 15,
   },
   progressPercent: {
@@ -233,7 +175,7 @@ export const FIELD_DEFS = {
   },
   reportingCadence: {
     key: 'reportingCadence', ytName: 'Reporting cadence', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Reporting cadence', editor: 'select', options: REPORTING_CADENCE_VALUES,
+    label: 'Reporting cadence', editor: 'select',
     column: true, creatable: false, patchable: true, detailOrder: 18,
   },
   baseBranch: {
@@ -261,17 +203,17 @@ export const FIELD_DEFS = {
   // state on the ~266 issues that predate them — there was no backfill.
   issueDomain: {
     key: 'issueDomain', ytName: 'Issue domain', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Issue domain', editor: 'select', options: ISSUE_DOMAIN_VALUES,
+    label: 'Issue domain', editor: 'select',
     column: true, creatable: true, patchable: true, detailOrder: 23,
   },
   editHost: {
     key: 'editHost', ytName: 'Edit host', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Edit host', editor: 'select', options: EDIT_HOST_VALUES,
+    label: 'Edit host', editor: 'select',
     column: true, creatable: false, patchable: true, detailOrder: 24,
   },
   affectedHost: {
     key: 'affectedHost', ytName: 'Affected host', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Affected host', editor: 'select', options: AFFECTED_HOST_VALUES,
+    label: 'Affected host', editor: 'select',
     column: true, creatable: false, patchable: true, detailOrder: 25,
   },
   // Priority Desk field model (VERM-4, ADR-0007). `focus` and `focusRank`
@@ -283,7 +225,7 @@ export const FIELD_DEFS = {
   // and uses the generic editor normally.
   focus: {
     key: 'focus', ytName: 'Focus', $type: 'SingleEnumIssueCustomField', wire: 'enum',
-    label: 'Focus', options: FOCUS_VALUES,
+    label: 'Focus',
     column: false, creatable: false, patchable: true,
   },
   focusRank: {

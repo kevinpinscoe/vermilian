@@ -175,6 +175,30 @@
   font-style: italic;
 }
 
+/* A select field's value with its state note (VERM-117) */
+.selectState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.fieldNote {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
+.fieldRetry {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--link-color, #1f76c2);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* Chip (for status/priority/category) */
 .chip {
   display: inline-flex;

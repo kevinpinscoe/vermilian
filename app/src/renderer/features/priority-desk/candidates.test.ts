@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeCandidates, compareCandidates, candidateSetReadiness, deriveEpicFilterOptions, MAX_CANDIDATES,
+  computeCandidates, compareCandidates, candidateSetReadiness, deriveEpicFilterOptions, deriveStatusFilterOptions, MAX_CANDIDATES,
   type Candidate, type QueryStatus,
 } from './candidates';
+import { parseYouTrackProjectFields } from '../../../shared/youtrackProjectFields';
+import { projectFieldValuesFromMetadata } from '../../../shared/projectFieldValues';
 import type { BoardIssue, BoardIssueFields, ParentEpic } from '../../../shared/workspace';
 import type { Dismissals } from '../../../shared/boardConfig';
 
@@ -34,8 +36,18 @@ function issue(over: IssueOverrides): BoardIssue {
   };
 }
 
-function candidate(over: IssueOverrides, projectShortName = 'TEST'): Candidate {
-  return { issue: issue(over), projectShortName };
+const PRIORITIES = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'];
+
+function candidate(over: IssueOverrides, projectShortName = 'TEST', priorityOrder: string[] = PRIORITIES): Candidate {
+  return { issue: issue(over), projectShortName, priorityOrder };
+}
+
+/** A project's own Status values (VERM-117); `resolved` lists those that resolve an issue. */
+function projectValues(status: string[], resolved: string[], priority: string[] = []) {
+  return projectFieldValuesFromMetadata(parseYouTrackProjectFields([
+    { field: { name: 'Status' }, $type: 'StateProjectCustomField', bundle: { values: status.map((name, ordinal) => ({ name, ordinal, isResolved: resolved.includes(name) })) } },
+    ...(priority.length ? [{ field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: priority.map((name, ordinal) => ({ name, ordinal })) } }] : []),
+  ]));
 }
 
 describe('compareCandidates', () => {
@@ -61,6 +73,19 @@ describe('compareCandidates', () => {
     const noPriority = candidate({ id: 'a', idReadable: 'TEST-1', fields: { dueDate: 1000, priority: null } });
     const minor = candidate({ id: 'b', idReadable: 'TEST-2', fields: { dueDate: 1000, priority: 'Minor' } });
     expect([noPriority, minor].sort(compareCandidates).map((c) => c.issue.id)).toEqual(['b', 'a']);
+  });
+
+  it("ranks Priority by each issue's own project order, not a fixed list", () => {
+    // P1/P2 are not in the old fixed list; each candidate carries its project's order.
+    const p2 = candidate({ id: 'a', idReadable: 'OPS-1', fields: { dueDate: 1000, priority: 'P2' } }, 'OPS', ['P1', 'P2']);
+    const p1 = candidate({ id: 'b', idReadable: 'OPS-2', fields: { dueDate: 1000, priority: 'P1' } }, 'OPS', ['P1', 'P2']);
+    expect([p2, p1].sort(compareCandidates).map((c) => c.issue.id)).toEqual(['b', 'a']);
+  });
+
+  it('sorts a Priority its project order does not list last, like no Priority', () => {
+    const unknown = candidate({ id: 'a', idReadable: 'TEST-1', fields: { dueDate: 1000, priority: 'Show-stopper' } }, 'TEST', []);
+    const minor = candidate({ id: 'b', idReadable: 'TEST-2', fields: { dueDate: 1000, priority: 'Minor' } });
+    expect([unknown, minor].sort(compareCandidates).map((c) => c.issue.id)).toEqual(['b', 'a']);
   });
 
   it('breaks a Due Date + Priority tie by idReadable ascending, the final tiebreak', () => {
@@ -103,14 +128,44 @@ describe('candidateSetReadiness', () => {
 describe('computeCandidates', () => {
   const noDismissals: Dismissals = {};
 
-  it('excludes issues whose Status is Done', () => {
-    const issues = [issue({ id: 'a', fields: { status: 'Done' } }), issue({ id: 'b', fields: { status: 'To do' } })];
+  it("excludes issues whose Status their project marks resolved — Done, Wont do and Fixed alike", () => {
+    const issues = [
+      issue({ id: 'a', fields: { status: 'Done' } }),
+      issue({ id: 'b', fields: { status: 'To do' } }),
+      issue({ id: 'c', fields: { status: 'Wont do' } }),
+      issue({ id: 'd', fields: { status: 'Fixed' } }),
+    ];
     const { candidates } = computeCandidates({
       issuesByProject: new Map([['TEST', issues]]),
       dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null,
       epicFilter: null,
+      fieldValuesByProject: new Map([['TEST', projectValues(['To do', 'Done', 'Wont do', 'Fixed'], ['Done', 'Wont do', 'Fixed'])]]),
     });
     expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
+  });
+
+  it('excludes a ticket YouTrack has resolved, whatever its Status is called', () => {
+    const issues = [issue({ id: 'a', resolved: 1_700_000_000_000, fields: { status: 'Shipped' } }), issue({ id: 'b' })];
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([['TEST', issues]]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: null, epicFilter: null,
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['b']);
+  });
+
+  it('treats one Status name as resolved in one project and open in another', () => {
+    const { candidates } = computeCandidates({
+      issuesByProject: new Map([
+        ['OPEN', [issue({ id: 'open-consider', idReadable: 'OPEN-1', fields: { status: 'Consider' } })]],
+        ['SHUT', [issue({ id: 'shut-consider', idReadable: 'SHUT-1', fields: { status: 'Consider' } })]],
+      ]),
+      dismissals: noDismissals, workspaceId: 'ws-1', weekOf: '2026-09-14', statusFilter: 'Consider', epicFilter: null,
+      fieldValuesByProject: new Map([
+        ['OPEN', projectValues(['To do', 'Consider', 'Done'], ['Done'])],
+        ['SHUT', projectValues(['To do', 'Consider', 'Done'], ['Consider', 'Done'])],
+      ]),
+    });
+    expect(candidates.map((c) => c.issue.id)).toEqual(['open-consider']);
   });
 
   it('excludes an issue that already holds Focus rank 1-3 — it belongs in Now mode instead', () => {
@@ -347,5 +402,20 @@ describe('deriveEpicFilterOptions', () => {
       ['TST2', [issue({ id: 'b', idReadable: 'TST2-1', parentEpic: EPIC_A })]],
     ]);
     expect(deriveEpicFilterOptions(issuesByProject)).toEqual([EPIC_A]);
+  });
+});
+
+describe('deriveStatusFilterOptions (VERM-117)', () => {
+  it('offers a Status that is open work in at least one project, in the projects\' own order', () => {
+    const values = new Map([
+      ['OPEN', projectValues(['Not yet started', 'Consider', 'Done', 'Wont do'], ['Done', 'Wont do'])],
+      ['SHUT', projectValues(['Triage', 'Consider', 'Fixed'], ['Consider', 'Fixed'])],
+    ]);
+    // Consider: open in OPEN, resolved in SHUT — still offered. Done, Wont do, Fixed: resolved everywhere.
+    expect(deriveStatusFilterOptions(['OPEN', 'SHUT'], values)).toEqual(['Not yet started', 'Consider', 'Triage']);
+  });
+
+  it('offers nothing for a project whose values are not known', () => {
+    expect(deriveStatusFilterOptions(['TEST'], new Map())).toEqual([]);
   });
 });

@@ -6,11 +6,11 @@ import {
   activeAllTasksSort, allTasksSortAction, headerSortDirection, sortAllTasksFlat,
   projectIssuesKey, projectsOfTickets, youtrackProjectOf, type AllTasksSortState,
 } from './allTasksSort';
-import { FIELD_DEFS } from '../../../shared/fields';
 
 // The built-in list, used here as each project's bundle where a test does not
 // configure its own.
-const BUILT_IN = FIELD_DEFS.priority.options as readonly string[];
+// A YouTrack Priority order as fixture data (no app constant since VERM-117).
+const BUILT_IN: readonly string[] = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'];
 
 // Synthetic keys and names only.
 function issue(idReadable: string, priority: string | null, status = 'To do'): BoardIssue {
