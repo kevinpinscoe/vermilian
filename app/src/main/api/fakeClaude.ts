@@ -39,6 +39,13 @@ function record(fn: FakeClaudeCall['fn'], key: string, extra: Partial<FakeClaude
   calls.push({ fn, credentialRef: refFromE2eFakeAnthropicKey(key) ?? (key === 'e2e-claude-key' ? 'legacy' : 'other'), ...extra });
 }
 
+// e2e hook (VERM-115): hold extraction after the call is recorded, so a
+// spec can switch workspace while the AI is answering.
+let extractDelayMs = 0;
+export function setExtractDelayForTests(ms: number): void {
+  extractDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+}
+
 export function getCallsForTests(): FakeClaudeCall[] {
   return calls.map((c) => ({ ...c }));
 }
@@ -57,6 +64,7 @@ export async function extractTaskFields(
 ): Promise<AiCreateTaskResult> {
   // Recorded only when a project was known, so other specs' call records are unchanged.
   record('extractTaskFields', key, allowed ? { allowedStatus: [...allowed.status.values] } : {});
+  if (extractDelayMs > 0) await new Promise((r) => setTimeout(r, extractDelayMs));
   const trimmed = description.trim();
 
   const blank: AiCreateTaskFields = {

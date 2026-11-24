@@ -370,7 +370,7 @@ export async function createIssue(
   const proj = projectById(payload.projectId) ?? PROJECTS[0];
   // The server's own rule: a value outside the project's field is refused
   // with the recorded, unfilled template.
-  const meta = await getProjectFieldMetadata(url, token, proj.id);
+  const meta = await readFakeFieldMetadata(url, token, proj.id);
   for (const [name, value] of [['Status', payload.status], ['Priority', payload.priority], ['Category', payload.category]] as const) {
     if (!value) continue;
     const field = meta.fields.find((f) => f.name === name);
@@ -513,7 +513,10 @@ const FAKE_CATEGORY_VALUES = [
 ];
 
 interface FakeCreateField { values: string[]; default: string | null }
-type FakeCreateFields = Partial<Record<'Status' | 'Priority' | 'Category', FakeCreateField | null>>;
+type FakeCreateFields = Partial<Record<'Status' | 'Priority' | 'Category', FakeCreateField | null>> & {
+  // `Date time entered`'s field type ("date and time" unless seeded); null removes it.
+  dateTimeEntered?: string | null;
+};
 
 function fakeCreateFields(projectShortName: string): FakeCreateFields {
   let seeded: Record<string, unknown> = {};
@@ -523,6 +526,10 @@ function fakeCreateFields(projectShortName: string): FakeCreateFields {
   const own = seeded[projectShortName];
   if (typeof own !== 'object' || own === null) return {};
   const out: FakeCreateFields = {};
+  if ('Date time entered' in own) {
+    const t = (own as Record<string, unknown>)['Date time entered'];
+    out.dateTimeEntered = typeof t === 'string' ? t : null;
+  }
   for (const name of ['Status', 'Priority', 'Category'] as const) {
     if (!(name in own)) continue;
     const f = (own as Record<string, unknown>)[name];
@@ -548,7 +555,20 @@ export function failFieldMetadataForTests(n: number, project?: string): void {
   metadataFailures = { n: Number.isFinite(n) && n > 0 ? n : 0, project: typeof project === 'string' ? project : '' };
 }
 
+// Every project field read: the project asked for and which credential
+// reference the token came from (never the token), so a spec can check a
+// read went to the right workspace's connection — or was never made.
+const fieldMetadataRequests: Array<{ project: string; credentialRef: string }> = [];
+export function getFieldMetadataRequestsForTests(): Array<{ project: string; credentialRef: string }> {
+  return fieldMetadataRequests.map((r) => ({ ...r }));
+}
+
 export async function getProjectFieldMetadata(url: string, token: string, projectIdOrShortName: string): Promise<YouTrackProjectMetadata> {
+  fieldMetadataRequests.push({ project: projectIdOrShortName, credentialRef: refFromE2eFakeYouTrackToken(token) ?? 'legacy' });
+  return readFakeFieldMetadata(url, token, projectIdOrShortName);
+}
+
+async function readFakeFieldMetadata(url: string, token: string, projectIdOrShortName: string): Promise<YouTrackProjectMetadata> {
   // The real endpoint accepts a project's id or its short name.
   const projectShortName = (projectById(projectIdOrShortName) ?? projectByShortName(projectIdOrShortName))?.shortName;
   if (!projectShortName) throw { status: 404, message: `Entity with id ${projectIdOrShortName} not found` };
@@ -577,6 +597,9 @@ export async function getProjectFieldMetadata(url: string, token: string, projec
     add('Status', 'StateProjectCustomField', seeded.Status ?? { values: status.map((v) => v.name), default: 'To do' }, (v) => ({ isResolved: resolved.has(v) }));
   }
   if (seeded.Category !== null) add('Category', 'StateProjectCustomField', seeded.Category ?? { values: FAKE_CATEGORY_VALUES, default: null });
+  if (seeded.dateTimeEntered !== null) {
+    raw.push({ field: { name: 'Date time entered', fieldType: { id: seeded.dateTimeEntered ?? 'date and time' } }, $type: 'SimpleProjectCustomField', canBeEmpty: true });
+  }
   return parseYouTrackProjectFields(raw);
 }
 

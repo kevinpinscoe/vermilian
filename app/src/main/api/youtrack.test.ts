@@ -663,14 +663,15 @@ describe('getProjectFieldMetadata / getPriorityOrder (VERM-114, VERM-92)', () =>
     fetchMock.mockResolvedValue(
       jsonRes([
         { field: { name: 'Priority' }, $type: 'EnumProjectCustomField', bundle: { values: [{ name: 'Minor', ordinal: 2 }, { name: 'Major', ordinal: 0 }] } },
-        { field: { name: 'Status' }, $type: 'StateProjectCustomField', canBeEmpty: false, defaultValues: [{ name: 'Open' }], bundle: { values: [{ name: 'Open', isResolved: false, ordinal: 0 }, { name: 'Fixed', isResolved: true, ordinal: 1 }] } },
+        { field: { name: 'Status', fieldType: { id: 'state[1]' } }, $type: 'StateProjectCustomField', canBeEmpty: false, defaultValues: [{ name: 'Open' }], bundle: { values: [{ name: 'Open', isResolved: false, ordinal: 0 }, { name: 'Fixed', isResolved: true, ordinal: 1 }] } },
       ]),
     );
     const meta = await getProjectFieldMetadata(URL, TOKEN, 'BETA');
     expect(lastCall()[0]).toContain('/api/admin/projects/BETA/customFields?fields=');
     expect(lastCall()[0]).toContain('bundle(values(name,isResolved,ordinal,archived))');
+    expect(lastCall()[0]).toContain('field(name,fieldType(id))');
     expect(meta.fields.find((f) => f.name === 'Status')).toEqual({
-      name: 'Status', type: 'StateProjectCustomField', canBeEmpty: false, defaults: ['Open'],
+      name: 'Status', type: 'StateProjectCustomField', fieldType: 'state[1]', canBeEmpty: false, defaults: ['Open'],
       values: [{ name: 'Open', isResolved: false, archived: false }, { name: 'Fixed', isResolved: true, archived: false }],
     });
     await expect(getPriorityOrder(URL, TOKEN, 'BETA')).resolves.toEqual(['Major', 'Minor']);
@@ -753,7 +754,7 @@ describe('patchIssue', () => {
 // ─── createIssue ──────────────────────────────────────────────────────────────
 
 describe('createIssue', () => {
-  it('omits null custom fields but always stamps Date time entered', async () => {
+  it('omits null custom fields and stamps Date time entered when asked to', async () => {
     fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
     const result = await createIssue(URL, TOKEN, {
       projectId: '0-1',
@@ -767,6 +768,7 @@ describe('createIssue', () => {
       relatedLink: null,
       notes: 'note body',
       repoUrl: null,
+      dateTimeEntered: true,
     });
     expect(result).toEqual({ id: '5', idReadable: 'TST-5' });
 
@@ -779,6 +781,16 @@ describe('createIssue', () => {
     expect(names).toContain('Date time entered');
     expect(names).not.toContain('Priority');
     expect(names).not.toContain('Category');
+  });
+
+  it('omits Date time entered unless asked to stamp it (VERM-115)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes({ id: '5', idReadable: 'TST-5' }));
+    await createIssue(URL, TOKEN, {
+      projectId: '0-1', summary: 'New task', status: 'To do', priority: null, category: null, dueDate: null,
+      ticket: null, ticketLink: null, relatedLink: null, notes: null, repoUrl: null,
+    });
+    const body = JSON.parse(lastCall()[1].body as string);
+    expect(body.customFields.map((f: { name: string }) => f.name)).toEqual(['Status']);
   });
 
   it('sends notes as a raw string in the create payload too', async () => {

@@ -559,6 +559,12 @@ export interface CreateIssuePayload {
   relatedLink: string | null;
   notes: string | null;
   repoUrl: string | null;
+  /**
+   * Send the automatic `Date time entered` timestamp. Set only when the
+   * project defines a compatible date field (VERM-115, decided from its
+   * metadata by services/createTask.ts); otherwise the field is omitted.
+   */
+  dateTimeEntered?: boolean;
 }
 
 export interface CreateIssueResult {
@@ -585,7 +591,9 @@ export async function createIssue(
     if (!include) continue;
     customFields.push({ name: def.ytName, $type: def.$type, value: toYouTrackValue(def, value) });
   }
-  customFields.push({ name: 'Date time entered', $type: 'DateIssueCustomField', value: Date.now() });
+  if (payload.dateTimeEntered === true) {
+    customFields.push({ name: 'Date time entered', $type: 'DateIssueCustomField', value: Date.now() });
+  }
 
   return request<CreateIssueResult>(url, token, '/api/issues?fields=id,idReadable', {
     method: 'POST',

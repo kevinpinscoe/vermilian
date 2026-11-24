@@ -670,12 +670,22 @@ workspace and every value. If any check fails, nothing is sent.
 | `<Field> "<value>" is not a value in this project` | The value is no longer offered (the bundle changed while the form was open), or a caller sent a stale value | Pick another value; **Refresh project options** re-reads the project |
 | AI suggested `<Field> "<value>"` … Cleared | Claude proposed a value the project does not have | Choose a value or leave it blank |
 | The active workspace changed before the task was created | The workspace was switched while the form was open | Reopen the form in the workspace you want |
-| did not say which field … Refresh project options | YouTrack refused a value with its unfilled `({1})` template, and neither a fresh read nor the message identified it | Click **Refresh project options** and try again; if it repeats, compare the form's values with the project's fields in YouTrack |
+| YouTrack rejected the request but did not identify the field | YouTrack refused the create with its unfilled `({1})` template, and a fresh read still offers every value sent | Click **Refresh project options** and try again; if it repeats, compare the form's values with the project's fields in YouTrack |
 
 The `({1})` refusal recorded on 2026-11-24 read
 `An Open-type entity with the specified name ({1}) was not found`. Whether
-`Open` was the refused value is unconfirmed, so Vermilian names a field from
-that word only when it equals exactly one value it sent.
+`Open` was the refused value is unconfirmed, and the word is never used to name
+a field. Vermilian names a field only when the response itself names it, or
+when a fresh read confirms the submitted value is no longer offered.
+
+The automatic `Date time entered` timestamp is sent only when the project
+defines that field as a `date` or `date and time` field. A project without it
+gets no timestamp, rather than a refused create.
+
+Every options read and create runs on the YouTrack connection of the
+workspace the form or AI request came from. A workspace switch cancels a
+pending read or create before anything is sent, and the AI create message
+"The active workspace changed while the AI was answering" means exactly this.
 
 ## OpenBao credential storage (VERM-64)
 

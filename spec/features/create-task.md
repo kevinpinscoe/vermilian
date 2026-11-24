@@ -35,7 +35,7 @@ A lighter **inline quick-add** path also exists at the bottom of each group on t
 - [ ] **No value list is hard-coded on the create path (VERM-115).** Status, Priority and Category are read from the selected project's field configuration (`/api/admin/projects/{id}/customFields`, VERM-114's reader) on the active workspace's own YouTrack connection. Archived values are not offered. No value, such as `To do` or `Normal`, is assumed to exist.
 - [ ] A blank field is omitted from the `POST`, so YouTrack applies the project's own default.
 - [ ] While the project's options load, those three dropdowns and **Create** are disabled. If the read fails, the draft is kept and the form shows the error with a **Retry** action.
-- [ ] `Date time entered` is **not** shown in the form — it is auto-set to the current client timestamp on submission and sent as a custom field in the API payload.
+- [ ] `Date time entered` is **not** shown in the form. It is set automatically to the current client timestamp on submission and sent as a custom field, **only when the selected project defines `Date time entered` as a `date` or `date and time` field** (VERM-115). When the field is absent, or has any other type, it is left out of the payload.
 
 ### Validation
 
@@ -48,7 +48,7 @@ A lighter **inline quick-add** path also exists at the bottom of each group on t
 
 - [ ] Clicking **Create** (or pressing **Enter** while Summary is focused and valid) submits the form.
 - [ ] The Create button shows a loading state (disabled + spinner) while the API call is in flight.
-- [ ] The API call is: `POST /api/issues` with the full field payload including all custom fields and `Date time entered` set to `Date.now()` (milliseconds since epoch, as the YouTrack API expects).
+- [ ] The API call is: `POST /api/issues` with the non-blank custom fields and, where the project accepts it, `Date time entered` set to `Date.now()` (milliseconds since epoch, as the YouTrack API expects).
 - [ ] On success:
   - The modal closes.
   - The new task is prepended to the current task list without requiring a full refetch.
@@ -58,7 +58,8 @@ A lighter **inline quick-add** path also exists at the bottom of each group on t
   - A Vibe `Banner` (danger) appears at the top of the modal with the error message.
   - The Create button returns to its normal enabled state so the user can retry.
 - [ ] **Main-process recheck (VERM-115).** Before sending, the main process confirms the form's workspace is still the active one, reads the selected project on that workspace's connection, and checks every submitted value against it. Any failure sends nothing and names the field and value (e.g. `Status "To do" is not a value in this project.`).
-- [ ] YouTrack's refusal of an unknown value arrives as an unfilled template (`An Open-type entity with the specified name ({1}) was not found`, recorded 2026-11-24; whether `Open` is the refused value is unconfirmed). It is never shown raw. When a fresh read of the project, or a template word equal to exactly one sent value, identifies the field, the message names it. Otherwise it says YouTrack did not say which field, and offers **Refresh project options**.
+- [ ] YouTrack's refusal of an unknown value arrives as an unfilled template (`An Open-type entity with the specified name ({1}) was not found`, recorded 2026-11-24; whether `Open` is the refused value is unconfirmed). It is never shown raw. The word in the template (`Open-type`) does not identify the field or value: a submitted Status of `Open` alongside it proves nothing. A field and value are named only when the response itself names them, or when a fresh read of the project confirms the submitted value is no longer offered. Otherwise the message is "YouTrack rejected the request but did not identify the field.", with **Refresh project options**.
+- [ ] **Bound to the originating workspace (VERM-115).** The form's workspace is passed with every options read and create. Each project-field read uses that workspace's own YouTrack connection, never whichever workspace is active when the read runs. If the user has switched workspace, the read and the create are cancelled before any request is made.
 
 ### Project context
 

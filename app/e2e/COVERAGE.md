@@ -123,7 +123,8 @@ notifications, or the timer worklog round-trip.
 | Main-process recheck — invalid value, absent field, other workspace: zero create requests | ✅ E2E | `create-task-field-discovery.spec.ts`; 🧪 `createTask.test.ts` |
 | Ambiguous `({1})` refusal explained, Refresh project options | ✅ E2E | `create-task-field-discovery.spec.ts`; 🧪 `createFieldOptions.test.ts` |
 | Inbox default category | 🧪 Unit | `formOptions.test.ts` (only when the project offers INBOX) |
-| Date time entered auto-stamp | 🧪 Unit | `youtrack.test.ts` (createIssue stamps it) |
+| Date time entered auto-stamp, only for a compatible project field (VERM-115) | 🧪 Unit | `createTaskDateTimeEntered.test.ts` (client JSON body: date-and-time, date, absent, incompatible); `youtrack.test.ts` |
+| Bound to the originating workspace — a switch during AI extraction cancels the matched-project read; no create (VERM-115) | ✅ E2E | `create-task-field-discovery.spec.ts` (per-workspace, two YouTrack references); 🧪 `createTask.test.ts` |
 
 ## create-task-ai.md
 | Section | Status | Where |

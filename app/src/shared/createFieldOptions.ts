@@ -104,12 +104,16 @@ export function sanitizeCreateSuggestions<T extends Partial<Record<CreateFieldKe
 //
 // YouTrack refuses an unknown enum/state value with a template whose second
 // placeholder it never fills: "An Open-type entity with the specified name
-// ({1}) was not found" (recorded 2026-11-24, VERM-111 Claude check 2). Which
-// value it means is not in the text; the word in the first placeholder may be
-// the refused value ("Open" in that recording) but that is unconfirmed, so it
-// is only trusted when it equals a value that was actually sent.
+// ({1}) was not found" (recorded 2026-11-24, VERM-111 Claude check 2). The
+// word in the first placeholder is NOT evidence of which field or value was
+// refused — a submitted Status of "Open" alongside "Open-type" proves nothing
+// (VERM-115 review). A field and value are named only when the response
+// itself names them, or when a fresh read confirms the submitted value is no
+// longer offered.
 
-const NOT_FOUND = /An?\s+(.+?)-type entity with the specified name \(\{1\}\) was not found/i;
+export const AMBIGUOUS_REJECTION_MESSAGE = 'YouTrack rejected the request but did not identify the field.';
+
+const NOT_FOUND = /An?\s+.+?-type entity with the specified name \(\{1\}\) was not found/i;
 
 export function isUnfilledEntityNotFound(message: string): boolean {
   return NOT_FOUND.test(message) || /\(\{1\}\)/.test(message);
@@ -122,43 +126,54 @@ export interface ExplainedCreateError {
   ambiguous: boolean;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Turn a create failure into something the user can act on: name the field and
- * value whenever the response or a fresh read of the project's options
- * identifies them; otherwise say plainly that YouTrack did not say which.
- * Messages that are not YouTrack's unfilled template pass through unchanged.
+ * The single sent field the response names explicitly: its field name and its
+ * exact value both appear in the message as whole words. The unfilled
+ * template never qualifies, since it names no field.
+ */
+function explicitlyNamed(message: string, sent: Partial<Record<CreateFieldKey, string | null>>): RejectedCreateValue | null {
+  const hits = CREATE_FIELD_KEYS.flatMap((key) => {
+    const value = sent[key];
+    if (!value) return [];
+    const field = CREATE_FIELD_NAMES[key];
+    const names = new RegExp(`(^|[^\\w])${escapeRegExp(field)}([^\\w]|$)`).test(message);
+    const values = new RegExp(`(^|[^\\w])${escapeRegExp(value)}([^\\w]|$)`).test(message);
+    return names && values ? [{ key, field, value }] : [];
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Turn a create failure into something the user can act on. A field and value
+ * are named only when the response explicitly identifies them or a fresh read
+ * of the project confirms the submitted value is invalid; otherwise an
+ * unfilled ({1}) refusal says YouTrack did not identify the field. Other
+ * messages pass through unchanged.
  */
 export function explainCreateError(
   message: string,
   sent: Partial<Record<CreateFieldKey, string | null>>,
   freshOptions: CreateFieldOptions | null,
 ): ExplainedCreateError {
+  const named = explicitlyNamed(message, sent);
+  if (named) {
+    return { message: `YouTrack refused ${named.field} "${named.value}".`, rejected: [named], ambiguous: false };
+  }
   if (!isUnfilledEntityNotFound(message)) return { message, rejected: [], ambiguous: false };
 
-  // A fresh read of the project shows which sent value is no longer offered.
   if (freshOptions) {
     const rejected = invalidCreateValues(freshOptions, sent);
     if (rejected.length > 0) {
-      return { message: `YouTrack refused ${rejected.map((r) => `${r.field} "${r.value}"`).join(' and ')}: not a value in this project.`, rejected, ambiguous: false };
+      return {
+        message: `YouTrack refused ${rejected.map((r) => `${r.field} "${r.value}"`).join(' and ')}: not a value in this project.`,
+        rejected,
+        ambiguous: false,
+      };
     }
   }
-
-  // The template's first placeholder, trusted only if it is a value we sent.
-  const named = NOT_FOUND.exec(message)?.[1]?.trim();
-  if (named) {
-    const matches = CREATE_FIELD_KEYS.filter((k) => sent[k] === named);
-    if (matches.length === 1) {
-      const key = matches[0];
-      const r = { key, field: CREATE_FIELD_NAMES[key], value: named };
-      return { message: `YouTrack refused ${r.field} "${r.value}": not a value in this project.`, rejected: [r], ambiguous: false };
-    }
-  }
-
-  return {
-    message:
-      'YouTrack refused one of the values sent but did not say which field. ' +
-      "The project's options may have changed. Refresh the project options and try again.",
-    rejected: [],
-    ambiguous: true,
-  };
+  return { message: AMBIGUOUS_REJECTION_MESSAGE, rejected: [], ambiguous: true };
 }

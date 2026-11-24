@@ -90,19 +90,31 @@ describe('explainCreateError', () => {
     expect(r.message).toBe('YouTrack refused Category "Gone": not a value in this project.');
   });
 
-  it("trusts the template's first word only when it equals exactly one value that was sent", () => {
-    const r = explainCreateError(RECORDED, { status: 'Open', priority: 'P1' }, null);
-    expect(r.rejected).toEqual([{ key: 'status', field: 'Status', value: 'Open' }]);
-    expect(r.ambiguous).toBe(false);
+  // Regression (VERM-115 review): "Open-type" plus a submitted Status of
+  // "Open" does not identify the field. Fresh metadata still offers Open, so
+  // nothing is named.
+  it('does not name Status "Open" from an Open-type ({1}) refusal while fresh metadata still offers Open', () => {
+    const fresh = createFieldOptionsFromMetadata(meta([{ name: 'Status', values: ['Open', 'Closed'], defaults: ['Open'] }]));
+    const r = explainCreateError(RECORDED, { status: 'Open' }, fresh);
+    expect(r).toEqual({ message: 'YouTrack rejected the request but did not identify the field.', rejected: [], ambiguous: true });
   });
 
-  it('says so when YouTrack gives only {1} and nothing identifies the field', () => {
+  it('is ambiguous without fresh metadata, whatever the template word is', () => {
+    expect(explainCreateError(RECORDED, { status: 'Open' }, null)).toEqual({
+      message: 'YouTrack rejected the request but did not identify the field.', rejected: [], ambiguous: true,
+    });
+  });
+
+  it('names the field and value when the response itself identifies them', () => {
+    const r = explainCreateError('Field Status: value "Stale" is not allowed', { status: 'Stale', priority: 'P1' }, null);
+    expect(r).toEqual({ message: 'YouTrack refused Status "Stale".', rejected: [{ key: 'status', field: 'Status', value: 'Stale' }], ambiguous: false });
+  });
+
+  it('says so when YouTrack gives only {1} and fresh metadata confirms nothing', () => {
     const fresh: CreateFieldOptions = TRIAGE;
     const r = explainCreateError(RECORDED, { status: 'Doing', priority: 'P1' }, fresh);
     expect(r.ambiguous).toBe(true);
     expect(r.rejected).toEqual([]);
-    expect(r.message).toContain('did not say which field');
-    expect(r.message).toContain('Refresh the project options');
-    expect(r.message).not.toContain('{1}');
+    expect(r.message).toBe('YouTrack rejected the request but did not identify the field.');
   });
 });

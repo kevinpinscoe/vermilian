@@ -43,6 +43,7 @@ The AI task creation feature lets the user describe a task in plain English. The
   ```
 
 - [ ] **Allowed values (VERM-115).** When a project is already selected before the request, its own Status/Priority/Category values become the tool schema's enums (a field the project lacks is limited to null). With no project known, the fields are free strings. No value list is hard-coded.
+- [ ] Every project-field read for AI create (the known project before the request, the matched project after) uses the originating workspace's own connection. If the user switches workspace while Claude is answering, the lookup for the matched project is cancelled before any request, and the answer is discarded with a message to try again.
 - [ ] Before the review form opens, the main process checks the suggested status, priority and category against the project the review will open on: the one Claude identified, else the known one. Any value outside it is cleared, never sent, and flagged on the review form ("AI suggested Status "Open", which this project does not offer. Cleared."). A cleared field stays blank; a field Claude left empty takes the project's default.
 - [ ] If `clarification_needed` is non-null, the input modal stays open and the clarification text is displayed beneath the text area as a Vibe `Banner` (info). The user can refine the description and re-generate.
 

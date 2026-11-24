@@ -172,9 +172,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   When the project is known, AI create gives Claude that project's allowed values. Before the
   review form opens, it clears and flags any suggestion the matched project does not offer.
   Before creating, the main process rechecks the active workspace, the project and every value,
-  and sends nothing if one fails. YouTrack's unfilled `({1})` message is never shown raw. It
-  names the field and value when they can be identified, and otherwise says so and offers
-  **Refresh project options**.
+  and sends nothing if one fails. Every read and create runs on the YouTrack connection of the
+  workspace the request came from. Switching workspace while the AI is answering cancels the
+  lookup for the project it chose, and nothing is created. The automatic `Date time entered`
+  stamp is sent only when the project defines that field as a date field. YouTrack's unfilled
+  `({1})` message is never shown raw. A field and value are named only when the response
+  names them or a fresh read confirms the value is no longer offered. Otherwise it says
+  "YouTrack rejected the request but did not identify the field" and offers **Refresh project
+  options**.
 
 - **Stand-up and Daily Review no longer fail with "Can't parse search query"** (VERM-114). The
   stand-up query named hard-coded statuses, including `Working on it`, which had been removed from

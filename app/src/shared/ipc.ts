@@ -1029,8 +1029,10 @@ export interface VermilianAPI {
   debugSetArticle?(articleId: string, value: { content: string } | { status: number }): Promise<void>;
   // e2e-only (VERM-115): create requests that reached the fake YouTrack, a
   // one-shot server refusal, and a held or failing project field read.
-  debugGetCreateRequests?(): Promise<Array<{ projectId: string; summary: string; status: string | null; priority: string | null; category: string | null }>>;
+  debugGetCreateRequests?(): Promise<Array<{ projectId: string; summary: string; status: string | null; priority: string | null; category: string | null; dateTimeEntered?: boolean }>>;
   debugSetNextCreateError?(message: string | null): Promise<void>;
+  debugGetFieldMetadataRequests?(): Promise<Array<{ project: string; credentialRef: string }>>;
+  debugSetClaudeExtractDelay?(ms: number): Promise<void>;
   debugSetFieldMetadataDelay?(ms: number, project?: string): Promise<void>;
   debugFailFieldMetadata?(n: number, project?: string): Promise<void>;
 }

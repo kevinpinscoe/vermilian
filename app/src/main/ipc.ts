@@ -74,8 +74,7 @@ import {
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
 import { createPriorityOrders } from './services/priorityOrders';
-import { createTaskService } from './services/createTask';
-import { sanitizeCreateSuggestions } from '../shared/createFieldOptions';
+import { createTaskService, AI_CREATE_WORKSPACE_CHANGED_MESSAGE } from './services/createTask';
 import { runwayWorkspaceTracker } from '../shared/runwayItem';
 import type { AppConfig } from '../shared/config';
 import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
@@ -669,8 +668,14 @@ export function registerIpc(): void {
   const createTask = createTaskService({
     activeWorkspaceId: async () => (await activeWorkspaceContext()).workspaceId ?? '',
     generation: activeWorkspaceGeneration,
-    async connection() {
-      const yt = await trackerConnection(await readConfig());
+    // The named workspace's own connection — never whichever workspace is
+    // active when the call happens to run. Legacy storage has one shared
+    // Settings connection.
+    async connection(workspaceId) {
+      const cfg = await readConfig();
+      const yt = workspaceStorageMode() === 'per-workspace'
+        ? await resolveWorkspaceYouTrackConnection(await perWorkspaceDocument(workspaceId), cfg, credentialSourceIO, IS_E2E)
+        : await trackerConnection(cfg);
       if (!yt.ok) return { ok: false, error: yt.error };
       const tracker = youtrackTracker(yt.url, yt.token);
       return {
@@ -684,29 +689,18 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.aiCreateTask,
     async (_e, args: AiCreateTaskArgs): Promise<AiCreateTaskResult> => {
+      // Bound to the workspace the request came from, as read before the AI
+      // operation begins (VERM-115): every project-field read uses that
+      // workspace's connection, and stops if the user switches away.
+      const bound = await createTask.origin(args.workspaceId);
       const ai = await beginAi(args.workspaceId);
       if (!ai.ok) return { ok: false, error: ai.error };
+      if (!bound.ok || bound.origin.workspaceId !== ai.workspaceId) return { ok: false, error: AI_CREATE_WORKSPACE_CHANGED_MESSAGE };
       const cfg = await readConfig();
-      // A project known before the request gives Claude its allowed values
-      // (VERM-115). A failed read is not fatal: the answer is still checked
-      // against the matched project below, and again on Create.
       const known = typeof args.projectId === 'string' && args.projectId ? args.projectId : '';
-      const knownRead = known ? await createTask.readOptions(known) : null;
-      const allowed = knownRead?.ok ? knownRead.options : null;
-      const sent = await ai.send((key) => claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate, allowed));
-      if (!sent.ok) return { ok: false, error: sent.error };
-      const result = sent.value;
-      if (!result.ok || !result.fields || result.fields.clarificationNeeded) return result;
-      // Validate against the project the review form will open on.
-      const target = result.fields.projectId ?? known;
-      if (!target) return result;
-      const read = target === known && knownRead ? knownRead : await createTask.readOptions(target);
-      if (!read.ok) return result; // the form reads the options itself and offers Retry
-      const { fields, cleared } = sanitizeCreateSuggestions(result.fields, read.options);
-      return {
-        ok: true,
-        fields: cleared.length > 0 ? { ...fields, clearedSuggestions: cleared.map(({ field, value }) => ({ field, value })) } : fields,
-      };
+      return createTask.aiCreate(bound.origin, known, (allowed) =>
+        ai.send((key) => claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate, allowed)),
+      );
     },
   );
 
@@ -1283,6 +1277,8 @@ export function registerIpc(): void {
     // and master-plan articles by readable ID (content, or a refusal status).
     // Task creation (VERM-115): create requests that reached the fake, a
     // one-shot server refusal, and a held or failing project field read.
+    ipcMain.handle('e2e:fieldMetadataRequests', () => fakeYouTrackForE2E.getFieldMetadataRequestsForTests());
+    ipcMain.handle('e2e:claudeExtractDelay', (_e, ms: number) => fakeClaudeForE2E.setExtractDelayForTests(ms));
     ipcMain.handle('e2e:createRequests', () => fakeYouTrackForE2E.getCreateRequestsForTests());
     ipcMain.handle('e2e:nextCreateError', (_e, message: string | null) => fakeYouTrackForE2E.setNextCreateErrorForTests(message));
     ipcMain.handle('e2e:fieldMetadataDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setFieldMetadataDelayForTests(ms, project));

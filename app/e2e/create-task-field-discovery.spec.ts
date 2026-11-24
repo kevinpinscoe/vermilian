@@ -15,12 +15,15 @@
 import { test, expect, Page } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
+import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from '../src/shared/workspaceSchema';
 
 const CREATE_FIELDS = JSON.stringify({
   TST2: {
     Status: { values: ['Triage', 'Doing', 'Shipped'], default: 'Triage' },
     Priority: { values: ['P1', 'P2', 'P3'], default: 'P2' },
     Category: null,
+    // No automatic timestamp field in this project.
+    'Date time entered': null,
   },
   EMP: { Status: { values: ['Backlog', 'Active'], default: null } },
 });
@@ -75,7 +78,8 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await page.locator(CREATE).click();
     await expect(page.locator(SUMMARY)).toBeHidden();
     expect(await createRequests(page)).toEqual([
-      expect.objectContaining({ projectId: '0-e2', status: 'Doing', priority: 'P2', category: null }),
+      // TST2 has no Date time entered field, so no timestamp is asked for.
+      expect.objectContaining({ projectId: '0-e2', status: 'Doing', priority: 'P2', category: null, dateTimeEntered: false }),
     ]);
   });
 
@@ -85,7 +89,7 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await expect(page.locator(STATUS)).toHaveValue('');
     await page.locator(CREATE).click();
     await expect(page.locator(SUMMARY)).toBeHidden();
-    expect(await createRequests(page)).toEqual([expect.objectContaining({ projectId: '0-e4', status: null })]);
+    expect(await createRequests(page)).toEqual([expect.objectContaining({ projectId: '0-e4', status: null, dateTimeEntered: true })]);
   });
 
   test("a user's choice the next project lacks is cleared and flagged", async () => {
@@ -154,7 +158,7 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await expect(page.locator(STATUS)).toHaveValue('To do');
     await page.evaluate((m) => window.vermilian.debugSetNextCreateError!(m), RECORDED);
     await page.locator(CREATE).click();
-    await expect(page.getByText(/did not say which field/)).toBeVisible();
+    await expect(page.getByText('YouTrack rejected the request but did not identify the field.')).toBeVisible();
     await expect(page.getByText('({1})')).toHaveCount(0);
 
     await page.getByTestId('ct-refresh-options').click();
@@ -192,5 +196,98 @@ test.describe('Create task — per-project field discovery (VERM-115)', () => {
     await expect(page.getByTestId('ct-flag-status')).toHaveText('AI suggested Status "Done", which this project does not offer. Cleared.');
     await expect.poll(() => optionTexts(page, STATUS)).toEqual(['—', 'Backlog', 'Active']);
     await expect(page.locator(STATUS)).toHaveValue('');
+  });
+});
+
+// ─── Workspace binding (VERM-115 review) ─────────────────────────────────────
+// Two YouTrack workspaces with their own YouTrack and Anthropic credential
+// references. The fake YouTrack records which reference each project-field
+// read came from (never a token), so a read on the wrong workspace's
+// connection — or any read at all — is visible.
+
+const ytWorkspace = (workspaceId: string, name: string, order: number, ytRef: string, aiRef: string, projectIds: string[]): WorkspaceDocument => ({
+  schema: WORKSPACE_SCHEMA_VERSION,
+  workspaceId,
+  name,
+  order,
+  backend: { kind: 'youtrack', serverUrl: 'http://e2e.local', credentialRef: ytRef },
+  ai: { credentialRef: aiRef },
+  folders: [{ id: `folder-${workspaceId}`, name: 'Projects', order: 0, parentId: null, projectIds }],
+  boards: {},
+  dismissals: {},
+});
+
+test.describe('Create task — bound to the originating workspace (VERM-115)', () => {
+  let app: ElectronApplication;
+  let page: Page;
+
+  test.beforeEach(async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), {
+      VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace',
+      VERMILIAN_E2E_YT_CREATE_FIELDS: CREATE_FIELDS,
+    });
+    page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+    for (const d of [
+      ytWorkspace('ws-bind-a', 'Workspace A', 0, 'youtrack-a', 'anthropic-a', ['0-e1', '0-e4']),
+      ytWorkspace('ws-bind-b', 'Workspace B', 1, 'youtrack-b', 'anthropic-b', ['0-e2']),
+    ]) {
+      const r = await page.evaluate((doc) => window.vermilian.createWorkspaceArticle(doc), d);
+      expect(r.ok).toBe(true);
+    }
+    await page.reload();
+    await expect(page.locator('[data-testid="workspace-switcher"]')).toBeVisible({ timeout: 15_000 });
+    const r = await page.evaluate(() => window.vermilian.setActiveWorkspace('ws-bind-a'));
+    expect(r.ok).toBe(true);
+  });
+  test.afterEach(async () => { await app.close(); });
+
+  const metadataRequests = () => page.evaluate(() => window.vermilian.debugGetFieldMetadataRequests!());
+
+  // Regression: on 113cf45 the lookup for the project Claude chose ran on
+  // whichever workspace was active by then — B's connection — and the
+  // answer was returned as if nothing had happened.
+  test("switching from A to B while Claude answers cancels A's project lookup: B sees no metadata request and nothing is created", async () => {
+    await page.evaluate(() => window.vermilian.debugSetClaudeExtractDelay!(1500));
+    const metaBefore = (await metadataRequests()).length;
+    const claudeBefore = (await page.evaluate(() => window.vermilian.debugGetClaudeCalls!())).length;
+
+    const pending = page.evaluate(() =>
+      window.vermilian.aiCreateTask({
+        description: 'Archive old builds for Empty Project status: Backlog',
+        projects: [{ id: '0-e1', name: 'Test Project' }, { id: '0-e4', name: 'Empty Project' }],
+        projectId: '0-e1',
+        workspaceId: 'ws-bind-a',
+      }),
+    );
+    // Claude has the request; the user switches to B before it answers.
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.debugGetClaudeCalls!())).length).toBe(claudeBefore + 1);
+    const switched = await page.evaluate(() => window.vermilian.setActiveWorkspace('ws-bind-b'));
+    expect(switched.ok).toBe(true);
+
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('active workspace changed');
+
+    const reads = (await metadataRequests()).slice(metaBefore);
+    // Only the known project's read before Claude, on A's own connection.
+    expect(reads).toEqual([{ project: '0-e1', credentialRef: 'youtrack-a' }]);
+    expect(reads.filter((r) => r.credentialRef === 'youtrack-b')).toEqual([]);
+    expect(await createRequests(page)).toEqual([]);
+  });
+
+  test("manual create reads and creates on the origin workspace's own connection, and is refused after a switch", async () => {
+    const base = { projectId: '0-e1', summary: 'Bound', status: null, priority: null, category: null, dueDate: null, ticket: null, ticketLink: null, relatedLink: null, notes: null, repoUrl: null };
+    const metaBefore = (await metadataRequests()).length;
+    const ok = await page.evaluate((a) => window.vermilian.createIssue({ ...a, workspaceId: 'ws-bind-a' }), base);
+    expect(ok.ok).toBe(true);
+    expect((await metadataRequests()).slice(metaBefore)).toEqual([{ project: '0-e1', credentialRef: 'youtrack-a' }]);
+
+    await page.evaluate(() => window.vermilian.setActiveWorkspace('ws-bind-b'));
+    const afterSwitch = (await metadataRequests()).length;
+    const refused = await page.evaluate((a) => window.vermilian.createIssue({ ...a, workspaceId: 'ws-bind-a' }), base);
+    expect(refused.ok).toBe(false);
+    expect((await metadataRequests()).slice(afterSwitch).filter((r) => r.project === '0-e1')).toEqual([]);
+    expect(await createRequests(page)).toHaveLength(1);
   });
 });

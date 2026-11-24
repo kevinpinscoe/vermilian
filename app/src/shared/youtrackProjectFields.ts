@@ -17,10 +17,11 @@ import { youtrackPriorityOrder, type YouTrackProjectCustomField } from './priori
 
 /** The `fields=` selection for `/api/admin/projects/{id}/customFields`. */
 export const YOUTRACK_PROJECT_FIELDS_SELECTION =
-  'field(name),$type,canBeEmpty,defaultValues(name),bundle(values(name,isResolved,ordinal,archived))';
+  'field(name,fieldType(id)),$type,canBeEmpty,defaultValues(name),bundle(values(name,isResolved,ordinal,archived))';
 
 /** One project custom field as the request above returns it; every part optional. */
 export interface RawYouTrackProjectField extends YouTrackProjectCustomField {
+  field?: { name?: unknown; fieldType?: { id?: unknown } | null } | null;
   $type?: unknown;
   canBeEmpty?: unknown;
   defaultValues?: Array<{ name?: unknown } | null> | null;
@@ -40,6 +41,8 @@ export interface YouTrackProjectField {
   name: string;
   /** e.g. `StateProjectCustomField`, `EnumProjectCustomField`. */
   type: string;
+  /** The field's value type, e.g. `date`, `date and time`, `string`, `state[1]`; '' when not returned. */
+  fieldType: string;
   canBeEmpty: boolean;
   /** The project's configured default value names, in order. */
   defaults: string[];
@@ -78,9 +81,22 @@ export function parseYouTrackProjectFields(raw: unknown): YouTrackProjectMetadat
       if (!values.some((x) => x.name === v.name)) values.push({ name: v.name, isResolved: v.isResolved, archived: v.archived });
     }
     const defaults = (Array.isArray(f.defaultValues) ? f.defaultValues : []).map((d) => str(d?.name)).filter(Boolean);
-    fields.push({ name, type: str(f.$type), canBeEmpty: f.canBeEmpty === true, defaults, values });
+    fields.push({ name, type: str(f.$type), fieldType: str(f.field?.fieldType?.id), canBeEmpty: f.canBeEmpty === true, defaults, values });
   }
   return { fields, priorityOrder: youtrackPriorityOrder(list) ?? [] };
+}
+
+/** The automatic creation timestamp's field (VERM-115). */
+export const DATE_TIME_ENTERED_FIELD = 'Date time entered';
+
+/**
+ * Whether the project defines `Date time entered` as a field that accepts the
+ * automatic timestamp (epoch milliseconds): a `date` or `date and time` field.
+ * Absent, or any other type, means the timestamp is not sent (VERM-115).
+ */
+export function acceptsDateTimeEntered(meta: YouTrackProjectMetadata): boolean {
+  const f = meta.fields.find((x) => x.name === DATE_TIME_ENTERED_FIELD);
+  return Boolean(f && (f.fieldType === 'date' || f.fieldType === 'date and time'));
 }
 
 /**
