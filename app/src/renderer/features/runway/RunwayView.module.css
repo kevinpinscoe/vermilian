@@ -339,3 +339,57 @@
 .addError {
   color: var(--negative-color, #d83a52);
 }
+
+/* Blockers (VERM-98). */
+.refresh {
+  margin-left: auto;
+}
+
+.blocker {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  max-width: 50%;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.blockerState {
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--ui-background-color, #e6e9ef);
+  color: var(--primary-text-color, #323338);
+}
+
+.blocker_blocked {
+  background: var(--negative-color-selected, #fbd8dd);
+}
+
+.blocker_ready {
+  background: var(--positive-color-selected, #cdeee1);
+}
+
+.blocker_done {
+  background: none;
+  color: var(--secondary-text-color, #676879);
+}
+
+.blockerText {
+  color: var(--secondary-text-color, #676879);
+}
+
+.conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conflictText {
+  color: var(--negative-color, #d83a52);
+  font-weight: 600;
+}

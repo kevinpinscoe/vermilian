@@ -24,14 +24,24 @@
 //      in between — a changed generation cancels the edit. Any switch counts,
 //      so a round trip A → B → A while the edit waits cancels it too, where
 //      rule 3 alone would let it through.
+//   7. The blocker actions (VERM-98) — Add to Runway above a dependent, and
+//      Move prerequisite above — follow rule 6 too, so a round trip A → B → A
+//      while one waits cancels it. Each names the dependent by its stored ID,
+//      and the store finds the dependent's position inside its transaction:
+//      a dependent that moved still gets the row immediately above it, and
+//      one that was removed leaves the Runway untouched. The add is refused
+//      inside the gate when a row already holds the ticket under any of its
+//      IDs — its readable key or its tracker ID.
 
 import type {
+  RunwayItemsAddIssueAboveArgs,
   RunwayItemsAddIssueArgs,
   RunwayItemsAddIssueAtNumberArgs,
   RunwayItemsAddStructuralArgs,
   RunwayItemsErrorCode,
   RunwayItemsItemArgs,
   RunwayItemsListArgs,
+  RunwayItemsMoveAboveArgs,
   RunwayItemsMoveArgs,
   RunwayItemsMoveToNumberArgs,
   RunwayItemsResult,
@@ -79,6 +89,10 @@ export interface RunwayItemHandlers {
   moveToNumber(args: RunwayItemsMoveToNumberArgs): Promise<RunwayItemsResult>;
   moveUp(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   moveDown(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
+  /** Add to Runway for an external blocker: immediately above its dependent (rule 7). */
+  addIssueAbove(args: RunwayItemsAddIssueAboveArgs): Promise<RunwayItemsResult>;
+  /** Move prerequisite above: immediately above its dependent (rule 7). */
+  moveAbove(args: RunwayItemsMoveAboveArgs): Promise<RunwayItemsResult>;
   /**
    * Adds a ticket once (VERM-86), for an add that checked the ticket first:
    * not an IPC channel of its own. Inside the write gate, immediately before
@@ -232,6 +246,25 @@ export function createRunwayItemHandlers(deps: RunwayItemIpcDeps): RunwayItemHan
     moveToNumber: write<RunwayItemsMoveToNumberArgs>(null, (s, ws, a) => s.moveToNumber(ws, a.itemId, a.runwayNumber), edit),
     moveUp: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveUp(ws, a.itemId), edit),
     moveDown: write<RunwayItemsItemArgs>(null, (s, ws, a) => s.moveDown(ws, a.itemId), edit),
+    addIssueAbove: write<RunwayItemsAddIssueAboveArgs>(
+      (tracker, ws, a) => {
+        if (!Array.isArray(a.aliases) || typeof a.dependentItemId !== 'string') {
+          throw new Refusal('invalid-args', 'Add above needs the ticket\'s IDs and its dependent\'s row');
+        }
+        for (const id of [a.issueId, ...a.aliases]) refuseTicket(tracker, ws, id);
+      },
+      (s, ws, a) => s.addIssueAbove(ws, a.issueId, a.dependentItemId, a.aliases),
+      edit,
+    ),
+    moveAbove: write<RunwayItemsMoveAboveArgs>(
+      (_tracker, _ws, a) => {
+        if (typeof a.itemId !== 'string' || typeof a.dependentItemId !== 'string') {
+          throw new Refusal('invalid-args', 'Move above needs the row and its dependent\'s row');
+        }
+      },
+      (s, ws, a) => s.moveAbove(ws, a.itemId, a.dependentItemId),
+      edit,
+    ),
 
     async addIssueOnce(args) {
       const cancelled = () => new Refusal('cancelled', 'The add was cancelled because the active workspace was switched while the ticket was being checked.');

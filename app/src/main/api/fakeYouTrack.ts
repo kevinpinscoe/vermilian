@@ -179,7 +179,7 @@ function fakeLinksOf(idReadable: string): IssueLink[] {
       directed: t.directed,
       direction,
       verb: direction === 'inward' ? t.targetToSource : t.sourceToTarget,
-      issue: { id: other.id, key: other.idReadable, summary: other.summary, resolved: other.resolved !== null },
+      issue: { id: other.id, key: other.idReadable, summary: other.summary, resolved: other.resolved !== null, status: other.fields.status ?? null },
     });
   }
   return out;
@@ -326,6 +326,10 @@ export async function patchIssue(
   if (!i) return;
   if (field === 'summary') { i.summary = String(value ?? ''); return; }
   (i.fields as unknown as Record<string, unknown>)[field] = value;
+  // With the Runway fixtures on, a Done status resolves the issue as the real
+  // server's resolved state does, and any other reopens it, so the blocker
+  // tests (VERM-98) can resolve a prerequisite. Off, nothing else changes.
+  if (RUNWAY_FIXTURES && field === 'status') i.resolved = value === 'Done' ? Date.now() : null;
 }
 
 export async function moveIssue(

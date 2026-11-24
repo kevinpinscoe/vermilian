@@ -69,6 +69,8 @@ export const IPC = {
   runwayItemsAddNote: 'runway-items:add-note',
   runwayItemsRemove: 'runway-items:remove',
   runwayItemsMove: 'runway-items:move',
+  runwayItemsAddIssueAbove: 'runway-items:add-issue-above',
+  runwayItemsMoveAbove: 'runway-items:move-above',
   runwayItemsMoveToNumber: 'runway-items:move-to-number',
   runwayItemsMoveUp: 'runway-items:move-up',
   runwayItemsMoveDown: 'runway-items:move-down',
@@ -413,6 +415,27 @@ export interface RunwayItemsMoveArgs extends RunwayItemsItemArgs {
   position: number;
 }
 
+/**
+ * Add to Runway for an external blocker (VERM-98): the ticket goes in
+ * immediately above its dependent, wherever the dependent is when the write
+ * runs. `aliases` are every namespaced ID the ticket goes by (its readable
+ * key and, for YouTrack, its entity ID); a row holding any of them refuses
+ * the add.
+ */
+export interface RunwayItemsAddIssueAboveArgs {
+  workspaceId: string;
+  issueId: string;
+  aliases: string[];
+  /** The dependent's stored itemId. */
+  dependentItemId: string;
+}
+
+/** Move prerequisite above (VERM-98): the row moves immediately above its dependent, wherever it is when the write runs. */
+export interface RunwayItemsMoveAboveArgs extends RunwayItemsItemArgs {
+  /** The dependent's stored itemId. */
+  dependentItemId: string;
+}
+
 export interface RunwayItemsMoveToNumberArgs extends RunwayItemsItemArgs {
   runwayNumber: number;
 }
@@ -427,13 +450,14 @@ export type RunwayItemsErrorCode =
   | 'invalid-depth'
   | 'invalid-text'
   | 'not-a-ticket'
+  | 'dependent-not-on-runway'
   // From the handlers (main/services/runwayItemIpc.ts).
   | 'invalid-args' // not an argument object
   | 'unknown-workspace' // no workspace with this ID in the configuration
   | 'not-active-workspace' // a write to a workspace other than the active one
   | 'wrong-tracker' // the ticket is on the other tracker from the workspace's
   | 'workspace-unavailable' // the workspace configuration could not be read
-  | 'cancelled'; // addIssueOnce: the active workspace was switched since the request began
+  | 'cancelled'; // the active workspace was switched since the request began (addIssueOnce, edits, blocker actions)
 
 export type RunwayItemsResult =
   | { ok: true; items: import('./runwayItem').RunwayItem[] }
@@ -820,6 +844,8 @@ export interface VermilianAPI {
   runwayItemsAddNote(args: RunwayItemsAddStructuralArgs): Promise<RunwayItemsResult>;
   runwayItemsRemove(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   runwayItemsMove(args: RunwayItemsMoveArgs): Promise<RunwayItemsResult>;
+  runwayItemsAddIssueAbove(args: RunwayItemsAddIssueAboveArgs): Promise<RunwayItemsResult>;
+  runwayItemsMoveAbove(args: RunwayItemsMoveAboveArgs): Promise<RunwayItemsResult>;
   runwayItemsMoveToNumber(args: RunwayItemsMoveToNumberArgs): Promise<RunwayItemsResult>;
   runwayItemsMoveUp(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;
   runwayItemsMoveDown(args: RunwayItemsItemArgs): Promise<RunwayItemsResult>;

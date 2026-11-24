@@ -47,7 +47,8 @@ export type RunwayItemStoreErrorCode =
   | 'invalid-workspace' // empty workspace ID
   | 'invalid-depth' // section/note: depth is not a whole number 0..4
   | 'invalid-text' // section/note: empty or whitespace-only text
-  | 'not-a-ticket'; // moveToNumber: the row is a section or note, which has no Runway #
+  | 'not-a-ticket' // moveToNumber: the row is a section or note, which has no Runway #
+  | 'dependent-not-on-runway'; // addIssueAbove/moveAbove: the row to place above is no longer on the Runway
 
 export class RunwayItemStoreError extends Error {
   constructor(
@@ -90,6 +91,23 @@ export interface RunwayItemStore {
   moveUp(workspaceId: string, itemId: string): RunwayItem[];
   /** Swaps a row with the one below; the last row stays put. */
   moveDown(workspaceId: string, itemId: string): RunwayItem[];
+  /**
+   * Adds a ticket immediately above the row `anchorItemId` (VERM-98, Add to
+   * Runway for an external blocker), at the anchor's position as it stands
+   * inside this transaction: if the anchor moved since the request was made,
+   * the ticket still goes immediately above it. Refused, with nothing
+   * written, when the anchor is no longer on the Runway or a row already
+   * holds any of `aliases` (every namespaced ID the ticket goes by, the new
+   * row's own included). Every existing row keeps its relative order.
+   */
+  addIssueAbove(workspaceId: string, issueId: string, anchorItemId: string, aliases?: readonly string[]): RunwayItem[];
+  /**
+   * Moves a row immediately above the row `anchorItemId` (VERM-98, Move
+   * prerequisite above), at the anchor's position as it stands inside this
+   * transaction. Refused, with nothing written, when either row is no longer
+   * on the Runway. Every other row keeps its relative order.
+   */
+  moveAbove(workspaceId: string, itemId: string, anchorItemId: string): RunwayItem[];
 }
 
 export interface StructuralRowOptions {
@@ -260,6 +278,18 @@ export function createRunwayItemStore(
     return { order };
   }
 
+  /** The anchor row's index as it stands now; refused when it has left the Runway. */
+  function anchorIndexOrThrow(workspaceId: string, current: ItemRow[], anchorItemId: string): number {
+    const index = current.findIndex((r) => r.item_id === anchorItemId);
+    if (index < 0) {
+      throw new RunwayItemStoreError(
+        'dependent-not-on-runway',
+        `${anchorItemId} is no longer on workspace ${workspaceId}'s Runway, so nothing was placed above it`,
+      );
+    }
+    return index;
+  }
+
   function refuseDuplicate(workspaceId: string, current: ItemRow[], issueId: string): void {
     if (current.some((r) => r.item_id === issueId)) {
       throw new RunwayItemStoreError('already-on-runway', `${issueId} is already on workspace ${workspaceId}'s Runway`);
@@ -381,6 +411,28 @@ export function createRunwayItemStore(
       return mutate(workspaceId, (current) => {
         const from = indexOrThrow(workspaceId, current, itemId);
         return reorder(current, from, Math.min(from + 1, current.length - 1));
+      });
+    },
+
+    addIssueAbove(workspaceId, issueId, anchorItemId, aliases = []) {
+      requireTicketId(issueId);
+      return mutate(workspaceId, (current) => {
+        for (const id of new Set([issueId, ...aliases])) refuseDuplicate(workspaceId, current, id);
+        const anchor = anchorIndexOrThrow(workspaceId, current, anchorItemId);
+        const order = current.map((r) => r.item_id);
+        order.splice(anchor, 0, issueId);
+        return { order, added: ticketRow(issueId) };
+      });
+    },
+
+    moveAbove(workspaceId, itemId, anchorItemId) {
+      return mutate(workspaceId, (current) => {
+        anchorIndexOrThrow(workspaceId, current, anchorItemId);
+        indexOrThrow(workspaceId, current, itemId);
+        if (itemId === anchorItemId) return null;
+        const order = current.map((r) => r.item_id).filter((id) => id !== itemId);
+        order.splice(order.indexOf(anchorItemId), 0, itemId);
+        return order.every((id, i) => id === current[i].item_id) ? null : { order };
       });
     },
   };

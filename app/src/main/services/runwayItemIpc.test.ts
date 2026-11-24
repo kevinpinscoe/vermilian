@@ -473,3 +473,162 @@ describe('writes', () => {
     expect(ids(await handlers.list({ workspaceId: 'ws-yt-two' }))).toEqual([yt('2-2'), yt('2-1')]);
   });
 });
+
+describe('blocker actions: Add to Runway above a dependent, Move prerequisite above (VERM-98 review)', () => {
+  const A = YT_LEGACY;
+  const B = YT_OTHER;
+  // A's Runway: READ-12 (2-12), SYNC-3 (2-103), READ-14 (2-14), SYNC-7 (2-107), READ-20 (2-20).
+  const [r12, s3, r14, s7, r20] = ['2-12', '2-103', '2-14', '2-107', '2-20'].map((id) => yt(id));
+  // PLAT-40, the external blocker, by entity ID and by readable key.
+  const platId = yt('2-240');
+  const platKey = yt('PLAT-40');
+  const addPlat = () => handlers.addIssueAbove({ workspaceId: A, issueId: platId, aliases: [platId, platKey], dependentItemId: s7 });
+
+  beforeEach(() => {
+    for (const id of [r12, s3, r14, s7, r20]) store.addIssue(A, id);
+    store.addIssue(B, yt('3-1'));
+  });
+
+  function holdGate() {
+    let release!: () => void;
+    const held = gate.run(() => new Promise<void>((resolve) => (release = resolve)));
+    return { held, release: () => release() };
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  it('adds the blocker immediately above its dependent; every existing row keeps its relative order', async () => {
+    expect(ids(await addPlat())).toEqual([r12, s3, r14, platId, s7, r20]);
+  });
+
+  it('A → B → A while a queued add waits cancels it; both Runways are untouched', async () => {
+    const before = snapshot();
+    const gateHeld = holdGate();
+    const pending = addPlat();
+    await settle();
+    switchTo(B);
+    switchTo(A);
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'cancelled');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('A → B → A while a queued Move prerequisite above waits cancels it', async () => {
+    store.move(A, s3, 4); // SYNC-3 below READ-14
+    const before = snapshot();
+    const gateHeld = holdGate();
+    const pending = handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 });
+    await settle();
+    switchTo(B);
+    switchTo(A);
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'cancelled');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('refuses inside the gate a ticket already on the Runway under its readable key', async () => {
+    const gateHeld = holdGate();
+    const pending = addPlat();
+    await settle();
+    // While the add waits, the same ticket arrives by key (e.g. from the Add box).
+    store.addIssue(A, platKey);
+    const before = snapshot();
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'already-on-runway');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('refuses inside the gate a ticket already on the Runway under its tracker ID', async () => {
+    const gateHeld = holdGate();
+    const pending = handlers.addIssueAbove({ workspaceId: A, issueId: platKey, aliases: [platKey, platId], dependentItemId: s7 });
+    await settle();
+    store.addIssue(A, platId);
+    const before = snapshot();
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'already-on-runway');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('two queued adds of the same ticket: the first goes in, the second is refused', async () => {
+    const gateHeld = holdGate();
+    const first = addPlat();
+    const second = handlers.addIssueAbove({ workspaceId: A, issueId: platKey, aliases: [platKey, platId], dependentItemId: s7 });
+    await settle();
+    gateHeld.release();
+    await gateHeld.held;
+    expect((await first).ok).toBe(true);
+    expectRefused(await second, 'already-on-runway');
+    expect(ids(await handlers.list({ workspaceId: A }))).toEqual([r12, s3, r14, platId, s7, r20]);
+  });
+
+  it('the dependent moved while the add waited: the blocker still goes immediately above it', async () => {
+    const gateHeld = holdGate();
+    const pending = addPlat();
+    await settle();
+    store.move(A, s7, 1); // SYNC-7 moved to the top
+    gateHeld.release();
+    await gateHeld.held;
+    expect(ids(await pending)).toEqual([platId, s7, r12, s3, r14, r20]);
+  });
+
+  it('the dependent was removed while the add waited: the Runway is untouched', async () => {
+    const gateHeld = holdGate();
+    const pending = addPlat();
+    await settle();
+    store.remove(A, s7);
+    const before = snapshot();
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'dependent-not-on-runway');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('moves the prerequisite immediately above its dependent; every other row keeps its relative order', async () => {
+    store.move(A, s3, 5); // READ-12, READ-14, SYNC-7, READ-20, SYNC-3
+    expect(ids(await handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 }))).toEqual([r12, s3, r14, s7, r20]);
+  });
+
+  it('the dependent moved while the move waited: the prerequisite goes immediately above it where it is now', async () => {
+    store.move(A, s3, 5);
+    const gateHeld = holdGate();
+    const pending = handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 });
+    await settle();
+    store.move(A, r14, 4); // READ-12, SYNC-7, READ-20, READ-14, SYNC-3
+    gateHeld.release();
+    await gateHeld.held;
+    expect(ids(await pending)).toEqual([r12, s7, r20, s3, r14]);
+  });
+
+  it('the dependent was removed while the move waited: the Runway is untouched', async () => {
+    store.move(A, s3, 5);
+    const gateHeld = holdGate();
+    const pending = handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 });
+    await settle();
+    store.remove(A, r14);
+    const before = snapshot();
+    gateHeld.release();
+    await gateHeld.held;
+    expectRefused(await pending, 'dependent-not-on-runway');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('a prerequisite already immediately above its dependent stays put', async () => {
+    const before = snapshot();
+    expect(ids(await handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 }))).toEqual([r12, s3, r14, s7, r20]);
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('a prerequisite above but not adjacent moves down to immediately above its dependent', async () => {
+    store.move(A, s3, 1); // SYNC-3, READ-12, READ-14, SYNC-7, READ-20
+    expect(ids(await handlers.moveAbove({ workspaceId: A, itemId: s3, dependentItemId: r14 }))).toEqual([r12, s3, r14, s7, r20]);
+  });
+
+  it('refuses the other tracker\'s ticket among the aliases before any write', async () => {
+    const before = snapshot();
+    expectRefused(await handlers.addIssueAbove({ workspaceId: A, issueId: platId, aliases: [platId, jira('PLAT-40')], dependentItemId: s7 }), 'wrong-tracker');
+    expect(snapshot()).toEqual(before);
+  });
+});

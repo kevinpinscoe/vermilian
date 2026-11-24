@@ -13,6 +13,7 @@ import { getContrastColor } from './colors';
 import { useTimerStore, fmtMs, getTotalWorkMs } from '../../stores/timer';
 import { useBoardDragStore } from '../../stores/boardDrag';
 import { RunwayNumberCell } from '../runway/RunwayNumberCell';
+import { RunwayBlockerBadge } from '../runway/RunwayBlockerBadge';
 import { FocusControl } from './FocusControl';
 import styles from './KanbanView.module.css';
 
@@ -209,6 +210,8 @@ function KanbanCardInner({
                 ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }}
                 displayKey={issue.idReadable}
               />
+              {/* Blocked or Unknown only, beside the Runway # (VERM-98). */}
+              <RunwayBlockerBadge workspaceId={runwayWorkspaceId} tracker="youtrack" issue={issue} />
             </span>
           )}
           <FocusControl issue={issue} projectShortName={projectShortName} />

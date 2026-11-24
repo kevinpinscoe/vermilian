@@ -402,7 +402,7 @@ export function TaskDetailPanel({
   // of which view opened the panel. Falls back to the prop until the issue
   // loads, and stays on the prop for a caller that never had one to begin with.
   const effectiveProjectShortName = issue?.project.shortName ?? projectShortName;
-  const patchMutation = usePatchIssue(issueId, effectiveProjectShortName);
+  const patchMutation = usePatchIssue(issueId, effectiveProjectShortName, runwayWorkspaceId);
   const deleteMutation = useDeleteIssue(effectiveProjectShortName);
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);

@@ -64,7 +64,13 @@ export type RunwayEdit =
   | { op: 'moveUp'; itemId: string }
   | { op: 'moveDown'; itemId: string }
   | { op: 'moveToNumber'; itemId: string; runwayNumber: number }
-  | { op: 'move'; itemId: string; position: number };
+  | { op: 'move'; itemId: string; position: number }
+  /**
+   * The blocker actions (VERM-98). Each names the dependent by its stored
+   * itemId; the main process finds its position inside the transaction.
+   */
+  | { op: 'addAbove'; issueId: string; aliases: string[]; dependentItemId: string }
+  | { op: 'moveAbove'; itemId: string; dependentItemId: string };
 
 function send(workspaceId: string, edit: RunwayEdit): Promise<RunwayItemsResult> {
   const v = window.vermilian;
@@ -79,6 +85,10 @@ function send(workspaceId: string, edit: RunwayEdit): Promise<RunwayItemsResult>
       return v.runwayItemsMoveToNumber({ workspaceId, itemId: edit.itemId, runwayNumber: edit.runwayNumber });
     case 'move':
       return v.runwayItemsMove({ workspaceId, itemId: edit.itemId, position: edit.position });
+    case 'addAbove':
+      return v.runwayItemsAddIssueAbove({ workspaceId, issueId: edit.issueId, aliases: edit.aliases, dependentItemId: edit.dependentItemId });
+    case 'moveAbove':
+      return v.runwayItemsMoveAbove({ workspaceId, itemId: edit.itemId, dependentItemId: edit.dependentItemId });
   }
 }
 

@@ -91,6 +91,8 @@ export function workspacesFromDocuments(docs: readonly WorkspaceDocument[]): Wor
       id: d.workspaceId, name: d.name, order: d.order, folders: d.folders,
       ...(d.jiraBoards?.length ? { jiraBoards: d.jiraBoards } : {}),
       ...(d.jiraHiddenStatuses?.length ? { jiraHiddenStatuses: d.jiraHiddenStatuses } : {}),
+      // Kept when empty: [] is a choice (nothing is a prerequisite), not the default.
+      ...(d.prerequisiteLinkTypes !== undefined ? { prerequisiteLinkTypes: d.prerequisiteLinkTypes } : {}),
     }));
 }
 

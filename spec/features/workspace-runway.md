@@ -251,7 +251,7 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 
 ### Blockers
 
-- [ ] Each Runway ticket shows one state, in the Runway view and as a badge in All tasks:
+- [x] Each Runway ticket shows one state, in the Runway view and as a badge in All tasks (VERM-98):
 
   | State | Rule | Shown with |
   | --- | --- | --- |
@@ -282,7 +282,14 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       never reorders. A prerequisite's state is its link's resolved state, else its own Runway
       row's; its status name, for display only, is its Runway row's, else the one carried with
       the link (both adapters read it from the request they already make), else none.
-- [ ] A ticket blocked only by its own status shows the reason *Blocked by status, no linked
+- [x] In the Runway view each read ticket shows its state, its open blockers and any order
+      conflict. In All tasks a badge sits beside Runway #, in the list and on Kanban and Jira
+      cards, only for Blocked or Unknown; the full reason shows on hover and on keyboard focus,
+      and the badge never opens the row (Kevin, VERM-98).
+- [x] **Refresh** in the Runway view re-reads its tickets past the one-minute cache. A
+      successful status edit, in the detail panel or All tasks, re-reads the workspace's Runway
+      tickets, so a dependent's state follows its prerequisite. A refresh never writes the order.
+- [x] A ticket blocked only by its own status shows the reason *Blocked by status, no linked
       prerequisite* (decision E), or *Blocked by status. All linked prerequisites are resolved.*
       when it has resolved prerequisite links (Kevin's clarification of decision E, VERM-97).
 - [x] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`
@@ -296,17 +303,26 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       tracker can't be read, the saved choice is shown and can't be edited; closing keeps it,
       and **Reset to default** still removes it through the normal workspace save (VERM-96).
       Saves combined from the same starting document keep every field, the Master plan included.
-- [ ] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
+- [x] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
       In Progress)*, or *Blocked by PLAT-40 (external)* when no status name is known, with an
-      explicit **Add to Runway** action.
-- [ ] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.
+      explicit **Add to Runway** action, which inserts it immediately above its dependent; every
+      existing row keeps its relative order (VERM-98). The action names the dependent by its
+      stored ID, and its position is read inside the store transaction: a dependent that moved
+      still gets the blocker immediately above it, and one that was removed leaves the Runway
+      untouched. A switch of the active workspace while the add waits (A → B → A included)
+      cancels it, and a ticket already on the Runway under its readable key or its tracker ID is
+      refused inside the write gate.
+- [x] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.
       *Order conflict — SYNC-3 is #5, after this (#2)*, with an explicit
       **Move prerequisite above** action. Nothing moves until it is clicked. Raised only when
       both tickets are known to be open on this Runway; when either one's state is unknown, that
       uncertainty is shown instead (VERM-97). A Jira ticket with no resolution and no usable
       status role is unknown, never open, and a saved Runway row is found by entity ID or key even
-      when its tracker read failed.
-- [ ] Blocker state is computed on each refresh and held only in the renderer cache. A refresh
+      when its tracker read failed. **Move prerequisite above** moves the prerequisite immediately
+      above its dependent in one transaction; every other row keeps its relative order (VERM-98).
+      It too names the dependent by its stored ID, finds it inside the transaction, leaves the
+      Runway untouched when the dependent was removed, and is cancelled by a workspace switch.
+- [x] Blocker state is computed on each refresh and held only in the renderer cache. A refresh
       never writes the Runway order.
 
 ### Priority Desk (display only)
