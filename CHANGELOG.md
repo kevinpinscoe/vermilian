@@ -162,6 +162,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **AI features work with newer Claude models** (VERM-113). AI create task and Recommendations
+  no longer force the model to call their tool. Claude Opus 5.5, Claude Sonnet 5.5 and the
+  Fable and Mythos 5.1 and later models reject a forced tool call, so both features failed when
+  one of those models was set in Settings → AI. They now ask for the tool call and try once more
+  if the reply comes back as plain text. AI create task, Recommendations and Stand-up also leave
+  more room for the reply, because newer models always think first and that counts toward the
+  limit. A reply that is cut off or declined now says so, instead of reporting "no structured
+  output" or showing a truncated stand-up. **Test Claude key** now looks up the configured model
+  instead of sending a one-word message. It costs nothing, and it says when the key works but
+  the model name is wrong.
 - **All tasks could show the previous workspace's issues** (found under VERM-92). Its project
   issues were remembered by the time each read finished, and two projects' reads can finish in the
   same millisecond, so switching workspace could leave the old workspace's issues in the table.
