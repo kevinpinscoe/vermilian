@@ -16,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
+import { evidencePath } from './helpers/profiles';
 
 async function ready(app: ElectronApplication): Promise<Page> {
   const page = await app.firstWindow();
@@ -207,14 +208,6 @@ function insertV1Entry(db: DatabaseSync, workspace: string, issue: string, rank:
     `INSERT INTO runway_entry (workspace_id, issue_id, focus, focus_rank, why_now, deferred, updated_at)
      VALUES (?, ?, 1, ?, ?, 0, '2026-01-05T09:00:00.000Z')`,
   ).run(workspace, issue, rank, whyNow);
-}
-
-// Where the preview screenshots for the PR go: VERMILIAN_E2E_EVIDENCE_DIR, or
-// a throwaway temp directory.
-function evidenceDir(): string {
-  const dir = process.env.VERMILIAN_E2E_EVIDENCE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'vermilian-e2e-evidence-'));
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
 }
 
 test.describe('Runway snapshot import', () => {
@@ -477,10 +470,10 @@ test.describe('Runway snapshot import', () => {
       'This snapshot does not record when it was exported, so Vermilian cannot tell whether this computer has ' +
         'newer Runway changes. Importing replaces all local Runway data.',
     );
-    await page.screenshot({ path: path.join(evidenceDir(), 'v1-snapshot-preview.png') });
+    await page.screenshot({ path: evidencePath('v1-snapshot-preview.png') });
     await page
       .getByTestId('runway-import-replace-warning')
-      .screenshot({ path: path.join(evidenceDir(), 'v1-snapshot-warning.png') });
+      .screenshot({ path: evidencePath('v1-snapshot-warning.png') });
 
     await page.getByTestId('runway-import-confirm').click();
     await expect(page.getByText(/Imported Runway snapshot \(2 entries, 0 dismissals; Runway order empty\)/)).toBeVisible();
@@ -543,10 +536,10 @@ test.describe('Runway snapshot import', () => {
       await expect(page.getByTestId('runway-import-replace-warning')).toContainText(
         'The latest is the Priority Desk entry for jira:LOCAL-1 in workspace workspace-default',
       );
-      await page.screenshot({ path: path.join(evidenceDir(), 'v2-snapshot-preview.png') });
+      await page.screenshot({ path: evidencePath('v2-snapshot-preview.png') });
       await page
         .getByTestId('runway-import-replace-warning')
-        .screenshot({ path: path.join(evidenceDir(), 'v2-snapshot-warning.png') });
+        .screenshot({ path: evidencePath('v2-snapshot-warning.png') });
 
       await page.getByTestId('runway-import-confirm').click();
       await expect(page.getByText(/Imported Runway snapshot \(3 entries, 0 dismissals; Runway order 5 rows\)/)).toBeVisible();
@@ -638,7 +631,7 @@ test.describe('Runway snapshot import', () => {
     );
     // Shown before confirmation: the confirm button is there, not yet pressed.
     await expect(page.getByTestId('runway-import-confirm')).toBeEnabled();
-    await warning.screenshot({ path: path.join(evidenceDir(), 'dismissal-only-warning.png') });
+    await warning.screenshot({ path: evidencePath('dismissal-only-warning.png') });
     await page.getByTestId('runway-import-cancel').click();
     // Cancelling changed nothing.
     await withAppClosed((db) => {
@@ -678,7 +671,7 @@ test.describe('Runway snapshot import', () => {
         'export (Runway ticket jira:DEMO-102 in workspace workspace-default). Importing replaces all local Runway data.',
     );
     await expect(page.getByTestId('runway-import-confirm')).toBeEnabled();
-    await warning.screenshot({ path: path.join(evidenceDir(), 'removed-last-ticket-warning.png') });
+    await warning.screenshot({ path: evidencePath('removed-last-ticket-warning.png') });
     await page.getByTestId('runway-import-cancel').click();
     await withAppClosed((db) => {
       expect(db.prepare('SELECT count(*) AS n FROM runway_item').get()).toEqual({ n: 2 });
