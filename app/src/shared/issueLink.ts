@@ -31,6 +31,12 @@ export interface LinkedTicket {
    * prerequisite that may already be complete.
    */
   resolved: boolean | null;
+  /**
+   * The linked ticket's status name, for display only (VERM-97): "In
+   * Progress", "BLOCKED". Absent or null when the tracker gave none. Never
+   * decides a blocker state — `resolved` does.
+   */
+  status?: string | null;
 }
 
 export interface IssueLink {

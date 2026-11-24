@@ -54,6 +54,7 @@ export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): Is
           key: linked.idReadable,
           summary: linked.summary ?? '',
           resolved: resolvedState(linked.resolved),
+          status: statusName(linked.customFields),
         },
       });
     }
@@ -61,6 +62,20 @@ export function mapYouTrackLinks(links: readonly RawIssueLink[] | undefined): Is
   return out;
 }
 
+
+/**
+ * The linked issue's Status name (VERM-97), from the customFields the links
+ * embed already fetches: the first Status entry with a named value, so an
+ * orphaned text prototype of the same name is passed over. null when none.
+ */
+function statusName(customFields: RawLinkedIssue['customFields'] | undefined): string | null {
+  for (const f of customFields ?? []) {
+    if (f.name !== 'Status' || !f.value || typeof f.value !== 'object') continue;
+    const name = (f.value as { name?: unknown }).name;
+    if (typeof name === 'string' && name) return name;
+  }
+  return null;
+}
 
 /** A time: resolved. Explicit null: open. Omitted (or malformed): unknown. */
 function resolvedState(resolved: unknown): boolean | null {

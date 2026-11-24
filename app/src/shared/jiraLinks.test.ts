@@ -12,6 +12,15 @@ const issue = (key: string, s: ReturnType<typeof status> | null | undefined) => 
 });
 
 describe('mapJiraLinks (VERM-95)', () => {
+  it('carries the linked issue\'s status name, null when Jira gave none (VERM-97)', () => {
+    const [named, none] = mapJiraLinks([
+      { id: '1', type: BLOCKS, inwardIssue: issue('OPS-40', status('Impeded')) },
+      { id: '2', type: BLOCKS, inwardIssue: issue('OPS-41', undefined) },
+    ])!;
+    expect(named.issue.status).toBe('Impeded');
+    expect(none.issue.status).toBeNull();
+  });
+
   // OPS-956 is blocked by OPS-4089 (In Progress) and OPS-12 (Done), blocks
   // DEMO-7, and relates to DEMO-102.
   const raw = [
@@ -24,9 +33,9 @@ describe('mapJiraLinks (VERM-95)', () => {
 
   it('maps Blocks links to prerequisite and dependent with the linked issue\'s status category', () => {
     expect(links.slice(0, 3)).toEqual([
-      { type: 'Blocks', directed: true, direction: 'inward', verb: 'is blocked by', issue: { id: '14089', key: 'OPS-4089', summary: 'OPS-4089 summary', resolved: false } },
-      { type: 'Blocks', directed: true, direction: 'inward', verb: 'is blocked by', issue: { id: '112', key: 'OPS-12', summary: 'OPS-12 summary', resolved: true } },
-      { type: 'Blocks', directed: true, direction: 'outward', verb: 'blocks', issue: { id: '17', key: 'DEMO-7', summary: 'DEMO-7 summary', resolved: false } },
+      { type: 'Blocks', directed: true, direction: 'inward', verb: 'is blocked by', issue: { id: '14089', key: 'OPS-4089', summary: 'OPS-4089 summary', resolved: false, status: 'In Progress' } },
+      { type: 'Blocks', directed: true, direction: 'inward', verb: 'is blocked by', issue: { id: '112', key: 'OPS-12', summary: 'OPS-12 summary', resolved: true, status: 'Done' } },
+      { type: 'Blocks', directed: true, direction: 'outward', verb: 'blocks', issue: { id: '17', key: 'DEMO-7', summary: 'DEMO-7 summary', resolved: false, status: 'To Do' } },
     ]);
     expect(links.map((l) => [l.issue.key, linkRole(l)])).toEqual([
       ['OPS-4089', 'prerequisite'], ['OPS-12', 'prerequisite'], ['DEMO-7', 'dependent'], ['DEMO-102', null],

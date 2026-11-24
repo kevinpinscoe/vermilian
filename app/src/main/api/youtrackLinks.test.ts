@@ -24,11 +24,24 @@ const READ_14: RawIssueLink[] = [
 describe('mapYouTrackLinks (VERM-94)', () => {
   const links = mapYouTrackLinks(READ_14);
 
+  it('carries the linked issue\'s Status name, passing over a text prototype, null when none (VERM-97)', () => {
+    const [named, none] = mapYouTrackLinks([{
+      direction: 'INWARD',
+      linkType: DEPEND,
+      issues: [
+        { ...linked('PLAT-40'), customFields: [{ name: 'Type', $type: 'x', value: { name: 'Task' } }, { name: 'Status', $type: 'x', value: 'orphan' }, { name: 'Status', $type: 'x', value: { name: 'In Progress' } }] },
+        linked('PLAT-42'),
+      ],
+    }]);
+    expect(named.issue.status).toBe('In Progress');
+    expect(none.issue.status).toBeNull();
+  });
+
   it('maps a Depend link in each direction, with the wording from this side and the linked resolved state', () => {
     expect(links.slice(0, 3)).toEqual([
-      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-SYNC-3', key: 'SYNC-3', summary: 'SYNC-3 summary', resolved: false } },
-      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-SYNC-2', key: 'SYNC-2', summary: 'SYNC-2 summary', resolved: true } },
-      { type: 'Depend', directed: true, direction: 'outward', verb: 'is required for', issue: { id: '2-PLAT-41', key: 'PLAT-41', summary: 'PLAT-41 summary', resolved: false } },
+      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-SYNC-3', key: 'SYNC-3', summary: 'SYNC-3 summary', resolved: false, status: null } },
+      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-SYNC-2', key: 'SYNC-2', summary: 'SYNC-2 summary', resolved: true, status: null } },
+      { type: 'Depend', directed: true, direction: 'outward', verb: 'is required for', issue: { id: '2-PLAT-41', key: 'PLAT-41', summary: 'PLAT-41 summary', resolved: false, status: null } },
     ]);
   });
 

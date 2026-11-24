@@ -256,9 +256,12 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
   | State | Rule | Shown with |
   | --- | --- | --- |
   | **Done** | The ticket is resolved | kept in place |
-  | **Blocked** | A prerequisite link points to an unresolved ticket, or the status is `BLOCKED` with no link | each blocking key, its status, and its Runway # here or *external* |
-  | **Ready** | Unresolved, links read, every prerequisite resolved | — |
-  | **Unknown** | Links could not be read: offline, not readable with this credential, link type not mapped, or stale | the reason |
+  | **Blocked** | A prerequisite is known to be open, or the ticket's own status is blocked (YouTrack `BLOCKED`, or a Jira status mapped to blocked), even when every linked prerequisite is resolved | each open blocking key, its status, and its Runway # here or *external*; any prerequisite whose state is unknown |
+  | **Ready** | Unresolved, links read, every prerequisite known and resolved | — |
+  | **Unknown** | Nothing open is known, but the links could not be read (offline, not readable with this credential, stale) or a prerequisite's state was not reported | the reason |
+
+  Precedence: Done, then Blocked, then Unknown, then Ready. A known open blocker wins over an
+  unknown one (Kevin, VERM-97).
 
 - [x] Links are read into a provider-neutral `IssueLink` on each ticket: link type, direction as
       that ticket sees it, the wording from its side (the link type's name when that direction has
@@ -273,8 +276,15 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       workspace maps that project's statuses; otherwise when Jira's status category is Done. A
       linked ticket with no readable status is *unknown*. A Jira link type whose two wordings are
       the same (`Relates`) is undirected (VERM-95).
-- [ ] A YouTrack `BLOCKED` status with no prerequisite link shows the reason
-      *status BLOCKED, no linked prerequisite*.
+- [x] The blocker state engine (`shared/blockerState.ts`, VERM-97) computes these states, the
+      open and unknown prerequisites, and order conflicts, as a pure function of the ticket, its
+      links, the workspace's prerequisite link types and the Runway order. It never writes and
+      never reorders. A prerequisite's state is its link's resolved state, else its own Runway
+      row's; its status name, for display only, is its Runway row's, else the one carried with
+      the link (both adapters read it from the request they already make), else none.
+- [ ] A ticket blocked only by its own status shows the reason *Blocked by status, no linked
+      prerequisite* (decision E), or *Blocked by status. All linked prerequisites are resolved.*
+      when it has resolved prerequisite links (Kevin's clarification of decision E, VERM-97).
 - [x] Prerequisite link types are configurable per workspace. Defaults: YouTrack `Depend`
       (*depends on* is a prerequisite) and Jira `Blocks` (*is blocked by* is a prerequisite).
       `Subtask` and parent links are never blockers. Chosen in Manage workspaces →
@@ -287,10 +297,13 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
       and **Reset to default** still removes it through the normal workspace save (VERM-96).
       Saves combined from the same starting document keep every field, the Master plan included.
 - [ ] A blocker outside the Runway shows as *external*, e.g. *Blocked by PLAT-40 (external,
-      In Progress)*, with an explicit **Add to Runway** action.
+      In Progress)*, or *Blocked by PLAT-40 (external)* when no status name is known, with an
+      explicit **Add to Runway** action.
 - [ ] A prerequisite positioned after its dependent shows an **Order conflict** badge, e.g.
       *Order conflict — SYNC-3 is #5, after this (#2)*, with an explicit
-      **Move prerequisite above** action. Nothing moves until it is clicked.
+      **Move prerequisite above** action. Nothing moves until it is clicked. Raised only when
+      both tickets are known to be open on this Runway; when the prerequisite's state is unknown,
+      that uncertainty is shown instead (VERM-97).
 - [ ] Blocker state is computed on each refresh and held only in the renderer cache. A refresh
       never writes the Runway order.
 
