@@ -6,8 +6,9 @@
 // "Heading box inside dialog box" alone would pass on the broken layout,
 // because an inset of 0 still counts as inside — the VERM-116 defect was a
 // heading flush against the corner. So this measures clearance. Action
-// buttons are scrolled into view first: one at the end of long content must be
-// reachable and unclipped, not visible without scrolling.
+// buttons are scrolled into view first — vertically only: one at the end of
+// long content must be reachable and unclipped, not visible without
+// scrolling. Content wider than its scroll area is reported too.
 
 import fs from 'fs';
 import { expect, test, type Locator } from '@playwright/test';
@@ -31,10 +32,40 @@ export interface DialogLayoutMeasurement {
    * dialog's content column — the content-box overflow VERM-109 and VERM-118 found.
    */
   noticesOutsideContent: number;
+  /** Scroll areas in the dialog whose content is wider than they are. */
+  horizontalOverflow: number;
+  /** Which scroll area, by how much, and its widest descendant. */
+  overflowDetails: string[];
 }
 
-const inside = (t: Box, d: Box) => t.x >= d.x && t.y >= d.y && t.x + t.width <= d.x + d.width && t.y + t.height <= d.y + d.height;
+// 1px tolerance for sub-pixel layout; real clipping is whole pixels or more.
+const inside = (t: Box, d: Box) =>
+  t.x >= d.x - 1 && t.y >= d.y - 1 && t.x + t.width <= d.x + d.width + 1 && t.y + t.height <= d.y + d.height + 1;
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+/**
+ * Bring an element into view by scrolling its scroll container vertically only.
+ * Playwright's scrollIntoViewIfNeeded also scrolls sideways, which would hide
+ * exactly the right-edge clipping this check exists to catch.
+ */
+async function scrollIntoViewVertically(loc: Locator): Promise<void> {
+  await loc.evaluate((el) => {
+    let p = el.parentElement;
+    while (p) {
+      const st = getComputedStyle(p);
+      if (/(auto|scroll)/.test(st.overflowY) && p.scrollHeight > p.clientHeight) break;
+      p = p.parentElement;
+    }
+    if (!p) return;
+    p.scrollLeft = 0;
+    const r = el.getBoundingClientRect();
+    const pr = p.getBoundingClientRect();
+    // A small margin past the edge (the browser clamps it at the end), so the
+    // element is not left exactly on the scroll area's — and dialog's — edge.
+    if (r.bottom > pr.bottom) p.scrollTop += r.bottom - pr.bottom + 16;
+    else if (r.top < pr.top) p.scrollTop -= pr.top - r.top + 16;
+  }).catch(() => {});
+}
 
 /** The dialog's close button (Vibe's default test id carries the modal id as a suffix). */
 export function closeButton(dialog: Locator): Locator {
@@ -54,8 +85,9 @@ export async function measureDialogLayout(
   const fit: Record<string, boolean> = {};
   for (const [name, loc] of Object.entries(buttons)) {
     // A button at the end of long, scrolling content is below the fold by
-    // design; it must be reachable and not clipped, so scroll it into view.
-    await loc.scrollIntoViewIfNeeded().catch(() => {});
+    // design; it must be reachable and not clipped, so scroll it into view —
+    // vertically only, so sideways clipping still shows.
+    await scrollIntoViewVertically(loc);
     const b = await loc.boundingBox();
     if (!b) return null;
     fit[name] = inside(b, d);
@@ -67,12 +99,27 @@ export async function measureDialogLayout(
   const content = await dialog.locator('[data-testid^="modal-content"]').first().boundingBox();
   for (const n of await dialog.locator('[role="alert"], [role="status"]').all()) {
     if (!content || !(await n.isVisible())) continue;
-    await n.scrollIntoViewIfNeeded().catch(() => {});
+    await scrollIntoViewVertically(n);
     const b = await n.boundingBox();
     const c = await dialog.locator('[data-testid^="modal-content"]').first().boundingBox();
     if (b && c && (b.x < c.x - 1 || b.x + b.width > c.x + c.width + 1)) noticesOutsideContent++;
   }
+  // Content wider than its scroll area (scrollWidth > clientWidth) is the
+  // content-box overflow itself: it either clips at the dialog's edge or
+  // forces a sideways scrollbar.
+  const overflowing = await dialog.evaluate((d) =>
+    [...d.querySelectorAll<HTMLElement>('*')]
+      .filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowX) && e.scrollWidth > e.clientWidth + 1)
+      .map((e) => {
+        // The widest child names what is too wide.
+        const kids = [...e.querySelectorAll<HTMLElement>('*')];
+        const widest = kids.reduce<HTMLElement | null>((w, k) => (!w || k.getBoundingClientRect().right > w.getBoundingClientRect().right ? k : w), null);
+        const name = (el: Element | null) => el ? `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''}.${String(el.className).split(' ')[0]}` : '?';
+        return `${name(e)} ${e.scrollWidth}>${e.clientWidth}px (widest: ${name(widest)})`;
+      }));
   return {
+    horizontalOverflow: overflowing.length,
+    overflowDetails: overflowing,
     noticesOutsideContent,
     headingTopGapPx: Math.round(h.y - d.y),
     headingLeftGapPx: Math.round(h.x - d.x),
@@ -96,6 +143,7 @@ export function layoutProblems(m: DialogLayoutMeasurement | null): string {
   if (!m.headingInsideDialog) problems.push('heading extends past dialog');
   if (m.headingOverlapsCloseButton) problems.push('heading overlaps the close button');
   for (const [name, ok] of Object.entries(m.buttons)) if (!ok) problems.push(`${name} extends past dialog`);
+  if (m.horizontalOverflow > 0) problems.push(`content overflows sideways in ${m.horizontalOverflow} scroll area(s)`);
   if (m.noticesOutsideContent > 0) problems.push(`${m.noticesOutsideContent} notice(s) run past the content column`);
   return problems.length ? problems.join('; ') : 'ok';
 }

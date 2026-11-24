@@ -29,6 +29,7 @@ test.describe('Stand-Up dialog heading layout (VERM-116)', () => {
 
     // Config step — and its workspace scoping line is unchanged (VERM-48).
     await expectDialogLayout('standup-config', dialog, dialog.getByRole('heading', { name: 'Daily Stand-Up', exact: true }), {
+      Cancel: dialog.locator('button:not([data-testid^="modal-close-button"])').filter({ hasText: /^Cancel$/ }).first(),
       Generate: page.locator('[data-testid="standup-generate-btn"]'),
     });
     await expect(page.locator('[data-testid="standup-workspace"]')).toHaveText(/This stand-up covers .+ only\./);
@@ -36,7 +37,11 @@ test.describe('Stand-Up dialog heading layout (VERM-116)', () => {
     // Report step.
     await page.locator('[data-testid="standup-generate-btn"]').click();
     await expect(page.locator('[data-testid="standup-report-body"]')).toBeVisible();
+    const action = (text: string) => dialog.locator('button:not([data-testid^="modal-close-button"])').filter({ hasText: text }).first();
     await expectDialogLayout('standup-report', dialog, dialog.getByRole('heading', { name: /^Daily Stand-Up — / }), {
+      Regenerate: action('Regenerate'),
+      'Copy to clipboard': action('Copy to clipboard'),
+      'Save to daily notes': action('Save to daily notes'),
       Close: dialog.locator('button:not([data-testid^="modal-close-button"])').filter({ hasText: /^Close$/ }).first(),
     });
   });

@@ -52,6 +52,10 @@
 
 .name {
   flex: 1;
+  /* Let the name give way so the row's actions always fit the dialog: inside
+     ModalBasicLayout's padded content the row ran 20px past the edge and
+     clipped Delete (VERM-118). A long name truncates with an ellipsis. */
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -71,6 +75,10 @@
 
 .nameText {
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .activeBadge {

@@ -46,6 +46,7 @@ test.describe('Dialogs opened from the board', () => {
     await tid(page, 'new-task-btn').click();
     const dialog = page.locator('#create-task-modal');
     await expectDialogLayout('create-task', dialog, dialog.getByRole('heading', { name: 'Create task', exact: true }), {
+      Cancel: textButton(dialog, 'Cancel'),
       Create: tid(page, 'task-create-btn'),
     });
   });
@@ -57,12 +58,15 @@ test.describe('Dialogs opened from the board', () => {
     await tid(page, 'ai-create-btn').click();
     const dialog = page.locator('#ai-create-modal');
     await expectDialogLayout('ai-create', dialog, dialog.getByRole('heading', { name: 'AI create task', exact: true }), {
+      Cancel: textButton(dialog, 'Cancel'),
       Generate: tid(page, 'ai-generate-btn'),
     });
 
     await page.locator('#ai-description').fill('Fix the login crash on Safari — critical, JIRA-456');
     await tid(page, 'ai-generate-btn').click();
     await expectDialogLayout('ai-create-review', dialog, dialog.getByRole('heading', { name: 'Review AI-generated task', exact: true }), {
+      'Re-describe': dialog.locator('button').filter({ hasText: 'Re-describe' }).first(),
+      Cancel: textButton(dialog, 'Cancel'),
       Create: tid(page, 'ai-create-submit'),
     });
   });
@@ -85,7 +89,12 @@ test.describe('Dialogs opened from the board', () => {
     const page = await ready(app);
     await tid(page, 'jira-list-btn').click();
     const dialog = page.locator('#jira-list-modal');
+    // Measure the populated list: the heading and Close are also there while
+    // it loads and after an error, so wait for the table and its rows.
+    await expect(tid(page, 'jira-list-table')).toBeVisible({ timeout: 15_000 });
+    await expect(tid(page, 'jira-list-row').first()).toBeVisible();
     await expectDialogLayout('jira-list', dialog, dialog.getByRole('heading', { name: 'Jira — open issues assigned to me' }), {
+      Refresh: textButton(dialog, 'Refresh'),
       Close: textButton(dialog, 'Close'),
     });
   });
@@ -99,6 +108,8 @@ test.describe('Jira list without a Jira profile', () => {
     const dialog = page.locator('#jira-list-modal');
     await expect(tid(page, 'jira-list-not-configured')).toBeVisible({ timeout: 15_000 });
     await expectDialogLayout('jira-list-not-configured', dialog, dialog.getByRole('heading', { name: 'Jira — open issues assigned to me' }), {
+      'Open Settings': tid(page, 'jira-list-open-settings-btn'),
+      Refresh: textButton(dialog, 'Refresh'),
       Close: textButton(dialog, 'Close'),
     });
   });
@@ -114,6 +125,7 @@ test.describe('Settings confirmations', () => {
     const dialog = page.locator('#discard-credentials-modal');
     await expectDialogLayout('discard-credentials', dialog, dialog.getByRole('heading', { name: 'Discard unsaved changes?' }), {
       'Keep editing': textButton(dialog, 'Keep editing'),
+      'Discard changes': textButton(dialog, 'Discard changes'),
     });
   });
 
@@ -232,7 +244,24 @@ test.describe('Workspace dialogs (per-workspace storage)', () => {
 
   test('Manage workspaces', async () => {
     const dialog = await openManage();
+    // Every workspace row's actions too (reorder, AI credential, Master plan,
+    // Prerequisites, and Delete — the rightmost).
+    const rows = tid(page, 'workspace-row');
+    await expect(rows).toHaveCount(2);
+    const actions: Record<string, Locator> = {};
+    for (const row of await rows.all()) {
+      const ws = await row.getAttribute('data-ws-name');
+      const buttons = row.locator('button');
+      for (let i = 0; i < (await buttons.count()); i++) {
+        const b = buttons.nth(i);
+        if (!(await b.isVisible())) continue;
+        const label = (await b.getAttribute('aria-label')) || (await b.textContent())?.trim() || `button ${i}`;
+        actions[`${ws}: ${label}`] = b;
+      }
+    }
+    expect(Object.keys(actions).some((k) => k.endsWith(': Delete'))).toBe(true);
     await expectDialogLayout('manage-workspaces', dialog, dialog.getByRole('heading', { name: 'Manage workspaces' }), {
+      ...actions,
       Done: textButton(dialog, 'Done'),
     });
   });
@@ -244,6 +273,7 @@ test.describe('Workspace dialogs (per-workspace storage)', () => {
     await expectDialogLayout('workspace-ai-credential', dialog, dialog.getByRole('heading', { name: /^AI credential/ }), {
       Save: tid(page, 'workspace-ai-save'),
       None: tid(page, 'workspace-ai-none'),
+      Cancel: textButton(dialog, 'Cancel'),
     });
   });
 
@@ -254,6 +284,7 @@ test.describe('Workspace dialogs (per-workspace storage)', () => {
     await expectDialogLayout('workspace-master-plan', dialog, dialog.getByRole('heading', { name: /^Master plan/ }), {
       Save: tid(page, 'workspace-master-plan-save'),
       None: tid(page, 'workspace-master-plan-none'),
+      Cancel: textButton(dialog, 'Cancel'),
     });
   });
 
@@ -264,6 +295,7 @@ test.describe('Workspace dialogs (per-workspace storage)', () => {
     await expectDialogLayout('workspace-prerequisites', dialog, dialog.getByRole('heading', { name: /^Prerequisites/ }), {
       Save: tid(page, 'workspace-prerequisites-save'),
       Close: tid(page, 'workspace-prerequisites-close'),
+      'Reset to default': tid(page, 'workspace-prerequisites-reset'),
     });
   });
 

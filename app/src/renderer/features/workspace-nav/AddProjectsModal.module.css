@@ -35,6 +35,9 @@
   align-items: center;
   gap: 10px;
   width: 100%;
+  /* width: 100% plus padding overflowed the list by 16px under content-box,
+     so every list scrolled sideways (VERM-118). */
+  box-sizing: border-box;
   padding: 7px 8px;
   border: none;
   background: none;

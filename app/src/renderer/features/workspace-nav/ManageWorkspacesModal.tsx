@@ -198,7 +198,7 @@ export function ManageWorkspacesModal({
                       }}
                     />
                   ) : (
-                    <button type="button" className={styles.name} onClick={() => startRename(ws)} title="Click to rename">
+                    <button type="button" className={styles.name} onClick={() => startRename(ws)} title={`${ws.name} — click to rename`}>
                       <span className={styles.nameText}>{ws.name}</span>
                       {ws.id === config.activeWorkspaceId && <span className={styles.activeBadge}>active</span>}
                     </button>
