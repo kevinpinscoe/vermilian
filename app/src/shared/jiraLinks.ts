@@ -88,6 +88,7 @@ export function mapJiraLinks(raw: unknown, statusRolesFor: JiraStatusRolesFor = 
         key,
         summary: text(other.fields?.summary),
         resolved: resolvedOf(other, key, statusRolesFor),
+        status: text(other.fields?.status?.name) || null,
       },
     });
   }

@@ -89,7 +89,7 @@ describe('getIssues', () => {
         {
           id: '2-14', idReadable: 'READ-14', summary: 'Sync read state', resolved: null, customFields: [],
           links: [
-            { direction: 'INWARD', linkType: DEPEND, issues: [{ id: '2-3', idReadable: 'SYNC-3', summary: 'Merge library', resolved: 1_790_000_000_000, customFields: [] }] },
+            { direction: 'INWARD', linkType: DEPEND, issues: [{ id: '2-3', idReadable: 'SYNC-3', summary: 'Merge library', resolved: 1_790_000_000_000, customFields: [{ name: 'Status', value: { name: 'Done' } }] }] },
             { direction: 'OUTWARD', linkType: DEPEND, issues: [{ id: '2-41', idReadable: 'PLAT-41', summary: 'Token service', resolved: null, customFields: [] }] },
           ],
         },
@@ -99,8 +99,8 @@ describe('getIssues', () => {
     const requested = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
     expect(requested).toContain('links(direction,linkType(name,sourceToTarget,targetToSource,directed),issues(id,idReadable,summary,resolved,');
     expect(issue.links).toEqual([
-      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-3', key: 'SYNC-3', summary: 'Merge library', resolved: true } },
-      { type: 'Depend', directed: true, direction: 'outward', verb: 'is required for', issue: { id: '2-41', key: 'PLAT-41', summary: 'Token service', resolved: false } },
+      { type: 'Depend', directed: true, direction: 'inward', verb: 'depends on', issue: { id: '2-3', key: 'SYNC-3', summary: 'Merge library', resolved: true, status: 'Done' } },
+      { type: 'Depend', directed: true, direction: 'outward', verb: 'is required for', issue: { id: '2-41', key: 'PLAT-41', summary: 'Token service', resolved: false, status: null } },
     ]);
   });
 
