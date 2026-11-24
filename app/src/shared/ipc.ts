@@ -14,6 +14,7 @@ import type {
   SaveWorkspaceArticleResult,
 } from './workspaceArticle';
 import type { CreateFieldOptions } from './createFieldOptions';
+import type { ProjectFieldValues } from './projectFieldValues';
 import type { ActivationResult, RollbackResult, StorageStatusView } from './storageActivation';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from './workspaceMigration';
 import type {
@@ -154,6 +155,7 @@ export const IPC = {
   // The selected project's own Status/Priority/Category values and defaults
   // for the create forms (VERM-115), on the active workspace's connection.
   getCreateFieldOptions: 'youtrack:getCreateFieldOptions',
+  getProjectFieldValues: 'youtrack:getProjectFieldValues',
   deleteIssue: 'youtrack:deleteIssue',
   moveIssue: 'youtrack:moveIssue',
   // Priority Desk "Ask for recommendation" (VERM-8, docs/requirements.md §
@@ -724,6 +726,23 @@ export interface CreateFieldOptionsResult {
   refused?: 'not-active';
 }
 
+// A project's select-field values (VERM-117), read on the named workspace's
+// own connection. `project` is the project's short name or id; the result
+// names both the workspace and the project it answers for.
+export interface ProjectFieldValuesArgs {
+  workspaceId: string;
+  project: string;
+}
+
+export interface ProjectFieldValuesResult {
+  ok: boolean;
+  workspaceId: string;
+  project: string;
+  values?: ProjectFieldValues;
+  error?: string;
+  refused?: 'not-active';
+}
+
 export interface AiCreateTaskArgs {
   description: string;
   projects: { id: string; name: string }[];
@@ -945,6 +964,7 @@ export interface VermilianAPI {
   patchIssue(args: PatchIssueArgs): Promise<{ ok: boolean; error?: string }>;
   createIssue(args: CreateIssueArgs): Promise<CreateIssueResult>;
   getCreateFieldOptions(args: CreateFieldOptionsArgs): Promise<CreateFieldOptionsResult>;
+  getProjectFieldValues(args: ProjectFieldValuesArgs): Promise<ProjectFieldValuesResult>;
   deleteIssue(issueId: string): Promise<{ ok: boolean; error?: string }>;
   moveIssue(args: MoveIssueArgs): Promise<{ ok: boolean; error?: string }>;
   quitApp(): Promise<void>;

@@ -55,6 +55,8 @@ import {
   type CreateIssueResult,
   type CreateFieldOptionsArgs,
   type CreateFieldOptionsResult,
+  type ProjectFieldValuesArgs,
+  type ProjectFieldValuesResult,
   type AiCreateTaskArgs,
   type AiCreateTaskResult,
   type StandupGenerateArgs,
@@ -1124,6 +1126,20 @@ export function registerIpc(): void {
       } catch (e) {
         const a = (args ?? {}) as Partial<CreateFieldOptionsArgs>;
         return { ok: false, workspaceId: a.workspaceId ?? '', projectId: a.projectId ?? '', error: (e as { message?: string }).message ?? 'Could not read the project fields.' };
+      }
+    },
+  );
+
+  // Select-field values for the boards, Priority Desk and detail dropdowns
+  // (VERM-117), on the named workspace's own connection.
+  ipcMain.handle(
+    IPC.getProjectFieldValues,
+    async (_e, args: unknown): Promise<ProjectFieldValuesResult> => {
+      try {
+        return await createTask.getFieldValues(args);
+      } catch (e) {
+        const a = (args ?? {}) as Partial<ProjectFieldValuesArgs>;
+        return { ok: false, workspaceId: a.workspaceId ?? '', project: a.project ?? '', error: (e as { message?: string }).message ?? 'Could not read the project fields.' };
       }
     },
   );

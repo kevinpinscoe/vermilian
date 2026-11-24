@@ -258,3 +258,37 @@ describe('createTaskService.aiCreate (VERM-115)', () => {
     expect(h.readsBy).toEqual([]);
   });
 });
+
+describe('createTaskService.getFieldValues (VERM-117)', () => {
+  it("returns the project's select-field values, read on the named workspace's connection", async () => {
+    const h = harness({ projects: { VERM: metadata(['Triage', 'Shipped']) } });
+    const r = await h.svc.getFieldValues({ workspaceId: 'ws-a', project: 'VERM' });
+    expect(r.ok).toBe(true);
+    expect(r).toMatchObject({ workspaceId: 'ws-a', project: 'VERM' });
+    expect(r.values?.fields.status?.values).toEqual(['Triage', 'Shipped']);
+    expect(r.values?.fields.priority?.values).toEqual(['High', 'Low']);
+    expect(r.values?.fields.category?.present).toBe(false);
+    expect(h.readsBy).toEqual([{ workspaceId: 'ws-a', projectId: 'VERM' }]);
+  });
+
+  it('makes no read for a workspace that is not active', async () => {
+    const h = harness({ active: 'ws-b' });
+    const r = await h.svc.getFieldValues({ workspaceId: 'ws-a', project: 'p-1' });
+    expect(r).toMatchObject({ ok: false, refused: 'not-active', workspaceId: 'ws-a', project: 'p-1' });
+    expect(h.reads).toHaveLength(0);
+  });
+
+  it('discards the answer when the workspace switches during the read', async () => {
+    const h = harness({ switchDuringRead: true });
+    const r = await h.svc.getFieldValues({ workspaceId: 'ws-a', project: 'p-1' });
+    expect(r).toMatchObject({ ok: false, refused: 'not-active' });
+    expect(r.values).toBeUndefined();
+  });
+
+  it('reports a read failure and a missing connection without values', async () => {
+    expect((await harness().svc.getFieldValues({ workspaceId: 'ws-a', project: 'missing' })).error).toContain('not found');
+    const noConn = await harness({ connectionError: 'No YouTrack token' }).svc.getFieldValues({ workspaceId: 'ws-a', project: 'p-1' });
+    expect(noConn).toMatchObject({ ok: false, error: 'No YouTrack token' });
+    expect((await harness().svc.getFieldValues({})).ok).toBe(false);
+  });
+});

@@ -8,7 +8,7 @@ import { refFromE2eFakeYouTrackToken } from '../../shared/e2eFakeCredentials';
 import type { ArticleFetch } from '../services/masterPlan';
 import type { BoardIssue, BoardIssueFields, IssueDetail, ParentEpic } from '../../shared/workspace';
 import type { IssueLink } from '../../shared/issueLink';
-import { FIELD_DEFS, FIELD_KEYS, type FieldKey } from '../../shared/fields';
+import { FIELD_KEYS, type FieldKey } from '../../shared/fields';
 import { parseYouTrackProjectFields, type YouTrackProjectMetadata } from '../../shared/youtrackProjectFields';
 import { buildStandupQuery, standupGroupFor, type StandupPlan } from '../../shared/youtrackStandup';
 import type {
@@ -239,7 +239,7 @@ export async function getPriorityOrder(_url: string, _token: string, projectShor
   } catch { /* unseeded */ }
   const own = seeded[projectShortName];
   if (Array.isArray(own)) return own.filter((v): v is string => typeof v === 'string');
-  return [...FIELD_DEFS.priority.options];
+  return [...FAKE_PRIORITY_VALUES];
 }
 
 // The live server's four link types (checked 2026-11-23), plus a custom type
@@ -501,19 +501,47 @@ export function fakeStatusValues(projectShortName: string): Array<{ name: string
     .map((v) => ({ name: v.name, isResolved: v.isResolved === true }));
 }
 
-// Each fake project's create-form fields (VERM-115). Seeded per project by
+// Each fake project's select fields (VERM-115 create form, VERM-117 boards,
+// Priority Desk and detail dropdowns). Seeded per project by
 // VERMILIAN_E2E_YT_CREATE_FIELDS as JSON
 //   { "<shortName>": { "Status": { "values": [...], "default": "Triage" },
-//                      "Category": null, "Priority": { "values": [...] } } }
-// where null removes the field from that project. Unseeded fields keep the
-// built-in values below (Category mirrors the live shared bundle 158-8).
+//                      "Category": null, "Affected host": { "values": [...],
+//                      "archived": ["old-host"] } } }
+// where null removes the field from that project and `archived` adds
+// archived bundle values (shown when an issue holds one, never offered).
+// Unseeded fields keep the built-in values below — fixture data for the fake
+// only; the app itself reads every value from the project (VERM-117).
 const FAKE_CATEGORY_VALUES = [
   'PROJECT', 'OPS', 'COMPANY', 'SERVICE', 'PRODUCTIVITY', 'INBOX', 'ADMIN',
   'RELEASE', 'FINOPS', 'SECURITY', 'INGEST', 'HACKATHON', 'Playbook',
 ];
 
-interface FakeCreateField { values: string[]; default: string | null }
-type FakeCreateFields = Partial<Record<'Status' | 'Priority' | 'Category', FakeCreateField | null>> & {
+// The other select fields' built-in fixture values (VERM-117), mirroring the
+// live shared bundles as they stood on 2026-11-24.
+const FAKE_OTHER_SELECT_FIELDS: Record<string, { $type: string; values: string[] }> = {
+  'Project health': { $type: 'EnumProjectCustomField', values: ['Green', 'Amber', 'Red'] },
+  'Reporting cadence': { $type: 'EnumProjectCustomField', values: ['Daily', 'Sprint', 'Monthly', 'Annual', 'On demand'] },
+  'Issue domain': { $type: 'EnumProjectCustomField', values: ['Personal', 'Employer work', 'Client work'] },
+  'Edit host': { $type: 'EnumProjectCustomField', values: ['FLDW', 'core', 'mac', 'mac-container'] },
+  'Affected host': {
+    $type: 'EnumProjectCustomField',
+    values: [
+      'FLDW', 'core', 'mac', 'mac-container', 'web1', 'mail1', 'john', 'obs',
+      'postgres', 'wazuh', 'aws-agent-1', 'home-k3s-dev', 'home-k3s-lab',
+      'home-k3s-prod', 'dev-agents-1', 'dev-servers-1', 'lab-agents-1',
+      'lab-agents-2', 'lab-servers-1', 'prod-agents-1', 'prod-servers-1',
+    ],
+  },
+  Focus: { $type: 'EnumProjectCustomField', values: ['Yes'] },
+};
+
+// The fake's built-in Priority values, most urgent first.
+export const FAKE_PRIORITY_VALUES = ['Show-stopper', 'Critical', 'Major', 'Normal', 'Minor'];
+
+const SEEDABLE_SELECT_FIELDS = ['Status', 'Priority', 'Category', ...Object.keys(FAKE_OTHER_SELECT_FIELDS)];
+
+interface FakeCreateField { values: string[]; default: string | null; archived?: string[] }
+type FakeCreateFields = Partial<Record<string, FakeCreateField | null>> & {
   // `Date time entered`'s field type ("date and time" unless seeded); null removes it.
   dateTimeEntered?: string | null;
 };
@@ -530,15 +558,17 @@ function fakeCreateFields(projectShortName: string): FakeCreateFields {
     const t = (own as Record<string, unknown>)['Date time entered'];
     out.dateTimeEntered = typeof t === 'string' ? t : null;
   }
-  for (const name of ['Status', 'Priority', 'Category'] as const) {
+  const strings = (v: unknown) => (Array.isArray(v) ? (v.filter((x) => typeof x === 'string') as string[]) : []);
+  for (const name of SEEDABLE_SELECT_FIELDS) {
     if (!(name in own)) continue;
     const f = (own as Record<string, unknown>)[name];
     if (f === null) { out[name] = null; continue; }
-    const values = Array.isArray((f as { values?: unknown })?.values)
-      ? ((f as { values: unknown[] }).values.filter((v) => typeof v === 'string') as string[])
-      : [];
     const d = (f as { default?: unknown })?.default;
-    out[name] = { values, default: typeof d === 'string' ? d : null };
+    out[name] = {
+      values: strings((f as { values?: unknown })?.values),
+      default: typeof d === 'string' ? d : null,
+      archived: strings((f as { archived?: unknown })?.archived),
+    };
   }
   return out;
 }
@@ -588,7 +618,12 @@ async function readFakeFieldMetadata(url: string, token: string, projectIdOrShor
       $type,
       canBeEmpty: name !== 'Status',
       defaultValues: f.default ? [{ name: f.default }] : [],
-      bundle: { values: f.values.map((v, ordinal) => ({ name: v, ordinal, ...extra(v) })) },
+      bundle: {
+        values: [
+          ...f.values.map((v, ordinal) => ({ name: v, ordinal, ...extra(v) })),
+          ...(f.archived ?? []).map((v, i) => ({ name: v, ordinal: f.values.length + i, archived: true, ...extra(v) })),
+        ],
+      },
     });
   if (seeded.Priority !== null) add('Priority', 'EnumProjectCustomField', seeded.Priority ?? { values: priority, default: null });
   if (seeded.Status !== null) {
@@ -597,6 +632,9 @@ async function readFakeFieldMetadata(url: string, token: string, projectIdOrShor
     add('Status', 'StateProjectCustomField', seeded.Status ?? { values: status.map((v) => v.name), default: 'To do' }, (v) => ({ isResolved: resolved.has(v) }));
   }
   if (seeded.Category !== null) add('Category', 'StateProjectCustomField', seeded.Category ?? { values: FAKE_CATEGORY_VALUES, default: null });
+  for (const [name, f] of Object.entries(FAKE_OTHER_SELECT_FIELDS)) {
+    if (seeded[name] !== null) add(name, f.$type, seeded[name] ?? { values: f.values, default: null });
+  }
   if (seeded.dateTimeEntered !== null) {
     raw.push({ field: { name: 'Date time entered', fieldType: { id: seeded.dateTimeEntered ?? 'date and time' } }, $type: 'SimpleProjectCustomField', canBeEmpty: true });
   }
