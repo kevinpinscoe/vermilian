@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button, Text, Loader, Tooltip } from '@vibe/core';
+import { Modal, ModalBasicLayout, ModalContent, ModalHeader, Button, Text, Loader, Tooltip } from '@vibe/core';
 import type { StandupWindow } from '../../../shared/config';
 import { useToastStore } from '../../stores/toast';
 import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
@@ -181,77 +181,79 @@ export function StandupModal({
   if (step === 'config') {
     return (
       <Modal id="standup-modal" show onClose={onClose} size="medium">
-        <ModalHeader title="Daily Stand-Up" />
-        <ModalContent>
-          <div className={styles.configStep}>
-            {genError && (
-              <div className={styles.banner} data-kind="danger">
-                <Text type="text2">{genError}</Text>
-              </div>
-            )}
-            {noTasks && (
-              <div className={styles.banner} data-kind="info">
-                <Text type="text2">
-                  No recent activity to report in this workspace. Try a longer window, or check that
-                  tasks are up to date in YouTrack.
-                </Text>
-              </div>
-            )}
-            <MappingWarnings warnings={mappingWarnings} />
-
-            {/* Covers the active workspace only (VERM-48). */}
-            <div className={styles.fieldset} data-testid="standup-workspace">
-              <span className={styles.legend}>Workspace</span>
-              <Text type="text2">
-                This stand-up covers <strong>{workspaceName || 'the current workspace'}</strong> only.
-              </Text>
-            </div>
-
-            {/* Window */}
-            <fieldset className={styles.fieldset}>
-              <legend className={styles.legend}>Window for "Done"</legend>
-              <div className={styles.windowButtons}>
-                {(
-                  [
-                    ['24h', '24h'],
-                    ['48h', '48h'],
-                    ['7d', '7d'],
-                    ['custom', 'Custom'],
-                  ] as [StandupWindow, string][]
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    type="button"
-                    className={`${styles.windowBtn} ${window_ === val ? styles.windowBtnActive : ''}`}
-                    onClick={() => handleWindowChange(val)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {window_ === 'custom' && (
-                <div className={styles.customWindowRow}>
-                  <input
-                    type="number"
-                    min={1}
-                    max={720}
-                    value={customWindowHours}
-                    onChange={(e) => setCustomWindowHours(Number(e.target.value))}
-                    className={styles.customWindowInput}
-                  />
-                  <Text type="text2">hours</Text>
+        <ModalBasicLayout className={styles.layout}>
+          <ModalHeader title="Daily Stand-Up" />
+          <ModalContent>
+            <div className={styles.configStep}>
+              {genError && (
+                <div className={styles.banner} data-kind="danger">
+                  <Text type="text2">{genError}</Text>
                 </div>
               )}
-            </fieldset>
+              {noTasks && (
+                <div className={styles.banner} data-kind="info">
+                  <Text type="text2">
+                    No recent activity to report in this workspace. Try a longer window, or check that
+                    tasks are up to date in YouTrack.
+                  </Text>
+                </div>
+              )}
+              <MappingWarnings warnings={mappingWarnings} />
 
-            <div className={styles.actions}>
-              <Button kind="secondary" onClick={onClose} type="button">
-                Cancel
-              </Button>
-              <Button data-testid="standup-generate-btn" onClick={generate}>Generate</Button>
+              {/* Covers the active workspace only (VERM-48). */}
+              <div className={styles.fieldset} data-testid="standup-workspace">
+                <span className={styles.legend}>Workspace</span>
+                <Text type="text2">
+                  This stand-up covers <strong>{workspaceName || 'the current workspace'}</strong> only.
+                </Text>
+              </div>
+
+              {/* Window */}
+              <fieldset className={styles.fieldset}>
+                <legend className={styles.legend}>Window for "Done"</legend>
+                <div className={styles.windowButtons}>
+                  {(
+                    [
+                      ['24h', '24h'],
+                      ['48h', '48h'],
+                      ['7d', '7d'],
+                      ['custom', 'Custom'],
+                    ] as [StandupWindow, string][]
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`${styles.windowBtn} ${window_ === val ? styles.windowBtnActive : ''}`}
+                      onClick={() => handleWindowChange(val)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {window_ === 'custom' && (
+                  <div className={styles.customWindowRow}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={customWindowHours}
+                      onChange={(e) => setCustomWindowHours(Number(e.target.value))}
+                      className={styles.customWindowInput}
+                    />
+                    <Text type="text2">hours</Text>
+                  </div>
+                )}
+              </fieldset>
+
+              <div className={styles.actions}>
+                <Button kind="secondary" onClick={onClose} type="button">
+                  Cancel
+                </Button>
+                <Button data-testid="standup-generate-btn" onClick={generate}>Generate</Button>
+              </div>
             </div>
-          </div>
-        </ModalContent>
+          </ModalContent>
+        </ModalBasicLayout>
       </Modal>
     );
   }
@@ -261,15 +263,17 @@ export function StandupModal({
   if (step === 'loading') {
     return (
       <Modal id="standup-modal" show onClose={onClose} size="medium">
-        <ModalHeader title="Daily Stand-Up" />
-        <ModalContent>
-          <div className={styles.loadingStep}>
-            <Loader size={40} />
-            <Text type="text1" className={styles.loadingText}>
-              Generating report…
-            </Text>
-          </div>
-        </ModalContent>
+        <ModalBasicLayout className={styles.layout}>
+          <ModalHeader title="Daily Stand-Up" />
+          <ModalContent>
+            <div className={styles.loadingStep}>
+              <Loader size={40} />
+              <Text type="text1" className={styles.loadingText}>
+                Generating report…
+              </Text>
+            </div>
+          </ModalContent>
+        </ModalBasicLayout>
       </Modal>
     );
   }
@@ -280,63 +284,65 @@ export function StandupModal({
 
   return (
     <Modal id="standup-modal" show onClose={onClose} size="large">
-      <ModalHeader
-        title={`Daily Stand-Up — ${formatDate(now)}`}
-      />
-      <ModalContent>
-        <div className={styles.reportStep}>
-          {genError && (
-            <div className={styles.banner} data-kind="danger">
-              <Text type="text2">{genError}</Text>
-              <Button size="small" kind="secondary" onClick={handleRegenerate} loading={regenerating}>
-                Retry
+      <ModalBasicLayout className={styles.layout}>
+        <ModalHeader
+          title={`Daily Stand-Up — ${formatDate(now)}`}
+        />
+        <ModalContent>
+          <div className={styles.reportStep}>
+            {genError && (
+              <div className={styles.banner} data-kind="danger">
+                <Text type="text2">{genError}</Text>
+                <Button size="small" kind="secondary" onClick={handleRegenerate} loading={regenerating}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            {noTasks && (
+              <div className={styles.banner} data-kind="info">
+                <Text type="text2">No recent activity found. The previous report is shown.</Text>
+              </div>
+            )}
+            <MappingWarnings warnings={mappingWarnings} />
+
+            <div
+              data-testid="standup-report-body"
+              className={styles.markdownBody}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }}
+            />
+
+            <div className={styles.reportActions}>
+              <Button kind="secondary" onClick={handleRegenerate} loading={regenerating} size="small">
+                Regenerate
               </Button>
-            </div>
-          )}
-          {noTasks && (
-            <div className={styles.banner} data-kind="info">
-              <Text type="text2">No recent activity found. The previous report is shown.</Text>
-            </div>
-          )}
-          <MappingWarnings warnings={mappingWarnings} />
-
-          <div
-            data-testid="standup-report-body"
-            className={styles.markdownBody}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }}
-          />
-
-          <div className={styles.reportActions}>
-            <Button kind="secondary" onClick={handleRegenerate} loading={regenerating} size="small">
-              Regenerate
-            </Button>
-            <div className={styles.actionsSpacer} />
-            <Button kind="secondary" onClick={handleCopy} size="small">
-              {copyLabel}
-            </Button>
-            <Tooltip
-              content={
-                hasDailyFolder
-                  ? 'Save to your daily notes folder'
-                  : 'Configure a daily-notes folder in Settings to save reports.'
-              }
-            >
-              <Button
-                kind="secondary"
-                onClick={handleSave}
-                disabled={!hasDailyFolder || saving}
-                loading={saving}
-                size="small"
+              <div className={styles.actionsSpacer} />
+              <Button kind="secondary" onClick={handleCopy} size="small">
+                {copyLabel}
+              </Button>
+              <Tooltip
+                content={
+                  hasDailyFolder
+                    ? 'Save to your daily notes folder'
+                    : 'Configure a daily-notes folder in Settings to save reports.'
+                }
               >
-                {saveLabel}
+                <Button
+                  kind="secondary"
+                  onClick={handleSave}
+                  disabled={!hasDailyFolder || saving}
+                  loading={saving}
+                  size="small"
+                >
+                  {saveLabel}
+                </Button>
+              </Tooltip>
+              <Button onClick={onClose} size="small">
+                Close
               </Button>
-            </Tooltip>
-            <Button onClick={onClose} size="small">
-              Close
-            </Button>
+            </div>
           </div>
-        </div>
-      </ModalContent>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }
