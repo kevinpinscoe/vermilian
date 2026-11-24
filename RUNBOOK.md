@@ -133,12 +133,31 @@ pnpm test
 
 **Expected output:** Vitest reports all suites passing (e.g. `Test Files  2 passed`). Runs in ~0.3s from source — no packaging needed. E2E (`pnpm test:e2e`) packages first and runs under `xvfb-run`.
 
-**E2E profile directories.** Each e2e launch gets its own Electron profile, inside one folder per
-run: `vermilian-e2e-run-*` in `$TMPDIR` (`/tmp` by default). The folder is removed when the run
-ends, pass or fail. A killed run leaves that one folder behind. The next run removes any
-`vermilian-e2e-*` folder older than an hour, including the loose ones left by runs before VERM-54.
-Set `VERMILIAN_E2E_KEEP_PROFILES=1` to keep the profiles for debugging; it also keeps the live
-harness's `vermilian-live-profile-*` profile.
+**E2E profile directories.** Each e2e run gets one folder, `vermilian-e2e-run-*`, in `$TMPDIR`
+(`/tmp` by default). Every Electron profile of the run goes inside it. For the length of the run,
+`TMPDIR`, `TMP` and `TEMP` point at that folder, so any temp folder a spec makes, and Chromium's own
+temp files, land there too (VERM-112). The folder is removed when the run ends, pass or fail. A
+killed run leaves that one folder behind; the next run removes any `vermilian-e2e-*` folder older
+than an hour, including the loose ones left by runs before VERM-54.
+
+After the last test, a cleanup check runs:
+
+- If the run's own folder cannot be removed, the run fails and prints its path.
+- If new e2e folders (`vermilian-e2e-*`, `verm-e2e-*`, `verm<N>-e2e-*`, `vermilian-live-profile-*`)
+  appeared in the real temp directory during the run, it prints a warning listing them. It leaves
+  them in place, since another lane's run may own them. A warning naming one of this branch's specs
+  means that spec wrote outside the run folder, for example to a hard-coded `/tmp`.
+
+Screenshots taken as PR evidence (the Runway snapshot import previews) go in one folder per worker,
+`evidence-w<N>` inside the run folder, and are removed with it. Each capture gets its own file name:
+a repeated name or a retry is saved as `name-2.png`, `name-3.png` and so on, never over an earlier
+one.
+
+- Set `VERMILIAN_E2E_KEEP_PROFILES=1` to keep the run folder (profiles and screenshots) for
+  debugging. The run prints the folder's path and each evidence folder in it. It also keeps the
+  live harness's `vermilian-live-profile-*` profile.
+- Set `VERMILIAN_E2E_EVIDENCE_DIR=<dir>` to write the screenshots to `<dir>` instead and keep them.
+  Captures from earlier runs in the same folder are not overwritten.
 
 ---
 
