@@ -123,7 +123,7 @@ describe('blockerStateOf: Blocked wins over unknown (Kevin, VERM-97)', () => {
     expect(r.state).toBe('blocked');
     expect(r.blockers.map((b) => b.key)).toEqual(['SYNC-3']);
     expect(r.unknownPrerequisites.map((p) => p.key)).toEqual(['SYNC-5']);
-    expect(describeBlockerReport(r)).toBe('Blocked by SYNC-3 (external). Status unknown for SYNC-5 (external)');
+    expect(describeBlockerReport(r)).toBe('Blocked by SYNC-3 (external). Status unknown for SYNC-5 (external).');
   });
 });
 
@@ -152,7 +152,7 @@ describe('blockerStateOf: blocked by the ticket\'s own status (decision E and it
     const r = blockerStateOf(issue('READ-14', { status: 'BLOCKED', links: undefined }), yt());
     expect(r.state).toBe('blocked');
     expect(r.statusBlock).toBe('links-unknown');
-    expect(describeBlockerReport(r)).toBe('Blocked by status. Links unknown: Links were not read');
+    expect(describeBlockerReport(r)).toBe('Blocked by status. Links unknown: Links were not read.');
   });
 
   it('a BLOCKED status alongside an open prerequisite lists the blocker', () => {
@@ -165,6 +165,27 @@ describe('blockerStateOf: blocked by the ticket\'s own status (decision E and it
     const jira: BlockerContext = { prerequisiteTypes: JIRA_DEFAULT_PREREQUISITE_LINK_TYPES, runway: [] };
     expect(blockerStateOf(issue('OPS-956', { status: 'Impeded', statusRole: 'blocked' }), jira).statusBlock).toBe('no-link');
     expect(blockerStateOf(issue('OPS-956', { status: 'BLOCKED', statusRole: 'inProgress' }), jira).state).toBe('ready');
+  });
+});
+
+describe('regression: the no-link status wording reads the same for both trackers (Kevin, VERM-97 review)', () => {
+  const WORDING = 'Blocked by status, no linked prerequisite.';
+
+  it('YouTrack BLOCKED with no prerequisite link', () => {
+    const r = blockerStateOf(issue('READ-14', { status: 'BLOCKED' }), yt());
+    expect(r.state).toBe('blocked');
+    expect(r.statusBlock).toBe('no-link');
+    expect(describeStatusBlock(r.statusBlock)).toBe(WORDING);
+    expect(describeBlockerReport(r)).toBe(WORDING);
+  });
+
+  it('a Jira status such as Impeded, mapped to blocked, with no prerequisite link', () => {
+    const jira: BlockerContext = { prerequisiteTypes: JIRA_DEFAULT_PREREQUISITE_LINK_TYPES, runway: [] };
+    const r = blockerStateOf(issue('OPS-956', { status: 'Impeded', statusRole: 'blocked' }), jira);
+    expect(r.state).toBe('blocked');
+    expect(r.statusBlock).toBe('no-link');
+    expect(describeStatusBlock(r.statusBlock)).toBe(WORDING);
+    expect(describeBlockerReport(r)).toBe(WORDING);
   });
 });
 
@@ -187,7 +208,7 @@ describe('blockerStateOf: external prerequisites', () => {
     const read14 = issue('READ-14', { links: [link('SYNC-3', false, { status: 'stale name' })] });
     const r = blockerStateOf(read14, yt([place(2, sync3), place(3, read14)]));
     expect(r.blockers).toEqual([{ key: 'SYNC-3', summary: 'SYNC-3 summary', runwayNumber: 2, status: 'In Progress' }]);
-    expect(describeBlockerReport(r)).toBe('Blocked by SYNC-3 (#2 here)');
+    expect(describeBlockerReport(r)).toBe('Blocked by SYNC-3 (#2 here).');
   });
 
   it('a Runway row that could not be read is still matched by its ID, keeping the link\'s status', () => {

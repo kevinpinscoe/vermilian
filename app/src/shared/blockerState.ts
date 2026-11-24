@@ -229,7 +229,7 @@ export function describeOrderConflict(c: OrderConflict): string {
     : `Possible order conflict — ${c.key} is #${c.prerequisiteNumber}, after this (#${c.dependentNumber}); its status is unknown`;
 }
 
-/** The one-line summary a row shows: "Ready", "Blocked by SYNC-3 (#2 here)", "Unknown: Links were not read". */
+/** The one-line summary a row shows: "Ready", "Blocked by SYNC-3 (#2 here).", "Unknown: Links were not read". */
 export function describeBlockerReport(r: BlockerReport): string {
   switch (r.state) {
     case 'done': return 'Done';
@@ -241,14 +241,15 @@ export function describeBlockerReport(r: BlockerReport): string {
       return `Unknown: ${parts.join('; ')}`;
     }
     case 'blocked': {
+      // Sentences, each ending in a full stop, so the status wording reads
+      // exactly as decided: "Blocked by status, no linked prerequisite."
       const parts: string[] = [];
-      if (r.blockers.length > 0) parts.push(`Blocked by ${r.blockers.map(describePrerequisite).join(', ')}`);
+      if (r.blockers.length > 0) parts.push(`Blocked by ${r.blockers.map(describePrerequisite).join(', ')}.`);
       const status = describeStatusBlock(r.statusBlock);
-      // Joined as sentences: the status wording's own full stop is dropped here.
-      if (status && r.statusBlock !== 'with-blockers') parts.push(status.replace(/\.$/, ''));
-      if (r.unknownPrerequisites.length > 0) parts.push(`Status unknown for ${r.unknownPrerequisites.map(describePrerequisite).join(', ')}`);
-      if (r.linksUnreadable) parts.push(`Links unknown: ${r.linksUnreadable}`);
-      return parts.join('. ');
+      if (status && r.statusBlock !== 'with-blockers') parts.push(status);
+      if (r.unknownPrerequisites.length > 0) parts.push(`Status unknown for ${r.unknownPrerequisites.map(describePrerequisite).join(', ')}.`);
+      if (r.linksUnreadable) parts.push(`Links unknown: ${r.linksUnreadable}.`);
+      return parts.join(' ');
     }
   }
 }
