@@ -24,6 +24,7 @@ import type { ConfirmationAction, RecommendationItem, RecommendationResult } fro
 import { ChipCell } from '../project-board/KanbanView';
 import { PRIORITY_COLORS } from '../project-board/colors';
 import { FocusControl } from '../project-board/FocusControl';
+import { RunwayNumberBadge } from '../runway/RunwayNumberBadge';
 import { FocusRankRepairBanner } from '../project-board/FocusRankRepairBanner';
 import {
   useWorkspaceFocusRankHolders,
@@ -252,6 +253,7 @@ function DeskCard({
   onStartTimer: (issueId: string, idReadable: string, summary: string) => void;
 }) {
   const issue: BoardIssue = holder.issue;
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
 
   // Only a cleanly 'loaded' Master Plan contributes an outcome label — a
   // missing article, a discovery problem, or an Epic with a conflicting
@@ -272,6 +274,8 @@ function DeskCard({
     >
       <div className={styles.cardTop}>
         <span className={styles.cardId}>{issue.idReadable}</span>
+        {/* Its Runway # in the active workspace, read-only (VERM-99). */}
+        <RunwayNumberBadge workspaceId={activeWorkspaceId} ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }} />
         {/* Priority is display-only here — the desk never writes it (docs/requirements.md § Priority Desk). */}
         {issue.fields.priority && (
           <ChipCell value={issue.fields.priority} colorMap={PRIORITY_COLORS} />
@@ -765,6 +769,7 @@ function CandidateCard({
   onDismiss: (issueId: string) => void;
 }) {
   const { issue, projectShortName } = candidate;
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
 
   return (
     <div
@@ -774,6 +779,8 @@ function CandidateCard({
     >
       <div className={styles.cardTop}>
         <span className={styles.cardId} data-testid="priority-desk-candidate-id">{issue.idReadable}</span>
+        {/* Its Runway # in the active workspace, read-only; the candidate order is unchanged (VERM-99). */}
+        <RunwayNumberBadge workspaceId={activeWorkspaceId} ticket={{ tracker: 'youtrack', keys: [issue.idReadable], entityId: issue.id }} />
         {issue.fields.priority && (
           <ChipCell value={issue.fields.priority} colorMap={PRIORITY_COLORS} />
         )}

@@ -57,6 +57,9 @@ import {
   runwayBlockers,
 } from './blockers';
 import { usePrerequisiteTypes } from './useBlockers';
+import { DeskSlotChip } from './DeskSlotChip';
+import { deskSlotOf, type DeskSlot } from './deskSlot';
+import { useDeskSlots } from './useDeskSlots';
 import {
   buildRunwayRows,
   dropPosition,
@@ -99,6 +102,7 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
     [stored, tickets.data, readError],
   );
   const prerequisiteTypes = usePrerequisiteTypes(workspaceId, tracker);
+  const deskSlots = useDeskSlots(workspaceId, tracker);
   const blockers = useMemo(() => runwayBlockers(rows, prerequisiteTypes), [rows, prerequisiteTypes]);
 
   const sensors = useSensors(
@@ -223,6 +227,7 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
                 onMoveToTyped={(text) => moveToTyped(row.itemId, text)}
                 onOpenTicket={onOpenTicket}
                 blocker={blockers.get(row.itemId) ?? null}
+                deskSlot={row.kind === 'ticket' ? deskSlotOf(deskSlots, [row.issue?.id, row.issue?.idReadable, row.ticketId]) : null}
                 onAddBlocker={(key) => addBlocker(row, key)}
                 onMovePrerequisiteAbove={(key) => movePrerequisiteAbove(row, key)}
               />
@@ -246,6 +251,8 @@ interface RowProps {
   onOpenTicket(issue: BoardIssue): void;
   /** The ticket's blocker report; null for a row the tracker did not read. */
   blocker: BlockerReport | null;
+  /** The ticket's Priority Desk slot (VERM-99); null when it has none. */
+  deskSlot: DeskSlot | null;
   onAddBlocker(key: string): void;
   onMovePrerequisiteAbove(key: string): void;
 }
@@ -257,7 +264,7 @@ const own = (fn: () => void) => (e: React.SyntheticEvent) => {
 };
 
 function RunwayRowView({
-  row, first, last, busy, mode, setMode, onEdit, onMoveToTyped, onOpenTicket, blocker, onAddBlocker, onMovePrerequisiteAbove,
+  row, first, last, busy, mode, setMode, onEdit, onMoveToTyped, onOpenTicket, blocker, deskSlot, onAddBlocker, onMovePrerequisiteAbove,
 }: RowProps) {
   const sortable = useSortable({ id: row.itemId, disabled: busy || mode !== null });
   const style: React.CSSProperties = {
@@ -413,6 +420,8 @@ function RunwayRowView({
     >
       {handle}
       {number}
+      {/* Its Priority Desk slot, read-only (VERM-99). */}
+      <DeskSlotChip slot={deskSlot} />
       {issue ? (
         <button type="button" className={styles.ticket} style={indent} aria-label={`Open ${row.ticketId}`}>
           {details}

@@ -24,6 +24,9 @@ import { RunwayNumberCell } from '../runway/RunwayNumberCell';
 import { RunwayBlockerBadge } from '../runway/RunwayBlockerBadge';
 import { useRememberedSort } from '../runway/rememberedSort';
 import { useRunwayNumberOf } from '../runway/useRunwayNumberOf';
+import { DeskSlotChip } from '../runway/DeskSlotChip';
+import { deskSlotOf, type DeskSlot } from '../runway/deskSlot';
+import { useDeskSlots } from '../runway/useDeskSlots';
 import { useYouTrackPriorityOrders } from '../runway/usePriorityOrders';
 import { RunwaySortControl } from '../runway/RunwaySortControl';
 import {
@@ -93,9 +96,11 @@ function sortIssues(issues: BoardIssue[], sort: BoardSortConfig | undefined): Bo
 const VISIBLE_COLS: ColumnField[] = ['status', 'priority', 'category', 'dueDate'];
 
 function IssueRow({
-  issue, onClick, onStartTimer, isActiveTimer, timerDisplay, onPatch, runwayWorkspaceId,
+  issue, onClick, onStartTimer, isActiveTimer, timerDisplay, onPatch, runwayWorkspaceId, deskSlot,
 }: {
   issue: BoardIssue; onClick: () => void;
+  /** The ticket's slot on the active workspace's Priority Desk (VERM-99); null when none. */
+  deskSlot: DeskSlot | null;
   /** The workspace whose Runway # the row shows (VERM-90); null shows no Runway # cell. */
   runwayWorkspaceId: string | null;
   onStartTimer: (id: string, readable: string, summary: string) => void;
@@ -116,6 +121,8 @@ function IssueRow({
           />
           {/* Blocked or Unknown only, beside the Runway # (VERM-98). */}
           <RunwayBlockerBadge workspaceId={runwayWorkspaceId} tracker="youtrack" issue={issue} />
+          {/* Its Priority Desk slot, read-only (VERM-99). */}
+          <DeskSlotChip slot={deskSlot} />
         </td>
       )}
       <td className={`${pbStyles.cell} ${pbStyles.cellTask}`}>
@@ -324,6 +331,7 @@ export function WorkspaceBoard({
   // A ticket's Runway # on this workspace's Runway; null when it has none or
   // its position cannot be verified (both sort last).
   const runwayNumberOf = useRunwayNumberOf(workspaceId, 'youtrack');
+  const deskSlots = useDeskSlots(workspaceId, 'youtrack');
 
   function toggle(field: 'status' | 'priority' | 'category' | 'assignee', value: string) {
     const cur = filter[field];
@@ -354,6 +362,7 @@ export function WorkspaceBoard({
         timerDisplay={isActive && timer ? fmtMs(getTotalWorkMs(timer)) : ''}
         onPatch={handlePatch}
         runwayWorkspaceId={workspaceId || null}
+        deskSlot={deskSlotOf(deskSlots, [issue.id, issue.idReadable])}
       />
     );
   }

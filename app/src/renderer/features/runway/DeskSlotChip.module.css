@@ -1,0 +1,23 @@
+/* The Desk slot chip (VERM-99): read-only, beside the Runway #. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: default;
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-selected-color, #cce5ff);
+}
+
+.now {
+  font-weight: 700;
+}
+
+.shared {
+  background: var(--warning-color-selected, #fceba1);
+}
