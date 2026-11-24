@@ -4,6 +4,7 @@ import type { StandupWindow } from '../../../shared/config';
 import { useToastStore } from '../../stores/toast';
 import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './StandupModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 // Minimal markdown-to-HTML renderer for Claude's structured stand-up output.
 // Only handles ## headings and - bullets (all Claude produces for this prompt).
@@ -181,7 +182,7 @@ export function StandupModal({
   if (step === 'config') {
     return (
       <Modal id="standup-modal" show onClose={onClose} size="medium">
-        <ModalBasicLayout className={styles.layout}>
+        <ModalBasicLayout className={modalLayout.layout}>
           <ModalHeader title="Daily Stand-Up" />
           <ModalContent>
             <div className={styles.configStep}>
@@ -263,7 +264,7 @@ export function StandupModal({
   if (step === 'loading') {
     return (
       <Modal id="standup-modal" show onClose={onClose} size="medium">
-        <ModalBasicLayout className={styles.layout}>
+        <ModalBasicLayout className={modalLayout.layout}>
           <ModalHeader title="Daily Stand-Up" />
           <ModalContent>
             <div className={styles.loadingStep}>
@@ -284,7 +285,7 @@ export function StandupModal({
 
   return (
     <Modal id="standup-modal" show onClose={onClose} size="large">
-      <ModalBasicLayout className={styles.layout}>
+      <ModalBasicLayout className={modalLayout.layout}>
         <ModalHeader
           title={`Daily Stand-Up — ${formatDate(now)}`}
         />

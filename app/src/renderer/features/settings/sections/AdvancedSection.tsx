@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Heading, Button, AttentionBox, Modal, ModalContent, ModalHeader } from '@vibe/core';
+import { Heading, Button, AttentionBox, Modal, ModalContent, ModalBasicLayout, ModalHeader } from '@vibe/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToastStore } from '../../../stores/toast';
 import type { RunwayImportPreview } from '../../../../shared/ipc';
 import { importPreviewRows, importSuccessMessage, importWarningTexts } from '../runwayImport';
 import styles from '../SettingsView.module.css';
+import modalLayout from '../../../components/ModalLayout.module.css';
 
 interface Props {
   onReset: () => Promise<void>;
@@ -194,54 +195,56 @@ export function AdvancedSection({ onReset }: Props) {
           onClose={() => { if (!importing) void handleCancelImport(); }}
           size="medium"
         >
-          <ModalHeader title="Replace all Runway metadata?" />
-          <ModalContent>
-            <AttentionBox
-              className={styles.importWarning}
-              type="warning"
-              title="This replaces Runway data for every workspace"
-              text="The Runway order of every workspace, and Focus, rank, Why now and dismissals for Jira issues in all workspaces on this computer, will be replaced by the snapshot. Records not in the snapshot are removed."
-            />
-            {importPreview.warnings.length > 0 && (
-              <div data-testid="runway-import-replace-warning">
-                {importWarningTexts(importPreview).map((text) => (
-                  <AttentionBox
-                    key={text}
-                    className={styles.importWarning}
-                    type="negative"
-                    title="Local Runway changes may be lost"
-                    text={text}
-                  />
+          <ModalBasicLayout className={modalLayout.layout}>
+            <ModalHeader title="Replace all Runway metadata?" />
+            <ModalContent>
+              <AttentionBox
+                className={styles.importWarning}
+                type="warning"
+                title="This replaces Runway data for every workspace"
+                text="The Runway order of every workspace, and Focus, rank, Why now and dismissals for Jira issues in all workspaces on this computer, will be replaced by the snapshot. Records not in the snapshot are removed."
+              />
+              {importPreview.warnings.length > 0 && (
+                <div data-testid="runway-import-replace-warning">
+                  {importWarningTexts(importPreview).map((text) => (
+                    <AttentionBox
+                      key={text}
+                      className={styles.importWarning}
+                      type="negative"
+                      title="Local Runway changes may be lost"
+                      text={text}
+                    />
+                  ))}
+                </div>
+              )}
+              <dl className={styles.importPreview}>
+                {importPreviewRows(importPreview).map((row) => (
+                  <React.Fragment key={row.testId}>
+                    <dt>{row.label}</dt>
+                    <dd data-testid={row.testId}>{row.value}</dd>
+                  </React.Fragment>
                 ))}
+              </dl>
+              <div className={styles.inline}>
+                <Button
+                  data-testid="runway-import-confirm"
+                  kind="primary"
+                  loading={importing}
+                  onClick={() => void handleConfirmImport()}
+                >
+                  Replace Runway data
+                </Button>
+                <Button
+                  data-testid="runway-import-cancel"
+                  kind="tertiary"
+                  disabled={importing}
+                  onClick={() => void handleCancelImport()}
+                >
+                  Cancel
+                </Button>
               </div>
-            )}
-            <dl className={styles.importPreview}>
-              {importPreviewRows(importPreview).map((row) => (
-                <React.Fragment key={row.testId}>
-                  <dt>{row.label}</dt>
-                  <dd data-testid={row.testId}>{row.value}</dd>
-                </React.Fragment>
-              ))}
-            </dl>
-            <div className={styles.inline}>
-              <Button
-                data-testid="runway-import-confirm"
-                kind="primary"
-                loading={importing}
-                onClick={() => void handleConfirmImport()}
-              >
-                Replace Runway data
-              </Button>
-              <Button
-                data-testid="runway-import-cancel"
-                kind="tertiary"
-                disabled={importing}
-                onClick={() => void handleCancelImport()}
-              >
-                Cancel
-              </Button>
-            </div>
-          </ModalContent>
+            </ModalContent>
+          </ModalBasicLayout>
         </Modal>
       )}
     </section>

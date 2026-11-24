@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalHeader } from '@vibe/core';
+import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalBasicLayout, ModalHeader } from '@vibe/core';
 import type { AppConfig } from '../../../shared/config';
 import type { CredentialKind } from '../../../shared/ipc';
 import { DEFAULT_CONFIG } from '../../../shared/config';
@@ -28,6 +28,7 @@ import { WorkspaceStorageSection } from './sections/WorkspaceStorageSection';
 import { OpenBaoSection } from './sections/OpenBaoSection';
 import { ACTIVE_WORKSPACE_QUERY_KEY, useActiveWorkspace } from '../workspace-nav/api';
 import styles from './SettingsView.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface Props {
   canCancel: boolean;
@@ -419,18 +420,20 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
       {confirmCancel && (
         <Modal id="discard-credentials-modal" show onClose={() => setConfirmCancel(false)} size="small">
-          <ModalHeader title="Discard unsaved changes?" />
-          <ModalContent>
-            <p className={styles.confirmText}>
-              You’ve typed an API token or key that hasn’t been saved. Closing Settings will discard it.
-            </p>
-            <div className={styles.confirmActions}>
-              <Button kind="tertiary" onClick={() => setConfirmCancel(false)}>Keep editing</Button>
-              <Button color="negative" onClick={() => { setConfirmCancel(false); onClose(); }}>
-                Discard changes
-              </Button>
-            </div>
-          </ModalContent>
+          <ModalBasicLayout className={modalLayout.layout}>
+            <ModalHeader title="Discard unsaved changes?" />
+            <ModalContent>
+              <p className={styles.confirmText}>
+                You’ve typed an API token or key that hasn’t been saved. Closing Settings will discard it.
+              </p>
+              <div className={styles.confirmActions}>
+                <Button kind="tertiary" onClick={() => setConfirmCancel(false)}>Keep editing</Button>
+                <Button color="negative" onClick={() => { setConfirmCancel(false); onClose(); }}>
+                  Discard changes
+                </Button>
+              </div>
+            </ModalContent>
+          </ModalBasicLayout>
         </Modal>
       )}
     </div>

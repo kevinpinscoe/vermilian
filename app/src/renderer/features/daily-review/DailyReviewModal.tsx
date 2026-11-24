@@ -10,12 +10,13 @@
 // Vermilian has no agent-execution metadata store yet, and this view must
 // never fabricate one from ordinary YouTrack fields.
 import React from 'react';
-import { Modal, ModalContent, ModalHeader, Button, Text, Heading, Loader, AttentionBox } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Text, Heading, Loader, AttentionBox } from '@vibe/core';
 import type { BoardIssue } from '../../../shared/workspace';
 import { useWorkspaceFocusRankHolders } from '../project-board/focus';
 import { useActiveWorkspaceIssues, deriveBlockedFocused, deriveNeedsAttention } from './boardData';
 import { useDailyReviewCompleted } from './api';
 import styles from './DailyReviewModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface DailyReviewModalProps {
   onClose: () => void;
@@ -45,88 +46,90 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
 
   return (
     <Modal id="daily-review-modal" show onClose={onClose} size="large">
-      <ModalHeader title={`Daily Review — ${formatDate(now)}`} />
-      <ModalContent>
-        <div className={styles.body} data-testid="daily-review-body">
-          {isError && (
-            <div data-testid="daily-review-error">
-              <AttentionBox
-                type="negative"
-                title="Couldn't load Daily Review"
-                text={
-                  boardError
-                    ? "One or more projects in this workspace failed to load."
-                    : (completedQuery.error?.message ?? completedQuery.data?.error ?? 'Failed to load recently completed work.')
-                }
-              />
-            </div>
-          )}
-
-          {!isError && isLoading && (
-            <div className={styles.loading} data-testid="daily-review-loading">
-              <Loader size={40} />
-              <Text type="text1">Loading…</Text>
-            </div>
-          )}
-
-          {!isError && !isLoading && (
-            <>
-              <Section title="Now / Next / Then" testId="daily-review-focus-slots">
-                <FocusSlots byRank={byRank} onSelectIssue={selectAndClose} />
-              </Section>
-
-              <Section title="Blocked focused work" testId="daily-review-blocked">
-                <IssueList
-                  issues={blockedFocused}
-                  emptyText="Nothing focused is blocked."
-                  testIdPrefix="daily-review-blocked"
-                  onSelectIssue={selectAndClose}
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title={`Daily Review — ${formatDate(now)}`} />
+        <ModalContent>
+          <div className={styles.body} data-testid="daily-review-body">
+            {isError && (
+              <div data-testid="daily-review-error">
+                <AttentionBox className={modalLayout.attention}
+                  type="negative"
+                  title="Couldn't load Daily Review"
+                  text={
+                    boardError
+                      ? "One or more projects in this workspace failed to load."
+                      : (completedQuery.error?.message ?? completedQuery.data?.error ?? 'Failed to load recently completed work.')
+                  }
                 />
-              </Section>
+              </div>
+            )}
 
-              <Section title="Needs attention" testId="daily-review-needs-attention">
-                <Text type="text2" className={styles.sectionHint}>
-                  Starred but never assigned a Focus rank — a decision left half-made.
-                </Text>
-                <IssueList
-                  issues={needsAttention}
-                  emptyText="Nothing starred is waiting on a rank."
-                  testIdPrefix="daily-review-needs-attention"
-                  onSelectIssue={selectAndClose}
-                />
-              </Section>
+            {!isError && isLoading && (
+              <div className={styles.loading} data-testid="daily-review-loading">
+                <Loader size={40} />
+                <Text type="text1">Loading…</Text>
+              </div>
+            )}
 
-              <Section title="Recently completed" testId="daily-review-completed">
-                <CompletedList tasks={completedQuery.data?.completed ?? []} />
-                {(completedQuery.data?.warnings ?? []).length > 0 && (
-                  <div data-testid="daily-review-mapping-warnings">
-                    <AttentionBox
-                      type="warning"
-                      text={`Some status mappings are incomplete: ${(completedQuery.data?.warnings ?? []).join(' ')}`}
-                    />
-                  </div>
-                )}
-              </Section>
+            {!isError && !isLoading && (
+              <>
+                <Section title="Now / Next / Then" testId="daily-review-focus-slots">
+                  <FocusSlots byRank={byRank} onSelectIssue={selectAndClose} />
+                </Section>
 
-              <Section title="Agent work awaiting review" testId="daily-review-agent-awaiting-review">
-                <AgentSectionPlaceholder />
-              </Section>
+                <Section title="Blocked focused work" testId="daily-review-blocked">
+                  <IssueList
+                    issues={blockedFocused}
+                    emptyText="Nothing focused is blocked."
+                    testIdPrefix="daily-review-blocked"
+                    onSelectIssue={selectAndClose}
+                  />
+                </Section>
 
-              <Section title="Agent work needing input" testId="daily-review-agent-needing-input">
-                <AgentSectionPlaceholder />
-              </Section>
+                <Section title="Needs attention" testId="daily-review-needs-attention">
+                  <Text type="text2" className={styles.sectionHint}>
+                    Starred but never assigned a Focus rank — a decision left half-made.
+                  </Text>
+                  <IssueList
+                    issues={needsAttention}
+                    emptyText="Nothing starred is waiting on a rank."
+                    testIdPrefix="daily-review-needs-attention"
+                    onSelectIssue={selectAndClose}
+                  />
+                </Section>
 
-              <Section title="Failed agent work" testId="daily-review-agent-failed">
-                <AgentSectionPlaceholder />
-              </Section>
-            </>
-          )}
+                <Section title="Recently completed" testId="daily-review-completed">
+                  <CompletedList tasks={completedQuery.data?.completed ?? []} />
+                  {(completedQuery.data?.warnings ?? []).length > 0 && (
+                    <div data-testid="daily-review-mapping-warnings">
+                      <AttentionBox className={modalLayout.attention}
+                        type="warning"
+                        text={`Some status mappings are incomplete: ${(completedQuery.data?.warnings ?? []).join(' ')}`}
+                      />
+                    </div>
+                  )}
+                </Section>
 
-          <div className={styles.actions}>
-            <Button onClick={onClose} size="small">Close</Button>
+                <Section title="Agent work awaiting review" testId="daily-review-agent-awaiting-review">
+                  <AgentSectionPlaceholder />
+                </Section>
+
+                <Section title="Agent work needing input" testId="daily-review-agent-needing-input">
+                  <AgentSectionPlaceholder />
+                </Section>
+
+                <Section title="Failed agent work" testId="daily-review-agent-failed">
+                  <AgentSectionPlaceholder />
+                </Section>
+              </>
+            )}
+
+            <div className={styles.actions}>
+              <Button onClick={onClose} size="small">Close</Button>
+            </div>
           </div>
-        </div>
-      </ModalContent>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }
@@ -258,7 +261,7 @@ function CompletedList({ tasks }: { tasks: { idReadable: string; summary: string
 
 function AgentSectionPlaceholder() {
   return (
-    <AttentionBox
+    <AttentionBox className={modalLayout.attention}
       type="neutral"
       text="Agent-execution tracking isn't set up yet, so there's nothing to show here."
     />

@@ -1,0 +1,21 @@
+/*
+ * Shared by every dialog's ModalBasicLayout (VERM-116, VERM-118). The layout
+ * gives its header and scrollable content width: 100% plus inline padding, and
+ * assumes a global border-box reset that Vermilian does not have. Under the
+ * content-box default both ran 32px past the dialog's right edge, so the
+ * heading overlapped the close button and footer buttons were clipped.
+ * e2e/dialog-layout.spec.ts and e2e/standup-dialog-layout.spec.ts measure it.
+ */
+.layout > * {
+  box-sizing: border-box;
+}
+
+/*
+ * Vibe's AttentionBox is width: 100% with 16px horizontal padding and no
+ * box-sizing, so inside a dialog it ran 32px past the content column
+ * (VERM-109 found it in the Runway import dialog; VERM-118 in Daily Review and
+ * the storage confirmation). Give any AttentionBox in a dialog this class.
+ */
+.attention {
+  box-sizing: border-box;
+}

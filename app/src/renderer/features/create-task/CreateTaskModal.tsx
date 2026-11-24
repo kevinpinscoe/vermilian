@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { YouTrackProject } from '../../../shared/workspace';
 import { useToastStore } from '../../stores/toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import type { FormState } from './TaskForm';
 import { useTaskFormOptions } from './useTaskFormOptions';
 import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './CreateTaskModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface CreateTaskModalProps {
   projects: YouTrackProject[];
@@ -80,31 +81,33 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
 
   return (
     <Modal id="create-task-modal" show onClose={onClose} size="medium">
-      <ModalHeader title="Create task" />
-      <ModalContent>
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={styles.fields}>
-            <TaskForm
-              form={form}
-              onChange={setForm}
-              projects={projects}
-              fieldOptions={fieldOptions}
-              loading={loading}
-              apiError={apiError}
-              apiErrorRefresh={apiErrorRefresh}
-              autoFocusSummary
-            />
-          </div>
-          <div className={styles.actions}>
-            <Button kind="secondary" onClick={onClose} type="button">
-              Cancel
-            </Button>
-            <Button type="submit" data-testid="task-create-btn" disabled={!canCreate} loading={loading}>
-              {loading ? 'Creating…' : 'Create'}
-            </Button>
-          </div>
-        </form>
-      </ModalContent>
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title="Create task" />
+        <ModalContent>
+          <form onSubmit={handleSubmit} className={styles.form}>
+            <div className={styles.fields}>
+              <TaskForm
+                form={form}
+                onChange={setForm}
+                projects={projects}
+                fieldOptions={fieldOptions}
+                loading={loading}
+                apiError={apiError}
+                apiErrorRefresh={apiErrorRefresh}
+                autoFocusSummary
+              />
+            </div>
+            <div className={styles.actions}>
+              <Button kind="secondary" onClick={onClose} type="button">
+                Cancel
+              </Button>
+              <Button type="submit" data-testid="task-create-btn" disabled={!canCreate} loading={loading}>
+                {loading ? 'Creating…' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }

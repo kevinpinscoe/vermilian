@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button, Loader } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import type { PrerequisiteSide } from '../../../shared/issueLink';
 import type { WorkspaceDocument } from '../../../shared/workspaceSchema';
 import {
@@ -13,6 +13,7 @@ import {
   type TrackerLinkType,
 } from '../../../shared/workspacePrerequisites';
 import styles from './AddProjectsModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface WorkspacePrerequisitesModalProps {
   workspaceId: string;
@@ -90,56 +91,58 @@ export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: W
 
   return (
     <Modal id="workspace-prerequisites-modal" show onClose={onClose} size="medium">
-      <ModalHeader title={base ? `Prerequisites for “${base.name}”` : 'Prerequisites'} />
-      <ModalContent>
-        <div className={styles.intro}>
-          Which links mean a ticket is waiting on another. For each link type, choose the wording that answers
-          &ldquo;What am I waiting on?&rdquo; &mdash; for example &ldquo;depends on&rdquo; in YouTrack or
-          &ldquo;is blocked by&rdquo; in Jira. Read from this workspace&apos;s own {tracker} connection; nothing is
-          written to {tracker}.
-        </div>
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title={base ? `Prerequisites for “${base.name}”` : 'Prerequisites'} />
+        <ModalContent>
+          <div className={styles.intro}>
+            Which links mean a ticket is waiting on another. For each link type, choose the wording that answers
+            &ldquo;What am I waiting on?&rdquo; &mdash; for example &ldquo;depends on&rdquo; in YouTrack or
+            &ldquo;is blocked by&rdquo; in Jira. Read from this workspace&apos;s own {tracker} connection; nothing is
+            written to {tracker}.
+          </div>
 
-        {loadError ? (
-          <div className={styles.empty} role="alert" data-testid="workspace-prerequisites-error">{loadError}</div>
-        ) : !base ? (
-          <Loader size="small" />
-        ) : (
-          <>
-            <div data-testid="workspace-prerequisites-current">
-              Current: {describePrerequisiteLinkTypes(base, types ?? [])}
-            </div>
-            {typesError ? (
-              <div className={styles.moveNotice} role="alert" data-testid="workspace-prerequisites-types-error">
-                {tracker}&apos;s link types could not be read: {typesError} Your saved choice is kept and can&apos;t be
-                edited until {tracker} can be reached.{saved ? ' You can still reset it to the default.' : ''}
+          {loadError ? (
+            <div className={styles.empty} role="alert" data-testid="workspace-prerequisites-error">{loadError}</div>
+          ) : !base ? (
+            <Loader size="small" />
+          ) : (
+            <>
+              <div data-testid="workspace-prerequisites-current">
+                Current: {describePrerequisiteLinkTypes(base, types ?? [])}
               </div>
-            ) : !types ? (
-              <Loader size="small" />
-            ) : (
-              <div className={styles.list} data-testid="workspace-prerequisites-list">
-                {rows.map((r) => (
-                  <PrerequisiteRowView key={r.type} row={r} onChoose={(side) => choose(r.type, side)} />
-                ))}
-              </div>
+              {typesError ? (
+                <div className={styles.moveNotice} role="alert" data-testid="workspace-prerequisites-types-error">
+                  {tracker}&apos;s link types could not be read: {typesError} Your saved choice is kept and can&apos;t be
+                  edited until {tracker} can be reached.{saved ? ' You can still reset it to the default.' : ''}
+                </div>
+              ) : !types ? (
+                <Loader size="small" />
+              ) : (
+                <div className={styles.list} data-testid="workspace-prerequisites-list">
+                  {rows.map((r) => (
+                    <PrerequisiteRowView key={r.type} row={r} onChoose={(side) => choose(r.type, side)} />
+                  ))}
+                </div>
+              )}
+              {saveError && <div className={styles.moveNotice} role="alert" data-testid="workspace-prerequisites-save-error">{saveError}</div>}
+            </>
+          )}
+
+          <div className={styles.footer}>
+            <Button kind="tertiary" data-testid="workspace-prerequisites-close" onClick={onClose}>{editable ? 'Cancel' : 'Close'}</Button>
+            {canReset && (
+              <Button kind="secondary" data-testid="workspace-prerequisites-reset" disabled={saving} onClick={() => void save(true)}>
+                Reset to default
+              </Button>
             )}
-            {saveError && <div className={styles.moveNotice} role="alert" data-testid="workspace-prerequisites-save-error">{saveError}</div>}
-          </>
-        )}
-
-        <div className={styles.footer}>
-          <Button kind="tertiary" data-testid="workspace-prerequisites-close" onClick={onClose}>{editable ? 'Cancel' : 'Close'}</Button>
-          {canReset && (
-            <Button kind="secondary" data-testid="workspace-prerequisites-reset" disabled={saving} onClick={() => void save(true)}>
-              Reset to default
-            </Button>
-          )}
-          {editable && (
-            <Button data-testid="workspace-prerequisites-save" disabled={saving} onClick={() => void save(false)}>
-              Save
-            </Button>
-          )}
-        </div>
-      </ModalContent>
+            {editable && (
+              <Button data-testid="workspace-prerequisites-save" disabled={saving} onClick={() => void save(false)}>
+                Save
+              </Button>
+            )}
+          </div>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }

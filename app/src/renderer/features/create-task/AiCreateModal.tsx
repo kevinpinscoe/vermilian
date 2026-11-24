@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button, Text } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Text } from '@vibe/core';
 import type { YouTrackProject } from '../../../shared/workspace';
 import { useToastStore } from '../../stores/toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { useTaskFormOptions } from './useTaskFormOptions';
 import { CREATE_FIELD_KEYS, CREATE_FIELD_NAMES, type CreateFieldKey } from '../../../shared/createFieldOptions';
 import { clearedFlag, type FieldFlags } from './formOptions';
 import styles from './AiCreateModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface AiCreateModalProps {
   projects: YouTrackProject[];
@@ -202,56 +203,58 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
   if (step === 'input') {
     return (
       <Modal id="ai-create-modal" show onClose={onClose} size="medium">
-        <ModalHeader title="AI create task" />
-        <ModalContent>
-          <div className={styles.inputStep}>
-            <div className={styles.fieldGroup}>
-              <label className={styles.label} htmlFor="ai-description">
-                Describe your task
-              </label>
-              <Text type="text2" className={styles.subtitle}>
-                Describe what needs to be done. Include any relevant details — priority,
-                deadline, project, category, or related ticket numbers.
-              </Text>
-              <textarea
-                ref={textareaRef}
-                id="ai-description"
-                className={styles.textarea}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={5}
-                disabled={generating}
-                placeholder="e.g. Fix the login page crash on Safari — critical, due Friday, related to JIRA-456"
-              />
-            </div>
-
-            {clarification && (
-              <div className={styles.banner} data-kind="info">
-                <Text type="text2">{clarification}</Text>
+        <ModalBasicLayout className={modalLayout.layout}>
+          <ModalHeader title="AI create task" />
+          <ModalContent>
+            <div className={styles.inputStep}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label} htmlFor="ai-description">
+                  Describe your task
+                </label>
+                <Text type="text2" className={styles.subtitle}>
+                  Describe what needs to be done. Include any relevant details — priority,
+                  deadline, project, category, or related ticket numbers.
+                </Text>
+                <textarea
+                  ref={textareaRef}
+                  id="ai-description"
+                  className={styles.textarea}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={5}
+                  disabled={generating}
+                  placeholder="e.g. Fix the login page crash on Safari — critical, due Friday, related to JIRA-456"
+                />
               </div>
-            )}
 
-            {inputError && (
-              <div className={styles.banner} data-kind="danger">
-                <Text type="text2">{inputError}</Text>
+              {clarification && (
+                <div className={styles.banner} data-kind="info">
+                  <Text type="text2">{clarification}</Text>
+                </div>
+              )}
+
+              {inputError && (
+                <div className={styles.banner} data-kind="danger">
+                  <Text type="text2">{inputError}</Text>
+                </div>
+              )}
+
+              <div className={styles.actions}>
+                <Button kind="secondary" onClick={onClose} type="button" disabled={generating}>
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="ai-generate-btn"
+                  onClick={handleGenerate}
+                  disabled={!description.trim() || generating}
+                  loading={generating}
+                >
+                  {generating ? 'Generating…' : 'Generate'}
+                </Button>
               </div>
-            )}
-
-            <div className={styles.actions}>
-              <Button kind="secondary" onClick={onClose} type="button" disabled={generating}>
-                Cancel
-              </Button>
-              <Button
-                data-testid="ai-generate-btn"
-                onClick={handleGenerate}
-                disabled={!description.trim() || generating}
-                loading={generating}
-              >
-                {generating ? 'Generating…' : 'Generate'}
-              </Button>
             </div>
-          </div>
-        </ModalContent>
+          </ModalContent>
+        </ModalBasicLayout>
       </Modal>
     );
   }
@@ -260,49 +263,51 @@ export function AiCreateModal({ projects, defaultProjectId, onClose }: AiCreateM
 
   return (
     <Modal id="ai-create-modal" show onClose={onClose} size="medium">
-      <ModalHeader title="Review AI-generated task" />
-      <ModalContent>
-        <form onSubmit={handleSubmit} className={styles.reviewStep}>
-          <div className={styles.banner} data-kind="info">
-            <Text type="text2">AI-generated — please review before creating.</Text>
-          </div>
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title="Review AI-generated task" />
+        <ModalContent>
+          <form onSubmit={handleSubmit} className={styles.reviewStep}>
+            <div className={styles.banner} data-kind="info">
+              <Text type="text2">AI-generated — please review before creating.</Text>
+            </div>
 
-          <div className={styles.fields}>
-            <ReviewForm
-              key={review.key}
-              workspaceId={ai.workspaceId}
-              form={form}
-              setForm={setForm}
-              projects={projects}
-              touched={review.touched}
-              flags={review.flags}
-              submitting={submitting}
-              submitError={submitError}
-              submitErrorRefresh={submitErrorRefresh}
-              projectMatchError={projectMatchError}
-              onReadyChange={setOptionsReady}
-            />
-          </div>
+            <div className={styles.fields}>
+              <ReviewForm
+                key={review.key}
+                workspaceId={ai.workspaceId}
+                form={form}
+                setForm={setForm}
+                projects={projects}
+                touched={review.touched}
+                flags={review.flags}
+                submitting={submitting}
+                submitError={submitError}
+                submitErrorRefresh={submitErrorRefresh}
+                projectMatchError={projectMatchError}
+                onReadyChange={setOptionsReady}
+              />
+            </div>
 
-          <div className={styles.reviewActions}>
-            <button
-              type="button"
-              className={styles.redescribeLink}
-              onClick={() => setStep('input')}
-              disabled={submitting}
-            >
-              ← Re-describe
-            </button>
-            <div className={styles.actionsSpacer} />
-            <Button kind="secondary" onClick={onClose} type="button" disabled={submitting}>
-              Cancel
-            </Button>
-            <Button data-testid="ai-create-submit" type="submit" disabled={!canCreate} loading={submitting}>
-              {submitting ? 'Creating…' : 'Create'}
-            </Button>
-          </div>
-        </form>
-      </ModalContent>
+            <div className={styles.reviewActions}>
+              <button
+                type="button"
+                className={styles.redescribeLink}
+                onClick={() => setStep('input')}
+                disabled={submitting}
+              >
+                ← Re-describe
+              </button>
+              <div className={styles.actionsSpacer} />
+              <Button kind="secondary" onClick={onClose} type="button" disabled={submitting}>
+                Cancel
+              </Button>
+              <Button data-testid="ai-create-submit" type="submit" disabled={!canCreate} loading={submitting}>
+                {submitting ? 'Creating…' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }

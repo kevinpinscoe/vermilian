@@ -4,7 +4,7 @@
 // is status from the main process.
 
 import { useEffect, useState } from 'react';
-import { Heading, Button, AttentionBox, Modal, ModalContent, ModalHeader, TextField } from '@vibe/core';
+import { Heading, Button, AttentionBox, Modal, ModalContent, ModalBasicLayout, ModalHeader, TextField } from '@vibe/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_OPENBAO_CONNECTION,
@@ -14,6 +14,7 @@ import {
 } from '../../../../shared/openbao';
 import { OPENBAO_STATE_QUERY_KEY, CRED_STATUS_QUERY_KEY } from '../api';
 import styles from '../SettingsView.module.css';
+import modalLayout from '../../../components/ModalLayout.module.css';
 
 type Outcome = { tone: 'positive' | 'negative'; text: string } | null;
 type Confirm = { kind: 'deactivate' | 'delete' | 'cleanup'; ref: string } | null;
@@ -227,16 +228,18 @@ export function OpenBaoSection() {
 
       {confirm && (
         <Modal id="openbao-confirm" show onClose={() => setConfirm(null)}>
-          <ModalHeader title={CONFIRM_TEXT[confirm.kind].title} />
-          <ModalContent>
-            <p>{CONFIRM_TEXT[confirm.kind].text}</p>
-            <div className={styles.inline}>
-              <Button kind="tertiary" onClick={() => setConfirm(null)}>Cancel</Button>
-              <Button data-testid="openbao-confirm-btn" color="negative" onClick={() => void handleConfirm()}>
-                {CONFIRM_TEXT[confirm.kind].action}
-              </Button>
-            </div>
-          </ModalContent>
+          <ModalBasicLayout className={modalLayout.layout}>
+            <ModalHeader title={CONFIRM_TEXT[confirm.kind].title} />
+            <ModalContent>
+              <p>{CONFIRM_TEXT[confirm.kind].text}</p>
+              <div className={styles.inline}>
+                <Button kind="tertiary" onClick={() => setConfirm(null)}>Cancel</Button>
+                <Button data-testid="openbao-confirm-btn" color="negative" onClick={() => void handleConfirm()}>
+                  {CONFIRM_TEXT[confirm.kind].action}
+                </Button>
+              </div>
+            </ModalContent>
+          </ModalBasicLayout>
         </Modal>
       )}
     </section>

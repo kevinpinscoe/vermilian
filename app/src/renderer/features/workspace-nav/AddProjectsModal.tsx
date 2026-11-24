@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, Button } from '@vibe/core';
+import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
 import { filterProjects, setWorkspaceProjects } from '../../../shared/workspace';
 import styles from './AddProjectsModal.module.css';
+import modalLayout from '../../components/ModalLayout.module.css';
 
 interface AddProjectsModalProps {
   config: VermilianConfig;
@@ -73,85 +74,87 @@ export function AddProjectsModal({
 
   return (
     <Modal id="add-projects-modal" show onClose={onClose} size="medium">
-      <ModalHeader title={`Add projects to “${workspaceName}”`} />
-      <ModalContent>
-        <div className={styles.intro}>
-          Projects belong to one workspace at a time. Unchecking a project leaves it
-          unassigned rather than deleting it.
-        </div>
-
-        {allProjects.length === 0 ? (
-          <div className={styles.empty}>No YouTrack projects available.</div>
-        ) : (
-          <>
-            <input
-              type="search"
-              className={styles.search}
-              placeholder="Filter projects"
-              aria-label="Filter projects"
-              data-testid="add-projects-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              autoFocus
-            />
-            {visibleProjects.length === 0 ? (
-              <div className={styles.empty} data-testid="add-projects-no-match">
-                No projects match “{query.trim()}”.
-              </div>
-            ) : (
-              <div className={styles.list} data-testid="add-projects-list">
-                {visibleProjects.map((p) => {
-                  const origin = originByProjectId.get(p.id);
-                  const here = initiallyHere.has(p.id);
-                  return (
-                    <label
-                      key={p.id}
-                      className={styles.row}
-                      data-testid="add-projects-row"
-                      data-project-name={p.name}
-                    >
-                      <input
-                        type="checkbox"
-                        className={styles.checkbox}
-                        checked={selected.has(p.id)}
-                        onChange={() => toggle(p.id)}
-                        aria-label={p.name}
-                      />
-                      <span className={styles.projectName}>{p.name}</span>
-                      {here ? (
-                        <span className={styles.origin}>in this workspace</span>
-                      ) : origin ? (
-                        <span className={styles.origin}>in “{origin}”</span>
-                      ) : (
-                        <span className={`${styles.origin} ${styles.originUnassigned}`}>unassigned</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {movingFromElsewhere.length > 0 && (
-          <div className={styles.moveNotice} data-testid="add-projects-move-notice">
-            {movingFromElsewhere.length === 1
-              ? `“${movingFromElsewhere[0].name}” will move out of “${originByProjectId.get(movingFromElsewhere[0].id)}”.`
-              : `${movingFromElsewhere.length} projects will move out of their current workspace.`}
+      <ModalBasicLayout className={modalLayout.layout}>
+        <ModalHeader title={`Add projects to “${workspaceName}”`} />
+        <ModalContent>
+          <div className={styles.intro}>
+            Projects belong to one workspace at a time. Unchecking a project leaves it
+            unassigned rather than deleting it.
           </div>
-        )}
 
-        <div className={styles.footer}>
-          <Button kind="tertiary" onClick={onClose}>Cancel</Button>
-          <Button
-            kind="primary"
-            data-testid="add-projects-save"
-            onClick={handleSave}
-          >
-            Save
-          </Button>
-        </div>
-      </ModalContent>
+          {allProjects.length === 0 ? (
+            <div className={styles.empty}>No YouTrack projects available.</div>
+          ) : (
+            <>
+              <input
+                type="search"
+                className={styles.search}
+                placeholder="Filter projects"
+                aria-label="Filter projects"
+                data-testid="add-projects-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoFocus
+              />
+              {visibleProjects.length === 0 ? (
+                <div className={styles.empty} data-testid="add-projects-no-match">
+                  No projects match “{query.trim()}”.
+                </div>
+              ) : (
+                <div className={styles.list} data-testid="add-projects-list">
+                  {visibleProjects.map((p) => {
+                    const origin = originByProjectId.get(p.id);
+                    const here = initiallyHere.has(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={styles.row}
+                        data-testid="add-projects-row"
+                        data-project-name={p.name}
+                      >
+                        <input
+                          type="checkbox"
+                          className={styles.checkbox}
+                          checked={selected.has(p.id)}
+                          onChange={() => toggle(p.id)}
+                          aria-label={p.name}
+                        />
+                        <span className={styles.projectName}>{p.name}</span>
+                        {here ? (
+                          <span className={styles.origin}>in this workspace</span>
+                        ) : origin ? (
+                          <span className={styles.origin}>in “{origin}”</span>
+                        ) : (
+                          <span className={`${styles.origin} ${styles.originUnassigned}`}>unassigned</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {movingFromElsewhere.length > 0 && (
+            <div className={styles.moveNotice} data-testid="add-projects-move-notice">
+              {movingFromElsewhere.length === 1
+                ? `“${movingFromElsewhere[0].name}” will move out of “${originByProjectId.get(movingFromElsewhere[0].id)}”.`
+                : `${movingFromElsewhere.length} projects will move out of their current workspace.`}
+            </div>
+          )}
+
+          <div className={styles.footer}>
+            <Button kind="tertiary" onClick={onClose}>Cancel</Button>
+            <Button
+              kind="primary"
+              data-testid="add-projects-save"
+              onClick={handleSave}
+            >
+              Save
+            </Button>
+          </div>
+        </ModalContent>
+      </ModalBasicLayout>
     </Modal>
   );
 }
