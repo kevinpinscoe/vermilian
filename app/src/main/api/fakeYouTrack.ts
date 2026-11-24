@@ -21,6 +21,8 @@ import type {
   RecommendationIssue,
   WorkspaceArticleListing,
 } from './youtrack';
+// Same paging bounds as the real client (the fake reads one in-memory page).
+export { STANDUP_MAX_PAGES, STANDUP_PAGE_SIZE } from './youtrack';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
 import { STORAGE_MARKER_TITLE, serialiseStorageMarker } from '../../shared/storageActivation';
 
@@ -519,7 +521,9 @@ export async function getIssuesForStandup(
   // Which credential reference the read used, from the fictional e2e token;
   // 'legacy' for the Settings token's stand-in. Never the token itself.
   standupCredentialRefs.push(refFromE2eFakeYouTrackToken(token) ?? 'legacy');
-  if (standupDelayMs > 0) await new Promise((r) => setTimeout(r, standupDelayMs));
+  if (standupDelayMs > 0 && (!standupDelayProject || projectShortNames.includes(standupDelayProject))) {
+    await new Promise((r) => setTimeout(r, standupDelayMs));
+  }
   const query = buildStandupQuery(plan);
   if (!query) return { done: [], inProgress: [], blocked: [] };
   rejectInvalidStandupQuery(query, (shortName) => fakeStatusValues(shortName).map((v) => v.name));
@@ -529,6 +533,9 @@ export async function getIssuesForStandup(
     { idReadable: 'TEST-1', summary: 'Finished the login flow', status: 'Done', priority: 'Normal', notes: null, updatedMs: 0, loggedMinutesToday: 85 },
     { idReadable: 'TEST-5', summary: 'Refactoring the API client', status: 'In Progress', priority: 'Critical', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
     { idReadable: 'TST2-2', summary: 'Waiting on a vendor response', status: 'BLOCKED', priority: 'Major', notes: null, updatedMs: 0, loggedMinutesToday: 0 },
+    // Opt-in extra fixtures (VERM-114 review), e.g. a completed ticket in a
+    // second workspace's project: [{ idReadable, summary, status }].
+    ...extraStandupFixtures(),
   ];
   const out: StandupIssues = { done: [], inProgress: [], blocked: [] };
   for (const t of fixtures) {
@@ -545,13 +552,30 @@ export function getStandupCredentialRefsForTests(): string[] {
   return [...standupCredentialRefs];
 }
 let standupDelayMs = 0;
+let standupDelayProject = '';
+
+function extraStandupFixtures(): StandupIssues['done'] {
+  const raw = process.env.VERMILIAN_E2E_STANDUP_EXTRA_FIXTURES;
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw) as Array<{ idReadable?: unknown; summary?: unknown; status?: unknown }>;
+    return list.flatMap((f) =>
+      typeof f.idReadable === 'string' && typeof f.summary === 'string' && typeof f.status === 'string'
+        ? [{ idReadable: f.idReadable, summary: f.summary, status: f.status, priority: null, notes: null, updatedMs: 0, loggedMinutesToday: 0 }]
+        : []);
+  } catch {
+    return [];
+  }
+}
 
 export function getStandupQueriesForTests(): string[][] {
   return standupQueries.map((q) => [...q]);
 }
 
-export function setStandupDelayForTests(ms: number): void {
+/** Hold stand-up reads for `ms`; only reads that include `project`, when one is named. */
+export function setStandupDelayForTests(ms: number, project?: string): void {
   standupDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0;
+  standupDelayProject = typeof project === 'string' ? project : '';
 }
 
 // ─── _vermilian-config Article (in-memory) ──────────────────────────────────────

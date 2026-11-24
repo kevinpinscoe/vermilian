@@ -118,24 +118,31 @@ export async function generateWorkspaceStandup(d: WorkspaceStandupDeps): Promise
 }
 
 export interface WorkspaceDailyReviewDeps extends WorkspaceReportSourceDeps {
-  /** The active workspace's ID, or '' when there is none. */
-  activeWorkspaceId(): Promise<string>;
+  /** Whether `workspaceId` names a workspace this machine has. */
+  isKnownWorkspace(workspaceId: string): Promise<boolean>;
   cutoffMs: number;
 }
 
 /**
- * The Daily Review's "recently completed" list (VERM-9) for the active
- * workspace, read exactly as a stand-up reads it (VERM-114): same
- * connection rule, same discovery, same done mapping. Deterministic — no
- * Claude call.
+ * The Daily Review's "recently completed" list (VERM-9) for one workspace,
+ * read exactly as a stand-up reads it (VERM-114): same connection rule, same
+ * discovery, same done mapping. Deterministic — no Claude call.
+ *
+ * The review is bound to the workspace the renderer asked for (VERM-114
+ * review), not to whichever is active when the read finishes, and every
+ * answer names that workspace. The renderer caches by it and refuses an
+ * answer naming any other, so a slow answer for A can never fill B's view.
  */
-export async function getWorkspaceDailyReview(d: WorkspaceDailyReviewDeps): Promise<DailyReviewGetResult> {
-  const id = await d.activeWorkspaceId();
-  if (!id) return { ok: false, error: 'There is no active workspace to review.' };
-  const read = await readWorkspaceReportIssues(d, id, d.cutoffMs);
-  if (!read.ok) return { ok: false, error: read.error };
+export async function getWorkspaceDailyReview(d: WorkspaceDailyReviewDeps, workspaceId: string): Promise<DailyReviewGetResult> {
+  if (!workspaceId) return { ok: false, error: 'There is no active workspace to review.' };
+  if (!(await d.isKnownWorkspace(workspaceId))) {
+    return { ok: false, workspaceId, error: 'That workspace no longer exists, so it cannot be reviewed.' };
+  }
+  const read = await readWorkspaceReportIssues(d, workspaceId, d.cutoffMs);
+  if (!read.ok) return { ok: false, workspaceId, error: read.error };
   return {
     ok: true,
+    workspaceId,
     completed: read.issues.done.map((t) => ({ idReadable: t.idReadable, summary: t.summary, priority: t.priority })),
     // Only what affects completed work: a project left out, or no done state.
     warnings: read.warnings.filter((w) => w.group === null || w.group === 'done').map((w) => w.message),

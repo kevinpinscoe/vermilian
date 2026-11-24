@@ -166,11 +166,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stand-up query named hard-coded statuses, including `Working on it`, which had been removed from
   YouTrack, and YouTrack rejects a whole query when one value is unknown; the Priority Desk Daily
   Review shared that read and failed the same way. Both now read each project's own Status values
-  from its configuration and query only those. Resolved states count as done, except those that
-  close an issue without completing it, such as `Wont do`, and a project can override any value in its workspace document
-  (`youtrackProjects`, see RUNBOOK *Stand-up status mapping*). A project with no state for a group
-  is named, and the other groups are still reported. Under per-workspace storage, Daily Review now
-  reads through the active workspace's own connection, as the stand-up already did.
+  from its configuration and query only those. Resolved states count as done, except `Wont do`,
+  and a project can override any value in its workspace document (`youtrackProjects`, see
+  RUNBOOK *Stand-up status mapping*). A project with no state for a group is named, and the other
+  groups are still reported. Results are now read page by page until YouTrack has no more, where
+  one request used to stop at 500 issues without saying so. Under per-workspace storage, Daily
+  Review now reads through its workspace's own connection, as the stand-up already did, and its
+  completed work is cached per workspace, so a slow answer for one workspace can no longer appear
+  after you switch to another.
 
 - **AI features work with newer Claude models** (VERM-113). AI create task and Recommendations
   no longer force the model to call their tool. Claude Opus 5.5, Claude Sonnet 5.5 and the

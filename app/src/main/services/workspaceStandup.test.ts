@@ -217,8 +217,8 @@ describe('status discovery and mapping (VERM-114)', () => {
 describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => {
   function dailyDeps(activeId: string, over: Partial<WorkspaceDailyReviewDeps> = {}) {
     const { d, reads } = deps(activeId);
-    const dd: WorkspaceDailyReviewDeps = { ...d, activeWorkspaceId: async () => activeId, cutoffMs: 0, ...over };
-    return { d: dd, reads };
+    const dd: WorkspaceDailyReviewDeps = { ...d, isKnownWorkspace: async (id) => id in WORKSPACES || id === 'ws-broken', cutoffMs: 0, ...over };
+    return { d: dd, reads, id: activeId };
   }
 
   it('per-workspace: neither caller uses the Settings connection for any read', async () => {
@@ -228,8 +228,9 @@ describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => 
 
     const reviewLegacy = vi.fn(async () => ({ ok: true as const, url: 'https://yt.example.com', token: 'fictional-settings-token' }));
     const r = dailyDeps('ws-work', { legacyConnection: reviewLegacy });
-    await expect(getWorkspaceDailyReview(r.d)).resolves.toEqual({
+    await expect(getWorkspaceDailyReview(r.d, r.id)).resolves.toEqual({
       ok: true,
+      workspaceId: 'ws-work',
       completed: [{ idReadable: 'HOME-1', summary: 'x', priority: null }],
       warnings: [],
     });
@@ -244,7 +245,7 @@ describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => 
   it('per-workspace: Daily Review with a broken workspace credential fails without falling back', async () => {
     const legacyConnection = vi.fn();
     const r = dailyDeps('ws-broken', { legacyConnection });
-    const out = await getWorkspaceDailyReview(r.d);
+    const out = await getWorkspaceDailyReview(r.d, r.id);
     expect(out.ok).toBe(false);
     expect(legacyConnection).not.toHaveBeenCalled();
     expect(r.reads).toEqual([]);
@@ -253,7 +254,7 @@ describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => 
   it('legacy: Daily Review keeps the configured shared connection', async () => {
     const connectWorkspace = vi.fn();
     const r = dailyDeps('ws-work', { storage: 'legacy', connectWorkspace, loadWorkspace: async () => ({ id: 'ws-work', backend: null, folders: [{ projectIds: ['0-2'] }] }) });
-    await expect(getWorkspaceDailyReview(r.d)).resolves.toMatchObject({ ok: true });
+    await expect(getWorkspaceDailyReview(r.d, r.id)).resolves.toMatchObject({ ok: true, workspaceId: 'ws-work' });
     expect(connectWorkspace).not.toHaveBeenCalled();
     expect(new Set(r.reads.map((x) => x.token))).toEqual(new Set(['fictional-settings-token']));
   });
@@ -262,12 +263,28 @@ describe('Stand-up and Daily Review — connection isolation (VERM-114)', () => 
     const r = dailyDeps('ws-home', {
       loadWorkspace: async () => ({ ...WORKSPACES['ws-home'], youtrackProjects: { HOME: { statusRoles: { BLOCKED: 'todo', Done: 'todo' } } } }),
     });
-    const out = await getWorkspaceDailyReview(r.d);
+    const out = await getWorkspaceDailyReview(r.d, r.id);
     expect(out.warnings).toEqual(['HOME: no Status value is mapped to done, so done issues from HOME are not shown.']);
   });
 
-  it('Daily Review refuses a Jira workspace and reports no active workspace', async () => {
-    await expect(getWorkspaceDailyReview(dailyDeps('ws-jira').d)).resolves.toEqual({ ok: false, error: JIRA_STANDUP_UNSUPPORTED_MESSAGE });
-    await expect(getWorkspaceDailyReview(dailyDeps('', {}).d)).resolves.toMatchObject({ ok: false });
+  it('Daily Review refuses a Jira workspace, no workspace, and a workspace that does not exist', async () => {
+    await expect(getWorkspaceDailyReview(dailyDeps('ws-jira').d, 'ws-jira')).resolves.toEqual({ ok: false, workspaceId: 'ws-jira', error: JIRA_STANDUP_UNSUPPORTED_MESSAGE });
+    await expect(getWorkspaceDailyReview(dailyDeps('').d, '')).resolves.toMatchObject({ ok: false });
+    const unknown = dailyDeps('ws-gone');
+    await expect(getWorkspaceDailyReview(unknown.d, 'ws-gone')).resolves.toMatchObject({ ok: false, workspaceId: 'ws-gone' });
+    expect(unknown.reads).toEqual([]);
+  });
+
+  // The review is bound to the workspace it was asked for (VERM-114 review):
+  // it reads that workspace, whichever is active by the time it runs, and the
+  // answer names it so the renderer can refuse to file it under another.
+  it('Daily Review reads the workspace it was asked for, with that workspace\'s connection, and names it', async () => {
+    const home = dailyDeps('ws-home');
+    const work = dailyDeps('ws-work');
+    const [h, w] = await Promise.all([getWorkspaceDailyReview(home.d, 'ws-home'), getWorkspaceDailyReview(work.d, 'ws-work')]);
+    expect(h).toMatchObject({ ok: true, workspaceId: 'ws-home' });
+    expect(w).toMatchObject({ ok: true, workspaceId: 'ws-work' });
+    expect(new Set(home.reads.map((x) => x.token))).toEqual(new Set(['fictional-home-token']));
+    expect(new Set(work.reads.map((x) => x.token))).toEqual(new Set(['fictional-work-token']));
   });
 });

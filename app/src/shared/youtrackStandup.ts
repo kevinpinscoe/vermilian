@@ -10,10 +10,12 @@
 //   1. the workspace document's `youtrackProjects[<shortName>].statusRoles`
 //      override for that value, when there is one;
 //   2. otherwise a default derived from the project's configuration:
-//      - a resolved value is `done`, except values that close an issue
-//        without completing it (Wont do, Won't fix, Duplicate, Obsolete,
-//        Cancelled, Rejected, Invalid), which have no role and so never count
-//        as accomplishments;
+//      - a resolved value is `done`, except Wont do (also spelt Won't do),
+//        which has no role and so never counts as an accomplishment. That is
+//        the one agreed default exclusion (Kevin, VERM-114 review); any other
+//        resolved value that closes an issue without completing it
+//        (Duplicate, Obsolete, Rejected…) counts as done unless the project
+//        maps it to a role with no stand-up group, such as `deferred`;
 //      - an unresolved value is `inProgress`, `waiting` or `blocked` when its
 //        name says so (In Progress, Working on it, Waiting…, Blocked…), and
 //        `todo` otherwise.
@@ -47,8 +49,10 @@ export type YouTrackProjectSettingsMap = Record<string, YouTrackProjectSettings>
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ');
 
-// Resolved values that close an issue without completing it.
-const NOT_COMPLETED = new Set(['wont do', 'wont fix', 'duplicate', 'obsolete', 'cancelled', 'canceled', 'rejected', 'invalid']);
+// The resolved value excluded from accomplishments by default. Only Wont do
+// was agreed; broadening this needs Kevin's approval (VERM-114 review), and
+// a project can exclude anything else through its own overrides.
+const NOT_COMPLETED = new Set(['wont do']);
 const IN_PROGRESS = new Set(['in progress', 'working on it', 'doing', 'in development', 'in review']);
 const BLOCKED = new Set(['blocked', 'impeded']);
 

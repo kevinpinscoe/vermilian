@@ -41,7 +41,7 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
   }
 
   const isLoading = focusLoading || boardLoading || completedQuery.isPending;
-  const isError = boardError || (completedQuery.isSuccess && !completedQuery.data.ok);
+  const isError = boardError || completedQuery.isError || (completedQuery.isSuccess && !completedQuery.data.ok);
 
   return (
     <Modal id="daily-review-modal" show onClose={onClose} size="large">
@@ -56,7 +56,7 @@ export function DailyReviewModal({ onClose, onSelectIssue }: DailyReviewModalPro
                 text={
                   boardError
                     ? "One or more projects in this workspace failed to load."
-                    : (completedQuery.data?.error ?? 'Failed to load recently completed work.')
+                    : (completedQuery.error?.message ?? completedQuery.data?.error ?? 'Failed to load recently completed work.')
                 }
               />
             </div>

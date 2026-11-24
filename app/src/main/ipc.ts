@@ -66,6 +66,7 @@ import {
   type GetRecommendationResult,
   type PostRecommendationAuditArgs,
   type PostRecommendationAuditResult,
+  type DailyReviewGetArgs,
   type DailyReviewGetResult,
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
@@ -1174,20 +1175,27 @@ export function registerIpc(): void {
   // (that cache excludes resolved issues); Now/Next/Then, blocked-focused,
   // and needs-attention are all derived client-side from that board cache
   // instead (renderer/features/daily-review/boardData.ts).
-  ipcMain.handle(IPC.dailyReviewGet, async (): Promise<DailyReviewGetResult> => {
+  ipcMain.handle(IPC.dailyReviewGet, async (_e, args: unknown): Promise<DailyReviewGetResult> => {
+    // The workspace the renderer's view is for (VERM-114 review): read that
+    // one and name it in the answer, never whichever is active by then.
+    const requested = (args as Partial<DailyReviewGetArgs> | null)?.workspaceId;
+    const workspaceId = typeof requested === 'string' ? requested : '';
     try {
       const cfg = await readConfig();
       // Read exactly as a stand-up reads (VERM-114): under per-workspace
-      // storage the active workspace's own connection for discovery and the
-      // issue read, never the Settings connection; legacy keeps the shared one.
-      return await getWorkspaceDailyReview({
-        ...workspaceReportSource(cfg),
-        activeWorkspaceId: async () => (await activeWorkspaceContext()).workspaceId ?? '',
-        cutoffMs: Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000,
-      });
+      // storage the workspace's own connection for discovery and the issue
+      // read, never the Settings connection; legacy keeps the shared one.
+      return await getWorkspaceDailyReview(
+        {
+          ...workspaceReportSource(cfg),
+          isKnownWorkspace: async (id) => (await workspaceChoices()).choices.some((c) => c.id === id),
+          cutoffMs: Date.now() - DAILY_REVIEW_COMPLETED_WINDOW_HOURS * 60 * 60 * 1000,
+        },
+        workspaceId,
+      );
     } catch (e) {
       const err = e as { message?: string };
-      return { ok: false, error: err.message ?? 'Daily Review failed to load.' };
+      return { ok: false, workspaceId, error: err.message ?? 'Daily Review failed to load.' };
     }
   });
 
@@ -1225,7 +1233,7 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
     ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());
     ipcMain.handle('e2e:articleDelay', (_e, ms: number) => fakeYouTrackForE2E.setArticleDelayForTests(ms));
-    ipcMain.handle('e2e:standupDelay', (_e, ms: number) => fakeYouTrackForE2E.setStandupDelayForTests(ms));
+    ipcMain.handle('e2e:standupDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setStandupDelayForTests(ms, project));
     ipcMain.handle('e2e:setArticle', (_e, articleId: string, value: { content: string } | { status: number }) =>
       fakeYouTrackForE2E.setArticleForTests(articleId, value),
     );

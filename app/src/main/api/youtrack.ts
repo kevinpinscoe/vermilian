@@ -683,6 +683,40 @@ export interface StandupIssues {
  * hard-coded status name can never reach YouTrack. Done issues older than the
  * cutoff are dropped.
  */
+// Stand-up results are read page by page until a short page proves there
+// are no more (VERM-114 review). One bounded `$top=500` request used to drop
+// everything past the first 500 matches without saying so, which could hide a
+// blocked or in-progress ticket from a busy workspace. The cap only stops a
+// runaway read: reaching it is an error, never a silently partial stand-up.
+export const STANDUP_PAGE_SIZE = 100;
+export const STANDUP_MAX_PAGES = 50;
+
+async function fetchAllStandupIssues(url: string, token: string, queryText: string): Promise<StandupRawIssue[]> {
+  const all: StandupRawIssue[] = [];
+  // An issue can move between pages while they are read (its position shifts
+  // when another issue changes); each one is kept once, at its first sighting.
+  const seen = new Set<string>();
+  for (let page = 0; page < STANDUP_MAX_PAGES; page++) {
+    const batch = await request<StandupRawIssue[]>(
+      url,
+      token,
+      `/api/issues?fields=${STANDUP_FIELDS}&query=${encodeURIComponent(queryText)}` +
+        `&$top=${STANDUP_PAGE_SIZE}&$skip=${page * STANDUP_PAGE_SIZE}`,
+    );
+    for (const issue of batch) {
+      if (seen.has(issue.idReadable)) continue;
+      seen.add(issue.idReadable);
+      all.push(issue);
+    }
+    if (batch.length < STANDUP_PAGE_SIZE) return all;
+  }
+  const err: YouTrackError = {
+    status: 0,
+    message: `The stand-up matched more than ${STANDUP_PAGE_SIZE * STANDUP_MAX_PAGES} issues, so it was stopped rather than shown incomplete.`,
+  };
+  throw err;
+}
+
 export async function getIssuesForStandup(
   url: string,
   token: string,
@@ -693,11 +727,7 @@ export async function getIssuesForStandup(
   const queryText = buildStandupQuery(plan);
   if (!queryText) return empty;
 
-  const raw = await request<StandupRawIssue[]>(
-    url,
-    token,
-    `/api/issues?fields=${STANDUP_FIELDS}&query=${encodeURIComponent(queryText)}&$top=500`,
-  );
+  const raw = await fetchAllStandupIssues(url, token, queryText);
 
   const todayStart = (() => {
     const d = new Date();

@@ -19,8 +19,13 @@ describe('defaultYouTrackStatusRole', () => {
     ['Fixed', true, 'done'],
     ['Wont do', true, null],
     ["Won't do", true, null],
-    ['Duplicate', true, null],
-    ['Obsolete', true, null],
+    // Only Wont do is excluded by default (VERM-114 review); every other
+    // resolved value counts as done unless the project overrides it.
+    ['Duplicate', true, 'done'],
+    ['Obsolete', true, 'done'],
+    ['Rejected', true, 'done'],
+    ['Invalid', true, 'done'],
+    ["Won't fix", true, 'done'],
     ['In Progress', false, 'inProgress'],
     ['Working on it', false, 'inProgress'],
     ['Waiting for customer', false, 'waiting'],
@@ -82,6 +87,15 @@ describe('buildStandupPlan', () => {
     expect(plan.projects).toEqual([]);
     expect(buildStandupQuery(plan)).toBe('');
     expect(plan.warnings).toHaveLength(3);
+  });
+
+  it('a project excludes another resolved value by mapping it to a role with no stand-up group', () => {
+    const values: Array<[string, boolean]> = [['Doing', false], ['Fixed', true], ['Duplicate', true]];
+    const byDefault = buildStandupPlan([{ shortName: 'OPS', metadata: meta(values) }], undefined);
+    expect(byDefault.projects[0].groups).toEqual({ Doing: 'inProgress', Fixed: 'done', Duplicate: 'done' });
+    const overridden = buildStandupPlan([{ shortName: 'OPS', metadata: meta(values) }], { OPS: { statusRoles: { Duplicate: 'deferred' } } });
+    expect(overridden.projects[0].groups).toEqual({ Doing: 'inProgress', Fixed: 'done' });
+    expect(buildStandupQuery(overridden)).toBe('(project: {OPS} and {Status}: {Doing},{Fixed})');
   });
 
   it('groups by the same mapping the query used', () => {

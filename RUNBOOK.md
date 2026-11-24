@@ -566,12 +566,21 @@ workspace's own connection, then decides what each Status value means:
 
 | Value | Default role | Stand-up group |
 | --- | --- | --- |
-| Resolved (`isResolved`), e.g. `Done`, `Fixed` | `done` | Done |
-| Resolved but not completed: `Wont do`, `Won't fix`, `Duplicate`, `Obsolete`, `Cancelled`, `Rejected`, `Invalid` | none | Not reported |
+| Resolved (`isResolved`), e.g. `Done`, `Fixed`, `Duplicate` | `done` | Done |
+| `Wont do` (also spelt `Won't do`, any case) | none | Not reported |
 | `In Progress`, `Working on it`, `Doing`, `In development`, `In review` | `inProgress` | In progress |
 | Any name starting `Waiting` | `waiting` | In progress |
 | `Blocked`, `Impeded` (any case) | `blocked` | Blocked |
 | Anything else | `todo` | Not reported |
+
+`Wont do` is the only resolved value left out of completed work by default.
+Every other resolved value, including `Duplicate`, `Obsolete` and `Rejected`,
+counts as done unless the project's override maps it to a role with no
+stand-up group (`todo` or `deferred`); see the worked example below.
+
+Results are read in pages of 100 until YouTrack has no more. A stand-up that
+matches more than 5,000 issues stops with an error rather than showing a
+partial report.
 
 The query and the displayed groups are built from the same mapping, and the
 query names only values the project actually has. If a project has no value
@@ -588,15 +597,17 @@ Each entry maps an exact Status value to one of `todo`, `inProgress`,
 `waiting`, `blocked`, `deferred` or `done`. Values not named keep their
 default.
 
-Worked example: project `OPS` uses `Stuck` for blocked work, and its team
-wants `Wont do` listed as completed:
+Worked example: project `OPS` uses `Stuck` for blocked work, its team wants
+`Wont do` listed as completed, and it does not want `Duplicate` counted as an
+accomplishment:
 
 ```json
 "youtrackProjects": {
   "OPS": {
     "statusRoles": {
       "Stuck": "blocked",
-      "Wont do": "done"
+      "Wont do": "done",
+      "Duplicate": "deferred"
     }
   }
 }
@@ -607,7 +618,8 @@ wants `Wont do` listed as completed:
 2. In YouTrack, open the article `_vermilian-ws-<workspaceId>`, add the
    `youtrackProjects` block at the top level of the JSON, and save.
 3. Start Vermilian and generate a stand-up. `Stuck` issues now appear under
-   Blocked and recently closed `Wont do` issues under Done. A name that is not
+   Blocked, recently closed `Wont do` issues under Done, and `Duplicate`
+   issues nowhere. A name that is not
    one of the project's Status values is ignored, and the stand-up says so.
 
 To return a project to the defaults, delete its entry. A mapping editor in the

@@ -654,9 +654,17 @@ export interface DailyReviewTask {
   priority: string | null;
 }
 
+// The workspace a Daily Review is for (VERM-114 review). The main process
+// reads exactly this workspace and names it in the answer.
+export interface DailyReviewGetArgs {
+  workspaceId: string;
+}
+
 export interface DailyReviewGetResult {
   ok: boolean;
   error?: string;
+  // The workspace this answer is for; absent only when none was named.
+  workspaceId?: string;
   // Present only when ok is true. Always the fixed active-workspace/48h
   // scope — see renderer/features/daily-review — never user-configurable.
   completed?: DailyReviewTask[];
@@ -905,7 +913,7 @@ export interface VermilianAPI {
   // Priority Desk "Ask for recommendation" (VERM-8)
   getRecommendation(args: GetRecommendationArgs): Promise<GetRecommendationResult>;
   postRecommendationAudit(args: PostRecommendationAuditArgs): Promise<PostRecommendationAuditResult>;
-  dailyReviewGet(): Promise<DailyReviewGetResult>;
+  dailyReviewGet(args: DailyReviewGetArgs): Promise<DailyReviewGetResult>;
   // e2e-only test hook (VERMILIAN_E2E=1) — reads back what
   // postRecommendationAudit actually posted, from the in-memory fake. The
   // main-process handler is registered only under the e2e harness; calling
@@ -979,7 +987,7 @@ export interface VermilianAPI {
   debugGetStandupCredentialRefs?(): Promise<string[]>;
   debugGetArticleFetches?(): Promise<Array<{ articleId: string; credentialRef: string }>>;
   debugSetArticleDelay?(ms: number): Promise<void>;
-  debugSetStandupDelay?(ms: number): Promise<void>;
+  debugSetStandupDelay?(ms: number, project?: string): Promise<void>;
   debugSetArticle?(articleId: string, value: { content: string } | { status: number }): Promise<void>;
 }
 

@@ -5,6 +5,8 @@ import {
   getCurrentUser,
   getWorklogTypes,
   getIssuesForStandup,
+  STANDUP_MAX_PAGES,
+  STANDUP_PAGE_SIZE,
   patchIssue,
   createIssue,
   findMasterPlanArticle,
@@ -526,7 +528,7 @@ describe('getIssuesForStandup (VERM-114)', () => {
     await getIssuesForStandup(URL, TOKEN, plan(), 0);
     expect(emittedQuery()).toBe(
       '(project: {ALPHA} and {Status}: {In Progress},{Waiting for IT},{BLOCKED},{Done})' +
-        ' or (project: {BETA} and {Status}: {Doing},{Stuck},{Fixed})',
+        ' or (project: {BETA} and {Status}: {Doing},{Stuck},{Fixed},{Duplicate})',
     );
     expect(emittedQuery()).not.toMatch(/Working on it/);
     // The fake applies the live server's rule to the emitted text and accepts it.
@@ -558,9 +560,61 @@ describe('getIssuesForStandup (VERM-114)', () => {
       ]),
     );
     const out = await getIssuesForStandup(URL, TOKEN, plan(), 1000);
-    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-1', 'BETA-1']);
+    // Wont do is the only default exclusion; BETA's Duplicate counts as done.
+    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-1', 'BETA-1', 'BETA-4']);
     expect(out.inProgress.map((t) => t.idReadable)).toEqual(['ALPHA-3', 'ALPHA-4', 'BETA-2']);
     expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-5', 'BETA-3']);
+  });
+});
+
+describe('getIssuesForStandup paging (VERM-114 review)', () => {
+  const plan = buildStandupPlan(
+    [{ shortName: 'ALPHA', metadata: parseYouTrackProjectFields([
+      { field: { name: 'Status' }, $type: 'StateProjectCustomField', bundle: { values: [['In Progress', false], ['BLOCKED', false], ['Done', true]].map(([name, isResolved], ordinal) => ({ name, isResolved, ordinal })) } },
+    ]) }],
+    undefined,
+  );
+  const issue = (n: number, status: string, updated = 9) => ({
+    id: `ALPHA-${n}`, idReadable: `ALPHA-${n}`, summary: `ALPHA-${n}`, updated, project: { shortName: 'ALPHA' },
+    customFields: [{ name: 'Status', $type: 'StateIssueCustomField', value: { name: status } }],
+  });
+  const fullPage = (from: number, status = 'In Progress') =>
+    Array.from({ length: STANDUP_PAGE_SIZE }, (_, i) => issue(from + i, status));
+  const skips = () => fetchMock.mock.calls.map(([u]) => new globalThis.URL(String(u)).searchParams.get('$skip'));
+
+  it('reads every page, so a blocked ticket on page two is reported, exactly once', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(fullPage(1)))
+      // Page two repeats page one's last issue (results shifted between
+      // requests) and carries the blocked ticket.
+      .mockResolvedValueOnce(jsonRes([issue(STANDUP_PAGE_SIZE, 'In Progress'), issue(900, 'BLOCKED')]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(skips()).toEqual(['0', String(STANDUP_PAGE_SIZE)]);
+    expect(out.blocked.map((t) => t.idReadable)).toEqual(['ALPHA-900']);
+    expect(out.inProgress).toHaveLength(STANDUP_PAGE_SIZE);
+    expect(new Set(out.inProgress.map((t) => t.idReadable)).size).toBe(STANDUP_PAGE_SIZE);
+  });
+
+  it('a full last page is followed by one more request, and stops at the empty page', async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes(fullPage(1))).mockResolvedValueOnce(jsonRes([]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 0);
+    expect(skips()).toEqual(['0', String(STANDUP_PAGE_SIZE)]);
+    expect(out.inProgress).toHaveLength(STANDUP_PAGE_SIZE);
+  });
+
+  it('keeps the completed-work cutoff on every page', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonRes([...fullPage(1, 'Done').map((i) => ({ ...i, updated: 500 }))]))
+      .mockResolvedValueOnce(jsonRes([issue(901, 'Done', 2000), issue(902, 'Done', 500)]));
+    const out = await getIssuesForStandup(URL, TOKEN, plan, 1000);
+    expect(out.done.map((t) => t.idReadable)).toEqual(['ALPHA-901']);
+  });
+
+  it('refuses rather than returning a partial result when the page cap is reached', async () => {
+    let n = 0;
+    fetchMock.mockImplementation(async () => jsonRes(fullPage((n++) * STANDUP_PAGE_SIZE + 1)));
+    await expect(getIssuesForStandup(URL, TOKEN, plan, 0)).rejects.toThrow(/more than \d+ issues/);
+    expect(fetchMock).toHaveBeenCalledTimes(STANDUP_MAX_PAGES);
   });
 });
 
