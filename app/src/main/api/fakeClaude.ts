@@ -17,6 +17,7 @@ import type { RecommendationIssue, StandupIssues, StandupTask } from './youtrack
 import { matchProjectByName } from './aiExtract';
 import { formatDuration } from './standupPrompt';
 import { refFromE2eFakeAnthropicKey } from '../../shared/workspaceAi';
+import type { CreateFieldOptions } from '../../shared/createFieldOptions';
 
 // ── e2e observation (VERM-47) ────────────────────────────────────────────────
 // Which credential reference each call came with, so a spec can check that
@@ -27,12 +28,15 @@ import { refFromE2eFakeAnthropicKey } from '../../shared/workspaceAi';
 export interface FakeClaudeCall {
   fn: 'testKey' | 'extractTaskFields' | 'generateStandupReport' | 'getRecommendation';
   credentialRef: string;
+  // extractTaskFields only (VERM-115): the Status values Claude was limited
+  // to; absent when no project was known before the request.
+  allowedStatus?: string[];
 }
 
 const calls: FakeClaudeCall[] = [];
 
-function record(fn: FakeClaudeCall['fn'], key: string): void {
-  calls.push({ fn, credentialRef: refFromE2eFakeAnthropicKey(key) ?? (key === 'e2e-claude-key' ? 'legacy' : 'other') });
+function record(fn: FakeClaudeCall['fn'], key: string, extra: Partial<FakeClaudeCall> = {}): void {
+  calls.push({ fn, credentialRef: refFromE2eFakeAnthropicKey(key) ?? (key === 'e2e-claude-key' ? 'legacy' : 'other'), ...extra });
 }
 
 export function getCallsForTests(): FakeClaudeCall[] {
@@ -49,8 +53,10 @@ export async function extractTaskFields(
   description: string,
   projects: { id: string; name: string }[],
   _model: string,
+  allowed: CreateFieldOptions | null = null,
 ): Promise<AiCreateTaskResult> {
-  record('extractTaskFields', key);
+  // Recorded only when a project was known, so other specs' call records are unchanged.
+  record('extractTaskFields', key, allowed ? { allowedStatus: [...allowed.status.values] } : {});
   const trimmed = description.trim();
 
   const blank: AiCreateTaskFields = {
@@ -77,10 +83,15 @@ export async function extractTaskFields(
     : lc.includes('urgent') || lc.includes('asap') ? 'Major'
     : null;
   const ticket = (trimmed.match(/\b[A-Z]{2,}-\d+\b/) ?? [null])[0];
+  // Explicit `status: X` / `category: X` cues (VERM-115), returned verbatim —
+  // valid or not — so a spec can drive an out-of-project suggestion.
+  const cue = (name: string) => (trimmed.match(new RegExp(`\\b${name}:\\s*([^,;\\n]+)`, 'i'))?.[1] ?? '').trim() || null;
+  const status = cue('status');
+  const category = cue('category');
 
   return {
     ok: true,
-    fields: { ...blank, summary, projectId, priority, ticket, projectMatchError },
+    fields: { ...blank, summary, projectId, priority, status, category, ticket, projectMatchError },
   };
 }
 

@@ -5,6 +5,8 @@ import { useToastStore } from '../../stores/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { TaskForm, makeDefaultFormState, validateForm } from './TaskForm';
 import type { FormState } from './TaskForm';
+import { useTaskFormOptions } from './useTaskFormOptions';
+import { useWorkspaceAi } from '../workspace-nav/useWorkspaceAi';
 import styles from './CreateTaskModal.module.css';
 
 interface CreateTaskModalProps {
@@ -18,14 +20,19 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
   const showToast = useToastStore((s) => s.show);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [apiErrorRefresh, setApiErrorRefresh] = useState(false);
   const [form, setForm] = useState<FormState>(() =>
     makeDefaultFormState(projects, defaultProjectId),
   );
+  // The workspace this form was opened in; the main process refuses the
+  // create if it is no longer the active one (VERM-115).
+  const { workspaceId } = useWorkspaceAi();
+  const fieldOptions = useTaskFormOptions(workspaceId, projects, form, setForm);
 
   const { summaryEmpty, projectEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } =
     validateForm(form);
   const canCreate =
-    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !loading;
+    !summaryEmpty && !projectEmpty && !ticketLinkInvalid && !relatedLinkInvalid && !repoUrlInvalid && !loading && fieldOptions.ready;
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -33,10 +40,12 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
 
     setLoading(true);
     setApiError(null);
+    setApiErrorRefresh(false);
 
     const dueDate = form.dueDate ? new Date(form.dueDate).getTime() : null;
 
     const result = await window.vermilian.createIssue({
+      workspaceId,
       projectId: form.projectId,
       summary: form.summary.trim(),
       status: form.status || null,
@@ -54,6 +63,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
 
     if (!result.ok || !result.idReadable) {
       setApiError(result.error ?? 'Failed to create task.');
+      setApiErrorRefresh(Boolean(result.refreshOptions));
       return;
     }
 
@@ -78,8 +88,10 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose }: CreateT
               form={form}
               onChange={setForm}
               projects={projects}
+              fieldOptions={fieldOptions}
               loading={loading}
               apiError={apiError}
+              apiErrorRefresh={apiErrorRefresh}
               autoFocusSummary
             />
           </div>

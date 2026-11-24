@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Text } from '@vibe/core';
 import type { YouTrackProject } from '../../../shared/workspace';
-import { STATUS_OPTIONS, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../../shared/workspace';
 import { CREATABLE_FIELD_DEFS } from '../../../shared/fields';
+import type { CreateFieldKey } from '../../../shared/createFieldOptions';
+import type { TaskFormOptions } from './useTaskFormOptions';
 import styles from './CreateTaskModal.module.css';
 
 export interface FormState {
@@ -19,19 +20,6 @@ export interface FormState {
   repoUrl: string;
 }
 
-function isInboxProject(projects: YouTrackProject[], projectId: string): boolean {
-  const p = projects.find((pr) => pr.id === projectId);
-  return Boolean(p && p.name.toLowerCase().includes('inbox'));
-}
-
-// status/priority need a non-empty create-form default; every other creatable
-// field defaults to ''. Same escape-hatch pattern as project/category's
-// side-effecting onChange handlers below — not a registry concern.
-const FORM_DEFAULT_OVERRIDES: Partial<Record<string, string>> = {
-  status: 'To do',
-  priority: 'Normal',
-};
-
 export function makeDefaultFormState(
   projects: YouTrackProject[],
   defaultProjectId: string | null,
@@ -43,16 +31,13 @@ export function makeDefaultFormState(
   // choose explicitly than fail with a confusing YouTrack API error.
   const pid =
     defaultProjectId && projects.find((p) => p.id === defaultProjectId) ? defaultProjectId : '';
-  const inbox = isInboxProject(projects, pid);
+  // Every field starts empty. Status, Priority and Category take the
+  // selected project's own defaults once its options are read (VERM-115);
+  // nothing assumes a value such as "To do" exists.
   const base = Object.fromEntries(
-    CREATABLE_FIELD_DEFS.map((d) => [d.key, FORM_DEFAULT_OVERRIDES[d.key] ?? '']),
+    CREATABLE_FIELD_DEFS.map((d) => [d.key, '']),
   ) as Omit<FormState, 'summary' | 'projectId'>;
-  return {
-    ...base,
-    summary: '',
-    projectId: pid,
-    category: inbox ? 'INBOX' : base.category,
-  };
+  return { ...base, summary: '', projectId: pid };
 }
 
 export function validateForm(form: FormState): {
@@ -82,24 +67,77 @@ interface TaskFormProps {
   form: FormState;
   onChange: (form: FormState) => void;
   projects: YouTrackProject[];
+  /** The selected project's options, from useTaskFormOptions (VERM-115). */
+  fieldOptions: TaskFormOptions;
   loading?: boolean;
   apiError?: string | null;
+  /** Offer to refresh the project's options beside the API error. */
+  apiErrorRefresh?: boolean;
   projectMatchError?: boolean;
   autoFocusSummary?: boolean;
+}
+
+function OptionSelect({
+  fieldKey,
+  value,
+  fieldOptions,
+  disabled,
+  onChange,
+}: {
+  fieldKey: CreateFieldKey;
+  value: string;
+  fieldOptions: TaskFormOptions;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const opt = fieldOptions.options?.[fieldKey];
+  const absent = Boolean(opt && !opt.present);
+  const flag = fieldOptions.flags[fieldKey];
+  return (
+    <>
+      <select
+        id={`ct-${fieldKey}`}
+        className={styles.select}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled || !fieldOptions.ready || absent}
+      >
+        {!fieldOptions.ready ? (
+          <option value={value}>{fieldOptions.loading ? 'Loading…' : '—'}</option>
+        ) : absent ? (
+          <option value="">Not used in this project</option>
+        ) : (
+          <>
+            <option value="">—</option>
+            {opt?.values.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </>
+        )}
+      </select>
+      {flag && (
+        <span className={styles.fieldError} data-testid={`ct-flag-${fieldKey}`}>
+          {flag}
+        </span>
+      )}
+    </>
+  );
 }
 
 export function TaskForm({
   form,
   onChange,
   projects,
+  fieldOptions,
   loading,
   apiError,
+  apiErrorRefresh,
   projectMatchError,
   autoFocusSummary,
 }: TaskFormProps) {
   const summaryRef = useRef<HTMLInputElement>(null);
-  const [inboxCategoryNote, setInboxCategoryNote] = useState(false);
-  const [categoryTouched, setCategoryTouched] = useState(false);
 
   const { summaryEmpty, ticketLinkInvalid, relatedLinkInvalid, repoUrlInvalid } = validateForm(form);
 
@@ -111,22 +149,15 @@ export function TaskForm({
     onChange({ ...form, [field]: value });
   }
 
+  // Status/Priority/Category are re-derived from the new project's options
+  // when they arrive (useTaskFormOptions).
   function handleProjectChange(projectId: string) {
-    const inbox = isInboxProject(projects, projectId);
-    let category = form.category;
-    if (inbox && !categoryTouched && !category) {
-      category = 'INBOX';
-      setInboxCategoryNote(true);
-    } else {
-      setInboxCategoryNote(false);
-    }
-    onChange({ ...form, projectId, category });
+    onChange({ ...form, projectId });
   }
 
-  function handleCategoryChange(category: string) {
-    setCategoryTouched(true);
-    setInboxCategoryNote(false);
-    onChange({ ...form, category });
+  function handleOptionChange(key: CreateFieldKey, value: string) {
+    fieldOptions.touch(key);
+    set(key, value);
   }
 
   const projectsSorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
@@ -138,6 +169,17 @@ export function TaskForm({
           <Text type="text2" style={{ color: 'var(--negative-color, #e2445c)' }}>
             {apiError}
           </Text>
+          {apiErrorRefresh && (
+            <button
+              type="button"
+              className={styles.inlineAction}
+              data-testid="ct-refresh-options"
+              onClick={fieldOptions.refresh}
+              disabled={loading}
+            >
+              Refresh project options
+            </button>
+          )}
         </div>
       )}
 
@@ -185,6 +227,19 @@ export function TaskForm({
             Could not match a project — please select one.
           </span>
         )}
+        {fieldOptions.error && (
+          <span className={styles.fieldError} data-testid="ct-options-error">
+            Could not load this project&apos;s fields: {fieldOptions.error}{' '}
+            <button
+              type="button"
+              className={styles.inlineAction}
+              data-testid="ct-options-retry"
+              onClick={fieldOptions.retry}
+            >
+              Retry
+            </button>
+          </span>
+        )}
       </div>
 
       {/* Priority + Status */}
@@ -193,39 +248,13 @@ export function TaskForm({
           <label className={styles.label} htmlFor="ct-priority">
             Priority
           </label>
-          <select
-            id="ct-priority"
-            className={styles.select}
-            value={form.priority}
-            onChange={(e) => set('priority', e.target.value)}
-            disabled={loading}
-          >
-            <option value="">—</option>
-            {PRIORITY_OPTIONS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
+          <OptionSelect fieldKey="priority" value={form.priority} fieldOptions={fieldOptions} disabled={loading} onChange={(v) => handleOptionChange('priority', v)} />
         </div>
         <div className={styles.fieldGroup}>
           <label className={styles.label} htmlFor="ct-status">
             Status
           </label>
-          <select
-            id="ct-status"
-            className={styles.select}
-            value={form.status}
-            onChange={(e) => set('status', e.target.value)}
-            disabled={loading}
-          >
-            <option value="">—</option>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
+          <OptionSelect fieldKey="status" value={form.status} fieldOptions={fieldOptions} disabled={loading} onChange={(v) => handleOptionChange('status', v)} />
         </div>
       </div>
 
@@ -235,21 +264,8 @@ export function TaskForm({
           <label className={styles.label} htmlFor="ct-category">
             Category
           </label>
-          <select
-            id="ct-category"
-            className={styles.select}
-            value={form.category}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            disabled={loading}
-          >
-            <option value="">—</option>
-            {CATEGORY_OPTIONS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-          {inboxCategoryNote && (
+          <OptionSelect fieldKey="category" value={form.category} fieldOptions={fieldOptions} disabled={loading} onChange={(v) => handleOptionChange('category', v)} />
+          {fieldOptions.inboxNote && (
             <span className={styles.fieldNote}>Auto-set because this is an Inbox project.</span>
           )}
         </div>

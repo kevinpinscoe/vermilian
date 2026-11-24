@@ -34,6 +34,7 @@ import {
   type RunwayItemsMoveToNumberArgs,
   type MoveIssueArgs,
   type CreateIssueArgs,
+  type CreateFieldOptionsArgs,
   type AiCreateTaskArgs,
   type StandupGenerateArgs,
   type StandupSaveArgs,
@@ -140,6 +141,7 @@ const api: VermilianAPI = {
   getIssueDetail: (issueId: string) => ipcRenderer.invoke(IPC.getIssueDetail, issueId),
   patchIssue: (args: PatchIssueArgs) => ipcRenderer.invoke(IPC.patchIssue, args),
   createIssue: (args: CreateIssueArgs) => ipcRenderer.invoke(IPC.createIssue, args),
+  getCreateFieldOptions: (args: CreateFieldOptionsArgs) => ipcRenderer.invoke(IPC.getCreateFieldOptions, args),
   deleteIssue: (issueId: string) => ipcRenderer.invoke(IPC.deleteIssue, issueId),
   moveIssue: (args: MoveIssueArgs) => ipcRenderer.invoke(IPC.moveIssue, args),
   quitApp: () => ipcRenderer.invoke(IPC.quitApp),
@@ -209,6 +211,10 @@ const api: VermilianAPI = {
   debugSetArticleDelay: (ms: number) => ipcRenderer.invoke('e2e:articleDelay', ms),
   debugSetStandupDelay: (ms: number, project?: string) => ipcRenderer.invoke('e2e:standupDelay', ms, project),
   debugSetArticle: (articleId: string, value: unknown) => ipcRenderer.invoke('e2e:setArticle', articleId, value),
+  debugGetCreateRequests: () => ipcRenderer.invoke('e2e:createRequests'),
+  debugSetNextCreateError: (message: string | null) => ipcRenderer.invoke('e2e:nextCreateError', message),
+  debugSetFieldMetadataDelay: (ms: number, project?: string) => ipcRenderer.invoke('e2e:fieldMetadataDelay', ms, project),
+  debugFailFieldMetadata: (n: number, project?: string) => ipcRenderer.invoke('e2e:failFieldMetadata', n, project),
 };
 
 contextBridge.exposeInMainWorld('vermilian', api);

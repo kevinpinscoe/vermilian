@@ -53,6 +53,8 @@ import {
   type MoveIssueArgs,
   type CreateIssueArgs,
   type CreateIssueResult,
+  type CreateFieldOptionsArgs,
+  type CreateFieldOptionsResult,
   type AiCreateTaskArgs,
   type AiCreateTaskResult,
   type StandupGenerateArgs,
@@ -72,6 +74,8 @@ import {
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
 import { createPriorityOrders } from './services/priorityOrders';
+import { createTaskService } from './services/createTask';
+import { sanitizeCreateSuggestions } from '../shared/createFieldOptions';
 import { runwayWorkspaceTracker } from '../shared/runwayItem';
 import type { AppConfig } from '../shared/config';
 import { pruneStaleProjectIds, type VermilianConfig } from '../shared/workspace';
@@ -660,14 +664,49 @@ export function registerIpc(): void {
     }
   });
 
+  // Task creation (VERM-115) on the active workspace's own YouTrack
+  // connection, never another credential.
+  const createTask = createTaskService({
+    activeWorkspaceId: async () => (await activeWorkspaceContext()).workspaceId ?? '',
+    generation: activeWorkspaceGeneration,
+    async connection() {
+      const yt = await trackerConnection(await readConfig());
+      if (!yt.ok) return { ok: false, error: yt.error };
+      const tracker = youtrackTracker(yt.url, yt.token);
+      return {
+        ok: true,
+        readMetadata: (projectId) => tracker.getProjectFieldMetadata(projectId),
+        create: (payload) => tracker.createIssue(payload),
+      };
+    },
+  });
+
   ipcMain.handle(
     IPC.aiCreateTask,
     async (_e, args: AiCreateTaskArgs): Promise<AiCreateTaskResult> => {
       const ai = await beginAi(args.workspaceId);
       if (!ai.ok) return { ok: false, error: ai.error };
       const cfg = await readConfig();
-      const sent = await ai.send((key) => claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate));
-      return sent.ok ? sent.value : { ok: false, error: sent.error };
+      // A project known before the request gives Claude its allowed values
+      // (VERM-115). A failed read is not fatal: the answer is still checked
+      // against the matched project below, and again on Create.
+      const known = typeof args.projectId === 'string' && args.projectId ? args.projectId : '';
+      const knownRead = known ? await createTask.readOptions(known) : null;
+      const allowed = knownRead?.ok ? knownRead.options : null;
+      const sent = await ai.send((key) => claude.extractTaskFields(key, args.description, args.projects, cfg.modelForCreate, allowed));
+      if (!sent.ok) return { ok: false, error: sent.error };
+      const result = sent.value;
+      if (!result.ok || !result.fields || result.fields.clarificationNeeded) return result;
+      // Validate against the project the review form will open on.
+      const target = result.fields.projectId ?? known;
+      if (!target) return result;
+      const read = target === known && knownRead ? knownRead : await createTask.readOptions(target);
+      if (!read.ok) return result; // the form reads the options itself and offers Retry
+      const { fields, cleared } = sanitizeCreateSuggestions(result.fields, read.options);
+      return {
+        ok: true,
+        fields: cleared.length > 0 ? { ...fields, clearedSuggestions: cleared.map(({ field, value }) => ({ field, value })) } : fields,
+      };
     },
   );
 
@@ -1068,18 +1107,29 @@ export function registerIpc(): void {
     },
   );
 
+  // Task creation (VERM-115): options and the create itself both go through
+  // createTaskService on the active workspace's own connection, which
+  // rechecks the workspace, the project and every value before sending.
   ipcMain.handle(
     IPC.createIssue,
     async (_e, args: CreateIssueArgs): Promise<CreateIssueResult> => {
       try {
-        const cfg = await readConfig();
-        const yt = await trackerConnection(cfg);
-        if (!yt.ok) return { ok: false, error: yt.error };
-        const result = await youtrackTracker(yt.url, yt.token).createIssue(args);
-        return { ok: true, id: result.id, idReadable: result.idReadable };
+        return await createTask.create(args);
       } catch (e) {
         const err = e as { message?: string };
         return { ok: false, error: err.message ?? 'Create failed' };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.getCreateFieldOptions,
+    async (_e, args: unknown): Promise<CreateFieldOptionsResult> => {
+      try {
+        return await createTask.getOptions(args);
+      } catch (e) {
+        const a = (args ?? {}) as Partial<CreateFieldOptionsArgs>;
+        return { ok: false, workspaceId: a.workspaceId ?? '', projectId: a.projectId ?? '', error: (e as { message?: string }).message ?? 'Could not read the project fields.' };
       }
     },
   );
@@ -1231,6 +1281,12 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:claudeCalls', () => fakeClaudeForE2E.getCallsForTests());
     // The fake YouTrack (VERM-48): stand-up project queries, a stand-up hold,
     // and master-plan articles by readable ID (content, or a refusal status).
+    // Task creation (VERM-115): create requests that reached the fake, a
+    // one-shot server refusal, and a held or failing project field read.
+    ipcMain.handle('e2e:createRequests', () => fakeYouTrackForE2E.getCreateRequestsForTests());
+    ipcMain.handle('e2e:nextCreateError', (_e, message: string | null) => fakeYouTrackForE2E.setNextCreateErrorForTests(message));
+    ipcMain.handle('e2e:fieldMetadataDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setFieldMetadataDelayForTests(ms, project));
+    ipcMain.handle('e2e:failFieldMetadata', (_e, n: number, project?: string) => fakeYouTrackForE2E.failFieldMetadataForTests(n, project));
     ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
     ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());
     ipcMain.handle('e2e:articleFetches', () => fakeYouTrackForE2E.getArticleFetchesForTests());

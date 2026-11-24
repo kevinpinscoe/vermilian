@@ -117,7 +117,12 @@ notifications, or the timer worklog round-trip.
 | Validation — Summary required (Create disabled) | ✅ E2E | `create-task.spec.ts` |
 | Validation — URL format | ✅ E2E | `create-task.spec.ts` (bad Ticket link blocks Create) |
 | Submission — happy-path create | ✅ E2E | `create-task.spec.ts` |
-| Project context / Inbox default category | ⬜ Gap | — |
+| Per-project Status/Priority/Category options and defaults; no assumed "To do"; blank omitted from POST (VERM-115) | ✅ E2E | `create-task-field-discovery.spec.ts`; derivation 🧪 `createFieldOptions.test.ts`, `formOptions.test.ts` |
+| Project switch — choices kept or cleared and flagged; late answer for the previous project ignored | ✅ E2E | `create-task-field-discovery.spec.ts` |
+| Field read failure keeps the draft and offers Retry | ✅ E2E | `create-task-field-discovery.spec.ts` |
+| Main-process recheck — invalid value, absent field, other workspace: zero create requests | ✅ E2E | `create-task-field-discovery.spec.ts`; 🧪 `createTask.test.ts` |
+| Ambiguous `({1})` refusal explained, Refresh project options | ✅ E2E | `create-task-field-discovery.spec.ts`; 🧪 `createFieldOptions.test.ts` |
+| Inbox default category | 🧪 Unit | `formOptions.test.ts` (only when the project offers INBOX) |
 | Date time entered auto-stamp | 🧪 Unit | `youtrack.test.ts` (createIssue stamps it) |
 
 ## create-task-ai.md
@@ -126,6 +131,7 @@ notifications, or the timer worklog round-trip.
 | Entry point / gating (disabled without key) | ⬜ Gap (gating) | — (e2e always seeds a key) |
 | Input → Generate → review → create (happy path) | ✅ E2E | `ai-create.spec.ts` (fake Claude) |
 | Clarification path (too-vague input) | ✅ E2E | `ai-create.spec.ts` |
+| Known project's values given to Claude; invalid suggestion cleared and flagged; identified project validated before review (VERM-115) | ✅ E2E | `create-task-field-discovery.spec.ts`; schema 🧪 `extractTool.test.ts` |
 | Claude API call + JSON extraction | 🧪 Unit | `aiExtract.test.ts` (project match) |
 | Error handling | 🚫 Out of harness | real-API failures |
 

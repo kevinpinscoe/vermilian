@@ -651,6 +651,32 @@ accomplishment:
 To return a project to the defaults, delete its entry. A mapping editor in the
 app is a planned follow-up.
 
+## Task creation field values (VERM-115)
+
+New task and AI create take Status, Priority and Category from the selected
+project's own configuration in YouTrack. They read
+`/api/admin/projects/{id}/customFields` on the active workspace's connection,
+using the same reader the stand-up uses. Nothing is configured in Vermilian.
+To change what the form offers, change the project's fields or bundles in
+YouTrack. The form shows the project's active values, defaulting to its
+configured default or blank. A blank field is left out of the create request.
+
+Before sending, the main process re-reads the project and checks the
+workspace and every value. If any check fails, nothing is sent.
+
+| Message (contains) | Cause | What to do |
+| --- | --- | --- |
+| Could not load this project's fields … Retry | The field read failed (YouTrack unreachable, or the workspace credential cannot read the project) | Click **Retry**; the draft is kept. If it persists, check the workspace's YouTrack credential |
+| `<Field> "<value>" is not a value in this project` | The value is no longer offered (the bundle changed while the form was open), or a caller sent a stale value | Pick another value; **Refresh project options** re-reads the project |
+| AI suggested `<Field> "<value>"` … Cleared | Claude proposed a value the project does not have | Choose a value or leave it blank |
+| The active workspace changed before the task was created | The workspace was switched while the form was open | Reopen the form in the workspace you want |
+| did not say which field … Refresh project options | YouTrack refused a value with its unfilled `({1})` template, and neither a fresh read nor the message identified it | Click **Refresh project options** and try again; if it repeats, compare the form's values with the project's fields in YouTrack |
+
+The `({1})` refusal recorded on 2026-11-24 read
+`An Open-type entity with the specified name ({1}) was not found`. Whether
+`Open` was the refused value is unconfirmed, so Vermilian names a field from
+that word only when it equals exactly one value it sent.
+
 ## OpenBao credential storage (VERM-64)
 
 ### What this is

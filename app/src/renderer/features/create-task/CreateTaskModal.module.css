@@ -102,3 +102,20 @@
   border-top: 1px solid var(--border-color, #e0e0e0);
   flex-shrink: 0;
 }
+
+/* Retry / Refresh project options (VERM-115). */
+.inlineAction {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--primary-color, #0073ea);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inlineAction:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
