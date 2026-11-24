@@ -153,6 +153,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   use API version `2026-10-21` and send the API key as `Authorization: Bearer` instead of
   `x-api-key`. Vermilian sends no sampling parameters, documents or citations, so nothing
   that version rejects.
+- **Weekly dependency updates** (VERM-55). React and React DOM 19.3.1, Vitest 5.1.1,
+  Zustand 5.1.0, @vibe/icons 4.2.0 and @tanstack/react-query-devtools 5.108.3. The devtools
+  panel does not ship in the packaged app, so its new dependencies do not either.
 
 ### Fixed
 

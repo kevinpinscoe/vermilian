@@ -41,7 +41,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.1",
     "@reforged/maker-appimage": "^5.3.1",
-    "@tanstack/react-query-devtools": "^5.102.8",
+    "@tanstack/react-query-devtools": "^5.108.3",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -56,7 +56,7 @@
     "tinyglobby": "^0.2.17",
     "typescript": "~6.0.3",
     "vite": "^6.4.6",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
@@ -65,13 +65,13 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@tanstack/react-query": "^5.108.3",
     "@vibe/core": "^4.5.39",
-    "@vibe/icons": "^4.1.0",
+    "@vibe/icons": "^4.2.0",
     "electron-squirrel-startup": "^1.0.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
-    "zustand": "^5.0.15"
+    "zustand": "^5.1.0"
   },
   "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1"
 }
