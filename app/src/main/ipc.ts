@@ -1299,6 +1299,9 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:nextCreateError', (_e, message: string | null) => fakeYouTrackForE2E.setNextCreateErrorForTests(message));
     ipcMain.handle('e2e:fieldMetadataDelay', (_e, ms: number, project?: string) => fakeYouTrackForE2E.setFieldMetadataDelayForTests(ms, project));
     ipcMain.handle('e2e:failFieldMetadata', (_e, n: number, project?: string) => fakeYouTrackForE2E.failFieldMetadataForTests(n, project));
+    ipcMain.handle('e2e:holdFieldMetadata', (_e, project: string) => fakeYouTrackForE2E.holdFieldMetadataForTests(project));
+    ipcMain.handle('e2e:releaseFieldMetadata', () => fakeYouTrackForE2E.releaseFieldMetadataForTests());
+    ipcMain.handle('e2e:getPatchRequests', () => fakeYouTrackForE2E.getPatchRequestsForTests());
     ipcMain.handle('e2e:setProjectField', (_e, project: string, field: string, values: string[] | null) => fakeYouTrackForE2E.setFakeProjectFieldForTests(project, field, values));
     ipcMain.handle('e2e:standupQueries', () => fakeYouTrackForE2E.getStandupQueriesForTests());
     ipcMain.handle('e2e:standupCredentialRefs', () => fakeYouTrackForE2E.getStandupCredentialRefsForTests());

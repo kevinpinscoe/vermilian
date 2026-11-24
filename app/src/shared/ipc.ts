@@ -1055,6 +1055,11 @@ export interface VermilianAPI {
   debugSetClaudeExtractDelay?(ms: number): Promise<void>;
   debugSetFieldMetadataDelay?(ms: number, project?: string): Promise<void>;
   debugFailFieldMetadata?(n: number, project?: string): Promise<void>;
+  // e2e only (VERM-117): hold one project's metadata reads until released, and
+  // read back every patch request the fake received.
+  debugHoldFieldMetadata?(project: string): Promise<void>;
+  debugReleaseFieldMetadata?(): Promise<void>;
+  debugGetPatchRequests?(): Promise<Array<{ issueId: string; field: string; value: string | number | null }>>;
   // e2e only (VERM-117): change a fake project's field values while the app runs.
   debugSetProjectField?(project: string, field: string, values: string[] | null): Promise<void>;
 }

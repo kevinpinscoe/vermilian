@@ -112,4 +112,14 @@ describe('selectEditorState (VERM-117 review)', () => {
     });
     expect(selectEditorState(vermLike, null, 'affectedHost', 'gone')).toMatchObject({ currentInactive: true, currentArchived: false });
   });
+
+  it("holds editing while that project's values are being re-read, even with choices cached", () => {
+    expect(selectEditorState(vermLike, null, 'affectedHost', 'FLDW', true)).toMatchObject({ mode: 'loading', options: [] });
+    // Another project not being re-read stays editable.
+    expect(selectEditorState(otherProject, null, 'affectedHost', 'web1', false).mode).toBe('editable');
+  });
+
+  it('keeps showing Retry while a retry is in flight', () => {
+    expect(selectEditorState(vermLike, 'Simulated field read failure', 'affectedHost', 'FLDW', true).mode).toBe('error');
+  });
 });

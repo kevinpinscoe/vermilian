@@ -127,7 +127,8 @@ interface SelectFieldProps {
 // saved value that is archived (or no longer in the project) stays shown as
 // the current value and is never re-sent; the active values are offered as
 // its replacements. Editing is only possible after a successful read: while
-// values load, or after any failed read (even with earlier values cached),
+// values load or are being re-read (the panel re-reads on every open), or
+// after any failed read (even with earlier values cached),
 // the current value stays visible and editing is disabled, with Retry. Only a
 // field the project allows to be empty can be cleared.
 function SelectField({ value, state, readError, onRetry, colorMap, onSave, onEnter }: SelectFieldProps) {
@@ -459,6 +460,8 @@ export function TaskDetailPanel({
   );
   const projectValues = projectKey ? fieldValues.byProject.get(projectKey) : undefined;
   const readError = projectKey ? fieldValues.errors.get(projectKey) ?? null : null;
+  // Re-read on every open: until it finishes, the saved values show and editing holds.
+  const refreshing = Boolean(projectKey) && fieldValues.refreshing.has(projectKey);
   const patchMutation = usePatchIssue(issueId, effectiveProjectShortName, runwayWorkspaceId);
   const deleteMutation = useDeleteIssue(effectiveProjectShortName);
   const queryClient = useQueryClient();
@@ -549,7 +552,7 @@ export function TaskDetailPanel({
                 <FieldRow key={key} label={def.label} fieldName={key}>
                   <SelectField
                     value={value as string | null}
-                    state={selectEditorState(projectValues, readError, key, value as string | null)}
+                    state={selectEditorState(projectValues, readError, key, value as string | null, refreshing)}
                     readError={readError}
                     onRetry={() => fieldValues.retry(projectKey)}
                     colorMap={SELECT_COLOR_MAPS[key]}

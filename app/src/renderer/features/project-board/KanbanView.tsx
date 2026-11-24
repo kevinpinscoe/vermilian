@@ -51,11 +51,12 @@ export function ChipCell({ value, colorMap, field, project, onEdit }: ChipCellPr
   // The issue's own project's values — never a fixed list (VERM-117). Values
   // are offered only after a successful read: while they load, or after any
   // failed read (even with earlier values cached, which may hold a retired
-  // value), the dropdown shows only the current value, with Retry on failure.
+  // value), and while that project's values are being re-read, the dropdown
+  // shows only the current value, with Retry on failure.
   // A field the project does not have is not editable.
   const readError = project ? lookup.errorFor(project) ?? null : null;
   const editor = field && project
-    ? selectEditorState(lookup.valuesFor(project), readError, field as FieldKey, value)
+    ? selectEditorState(lookup.valuesFor(project), readError, field as FieldKey, value, lookup.refreshingFor(project))
     : null;
   const editable = Boolean(onEdit && editor && editor.mode !== 'absent');
   const options = editor?.mode === 'editable' ? editor.options : value ? [value] : [];

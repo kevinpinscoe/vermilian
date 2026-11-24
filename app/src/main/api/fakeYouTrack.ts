@@ -326,6 +326,7 @@ export async function getIssueDetail(_url: string, _token: string, issueId: stri
 export async function patchIssue(
   _url: string, _token: string, issueId: string, field: string, value: string | number | null,
 ): Promise<void> {
+  patchRequests.push({ issueId, field, value });
   const i = issues.find((x) => x.id === issueId || x.idReadable === issueId);
   if (!i) return;
   if (field === 'summary') { i.summary = String(value ?? ''); return; }
@@ -600,6 +601,27 @@ let metadataFailures: { n: number; project: string } = { n: 0, project: '' };
 export function setFieldMetadataDelayForTests(ms: number, project?: string): void {
   metadataDelay = { ms: Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : 0, project: typeof project === 'string' ? project : '' };
 }
+// e2e hook (VERM-117 review): hold a project's metadata reads until released,
+// so a spec can act while a refresh is pending. Only reads for that project
+// wait; every other project answers at once.
+let metadataHold: { project: string; released: Promise<void>; release: () => void } | null = null;
+export function holdFieldMetadataForTests(project: string): void {
+  metadataHold?.release();
+  let release = () => {};
+  const released = new Promise<void>((r) => { release = r; });
+  metadataHold = { project: typeof project === 'string' ? project : '', released, release };
+}
+export function releaseFieldMetadataForTests(): void {
+  metadataHold?.release();
+  metadataHold = null;
+}
+
+// e2e observation (VERM-117 review): every patch request that reached the fake.
+const patchRequests: Array<{ issueId: string; field: string; value: string | number | null }> = [];
+export function getPatchRequestsForTests(): Array<{ issueId: string; field: string; value: string | number | null }> {
+  return patchRequests.map((r) => ({ ...r }));
+}
+
 export function failFieldMetadataForTests(n: number, project?: string): void {
   metadataFailures = { n: Number.isFinite(n) && n > 0 ? n : 0, project: typeof project === 'string' ? project : '' };
 }
@@ -621,6 +643,7 @@ async function readFakeFieldMetadata(url: string, token: string, projectIdOrShor
   // The real endpoint accepts a project's id or its short name.
   const projectShortName = (projectById(projectIdOrShortName) ?? projectByShortName(projectIdOrShortName))?.shortName;
   if (!projectShortName) throw { status: 404, message: `Entity with id ${projectIdOrShortName} not found` };
+  if (metadataHold && metadataHold.project === projectShortName) await metadataHold.released;
   if (metadataDelay.ms > 0 && (!metadataDelay.project || metadataDelay.project === projectShortName)) {
     await new Promise((r) => setTimeout(r, metadataDelay.ms));
   }

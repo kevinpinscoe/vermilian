@@ -86,7 +86,9 @@ export interface SelectEditorState {
 
 /**
  * How a dropdown editor behaves for one field (VERM-117 review): editable only
- * when the project's values are known and the latest read succeeded. A read
+ * when the project's values are known, the latest read succeeded, and no
+ * re-read of that project is in flight — cached choices may be about to change,
+ * so editing holds until the read finishes (for that project only). A read
  * error disables editing even if earlier choices are cached — they may include
  * a value the project has since retired — and stays until a read succeeds; the
  * current value stays visible throughout. A required field is never offered a
@@ -97,10 +99,12 @@ export function selectEditorState(
   readError: string | null | undefined,
   key: FieldKey,
   current: string | null | undefined,
+  /** This project's values are being re-read: hold editing until the read finishes. */
+  refreshing = false,
 ): SelectEditorState {
   const none = { options: [] as string[], currentInactive: false, currentArchived: false, clearable: false };
   if (readError) return { mode: 'error', ...none };
-  if (!values) return { mode: 'loading', ...none };
+  if (!values || refreshing) return { mode: 'loading', ...none };
   const choices = fieldChoices(values, key);
   if (!choices.present) return { mode: 'absent', ...none };
   const { options, currentInactive } = dropdownOptions(choices, current);

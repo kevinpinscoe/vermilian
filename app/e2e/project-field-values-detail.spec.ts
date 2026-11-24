@@ -9,6 +9,8 @@
  *   - A refresh that fails after a successful read disables editing, with
  *     Retry, until a read succeeds (VERM-117 review).
  *   - Only a field the project allows to be empty can be cleared.
+ *   - While a reopened panel re-reads its project, the saved value shows and
+ *     editing holds for that project only, so a retired option cannot be sent.
  */
 
 import { test, expect, Page } from '@playwright/test';
@@ -170,5 +172,54 @@ test.describe('Detail dropdowns use the ticket project\'s own values (VERM-117)'
     await openDetail(page, 'TEST-2');
     expect(await selectOptions(page, 'editHost')).toEqual(['—', 'FLDW', 'core', 'mac']);
     await expect(field(page, 'editHost').locator('option[value=""]')).toBeDisabled();
+  });
+
+  test("while the panel's refresh is pending, editing holds for that project only and nothing retired can be sent", async () => {
+    await patch(page, 'TST2-1', 'affectedHost', 'web1');
+    const host = field(page, 'affectedHost');
+    const closePanel = () => page.locator('[data-testid="task-detail-panel"] [aria-label="Close panel"]').click();
+    const patchCount = async () => (await page.evaluate(() => window.vermilian.debugGetPatchRequests!())).length;
+
+    // Warm the cache: TST2 offers web1 and mail1.
+    await openDetail(page, 'TST2-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1', 'mail1']);
+    await closeSelect(page, 'affectedHost');
+    await closePanel();
+
+    // The tracker retires mail1, and TST2's next metadata response is held.
+    await page.evaluate(() => window.vermilian.debugSetProjectField!('TST2', 'Affected host', ['web1']));
+    await page.evaluate(() => window.vermilian.debugHoldFieldMetadata!('TST2'));
+    const before = await patchCount();
+
+    // Reopening re-reads TST2: the saved value shows, and there is nothing to edit.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-value"]')).toHaveText('web1');
+    await expect(host.locator('[data-testid="detail-select-loading"]')).toBeVisible();
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveCount(0);
+    await expect(host.locator('[data-testid="detail-select"]')).toHaveCount(0);
+
+    // Project TEST is not held: its panel is editable meanwhile.
+    await openDetail(page, 'TEST-1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'FLDW', 'core']);
+    await closeSelect(page, 'affectedHost');
+    await closePanel();
+
+    // TST2's board chips hold too: only the saved value, which is not sent when clicked.
+    await page.locator('[data-testid="ws-issue-row"][data-issue-id="TST2-1"] [data-testid="chip-cell"][data-field="priority"]').click();
+    await expect(tid(page, 'chip-values-loading')).toBeVisible();
+    await expect(tid(page, 'chip-option')).toHaveCount(1);
+    await tid(page, 'chip-option').click();
+    await page.mouse.click(5, 5);
+
+    // Still held when reopened; nothing was sent while it was.
+    await openDetail(page, 'TST2-1');
+    await expect(host.locator('[data-testid="detail-select-loading"]')).toBeVisible();
+    expect(await patchCount()).toBe(before);
+
+    // Release the response: the updated choices become editable, without mail1.
+    await page.evaluate(() => window.vermilian.debugReleaseFieldMetadata!());
+    await expect(host.locator('[data-testid="detail-select-button"]')).toHaveText('web1');
+    expect(await selectOptions(page, 'affectedHost')).toEqual(['—', 'web1']);
+    expect(await patchCount()).toBe(before);
   });
 });

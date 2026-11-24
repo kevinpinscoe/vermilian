@@ -19,6 +19,8 @@ export function issueProject(issue: { idReadable: string }): string {
 export interface ProjectFieldValuesLookup {
   valuesFor: (project: string) => ProjectFieldValues | undefined;
   errorFor: (project: string) => string | undefined;
+  /** This project's values are being re-read; its editors hold until the read finishes. */
+  refreshingFor: (project: string) => boolean;
   loading: boolean;
   retry: (project?: string) => void;
 }
@@ -26,6 +28,7 @@ export interface ProjectFieldValuesLookup {
 const EMPTY: ProjectFieldValuesLookup = {
   valuesFor: () => undefined,
   errorFor: () => undefined,
+  refreshingFor: () => false,
   loading: false,
   retry: () => {},
 };
@@ -36,6 +39,7 @@ export function lookupFrom(state: ProjectFieldValuesState): ProjectFieldValuesLo
   return {
     valuesFor: (p) => state.byProject.get(p),
     errorFor: (p) => state.errors.get(p),
+    refreshingFor: (p) => state.refreshing.has(p),
     loading: state.loading,
     retry: state.retry,
   };

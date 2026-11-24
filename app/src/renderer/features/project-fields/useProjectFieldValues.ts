@@ -29,6 +29,8 @@ export interface ProjectFieldValuesState {
   errors: ReadonlyMap<string, string>;
   /** Some project's values are still being read. */
   loading: boolean;
+  /** Projects whose values are being read right now, cached or not; editors for them hold. */
+  refreshing: ReadonlySet<string>;
   /** Re-read one project's values, or every project that failed. */
   retry: (project?: string) => void;
 }
@@ -69,6 +71,7 @@ export function useProjectFieldValues(
   const state = useMemo(() => {
     const byProject = new Map<string, ProjectFieldValues>();
     const errors = new Map<string, string>();
+    const refreshing = new Set<string>();
     let loading = false;
     unique.forEach((project, i) => {
       const r = results[i];
@@ -78,9 +81,10 @@ export function useProjectFieldValues(
       // stay disabled (with Retry) until a read succeeds — including while a
       // retry is in flight.
       if (r.isError) errors.set(project, (r.error as Error).message);
+      if (r.isFetching) refreshing.add(project);
       if (r.isFetching || r.isPending) loading = true;
     });
-    return { byProject, errors, loading };
+    return { byProject, errors, loading, refreshing };
     // `results` is a new array each render; `stamp` captures what changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unique, stamp, workspaceId]);

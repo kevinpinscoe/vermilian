@@ -219,6 +219,9 @@ const api: VermilianAPI = {
   debugSetNextCreateError: (message: string | null) => ipcRenderer.invoke('e2e:nextCreateError', message),
   debugSetFieldMetadataDelay: (ms: number, project?: string) => ipcRenderer.invoke('e2e:fieldMetadataDelay', ms, project),
   debugFailFieldMetadata: (n: number, project?: string) => ipcRenderer.invoke('e2e:failFieldMetadata', n, project),
+  debugHoldFieldMetadata: (project: string) => ipcRenderer.invoke('e2e:holdFieldMetadata', project),
+  debugReleaseFieldMetadata: () => ipcRenderer.invoke('e2e:releaseFieldMetadata'),
+  debugGetPatchRequests: () => ipcRenderer.invoke('e2e:getPatchRequests'),
   debugSetProjectField: (project: string, field: string, values: string[] | null) => ipcRenderer.invoke('e2e:setProjectField', project, field, values),
 };
 
