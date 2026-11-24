@@ -143,6 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is upgraded in the private staging copy, never in the live database. Its preview says so,
   shows the exporting computer and export time as *Not recorded (version 1 snapshot)*, and warns
   that Vermilian cannot tell whether this computer has newer Runway changes.
+- **Electron 45** (VERM-55). Electron 44.11.3 → 45.4.1, which also updates the bundled
+  Chromium and Node.js.
 
 ### Fixed
 
