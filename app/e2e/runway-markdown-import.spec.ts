@@ -146,8 +146,8 @@ test.describe('Runway: Markdown import preview', () => {
     // Unticked, and since VERM-103 it can be ticked (the corrections test ticks it).
     await expect(tick).toBeEnabled();
 
-    // Cancel is the only footer action.
-    await expect(dialog.getByRole('button', { name: 'Apply' })).toHaveCount(0);
+    // Apply (VERM-104) is offered but not pressed: Cancel must write nothing.
+    await expect(tid(page, 'import-apply')).toBeEnabled();
     await tid(page, 'import-cancel').click();
     await expect(dialog).toHaveCount(0);
 

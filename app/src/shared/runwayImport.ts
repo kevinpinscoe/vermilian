@@ -131,3 +131,86 @@ export type RunwayMarkdownOpenResult =
   | { ok: true; canceled: true }
   | { ok: true; canceled: false; fileName: string; text: string }
   | { ok: false; code: RunwayMarkdownOpenErrorCode; error: string };
+
+// ---------------------------------------------------------------------------
+// Applying the preview (VERM-104): runwayMarkdownApply. The renderer sends the
+// plan it shows; the main process verifies it, backs up the Runway database,
+// creates the new workspaces and fills their (empty) Runways.
+
+export type RunwayImportApplyRow =
+  /** A numbered ticket: its stored ID and the text it was written as (key or link). */
+  | { kind: 'ticket'; issueId: string; text: string; line: number }
+  | { kind: 'section'; text: string; depth: number; line: number }
+  | { kind: 'note'; text: string; depth: number; line: number };
+
+export type RunwayImportApplyTarget =
+  | { kind: 'existing'; workspaceId: string }
+  /** A new workspace copying `connectionWorkspaceId`'s tracker connection and credential reference. */
+  | { kind: 'new'; name: string; connectionWorkspaceId: string };
+
+export interface RunwayImportApplyGroup {
+  groupKey: string;
+  target: RunwayImportApplyTarget;
+  rows: RunwayImportApplyRow[];
+}
+
+export interface RunwayImportApplyArgs {
+  groups: RunwayImportApplyGroup[];
+}
+
+/**
+ * Why a group goes back to the preview. Nothing was written.
+ *   tickets-changed     a numbered ticket no longer reads as the same ticket
+ *                       on the group's connection: check it again and review
+ *   check-failed        the tickets could not be read to verify them
+ *   connection-missing  the workspace supplying the connection is gone
+ *   workspace-missing   the existing destination workspace is gone
+ *   name-taken          a new workspace's name is already used
+ *   same-destination    two groups go to one existing workspace: merge or skip
+ *   runway-not-empty    the existing destination's Runway has rows now
+ */
+export type RunwayImportApplyReason =
+  | 'tickets-changed'
+  | 'check-failed'
+  | 'connection-missing'
+  | 'workspace-missing'
+  | 'name-taken'
+  | 'same-destination'
+  | 'runway-not-empty';
+
+export interface RunwayImportApplyProblem {
+  groupKey: string;
+  reason: RunwayImportApplyReason;
+  message: string;
+}
+
+export interface RunwayImportAppliedWorkspace {
+  groupKey: string;
+  workspaceId: string;
+  name: string;
+  created: boolean;
+  rows: number;
+}
+
+export type RunwayImportApplyErrorCode =
+  | 'invalid-args'
+  | 'workspace-unavailable'
+  | 'review' // groups need correcting; nothing was written
+  | 'backup-failed' // the backup could not be written; nothing was changed
+  | 'create-failed' // a workspace could not be created; no rows were written
+  | 'write-failed'; // the rows could not be written; none were
+
+export type RunwayImportApplyResult =
+  | { ok: true; workspaces: RunwayImportAppliedWorkspace[]; backupPath: string }
+  | {
+      ok: false;
+      code: RunwayImportApplyErrorCode;
+      error: string;
+      problems: RunwayImportApplyProblem[];
+      /** The pre-Apply backup, when one was written. */
+      backupPath: string | null;
+      /** Workspaces this Apply created that could not be removed again. */
+      remaining: { workspaceId: string; name: string }[];
+    };
+
+export const RUNWAY_IMPORT_MAX_APPLY_ROWS = 20000;

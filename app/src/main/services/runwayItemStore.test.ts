@@ -764,3 +764,58 @@ describe('randomized sequence', () => {
     expect(Math.max(...memberships)).toBeGreaterThan(1);
   });
 });
+
+describe('fillEmpty (Markdown import Apply, VERM-104)', () => {
+  it('fills several empty Runways at positions 1..N in one go, with Runway # counting tickets only', () => {
+    const result = store.fillEmpty([
+      {
+        workspaceId: 'ws-new',
+        rows: [
+          { kind: 'note', text: 'Readers lose their place.', depth: 0 },
+          { kind: 'issue', issueId: yt('READ-12') },
+          { kind: 'section', text: 'Later', depth: 0 },
+          { kind: 'issue', issueId: yt('READ-14') },
+          { kind: 'note', text: '- Look at READ-9 again', depth: 1 },
+        ],
+      },
+      { workspaceId: 'ws-other', rows: [{ kind: 'issue', issueId: jira('OPS-1') }] },
+    ]);
+    expect(result['ws-new'].map((i) => [i.position, i.kind, i.runwayNumber, i.depth, i.text ?? i.itemId])).toEqual([
+      [1, 'note', null, 0, 'Readers lose their place.'],
+      [2, 'issue', 1, 0, yt('READ-12')],
+      [3, 'section', null, 0, 'Later'],
+      [4, 'issue', 2, 0, yt('READ-14')],
+      [5, 'note', null, 1, '- Look at READ-9 again'],
+    ]);
+    expect(ids(store.list('ws-other'))).toEqual([jira('OPS-1')]);
+  });
+
+  it('writes nothing at all when any destination already has rows, and names it; the existing rows stay', () => {
+    store.addIssue('ws-busy', yt('READ-1'));
+    const before = rawRows('ws-busy');
+    let thrown: unknown;
+    try {
+      store.fillEmpty([
+        { workspaceId: 'ws-empty', rows: [{ kind: 'issue', issueId: yt('READ-2') }] },
+        { workspaceId: 'ws-busy', rows: [{ kind: 'issue', issueId: yt('READ-3') }] },
+      ]);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'runway-not-empty', workspaceIds: ['ws-busy'] });
+    expect(store.list('ws-empty')).toEqual([]);
+    expect(rawRows('ws-busy')).toEqual(before);
+  });
+
+  it('refuses a bad row before writing anything', () => {
+    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'issue', issueId: 'READ-1' }] }]), 'invalid-issue-id');
+    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'note', text: '  ', depth: 0 }] }]), 'invalid-text');
+    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'section', text: 'S', depth: 5 }] }]), 'invalid-depth');
+    expectStoreError(
+      () => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'issue', issueId: yt('READ-1') }, { kind: 'issue', issueId: yt('READ-1') }] }]),
+      'already-on-runway',
+    );
+    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [] }, { workspaceId: 'ws-a', rows: [] }]), 'invalid-workspace');
+    expect(store.list('ws-a')).toEqual([]);
+  });
+});

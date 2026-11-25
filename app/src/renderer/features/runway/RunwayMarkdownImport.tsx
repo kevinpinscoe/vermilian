@@ -14,8 +14,16 @@
 // tick a matched Reference to schedule it. Undo reverses the last edit and
 // Reset restores the preview as first opened. The rules are in
 // importCorrections.ts and importPreview.ts (unit-tested).
+//
+// Apply (VERM-104) is offered once every included group is ready
+// (importApply.ts): the main process verifies the tickets again, backs up the
+// Runway database, creates the new workspaces and fills their empty Runways.
+// A group it sends back is shown with the reason (and rechecked when its
+// tickets changed); after success the dialog closes and the current workspace
+// stays active.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { AttentionBox, Button, Modal, ModalBasicLayout, ModalContent, ModalHeader, Text } from '@vibe/core';
 import { parseRunwaySchedule, type ScheduleReferenceCue, type ScheduleReferenceReason } from '../../../shared/runwaySchedule';
 import {
@@ -39,6 +47,11 @@ import {
   type ImportSessionState,
   type WorkingGroup,
 } from './importCorrections';
+import type { RunwayImportApplyResult } from '../../../shared/runwayImport';
+import { appliedSummary, applyBlockers, applyPlan, BLOCKER_MESSAGE, canApply, destinationOf, type ApplyBlocker } from './importApply';
+import { RUNWAY_ITEMS_QUERY_KEY } from './api';
+import { ACTIVE_WORKSPACE_QUERY_KEY, WORKSPACE_CONFIG_QUERY_KEY } from '../workspace-nav/api';
+import { useToastStore } from '../../stores/toast';
 import modalLayout from '../../components/ModalLayout.module.css';
 import styles from './RunwayMarkdownImport.module.css';
 
@@ -96,6 +109,65 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
   const edits = state?.corrections.length ?? 0;
   const apply = (c: Correction) => session.current?.apply(c) ?? false;
 
+  // Apply (VERM-104).
+  const queryClient = useQueryClient();
+  const showToast = useToastStore((t) => t.show);
+  const [applying, setApplying] = useState(false);
+  const [problems, setProblems] = useState<Record<string, string[]>>({});
+  const [applyError, setApplyError] = useState<Exclude<RunwayImportApplyResult, { ok: true }> | null>(null);
+  // Problems from the last Apply are cleared by the next edit.
+  useEffect(() => setProblems({}), [edits]);
+  const destinations = useMemo(
+    () => [...new Set((groups ?? []).filter((g) => !g.skipped).flatMap((g) => destinationOf(g) ?? []))].sort(),
+    [groups],
+  );
+  const runwayLists = useQueries({
+    queries: destinations.map((id) => ({
+      queryKey: RUNWAY_ITEMS_QUERY_KEY(id),
+      queryFn: () => window.vermilian.runwayItemsList({ workspaceId: id }),
+    })),
+  });
+  const runwayRows: Record<string, number | undefined> = {};
+  destinations.forEach((id, i) => {
+    const data = runwayLists[i]?.data;
+    runwayRows[id] = data?.ok ? data.items.length : undefined;
+  });
+  const blockers = groups && state ? applyBlockers(groups, state.checks, options, runwayRows) : {};
+  const ready = Boolean(groups && canApply(groups, blockers));
+
+  async function runApply() {
+    if (!groups || !state) return;
+    const plan = applyPlan(groups, state.checks);
+    if (!plan) return;
+    setApplying(true);
+    setApplyError(null);
+    setProblems({});
+    try {
+      const result = await window.vermilian.runwayMarkdownApply(plan);
+      if (result.ok) {
+        await queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+        await queryClient.invalidateQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
+        for (const w of result.workspaces) await queryClient.invalidateQueries({ queryKey: RUNWAY_ITEMS_QUERY_KEY(w.workspaceId) });
+        showToast('positive', `${appliedSummary(result.workspaces)} Backup: ${result.backupPath}`, 8000);
+        onClose();
+        return;
+      }
+      const byGroup: Record<string, string[]> = {};
+      for (const p of result.problems) {
+        byGroup[p.groupKey] = [...(byGroup[p.groupKey] ?? []), p.message];
+        // Changed tickets are read again, so the preview shows the new order before another Apply.
+        if (p.reason === 'tickets-changed' || p.reason === 'check-failed') session.current?.retry(p.groupKey);
+      }
+      for (const id of destinations) await queryClient.invalidateQueries({ queryKey: RUNWAY_ITEMS_QUERY_KEY(id) });
+      setProblems(byGroup);
+      if (result.code !== 'review' || result.remaining.length > 0) setApplyError(result);
+    } catch (err) {
+      setApplyError({ ok: false, code: 'write-failed', error: err instanceof Error ? err.message : String(err), problems: [], backupPath: null, remaining: [] });
+    } finally {
+      setApplying(false);
+    }
+  }
+
   return (
     <Modal id="runway-markdown-import" data-testid="runway-markdown-import" show onClose={onClose} size="large">
       <ModalBasicLayout className={modalLayout.layout}>
@@ -138,8 +210,32 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 check={state?.checks[g.groupKey]}
                 apply={apply}
                 onRetry={() => session.current?.retry(g.groupKey)}
+                blockers={blockers[g.groupKey] ?? []}
+                problems={problems[g.groupKey] ?? []}
               />
             ))}
+            {applyError && (
+              <div className={styles.failure} data-testid="import-apply-error">
+                <AttentionBox className={modalLayout.attention} type="negative" title="The import was not applied" text={applyError.error} />
+                {applyError.remaining.length > 0 && (
+                  <div data-testid="import-apply-remaining">
+                    <Text type="text2">These workspaces were created and could not be removed again; remove them by hand:</Text>
+                    <ul>
+                      {applyError.remaining.map((w) => (
+                        <li key={w.workspaceId}>
+                          {w.name} ({w.workspaceId})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {applyError.backupPath && (
+                  <Text type="text2" data-testid="import-apply-backup">
+                    Backup taken before Apply: {applyError.backupPath}
+                  </Text>
+                )}
+              </div>
+            )}
             <div className={styles.footer}>
               <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.undo()} data-testid="import-undo">
                 Undo
@@ -147,8 +243,11 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
               <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.reset()} data-testid="import-reset">
                 Reset
               </Button>
-              <Button size="small" kind="secondary" onClick={onClose} data-testid="import-cancel">
+              <Button size="small" kind="secondary" onClick={onClose} disabled={applying} data-testid="import-cancel">
                 Cancel
+              </Button>
+              <Button size="small" kind="primary" onClick={() => void runApply()} disabled={!ready || applying} data-testid="import-apply">
+                {applying ? 'Applying…' : 'Apply'}
               </Button>
             </div>
           </div>
@@ -165,9 +264,15 @@ interface GroupSectionProps {
   check: GroupCheck | undefined;
   apply(c: Correction): boolean;
   onRetry(): void;
+  blockers: readonly ApplyBlocker[];
+  /** Why the last Apply sent this group back. */
+  problems: readonly string[];
 }
 
-function GroupSection({ group, groups, workspaces, check, apply, onRetry }: GroupSectionProps) {
+/** Blockers already shown another way (the choose and checking lines). */
+const SHOWN_ELSEWHERE: readonly ApplyBlocker[] = ['waiting', 'checking'];
+
+function GroupSection({ group, groups, workspaces, check, apply, onRetry, blockers, problems }: GroupSectionProps) {
   const labels = useMemo(() => workspaceOptionLabels(workspaces), [workspaces]);
   const results = check?.state === 'done' && check.match.ok ? check.match.candidates : null;
   const preview = useMemo(() => groupPreview(group, results), [group, results]);
@@ -348,6 +453,20 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry }: Grou
         </div>
       )}
 
+      {problems.length > 0 && (
+        <div className={styles.failure} data-testid="import-group-problem">
+          {problems.map((m) => (
+            <AttentionBox key={m} className={modalLayout.attention} type="warning" text={m} />
+          ))}
+        </div>
+      )}
+      {blockers
+        .filter((b) => !SHOWN_ELSEWHERE.includes(b))
+        .map((b) => (
+          <Text key={b} type="text2" className={styles.tagWarn} data-testid="import-group-blocker" data-reason={b}>
+            {BLOCKER_MESSAGE[b]}
+          </Text>
+        ))}
       {hasTickets && waiting && (
         <Text type="text2" className={styles.status} data-testid="import-group-choose">
           Choose a workspace to check these tickets.

@@ -138,7 +138,7 @@ import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredenti
 import { aiCredentialRefOf, e2eFakeAnthropicKeyAllowed } from '../shared/workspaceAi';
 import { beginWorkspaceAiOperation, type WorkspaceAiOperation } from './services/workspaceAiKey';
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
-import { backendChangeProblem } from '../shared/workspaceSetup';
+import { backendChangeProblem, buildWorkspaceDocument, nextWorkspaceOrder } from '../shared/workspaceSetup';
 import type {
   CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
@@ -178,7 +178,7 @@ import {
   type OpenBaoWriteResult,
 } from '../shared/openbao';
 import { cleanupBlocker, migrateToOpenBao } from './services/openbaoMigration';
-import { isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
+import { generateWorkspaceId, isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
@@ -201,11 +201,14 @@ import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
 import { defaultSnapshotFileName, exportRunwaySnapshot, runwayRowCounts } from './services/runwaySnapshot';
 import {
   RUNWAY_BACKUP_DIRNAME,
+  RUNWAY_BACKUP_KEEP,
   RUNWAY_IMPORT_STAGING_DIRNAME,
   RunwayImportError,
   RunwayWriteGate,
   importRunwaySnapshot,
+  pruneRunwayBackups,
   runwayImportWarnings,
+  writeRunwayBackup,
 } from './services/runwayImport';
 import { RunwayImportSession } from './services/runwayImportSession';
 import {
@@ -220,6 +223,7 @@ import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
 import { createRunwayImportMatch } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
+import { createRunwayMarkdownApply, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
 import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
@@ -945,6 +949,14 @@ export function registerIpc(): void {
         const r = await savePerWorkspaceLayout(config);
         return r.ok ? { ok: true } : { ok: false, error: r.error };
       }
+      return saveLegacyWorkspaceConfig(config);
+    },
+  );
+
+  // Legacy storage's save: the local file, then the shared Article (debounced).
+  // Also the Markdown import's Apply (VERM-104).
+  async function saveLegacyWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean; error?: string }> {
+    {
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
 
@@ -969,8 +981,8 @@ export function registerIpc(): void {
       if (!articleConfig.updateWorkspaceConfig(toSave)) return { ok: false, error: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE };
       if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
       return { ok: true };
-    },
-  );
+    }
+  }
 
   ipcMain.handle(
     IPC.deleteWorkspace,
@@ -2485,6 +2497,87 @@ export function registerIpc(): void {
     if (choice.canceled || choice.filePaths.length === 0) return { ok: true, canceled: true };
     return readRunwayMarkdownFile(choice.filePaths[0]);
   });
+
+  // Applying the Markdown import preview (VERM-104): verify the previewed
+  // tickets on each group's connection, then under the write gate check the
+  // destinations, back up the Runway database, create the new workspaces and
+  // fill their Runways in one transaction. The rules live in
+  // services/runwayMarkdownApply.ts (unit-tested); this supplies the
+  // workspace configuration for the storage mode in use.
+  const applyWorkspaces: ApplyWorkspaceStore = {
+    async list() {
+      if (workspaceStorageMode() === 'per-workspace') {
+        const client = await workspaceArticleClient();
+        if (!client) throw new Error(NOT_CONFIGURED_WS.message);
+        const listed = await workspaceArticles.listWorkspaceArticles(client);
+        if (!listed.ok) throw new Error(listed.message);
+        return listed.workspaces.flatMap((e) => (e.status === 'ok' ? [{ id: e.document.workspaceId, name: e.document.name }] : []));
+      }
+      const legacy = await loadLegacyWorkspaceConfig();
+      return (legacy?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name }));
+    },
+    async create(name, connectionWorkspaceId) {
+      if (workspaceStorageMode() === 'per-workspace') {
+        let createdId = '';
+        const written = await guardedWorkspaceWrite(async (client) => {
+          const listed = await workspaceArticles.listWorkspaceArticles(client);
+          if (!listed.ok) return { ok: false, error: listed.message };
+          const docs = listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []));
+          const source = docs.find((d) => d.workspaceId === connectionWorkspaceId);
+          if (!source) return { ok: false, error: 'The workspace supplying the connection no longer exists.' };
+          // Only the tracker connection and its credential reference are copied; the AI credential stays empty.
+          const b = source.backend;
+          const built = buildWorkspaceDocument({
+            workspaceId: generateWorkspaceId(),
+            name,
+            order: nextWorkspaceOrder(docs),
+            backend: b.kind === 'jira' ? { kind: 'jira', siteUrl: b.siteUrl, email: b.email, credentialRef: b.credentialRef } : { kind: 'youtrack', serverUrl: b.serverUrl, credentialRef: b.credentialRef },
+            aiCredentialRef: null,
+          });
+          if (!built.ok) return { ok: false, error: built.errors.map((e) => e.message).join(' ') };
+          const doc = { ...built.document, backend: { ...b } };
+          const saved = await workspaceArticles.createWorkspaceArticle(client, doc);
+          if (!saved.ok) return { ok: false, error: saved.message };
+          createdId = doc.workspaceId;
+          return { ok: true };
+        });
+        return written.ok ? { ok: true, workspaceId: createdId } : { ok: false, error: written.error ?? 'The workspace could not be created.' };
+      }
+      // Legacy storage: every workspace is on the one configured YouTrack.
+      const config = await loadLegacyWorkspaceConfig();
+      if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
+      if (!config.workspaces.some((w) => w.id === connectionWorkspaceId)) return { ok: false, error: 'The workspace supplying the connection no longer exists.' };
+      const id = `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const order = config.workspaces.reduce((m, w) => Math.max(m, w.order + 1), 0);
+      const saved = await saveLegacyWorkspaceConfig({ ...config, workspaces: [...config.workspaces, { id, name, order, folders: [] }] });
+      return saved.ok ? { ok: true, workspaceId: id } : { ok: false, error: saved.error ?? 'The workspace could not be created.' };
+    },
+    async remove(workspaceId) {
+      if (workspaceStorageMode() === 'per-workspace') {
+        const r = await deletePerWorkspace(workspaceId, null);
+        return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The workspace could not be removed.' };
+      }
+      // Read afresh and drop only this workspace, so unrelated edits are kept.
+      const config = await loadLegacyWorkspaceConfig();
+      if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
+      if (!config.workspaces.some((w) => w.id === workspaceId)) return { ok: true };
+      const saved = await saveLegacyWorkspaceConfig({ ...config, workspaces: config.workspaces.filter((w) => w.id !== workspaceId) });
+      return saved.ok ? { ok: true } : { ok: false, error: saved.error ?? 'The workspace could not be removed.' };
+    },
+  };
+  const applyRunwayImport = createRunwayMarkdownApply({
+    workspaces: applyWorkspaces,
+    match: matchRunwayImport,
+    gate: runwayGate,
+    store: openRunwayItemStore,
+    backup: async () => {
+      const dir = path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME);
+      const written = await writeRunwayBackup(openJiraRunwayStore().db, dir);
+      pruneRunwayBackups(dir, RUNWAY_BACKUP_KEEP, written);
+      return written;
+    },
+  });
+  ipcMain.handle(IPC.runwayMarkdownApply, (_e, args) => applyRunwayImport(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {
