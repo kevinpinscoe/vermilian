@@ -317,11 +317,9 @@ export function createImportSession(parsed: ParsedSchedule, activeId: string, ma
 
   const request = (g: WorkingGroup, key: string) => {
     const connectionId = g.connectionId as string;
+    // Asked even with no candidates (sections and notes only): the matcher
+    // then looks nothing up, but reports the connection Apply binds to.
     const { candidates } = groupCandidates(g);
-    if (candidates.length === 0) {
-      results.set(key, { state: 'done', connectionId, match: { groupKey: g.groupKey, workspaceId: connectionId, ok: true, candidates: [] } });
-      return;
-    }
     const token = ++seq;
     inFlight.set(g.groupKey, { token, key });
     results.set(key, { state: 'pending', connectionId });

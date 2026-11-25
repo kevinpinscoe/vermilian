@@ -230,7 +230,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                     <ul>
                       {applyError.remaining.map((w) => (
                         <li key={w.workspaceId}>
-                          {w.name} ({w.workspaceId})
+                          {w.name} ({w.workspaceId}){w.articleIds.length > 0 ? `, article ${w.articleIds.join(', ')}` : ''}
                         </li>
                       ))}
                     </ul>

@@ -5,7 +5,7 @@ import { parseRunwaySchedule } from '../../shared/runwaySchedule';
 import { scheduleCandidates, type RunwayImportCandidate, type RunwayImportGroupMatch, type RunwayImportMatchResult } from '../../shared/runwayImport';
 import type { RunwayWorkspaces } from './runwayItemIpc';
 import type { RunwayReaderResult, RunwayTicketReader } from './runwayTicketFetch';
-import { createRunwayImportMatch, validateImportMatchArgs, type RunwayImportMatchDeps } from './runwayImportMatch';
+import { createRunwayImportMatch, validateImportMatchArgs, type RunwayImportConnection, type RunwayImportMatchDeps } from './runwayImportMatch';
 
 // Synthetic keys, names and hosts only.
 const YT_A = 'ws-aaaaaaaaaaaa';
@@ -62,13 +62,18 @@ function deps(readers: Partial<Record<string, RunwayReaderResult>>, extra: Parti
   const reader = vi.fn(async (workspaceId: string, _tracker: TrackerKind): Promise<RunwayReaderResult> => {
     return readers[workspaceId] ?? { ok: false, code: 'credential', error: 'no reader in this test' };
   });
+  // Each workspace's connection, resolved once: its key, its host and a reader opened on that same connection.
+  const connection = vi.fn(async (workspaceId: string, tracker: TrackerKind): Promise<RunwayImportConnection | null> => ({
+    key: `conn:${BASE[workspaceId] ?? ''}`,
+    baseUrl: BASE[workspaceId] ?? '',
+    open: () => reader(workspaceId, tracker),
+  }));
   const d: RunwayImportMatchDeps = {
     workspaces: async () => CONFIG,
-    trackerBaseUrl: async (workspaceId) => BASE[workspaceId] ?? '',
-    reader,
+    connection,
     ...extra,
   };
-  return { d, reader };
+  return { d, reader, connection };
 }
 
 const sched = (text: string, line: number): RunwayImportCandidate => ({ text, line, role: 'scheduled', reason: null });
@@ -447,8 +452,59 @@ describe('runwayImportMatch — read-only', () => {
     const { d } = deps({ [YT_A]: { ok: true, reader: r.reader } }, { workspaces: async () => frozen });
     okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_A, candidates: [sched('READ-1', 1), sched('https://yt.example.test/projects/SYNC/issues/READ-1', 2)] }] }));
     expect(JSON.stringify(frozen)).toBe(before);
-    expect(Object.keys(d).sort()).toEqual(['reader', 'trackerBaseUrl', 'workspaces']);
+    expect(Object.keys(d).sort()).toEqual(['connection', 'workspaces']);
     expect(Object.keys(r.reader).sort()).toEqual(['admits', 'batch', 'one']);
+  });
+});
+
+describe('runwayImportMatch — one connection per group (VERM-104)', () => {
+  // Two Jira sites that both have OPS-7.
+  const SITE_A = 'https://site-a.example.test';
+  const SITE_B = 'https://site-b.example.test';
+
+  it('resolves the connection once: the site that receives the request is the one validated against and reported, even when the workspace moves A → B → A', async () => {
+    const a = fakeReader({ 'OPS-7': issue('OPS-7', 'Pager on A', 'a-1') });
+    const b = fakeReader({ 'OPS-7': issue('OPS-7', 'Pager on B', 'b-1') });
+    // What the workspace's settings say at each moment: A, then B while the reader opens, then A again.
+    const sites = [SITE_A, SITE_B, SITE_A];
+    let reads = 0;
+    const siteNow = () => sites[Math.min(reads++, sites.length - 1)];
+    const connection = vi.fn(async (): Promise<RunwayImportConnection | null> => {
+      const site = siteNow();
+      return { key: `conn:${site}`, baseUrl: site, open: async () => ({ ok: true, reader: (site === SITE_A ? a : b).reader }) };
+    });
+    const match = createRunwayImportMatch({ workspaces: async () => CONFIG, connection });
+    const [g] = okGroups(await match({ groups: [{ groupKey: 'g', workspaceId: JIRA, candidates: [sched(`${SITE_A}/browse/OPS-7`, 1)] }] }));
+    expect(connection).toHaveBeenCalledTimes(1);
+    expect(a.batch).toHaveBeenCalledWith(['OPS-7']);
+    expect(b.batch).not.toHaveBeenCalled();
+    expect(b.one).not.toHaveBeenCalled();
+    expect(g).toMatchObject({ ok: true, connectionKey: `conn:${SITE_A}` });
+    expect(summary(g)).toEqual(['L1 scheduled matched OPS-7']);
+  });
+
+  it('a link to site A is refused on a workspace resolved to site B, and B is the site reported', async () => {
+    const b = fakeReader({ 'OPS-7': issue('OPS-7', 'Pager on B', 'b-1') });
+    const connection = vi.fn(async (): Promise<RunwayImportConnection | null> => ({ key: `conn:${SITE_B}`, baseUrl: SITE_B, open: async () => ({ ok: true, reader: b.reader }) }));
+    const [g] = okGroups(await createRunwayImportMatch({ workspaces: async () => CONFIG, connection })({ groups: [{ groupKey: 'g', workspaceId: JIRA, candidates: [sched(`${SITE_A}/browse/OPS-7`, 1)] }] }));
+    expect(g).toMatchObject({ ok: true, connectionKey: `conn:${SITE_B}` });
+    expect(b.batch).not.toHaveBeenCalled();
+    expect(g.ok && g.candidates[0].status).toBe('unmatched');
+  });
+
+  it('a group with only sections and notes reports its connection without opening a reader', async () => {
+    const { d, reader, connection } = deps({ [JIRA]: { ok: true, reader: fakeReader({}).reader } });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'notes', workspaceId: JIRA, candidates: [] }] }));
+    expect(g).toEqual({ groupKey: 'notes', workspaceId: JIRA, ok: true, candidates: [], connectionKey: `conn:${BASE[JIRA]}` });
+    expect(connection).toHaveBeenCalledTimes(1);
+    expect(reader).not.toHaveBeenCalled();
+  });
+
+  it('a workspace whose connection is gone fails the group, and nothing is read', async () => {
+    const { d, reader } = deps({}, { connection: vi.fn(async () => null) });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_A, candidates: [sched('READ-1', 1)] }] }));
+    expect(g).toMatchObject({ ok: false, code: 'unknown-workspace' });
+    expect(reader).not.toHaveBeenCalled();
   });
 });
 

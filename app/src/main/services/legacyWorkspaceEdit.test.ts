@@ -86,6 +86,52 @@ describe('legacy workspace add and remove (VERM-104)', () => {
     expect(shared().workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b']);
   });
 
+  it('rollback reverses only this add: a rename of another workspace made while the local write was held survives', async () => {
+    let release!: (fail: boolean) => void;
+    const held = new Promise<boolean>((r) => (release = r));
+    let started!: () => void;
+    const writing = new Promise<void>((r) => (started = r));
+    const { d, shared } = deps({
+      writeLocal: async () => {
+        started();
+        if (await held) throw new Error('disk full');
+      },
+    });
+    const adding = addLegacyWorkspace(d, NEW);
+    await writing;
+    // Elsewhere, workspace A is renamed in the shared configuration while the write is held open.
+    d.updateShared({ ...shared(), workspaces: shared().workspaces.map((w) => (w.id === 'ws-a' ? { ...w, name: 'Inbox (renamed)' } : w)) });
+    release(true);
+    expect(await adding).toMatchObject({ ok: false, error: expect.stringMatching(/disk full/) });
+    expect(shared().workspaces.map((w) => [w.id, w.name])).toEqual([
+      ['ws-a', 'Inbox (renamed)'],
+      ['ws-b', 'Reader App'],
+    ]);
+  });
+
+  it('rollback reverses only this removal: the workspace comes back at its place and a rename made meanwhile survives', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let started!: () => void;
+    const writing = new Promise<void>((r) => (started = r));
+    const { d, shared } = deps({
+      writeLocal: async () => {
+        started();
+        await held;
+        throw new Error('disk full');
+      },
+    });
+    const removing = removeLegacyWorkspace(d, 'ws-a');
+    await writing;
+    d.updateShared({ ...shared(), workspaces: shared().workspaces.map((w) => (w.id === 'ws-b' ? { ...w, name: 'Reader App (renamed)' } : w)) });
+    release();
+    expect(await removing).toMatchObject({ ok: false });
+    expect(shared().workspaces.map((w) => [w.id, w.name, w.folders.flatMap((f) => f.projectIds)])).toEqual([
+      ['ws-a', 'Inbox', ['0-e1', '0-hidden']],
+      ['ws-b', 'Reader App (renamed)', ['0-e2']],
+    ]);
+  });
+
   it('removing a workspace that is already gone is success and writes nothing', async () => {
     const before = readFileSync(file, 'utf8');
     const { d, scheduled } = deps();

@@ -243,6 +243,33 @@ test.describe('Runway: applying a Markdown import', () => {
     await tid(page, 'import-cancel').click();
   });
 
+  test('a mixed import applies both its tickets and a group of only sections and notes', async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), RUNWAY_ENV);
+    const page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+    await tid(page, 'nav-runway').click();
+    await stubOpenDialog(app, scratchFile('mixed.md', ['## Ship it', '- READ-12 Cache', '', '## Reading', '', '### Later', '', 'A paragraph to keep.', ''].join('\n')));
+    await tid(page, 'runway-import-markdown').click();
+    const dialog = tid(page, 'runway-markdown-import');
+    await expect(dialog.locator('[data-testid="import-group"]')).toHaveCount(2);
+    await expect(dialog.locator('[data-testid="import-group-blocker"]')).toHaveCount(0);
+    await expect(tid(page, 'import-apply')).toBeEnabled();
+    await tid(page, 'import-apply').click();
+    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    const config = await page.evaluate(() => window.vermilian.getWorkspaceConfig());
+    const idOf = (n: string) => config?.workspaces.find((w) => w.name === n)?.id as string;
+    const rows = async (w: string) => {
+      const r = await page.evaluate((id) => window.vermilian.runwayItemsList({ workspaceId: id }), w);
+      if (!r.ok) throw new Error(r.error);
+      return r.items.map((i) => [i.kind, i.kind === 'issue' ? i.itemId : i.text]);
+    };
+    expect(await rows(idOf('Ship it'))).toEqual([['issue', 'yt:READ-12']]);
+    expect(await rows(idOf('Reading'))).toEqual([
+      ['section', 'Later'],
+      ['note', 'A paragraph to keep.'],
+    ]);
+  });
+
   test('while Apply runs the preview is frozen: Skip, Undo and Escape do nothing, and what is written is what stayed on screen', async () => {
     app = await launchAppWithUserDataDir(freshUserDataDir(), { ...RUNWAY_ENV, VERMILIAN_E2E_RUNWAY_APPLY_HOLD_MS: '2500' });
     const page = await app.firstWindow();

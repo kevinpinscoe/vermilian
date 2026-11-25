@@ -138,7 +138,7 @@ import { checkWorkspaceCredential, credentialRefStatus, resolveWorkspaceCredenti
 import { aiCredentialRefOf, e2eFakeAnthropicKeyAllowed } from '../shared/workspaceAi';
 import { beginWorkspaceAiOperation, type WorkspaceAiOperation } from './services/workspaceAiKey';
 import { createJiraProvider, type JiraProvider } from './providers/jiraProvider';
-import { backendChangeProblem, buildWorkspaceDocument, nextWorkspaceOrder } from '../shared/workspaceSetup';
+import { backendChangeProblem } from '../shared/workspaceSetup';
 import type {
   CredentialRefStatusResult,
   GetWorkspaceJiraIssueDetailResult,
@@ -221,10 +221,11 @@ import {
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
-import { createRunwayImportMatch } from './services/runwayImportMatch';
+import { createRunwayImportMatch, type RunwayImportConnection } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
 import { createRunwayMarkdownApply, trackerConnectionKey, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
 import { addLegacyWorkspace, removeLegacyWorkspace, type LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
+import { createPerWorkspaceApplyWorkspaces } from './services/runwayApplyWorkspaces';
 import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
@@ -1412,18 +1413,26 @@ export function registerIpc(): void {
   // call. The token never leaves the main process.
   const jiraProviders = new Map<string, { key: string; provider: Promise<JiraProvider> }>();
 
+  // `given`: the workspace's document as already read by the caller, so the
+  // provider is built from exactly those settings (the import match, VERM-104).
   async function workspaceJiraProvider(
     workspaceId: unknown,
+    given?: WorkspaceDocument,
   ): Promise<{ ok: true; provider: JiraProvider; doc: WorkspaceDocument } | WorkspaceJiraFailure> {
     const fail = (message: string, reason: WorkspaceJiraFailure['reason'] = 'error', credentialRef: string | null = null): WorkspaceJiraFailure =>
       ({ ok: false, message, reason, credentialRef });
-    const client = await workspaceArticleClient();
-    if (!client) return fail(NOT_CONFIGURED_WS.message);
     if (typeof workspaceId !== 'string' || workspaceId === '') return fail('No workspace ID was given.');
-    const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
-    if (!read.ok) return fail(read.message);
-    if (read.entry.status !== 'ok') return fail(read.entry.message);
-    const doc = read.entry.document;
+    let doc: WorkspaceDocument;
+    if (given && given.workspaceId === workspaceId) {
+      doc = given;
+    } else {
+      const client = await workspaceArticleClient();
+      if (!client) return fail(NOT_CONFIGURED_WS.message);
+      const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
+      if (!read.ok) return fail(read.message);
+      if (read.entry.status !== 'ok') return fail(read.entry.message);
+      doc = read.entry.document;
+    }
     if (doc.backend.kind !== 'jira') return fail(`"${doc.name}" is not a Jira workspace.`);
     const { siteUrl, email, cloudId, credentialRef } = doc.backend;
     const key = JSON.stringify([siteUrl, email, cloudId, credentialRef, doc.jiraProjects ?? {}]);
@@ -2477,6 +2486,7 @@ export function registerIpc(): void {
   // A workspace's tracker connection as a comparable key (VERM-104): tracker,
   // server or site, email and credential reference; null when it is gone.
   // Under legacy storage every workspace uses the one configured YouTrack.
+  const LEGACY_YOUTRACK_CREDENTIAL_REF = 'legacy-youtrack-token';
   async function applyConnectionKey(workspaceId: string): Promise<string | null> {
     if (workspaceStorageMode() === 'per-workspace') {
       const doc = await perWorkspaceDocument(workspaceId);
@@ -2484,13 +2494,53 @@ export function registerIpc(): void {
     }
     const legacy = await loadLegacyWorkspaceConfig();
     if (!legacy?.workspaces.some((w) => w.id === workspaceId)) return null;
-    return trackerConnectionKey({ kind: 'youtrack', serverUrl: (await readConfig()).youtrackUrl ?? '', credentialRef: 'legacy-youtrack-token' });
+    return trackerConnectionKey({ kind: 'youtrack', serverUrl: (await readConfig()).youtrackUrl ?? '', credentialRef: LEGACY_YOUTRACK_CREDENTIAL_REF });
+  }
+  // The match's connection for one group, resolved from one reading of the
+  // workspace's settings: the key, the host links are checked against and the
+  // reader all come from that reading, so a result read on one site cannot be
+  // labelled as another's. Same connection rules as runwayReader.
+  async function runwayImportConnection(workspaceId: string, tracker: TrackerKind): Promise<RunwayImportConnection | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      if (!doc) return null;
+      const b = doc.backend;
+      const baseUrl = b.kind === 'jira' ? (tracker === 'jira' ? b.siteUrl : '') : tracker === 'youtrack' ? b.serverUrl : '';
+      return {
+        key: trackerConnectionKey(b),
+        baseUrl,
+        async open(): Promise<RunwayReaderResult> {
+          if (tracker !== b.kind) return { ok: false, code: 'credential', error: `This workspace is not on ${tracker === 'jira' ? 'Jira' : 'YouTrack'}.` };
+          if (b.kind === 'jira') {
+            const r = await workspaceJiraProvider(workspaceId, doc);
+            if (!r.ok) return { ok: false, code: r.reason === 'error' ? 'refresh-failed' : r.reason, error: r.message };
+            return { ok: true, reader: jiraRunwayReader(r.provider, workspaceAdmission(r.provider, r.doc)) };
+          }
+          const yt = await resolveWorkspaceYouTrackConnection(doc, await readConfig(), credentialSourceIO, IS_E2E);
+          if (!yt.ok) return { ok: false, code: 'credential', error: yt.error };
+          return { ok: true, reader: youtrackRunwayReader(youtrackTracker(yt.url, yt.token)) };
+        },
+      };
+    }
+    // Legacy storage: every workspace uses the one Settings YouTrack, read once here.
+    const legacy = await loadLegacyWorkspaceConfig();
+    if (!legacy?.workspaces.some((w) => w.id === workspaceId)) return null;
+    const cfg = await readConfig();
+    const url = cfg.youtrackUrl ?? '';
+    return {
+      key: trackerConnectionKey({ kind: 'youtrack', serverUrl: url, credentialRef: LEGACY_YOUTRACK_CREDENTIAL_REF }),
+      baseUrl: tracker === 'youtrack' ? url : '',
+      async open(): Promise<RunwayReaderResult> {
+        if (tracker !== 'youtrack') return { ok: false, code: 'credential', error: 'Under shared storage a workspace’s tickets are read on YouTrack.' };
+        const token = await loadYtToken(cfg);
+        if (!url || !token) return { ok: false, code: 'credential', error: 'YouTrack is not configured.' };
+        return { ok: true, reader: youtrackRunwayReader(youtrackTracker(url, token)) };
+      },
+    };
   }
   const matchRunwayImport = createRunwayImportMatch({
     workspaces: runwayWorkspaces,
-    trackerBaseUrl: runwayTrackerBaseUrl,
-    reader: runwayReader,
-    connectionKey: applyConnectionKey,
+    connection: runwayImportConnection,
   });
   ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
 
@@ -2533,6 +2583,16 @@ export function registerIpc(): void {
     },
     refusedMessage: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE,
   };
+  // Per-workspace create and cleanup keep the new workspace's identity, and
+  // remove exactly the articles this Apply wrote (services/runwayApplyWorkspaces.ts).
+  const perWorkspaceApply = createPerWorkspaceApplyWorkspaces({
+    async client() {
+      const guard = await storageGuard('per-workspace');
+      if (!guard.allowed) return guard.message;
+      return (await workspaceArticleClient()) ?? NOT_CONFIGURED_WS.message;
+    },
+    generateWorkspaceId,
+  });
   const applyWorkspaces: ApplyWorkspaceStore = {
     async list() {
       if (workspaceStorageMode() === 'per-workspace') {
@@ -2546,33 +2606,7 @@ export function registerIpc(): void {
       return (legacy?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name }));
     },
     async create(name, connectionWorkspaceId, expectedKey) {
-      if (workspaceStorageMode() === 'per-workspace') {
-        let createdId = '';
-        const written = await guardedWorkspaceWrite(async (client) => {
-          const listed = await workspaceArticles.listWorkspaceArticles(client);
-          if (!listed.ok) return { ok: false, error: listed.message };
-          const docs = listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []));
-          const source = docs.find((d) => d.workspaceId === connectionWorkspaceId);
-          if (!source) return { ok: false, error: 'The workspace supplying the connection no longer exists.' };
-          // Copy only the connection that was checked: the very settings read here must match it.
-          if (trackerConnectionKey(source.backend) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
-          const b = source.backend;
-          const built = buildWorkspaceDocument({
-            workspaceId: generateWorkspaceId(),
-            name,
-            order: nextWorkspaceOrder(docs),
-            backend: b.kind === 'jira' ? { kind: 'jira', siteUrl: b.siteUrl, email: b.email, credentialRef: b.credentialRef } : { kind: 'youtrack', serverUrl: b.serverUrl, credentialRef: b.credentialRef },
-            aiCredentialRef: null,
-          });
-          if (!built.ok) return { ok: false, error: built.errors.map((e) => e.message).join(' ') };
-          const doc = { ...built.document, backend: { ...b } };
-          const saved = await workspaceArticles.createWorkspaceArticle(client, doc);
-          if (!saved.ok) return { ok: false, error: saved.message };
-          createdId = doc.workspaceId;
-          return { ok: true };
-        });
-        return written.ok ? { ok: true, workspaceId: createdId } : { ok: false, error: written.error ?? 'The workspace could not be created.' };
-      }
+      if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.create(name, connectionWorkspaceId, expectedKey);
       // Legacy storage: every workspace is on the one configured YouTrack.
       if ((await applyConnectionKey(connectionWorkspaceId)) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
       const config = await loadLegacyWorkspaceConfig();
@@ -2582,11 +2616,8 @@ export function registerIpc(): void {
       const added = await addLegacyWorkspace(legacyEdit, { id, name, order, folders: [] });
       return added.ok ? { ok: true, workspaceId: id } : { ok: false, error: added.error };
     },
-    async remove(workspaceId) {
-      if (workspaceStorageMode() === 'per-workspace') {
-        const r = await deletePerWorkspace(workspaceId, null);
-        return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The workspace could not be removed.' };
-      }
+    async remove(workspaceId, articleIds) {
+      if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.remove(workspaceId, articleIds);
       return removeLegacyWorkspace(legacyEdit, workspaceId);
     },
   };

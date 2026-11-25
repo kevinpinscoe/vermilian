@@ -110,6 +110,40 @@ describe('applyPlan', () => {
     ]);
   });
 
+  it('a mixed import applies both its tickets and its notes-only group, each checked on its connection with no ticket lookup for the notes', async () => {
+    const asked: RunwayImportMatchArgs[] = [];
+    const session = createImportSession(
+      parseRunwaySchedule('## Ship the offline reader\n- READ-1\n\n## Reading\n\n### Later\n\nA paragraph to keep.'),
+      'ws-active',
+      (args) => {
+        asked.push(args);
+        return Promise.resolve(fakeMatch(args));
+      },
+      () => undefined,
+    );
+    session.setWorkspaces({ state: 'ready', workspaces: WS });
+    await flush();
+    const { groups, checks } = st(session);
+    const blockers = applyBlockers(groups, checks, WS, {});
+    expect(blockers).toEqual({ g0: [], g1: [] });
+    expect(canApply(groups, blockers)).toBe(true);
+    const plan = applyPlan(groups, checks);
+    expect(plan?.groups).toEqual([
+      expect.objectContaining({ groupKey: 'g0', connectionKey: 'conn:ws-active', rows: [{ kind: 'ticket', issueId: 'yt:READ-1', text: 'READ-1', line: 2 }] }),
+      {
+        groupKey: 'g1',
+        target: { kind: 'new', name: 'Reading', connectionWorkspaceId: 'ws-active' },
+        connectionKey: 'conn:ws-active',
+        rows: [
+          { kind: 'section', text: 'Later', depth: 0, line: 6 },
+          { kind: 'note', text: 'A paragraph to keep.', depth: 0, line: 8 },
+        ],
+      },
+    ]);
+    // The notes-only group asked for its connection with no candidates, so no ticket was looked up for it.
+    expect(asked.flatMap((a) => a.groups).find((g) => g.groupKey === 'g1')?.candidates).toEqual([]);
+  });
+
   it('a group mapped to an existing workspace targets it; a group not yet checked gives no plan', async () => {
     const s = open('## Reader App\n- READ-1');
     await flush();

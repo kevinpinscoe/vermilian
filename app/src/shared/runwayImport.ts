@@ -227,7 +227,14 @@ export type RunwayImportApplyResult =
       /** The pre-Apply backup, when one was written. */
       backupPath: string | null;
       /** Workspaces this Apply created that could not be removed again. */
-      remaining: { workspaceId: string; name: string }[];
+      remaining: RunwayImportApplyRemaining[];
     };
+
+/** A workspace an Apply created and could not confirm removed: its ID, name and any article still holding it. */
+export interface RunwayImportApplyRemaining {
+  workspaceId: string;
+  name: string;
+  articleIds: string[];
+}
 
 export const RUNWAY_IMPORT_MAX_APPLY_ROWS = 20000;

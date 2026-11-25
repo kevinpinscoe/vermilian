@@ -87,16 +87,16 @@ function harness(
             // Partly written: the ID was allocated before the failure.
             const id = `ws-new-${++n}`;
             workspaces.push({ id, name });
-            return { ok: false, error: 'the shared configuration refused the change', workspaceId: id };
+            return { ok: false, error: 'the shared configuration refused the change', workspaceId: id, articleIds: [`art-${id}`] };
           }
           opts.onCreate?.();
           const id = `ws-new-${++n}`;
           workspaces.push({ id, name });
-          return { ok: true, workspaceId: id };
+          return { ok: true, workspaceId: id, articleIds: [`art-${id}`] };
         },
-        remove: async (id) => {
-          events.push(`remove ${id}`);
-          if (id === opts.failRemove) return { ok: false, error: 'offline' };
+        remove: async (id, articleIds) => {
+          events.push(`remove ${id} [${articleIds.join(' ')}]`);
+          if (id === opts.failRemove) return { ok: false, error: 'offline', articleIds };
           removed.push(id);
           const i = workspaces.findIndex((w) => w.id === id);
           if (i >= 0) workspaces.splice(i, 1);
@@ -255,7 +255,7 @@ describe('runwayMarkdownApply', () => {
       groups: [NEW_GROUP, { ...NEW_GROUP, groupKey: 'g2', target: { kind: 'new', name: 'Second', connectionWorkspaceId: 'ws-a' }, rows: [ticket('READ-30', 30)] }],
     });
     expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [], backupPath: join(dir, 'runway-before-import-1.sqlite') });
-    expect(h.events).toEqual(['backup', 'create Ship the offline reader from ws-a', 'create Second from ws-a', 'remove ws-new-1']);
+    expect(h.events).toEqual(['backup', 'create Ship the offline reader from ws-a', 'create Second from ws-a', 'remove ws-new-1 [art-ws-new-1]']);
     expect(store.list('ws-new-1')).toEqual([]);
   });
 
@@ -264,7 +264,14 @@ describe('runwayMarkdownApply', () => {
     const r = await createRunwayMarkdownApply(h.deps)({
       groups: [NEW_GROUP, { ...NEW_GROUP, groupKey: 'g2', target: { kind: 'new', name: 'Second', connectionWorkspaceId: 'ws-a' }, rows: [] }],
     });
-    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [{ workspaceId: 'ws-new-1', name: 'Ship the offline reader' }], backupPath: join(dir, 'runway-before-import-1.sqlite') });
+    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [{ workspaceId: 'ws-new-1', name: 'Ship the offline reader', articleIds: ['art-ws-new-1'] }], backupPath: join(dir, 'runway-before-import-1.sqlite') });
+  });
+
+  it('a creation that reached the tracker but could not be verified: cleanup is given its exact article, and reports it if the removal is not confirmed', async () => {
+    const h = harness({}, { failCreateAllocated: 'Ship the offline reader', failRemove: 'ws-new-1' });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
+    expect(h.events).toContain('remove ws-new-1 [art-ws-new-1]');
+    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [{ workspaceId: 'ws-new-1', name: 'Ship the offline reader', articleIds: ['art-ws-new-1'] }] });
   });
 
   it('a failed row write rolls back and removes this Apply’s workspaces only', async () => {

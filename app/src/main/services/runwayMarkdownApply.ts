@@ -42,6 +42,7 @@ import {
   type RunwayImportApplyArgs,
   type RunwayImportApplyGroup,
   type RunwayImportApplyProblem,
+  type RunwayImportApplyRemaining,
   type RunwayImportApplyResult,
   type RunwayImportApplyRow,
   type RunwayImportMatchArgs,
@@ -61,15 +62,19 @@ export interface ApplyWorkspaceStore {
    * Creates a workspace copying `connectionWorkspaceId`'s tracker connection
    * and credential reference, refusing when that connection's key is no
    * longer `expectedKey`. A failure that had already allocated the new
-   * workspace's ID returns it, so it can be cleaned up.
+   * workspace's ID returns it, with any article it is known to have written
+   * (per-workspace storage), so it can be cleaned up exactly.
    */
   create(
     name: string,
     connectionWorkspaceId: string,
     expectedKey: string,
-  ): Promise<{ ok: true; workspaceId: string } | { ok: false; error: string; workspaceId?: string }>;
-  /** Removes a workspace this Apply created. */
-  remove(workspaceId: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  ): Promise<{ ok: true; workspaceId: string; articleIds?: string[] } | { ok: false; error: string; workspaceId?: string; articleIds?: string[] }>;
+  /**
+   * Removes a workspace this Apply created, including exactly the articles
+   * given; a failure names the articles it could not confirm removed.
+   */
+  remove(workspaceId: string, articleIds: string[]): Promise<{ ok: true } | { ok: false; error: string; articleIds?: string[] }>;
 }
 
 export interface RunwayMarkdownApplyDeps {
@@ -176,7 +181,7 @@ async function checkConnections(deps: RunwayMarkdownApplyDeps, groups: readonly 
 function refused(
   code: Exclude<RunwayImportApplyResult, { ok: true }>['code'],
   error: string,
-  extra: { problems?: RunwayImportApplyProblem[]; backupPath?: string | null; remaining?: { workspaceId: string; name: string }[] } = {},
+  extra: { problems?: RunwayImportApplyProblem[]; backupPath?: string | null; remaining?: RunwayImportApplyRemaining[] } = {},
 ): RunwayImportApplyResult {
   return { ok: false, code, error, problems: extra.problems ?? [], backupPath: extra.backupPath ?? null, remaining: extra.remaining ?? [] };
 }
@@ -269,15 +274,18 @@ function checkDestinations(groups: readonly RunwayImportApplyGroup[], workspaces
   return problems;
 }
 
-/** Removes the workspaces this Apply created; returns the ones that remain. */
-async function cleanup(deps: RunwayMarkdownApplyDeps, created: readonly { workspaceId: string; name: string }[]) {
-  const remaining: { workspaceId: string; name: string }[] = [];
+type Created = { groupKey: string; workspaceId: string; name: string; articleIds: string[] };
+
+/** Removes the workspaces this Apply created; returns the ones that remain, with their articles. */
+async function cleanup(deps: RunwayMarkdownApplyDeps, created: readonly Created[]): Promise<RunwayImportApplyRemaining[]> {
+  const remaining: RunwayImportApplyRemaining[] = [];
   for (const c of created) {
+    const left = (articleIds: string[] = c.articleIds) => remaining.push({ workspaceId: c.workspaceId, name: c.name, articleIds });
     try {
-      const r = await deps.workspaces.remove(c.workspaceId);
-      if (!r.ok) remaining.push(c);
+      const r = await deps.workspaces.remove(c.workspaceId, c.articleIds);
+      if (!r.ok) left(r.articleIds);
     } catch {
-      remaining.push(c);
+      left();
     }
   }
   return remaining;
@@ -326,7 +334,7 @@ export function createRunwayMarkdownApply(deps: RunwayMarkdownApplyDeps) {
       }
 
       // 5. The new workspaces.
-      const created: { groupKey: string; workspaceId: string; name: string }[] = [];
+      const created: Created[] = [];
       for (const g of plan.groups) {
         if (g.target.kind !== 'new') continue;
         let r: Awaited<ReturnType<ApplyWorkspaceStore['create']>>;
@@ -337,11 +345,11 @@ export function createRunwayMarkdownApply(deps: RunwayMarkdownApplyDeps) {
         }
         if (!r.ok) {
           // An ID allocated before the failure is this Apply's to remove too.
-          const allocated = r.workspaceId ? [{ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name }] : [];
+          const allocated = r.workspaceId ? [{ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name, articleIds: r.articleIds ?? [] }] : [];
           const remaining = await cleanup(deps, [...created, ...allocated]);
           return refused('create-failed', `The workspace ${g.target.name} could not be created, so no rows were written: ${r.error}`, { backupPath, remaining });
         }
-        created.push({ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name });
+        created.push({ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name, articleIds: r.articleIds ?? [] });
       }
 
       // 6. All the rows, in one transaction that checks each destination is still empty.
