@@ -83,6 +83,7 @@ export const IPC = {
   workspaceLinkTypes: 'workspace:linkTypes',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   runwayImportMatch: 'runway-import:match',
+  runwayImportIdentify: 'runway-import:identify',
   runwayMarkdownOpen: 'runway-markdown:open',
   runwayMarkdownApply: 'runway-markdown:apply',
   pickFolder: 'dialog:pickFolder',
@@ -460,7 +461,7 @@ export type RunwayItemsErrorCode =
   | 'invalid-text'
   | 'not-a-ticket'
   | 'dependent-not-on-runway'
-  | 'runway-not-empty' // fillEmpty only (the Markdown import's Apply); never from these handlers
+  | 'runway-changed' // appendImport only (the Markdown import's Apply); never from these handlers
   // From the handlers (main/services/runwayItemIpc.ts).
   | 'invalid-args' // not an argument object
   | 'unknown-workspace' // no workspace with this ID in the configuration
@@ -940,12 +941,15 @@ export interface VermilianAPI {
   // groups (VERM-101): read-only, each group on its own workspace's
   // connection. See shared/runwayImport.ts.
   runwayImportMatch(args: import('./runwayImport').RunwayImportMatchArgs): Promise<import('./runwayImport').RunwayImportMatchResult>;
+  /** The tickets already on a destination Runway, read on its own connection, each with every ID it answers to (VERM-105). Read-only. */
+  runwayImportIdentify(args: import('./runwayImport').RunwayImportIdentifyArgs): Promise<import('./runwayImport').RunwayImportIdentifyResult>;
   // Choose a Markdown schedule file for the import preview (VERM-102): the
   // native picker, then the file's name and UTF-8 text (at most 1 MiB).
   // Read-only; a cancelled picker resolves { ok: true, canceled: true }.
   runwayMarkdownOpen(): Promise<import('./runwayImport').RunwayMarkdownOpenResult>;
-  // Apply the Markdown import preview (VERM-104): verify, back up, create the
-  // new workspaces and fill their empty Runways. See shared/runwayImport.ts.
+  // Apply the Markdown import preview (VERM-104, VERM-105): verify, back up,
+  // create the new workspaces and append what each Runway does not have yet.
+  // See shared/runwayImport.ts and shared/runwayImportAppend.ts.
   runwayMarkdownApply(args: import('./runwayImport').RunwayImportApplyArgs): Promise<import('./runwayImport').RunwayImportApplyResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;

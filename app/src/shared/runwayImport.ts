@@ -11,6 +11,7 @@
 // workspace chosen for it; copying that connection at Apply is VERM-104.
 
 import type { ScheduleGroup, ScheduleReferenceReason } from './runwaySchedule';
+import type { RunwayDestinationRow, RunwaySavedIdentity } from './runwayImportAppend';
 
 export type RunwayImportRole = 'scheduled' | 'reference';
 
@@ -52,6 +53,12 @@ export interface RunwayImportTicket {
   /** The key the tracker answered with (a moved Jira issue answers with its new key). */
   key: string;
   summary: string;
+  /**
+   * Every tracker-qualified ID the ticket answered to on this connection: its
+   * stored ID, the key asked for and, for YouTrack, its entity ID (VERM-105).
+   * A repeat import matches saved rows by these.
+   */
+  aliases?: string[];
 }
 
 interface CandidateBase {
@@ -164,12 +171,29 @@ export interface RunwayImportApplyGroup {
   target: RunwayImportApplyTarget;
   /** The connection the preview checked the group on (the match's connectionKey). */
   connectionKey: string;
+  /** Every row the file gives the group, in preview order. */
   rows: RunwayImportApplyRow[];
+  /**
+   * An existing destination only (VERM-105): its rows as the preview compared
+   * them, and which of `rows` the preview showed being appended (indices, in
+   * order). Apply refuses when either differs from what it finds.
+   */
+  destination?: { rows: RunwayDestinationRow[]; append: number[] };
 }
 
 export interface RunwayImportApplyArgs {
   groups: RunwayImportApplyGroup[];
 }
+
+/** The saved tickets of a destination Runway, read on its own connection (VERM-105). */
+export interface RunwayImportIdentifyArgs {
+  workspaceId: string;
+  itemIds: string[];
+}
+
+export type RunwayImportIdentifyResult =
+  | { ok: true; connectionKey: string; items: RunwaySavedIdentity[] }
+  | { ok: false; code: 'invalid-args' | RunwayImportGroupErrorCode; error: string; retryable: boolean };
 
 /**
  * Why a group goes back to the preview. Nothing was written.
@@ -183,7 +207,11 @@ export interface RunwayImportApplyArgs {
  *   workspace-missing   the existing destination workspace is gone
  *   name-taken          a new workspace's name is already used
  *   same-destination    two groups go to one existing workspace: merge or skip
- *   runway-not-empty    the existing destination's Runway has rows now
+ *   runway-changed      the destination's Runway changed since the preview
+ *                       (a row added, removed, moved or edited): preview again
+ *   unable-to-verify    a ticket already on the Runway could not be read, so a
+ *                       new ticket might be the same one
+ *   append-changed      the rows to append are not the ones the preview showed
  */
 export type RunwayImportApplyReason =
   | 'tickets-changed'
@@ -193,7 +221,9 @@ export type RunwayImportApplyReason =
   | 'workspace-missing'
   | 'name-taken'
   | 'same-destination'
-  | 'runway-not-empty';
+  | 'runway-changed'
+  | 'unable-to-verify'
+  | 'append-changed';
 
 export interface RunwayImportApplyProblem {
   groupKey: string;
@@ -212,6 +242,7 @@ export interface RunwayImportAppliedWorkspace {
 export type RunwayImportApplyErrorCode =
   | 'invalid-args'
   | 'workspace-unavailable'
+  | 'nothing-new' // every group would add nothing; nothing was backed up or written
   | 'review' // groups need correcting; nothing was written
   | 'backup-failed' // the backup could not be written; nothing was changed
   | 'create-failed' // a workspace could not be created; no rows were written

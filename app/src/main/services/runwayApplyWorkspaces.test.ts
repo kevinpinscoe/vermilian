@@ -212,6 +212,7 @@ describe('the same-title case through Apply to the recovery message (VERM-104)',
       const apply = createRunwayMarkdownApply({
         workspaces: store(),
         match,
+        identify: async () => ({ ok: true, connectionKey: KEY, items: [] }),
         connectionKey: async (id) => (id === SOURCE.workspaceId ? KEY : null),
         gate: { run: async (op) => op() },
         store: () => items,

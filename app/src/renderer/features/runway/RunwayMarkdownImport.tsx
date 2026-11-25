@@ -17,7 +17,11 @@
 //
 // Apply (VERM-104) is offered once every included group is ready
 // (importApply.ts): the main process verifies the tickets again, backs up the
-// Runway database, creates the new workspaces and fills their empty Runways.
+// Runway database, creates the new workspaces and appends to each Runway what
+// it does not have yet. A group mapped to an existing workspace shows, row by
+// row, what is already on its Runway and what is added at the end, the
+// tickets it has that the file does not (Not in this file), and Nothing new
+// to add when there is nothing to append (VERM-105).
 // A group it sends back is shown with the reason (and rechecked when its
 // tickets or connection changed); after success the dialog closes and the
 // current workspace stays active. While Apply runs, the preview is frozen:
@@ -50,8 +54,20 @@ import {
   type WorkingGroup,
 } from './importCorrections';
 import { applyRecoveryLines, type RunwayImportApplyResult } from '../../../shared/runwayImport';
-import { appliedSummary, applyBlockers, applyPlan, BLOCKER_MESSAGE, canApply, destinationOf, type ApplyBlocker } from './importApply';
-import { RUNWAY_ITEMS_QUERY_KEY } from './api';
+import {
+  addsNothing,
+  appliedSummary,
+  applyBlockers,
+  applyPlan,
+  BLOCKER_MESSAGE,
+  canApply,
+  destinationOf,
+  groupAppend,
+  type ApplyBlocker,
+  type DestinationView,
+} from './importApply';
+import { destinationRows, type RunwayAppendPlan } from '../../../shared/runwayImportAppend';
+import { IMPORT_IDENTITY_QUERY_KEY, RUNWAY_ITEMS_QUERY_KEY } from './api';
 import { ACTIVE_WORKSPACE_QUERY_KEY, WORKSPACE_CONFIG_QUERY_KEY } from '../workspace-nav/api';
 import { useToastStore } from '../../stores/toast';
 import modalLayout from '../../components/ModalLayout.module.css';
@@ -131,17 +147,62 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
       queryFn: () => window.vermilian.runwayItemsList({ workspaceId: id }),
     })),
   });
-  const runwayRows: Record<string, number | undefined> = {};
-  destinations.forEach((id, i) => {
+  // The tickets already on each destination, read on its own connection (VERM-105). The key holds the
+  // connection the group was checked on and the saved ticket IDs, so either changing reads them again.
+  const checkedOn = (id: string) => {
+    const g = (groups ?? []).find((x) => !x.skipped && destinationOf(x) === id);
+    const c = g ? state?.checks[g.groupKey] : undefined;
+    return c?.state === 'done' && c.match.ok ? (c.match.connectionKey ?? '') : '';
+  };
+  const savedIds = destinations.map((id, i) => {
     const data = runwayLists[i]?.data;
-    runwayRows[id] = data?.ok ? data.items.length : undefined;
+    return data?.ok ? data.items.filter((it) => it.kind === 'issue').map((it) => it.itemId) : null;
   });
-  const blockers = groups && state ? applyBlockers(groups, state.checks, options, runwayRows) : {};
-  const ready = Boolean(groups && canApply(groups, blockers));
+  const identities = useQueries({
+    queries: destinations.map((id, i) => ({
+      queryKey: [...IMPORT_IDENTITY_QUERY_KEY, id, checkedOn(id), (savedIds[i] ?? []).join('|')],
+      queryFn: () => window.vermilian.runwayImportIdentify({ workspaceId: id, itemIds: savedIds[i] ?? [] }),
+      enabled: savedIds[i] !== null,
+      retry: false,
+    })),
+  });
+  const destinationViews: Record<string, DestinationView> = {};
+  destinations.forEach((id, i) => {
+    const list = runwayLists[i];
+    const data = list?.data;
+    if (!data) {
+      destinationViews[id] = list?.isError ? { state: 'failed', error: 'The Runway could not be read.' } : { state: 'loading' };
+      return;
+    }
+    if (!data.ok) {
+      destinationViews[id] = { state: 'failed', error: data.error };
+      return;
+    }
+    const q = identities[i];
+    const r = q?.data;
+    destinationViews[id] = {
+      state: 'ready',
+      rows: destinationRows(data.items),
+      identity: !r
+        ? q?.isError
+          ? { state: 'failed', error: 'The tickets could not be checked.' }
+          : { state: 'loading' }
+        : r.ok
+          ? { state: 'ready', connectionKey: r.connectionKey, items: Object.fromEntries(r.items.map((it) => [it.itemId, it])) }
+          : { state: 'failed', error: r.error },
+    };
+  });
+  const retryIdentity = (id: string) => {
+    const i = destinations.indexOf(id);
+    if (i >= 0) void identities[i]?.refetch();
+    if (i >= 0 && destinationViews[id]?.state === 'failed') void runwayLists[i]?.refetch();
+  };
+  const blockers = groups && state ? applyBlockers(groups, state.checks, options, destinationViews) : {};
+  const ready = Boolean(groups && state && canApply(groups, blockers, state.checks, destinationViews));
 
   async function runApply() {
     if (!groups || !state) return;
-    const plan = applyPlan(groups, state.checks);
+    const plan = applyPlan(groups, state.checks, destinationViews);
     if (!plan) return;
     applyingRef.current = true;
     setApplying(true);
@@ -164,6 +225,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
         if (p.reason === 'tickets-changed' || p.reason === 'check-failed' || p.reason === 'connection-changed') session.current?.retry(p.groupKey);
       }
       for (const id of destinations) await queryClient.invalidateQueries({ queryKey: RUNWAY_ITEMS_QUERY_KEY(id) });
+      await queryClient.invalidateQueries({ queryKey: IMPORT_IDENTITY_QUERY_KEY });
       setProblems(byGroup);
       if (result.code !== 'review' || result.remaining.length > 0) setApplyError(result);
     } catch (err) {
@@ -219,6 +281,12 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 frozen={applying}
                 blockers={blockers[g.groupKey] ?? []}
                 problems={problems[g.groupKey] ?? []}
+                append={destinationOf(g) ? (groupAppend(g, state?.checks[g.groupKey], destinationViews) ?? null) : null}
+                nothingNew={!g.skipped && Boolean(state) && addsNothing(g, state?.checks[g.groupKey], destinationViews)}
+                onRetryRunway={() => {
+                  const d = destinationOf(g);
+                  if (d && !applyingRef.current) retryIdentity(d);
+                }}
               />
             ))}
             {applyError && (
@@ -281,12 +349,24 @@ interface GroupSectionProps {
   blockers: readonly ApplyBlocker[];
   /** Why the last Apply sent this group back. */
   problems: readonly string[];
+  /** An existing destination's append plan (VERM-105), once its Runway and saved tickets are read. */
+  append: { previewIndex: number[]; plan: RunwayAppendPlan } | null;
+  /** Every row is already on the destination's Runway. */
+  nothingNew: boolean;
+  /** Reads the destination's Runway and saved tickets again. */
+  onRetryRunway(): void;
 }
 
 /** Blockers already shown another way (the choose and checking lines). */
 const SHOWN_ELSEWHERE: readonly ApplyBlocker[] = ['waiting', 'checking'];
 
-function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen, blockers, problems }: GroupSectionProps) {
+function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen, blockers, problems, append, nothingNew, onRetryRunway }: GroupSectionProps) {
+  // Each preview row's place on the destination's Runway: already there, or added at the end.
+  const placement = useMemo(() => {
+    const m = new Map<number, { present: boolean; runwayNumber: number | null }>();
+    append?.previewIndex.forEach((p, i) => m.set(p, append.plan.rows[i]));
+    return m;
+  }, [append]);
   const labels = useMemo(() => workspaceOptionLabels(workspaces), [workspaces]);
   const results = check?.state === 'done' && check.match.ok ? check.match.candidates : null;
   const preview = useMemo(() => groupPreview(group, results), [group, results]);
@@ -483,8 +563,19 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen
         .map((b) => (
           <Text key={b} type="text2" className={styles.tagWarn} data-testid="import-group-blocker" data-reason={b}>
             {BLOCKER_MESSAGE[b]}
+            {b === 'unable-to-verify' && append && append.plan.unverified.length > 0 ? ` Not readable: ${append.plan.unverified.join(', ')}.` : ''}
           </Text>
         ))}
+      {(blockers.includes('identity-failed') || blockers.includes('runway-failed')) && (
+        <Button size="small" kind="tertiary" onClick={onRetryRunway} data-testid="import-runway-retry">
+          Retry
+        </Button>
+      )}
+      {nothingNew && (
+        <Text type="text2" className={styles.status} data-testid="import-group-nothing-new">
+          Nothing new to add: every ticket, section and note here is already on this Runway.
+        </Text>
+      )}
       {hasTickets && waiting && (
         <Text type="text2" className={styles.status} data-testid="import-group-choose">
           Choose a workspace to check these tickets.
@@ -508,14 +599,31 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen
 
       <ol className={styles.rows} data-testid="import-rows">
         {preview.rows.length === 0 && <li className={styles.muted}>No tickets, sections or notes under this heading.</li>}
-        {preview.rows.map((row) => (
+        {preview.rows.map((row, i) => (
           <RowItem
             key={`${row.line}-${row.kind}-${row.kind === 'ticket' ? (row.refId ?? '') : ''}`}
             row={row}
+            placement={append ? (placement.get(i) ?? null) : null}
             onSplit={(segment, line) => apply({ op: 'split', groupKey: key, segment, line })}
           />
         ))}
       </ol>
+
+      {append && append.plan.absent.length > 0 && (
+        <div className={styles.references} data-testid="import-not-in-file">
+          <h4 className={styles.referencesTitle}>Not in this file</h4>
+          <Text type="text2" className={styles.muted}>
+            These tickets are on this Runway but not in the file. They stay exactly where they are.
+          </Text>
+          <ul>
+            {append.plan.absent.map((k) => (
+              <li key={k} data-testid="import-not-in-file-key">
+                {k}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {preview.references.length > 0 && (
         <div className={styles.references} data-testid="import-references">
@@ -556,15 +664,28 @@ function checkboxText(box: string | null): string | null {
   return box === ' ' ? '[ ]' : `[${box}]`;
 }
 
-function RowItem({ row, onSplit }: { row: PreviewRow; onSplit(segment: number, line: number): void }) {
+type Placement = { present: boolean; runwayNumber: number | null } | null;
+
+/** Where a row lands on an existing destination's Runway (VERM-105). */
+function PlacementTag({ placement }: { placement: Placement }) {
+  if (!placement) return null;
+  return (
+    <span className={placement.present ? styles.tag : styles.tagNew} data-testid="import-row-placement" data-state={placement.present ? 'present' : 'new'}>
+      {placement.present ? 'Already on the Runway' : 'Added at the end'}
+    </span>
+  );
+}
+
+function RowItem({ row, placement, onSplit }: { row: PreviewRow; placement: Placement; onSplit(segment: number, line: number): void }) {
   const common = { 'data-testid': 'import-row', 'data-kind': row.kind, 'data-line': row.line } as const;
   switch (row.kind) {
     case 'ticket':
       return (
         <li {...common} className={styles.ticket} data-key={row.key} data-ticked={row.refId ? 'true' : undefined}>
           <span className={styles.number} data-testid="import-row-number">
-            #{row.number}
+            #{placement?.runwayNumber ?? row.number}
           </span>
+          <PlacementTag placement={placement} />
           {row.checkbox !== null && <span className={styles.box}>{checkboxText(row.checkbox)}</span>}
           <span className={styles.key}>{row.key}</span>
           <span className={styles.summary}>{row.summary}</span>
@@ -592,6 +713,7 @@ function RowItem({ row, onSplit }: { row: PreviewRow; onSplit(segment: number, l
           <span className={styles.tagWarn} data-testid="import-row-unmatched">
             Unmatched, kept as a note: {row.message}
           </span>
+          <PlacementTag placement={placement} />
         </li>
       );
     case 'duplicate':
@@ -602,6 +724,7 @@ function RowItem({ row, onSplit }: { row: PreviewRow; onSplit(segment: number, l
             {row.titleHint ? ` ${row.titleHint}` : ''}
           </span>
           <span className={styles.tag}>Already scheduled{row.ofNumber !== null ? ` as #${row.ofNumber}` : ''}</span>
+          <PlacementTag placement={placement} />
         </li>
       );
     case 'section':
@@ -614,12 +737,14 @@ function RowItem({ row, onSplit }: { row: PreviewRow; onSplit(segment: number, l
               Make its own workspace
             </Button>
           )}
+          <PlacementTag placement={placement} />
         </li>
       );
     case 'note':
       return (
         <li {...common} className={styles.note} style={{ paddingLeft: row.depth * 16 }}>
           <span className={styles.noteText}>{row.text}</span>
+          <PlacementTag placement={placement} />
         </li>
       );
   }

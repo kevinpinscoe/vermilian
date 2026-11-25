@@ -765,11 +765,14 @@ describe('randomized sequence', () => {
   });
 });
 
-describe('fillEmpty (Markdown import Apply, VERM-104)', () => {
-  it('fills several empty Runways at positions 1..N in one go, with Runway # counting tickets only', () => {
-    const result = store.fillEmpty([
+describe('appendImport (Markdown import Apply, VERM-104/105)', () => {
+  const now = (ws: string) => store.list(ws).map((i) => ({ itemId: i.itemId, kind: i.kind, text: i.text, depth: i.depth }));
+
+  it('fills empty Runways at positions 1..N in one go, with Runway # counting tickets only', () => {
+    const result = store.appendImport([
       {
         workspaceId: 'ws-new',
+        expected: [],
         rows: [
           { kind: 'note', text: 'Readers lose their place.', depth: 0 },
           { kind: 'issue', issueId: yt('READ-12') },
@@ -778,7 +781,7 @@ describe('fillEmpty (Markdown import Apply, VERM-104)', () => {
           { kind: 'note', text: '- Look at READ-9 again', depth: 1 },
         ],
       },
-      { workspaceId: 'ws-other', rows: [{ kind: 'issue', issueId: jira('OPS-1') }] },
+      { workspaceId: 'ws-other', expected: [], rows: [{ kind: 'issue', issueId: jira('OPS-1') }] },
     ]);
     expect(result['ws-new'].map((i) => [i.position, i.kind, i.runwayNumber, i.depth, i.text ?? i.itemId])).toEqual([
       [1, 'note', null, 0, 'Readers lose their place.'],
@@ -790,32 +793,62 @@ describe('fillEmpty (Markdown import Apply, VERM-104)', () => {
     expect(ids(store.list('ws-other'))).toEqual([jira('OPS-1')]);
   });
 
-  it('writes nothing at all when any destination already has rows, and names it; the existing rows stay', () => {
+  it('appends after the last row of a Runway that has rows: every existing row and Runway # stays', () => {
+    store.addIssue('ws-a', yt('READ-20'));
+    store.addIssue('ws-a', yt('READ-12'));
+    store.addNote('ws-a', 'Kept');
+    const before = rawRows('ws-a');
+    const result = store.appendImport([{ workspaceId: 'ws-a', expected: now('ws-a'), rows: [{ kind: 'issue', issueId: yt('PLAT-1') }, { kind: 'section', text: 'New', depth: 0 }] }]);
+    expect(result['ws-a'].map((i) => [i.position, i.runwayNumber, i.text ?? i.itemId])).toEqual([
+      [1, 1, yt('READ-20')],
+      [2, 2, yt('READ-12')],
+      [3, null, 'Kept'],
+      [4, 3, yt('PLAT-1')],
+      [5, null, 'New'],
+    ]);
+    expect(rawRows('ws-a').slice(0, 3)).toEqual(before);
+  });
+
+  it('writes nothing at all when any destination is not as expected, and names it', () => {
     store.addIssue('ws-busy', yt('READ-1'));
     const before = rawRows('ws-busy');
     let thrown: unknown;
     try {
-      store.fillEmpty([
-        { workspaceId: 'ws-empty', rows: [{ kind: 'issue', issueId: yt('READ-2') }] },
-        { workspaceId: 'ws-busy', rows: [{ kind: 'issue', issueId: yt('READ-3') }] },
+      store.appendImport([
+        { workspaceId: 'ws-empty', expected: [], rows: [{ kind: 'issue', issueId: yt('READ-2') }] },
+        { workspaceId: 'ws-busy', expected: [], rows: [{ kind: 'issue', issueId: yt('READ-3') }] },
       ]);
     } catch (err) {
       thrown = err;
     }
-    expect(thrown).toMatchObject({ code: 'runway-not-empty', workspaceIds: ['ws-busy'] });
+    expect(thrown).toMatchObject({ code: 'runway-changed', workspaceIds: ['ws-busy'] });
     expect(store.list('ws-empty')).toEqual([]);
     expect(rawRows('ws-busy')).toEqual(before);
   });
 
+  it('a note edited in place (same ID, new text) is a change: nothing is written', () => {
+    const [note] = store.addNote('ws-a', 'Look at READ-9 again');
+    const expected = now('ws-a');
+    // No handler edits text today; the row keeps its ID and only its text changes.
+    db.prepare('UPDATE runway_item SET text = ? WHERE item_id = ?').run('Look at READ-9 again, edited', note.itemId);
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected, rows: [{ kind: 'note', text: 'More', depth: 0 }] }]), 'runway-changed');
+    expect(store.list('ws-a').map((i) => i.text)).toEqual(['Look at READ-9 again, edited']);
+  });
+
+  it('a ticket already on the Runway is never appended a second time', () => {
+    store.addIssue('ws-a', yt('READ-1'));
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected: now('ws-a'), rows: [{ kind: 'issue', issueId: yt('READ-1') }] }]), 'already-on-runway');
+  });
+
   it('refuses a bad row before writing anything', () => {
-    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'issue', issueId: 'READ-1' }] }]), 'invalid-issue-id');
-    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'note', text: '  ', depth: 0 }] }]), 'invalid-text');
-    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'section', text: 'S', depth: 5 }] }]), 'invalid-depth');
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected: [], rows: [{ kind: 'issue', issueId: 'READ-1' }] }]), 'invalid-issue-id');
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected: [], rows: [{ kind: 'note', text: '  ', depth: 0 }] }]), 'invalid-text');
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected: [], rows: [{ kind: 'section', text: 'S', depth: 5 }] }]), 'invalid-depth');
     expectStoreError(
-      () => store.fillEmpty([{ workspaceId: 'ws-a', rows: [{ kind: 'issue', issueId: yt('READ-1') }, { kind: 'issue', issueId: yt('READ-1') }] }]),
+      () => store.appendImport([{ workspaceId: 'ws-a', expected: [], rows: [{ kind: 'issue', issueId: yt('READ-1') }, { kind: 'issue', issueId: yt('READ-1') }] }]),
       'already-on-runway',
     );
-    expectStoreError(() => store.fillEmpty([{ workspaceId: 'ws-a', rows: [] }, { workspaceId: 'ws-a', rows: [] }]), 'invalid-workspace');
+    expectStoreError(() => store.appendImport([{ workspaceId: 'ws-a', expected: [], rows: [] }, { workspaceId: 'ws-a', expected: [], rows: [] }]), 'invalid-workspace');
     expect(store.list('ws-a')).toEqual([]);
   });
 });
