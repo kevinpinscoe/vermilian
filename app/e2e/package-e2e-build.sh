@@ -18,20 +18,16 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PINNED_ASAR_SHA256=44d4ee7e866a6b2ea7c162001fb9966eb3255e94fce37ddc7d957a4355855055
 
-case "$(uname -s)" in
-  Darwin) PLATFORM=darwin ;;
-  Linux) PLATFORM=linux ;;
-  *) echo "unsupported platform: $(uname -s)" >&2; exit 2 ;;
-esac
-case "$(uname -m)" in
-  x86_64) ARCH=x64 ;;
-  aarch64|arm64) ARCH=arm64 ;;
-  *) echo "unsupported architecture: $(uname -m)" >&2; exit 2 ;;
-esac
-OUT_DIR="$APP_DIR/out/Vermilian-$PLATFORM-$ARCH"
-if [ "$PLATFORM" = darwin ]; then ASAR="$OUT_DIR/Vermilian.app/Contents/Resources/app.asar"; else ASAR="$OUT_DIR/resources/app.asar"; fi
+# The package's path comes from Node, as the Playwright launcher computes it
+# (e2e/helpers/launch.ts: out/Vermilian-<process.platform>-<process.arch>), not
+# from uname, which Git Bash on Windows reports as MINGW64_NT-…. Paths stay
+# relative to the app directory, so Node on Windows reads them too.
+cd "$APP_DIR"
+TARGET="$(node -p "process.platform + '-' + process.arch")"
+OUT_DIR="out/Vermilian-$TARGET"
+if [ "${TARGET%%-*}" = darwin ]; then ASAR="$OUT_DIR/Vermilian.app/Contents/Resources/app.asar"; else ASAR="$OUT_DIR/resources/app.asar"; fi
 
-sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+sha() { node -e "process.stdout.write(require('crypto').createHash('sha256').update(require('fs').readFileSync(process.argv[1])).digest('hex'))" "$1"; }
 
 if [ -f "$ASAR" ] && [ "$(sha "$ASAR")" = "$PINNED_ASAR_SHA256" ]; then
   echo "REFUSED: $ASAR is the pinned acceptance build. Packaging here would overwrite it." >&2
@@ -39,11 +35,10 @@ if [ -f "$ASAR" ] && [ "$(sha "$ASAR")" = "$PINNED_ASAR_SHA256" ]; then
   exit 3
 fi
 
-cd "$APP_DIR"
 if [ "${1:-}" = --release ]; then
   env -u VERMILIAN_E2E_BUILD pnpm exec electron-forge package
-  echo "Release build: $OUT_DIR (app.asar $(sha "$ASAR"))"
+  echo "Release build: $ASAR ($(sha "$ASAR"))"
 else
   VERMILIAN_E2E_BUILD=1 pnpm exec electron-forge package
-  echo "E2e build: $OUT_DIR (app.asar $(sha "$ASAR"))"
+  echo "E2e build: $ASAR ($(sha "$ASAR"))"
 fi
