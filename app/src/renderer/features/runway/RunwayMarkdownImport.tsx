@@ -24,6 +24,7 @@ import {
   type ImportSessionState,
   type ImportWorkspaceList,
   type ImportWorkspaceOption,
+  workspaceOptionLabels,
   type PreviewReference,
   type PreviewRow,
   type ProposedGroup,
@@ -146,6 +147,7 @@ interface GroupSectionProps {
 }
 
 function GroupSection({ group, workspaces, connectionId, check, onConnection, onRetry }: GroupSectionProps) {
+  const labels = useMemo(() => workspaceOptionLabels(workspaces), [workspaces]);
   // Only the answer for the connection selected now is shown.
   const current = check && connectionId !== null && check.connectionId === connectionId ? check : undefined;
   const results = current?.state === 'done' && current.match.ok ? current.match.candidates : null;
@@ -181,7 +183,7 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
             )}
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.name}
+                {labels.get(w.id) ?? w.name}
               </option>
             ))}
           </select>

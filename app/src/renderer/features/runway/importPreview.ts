@@ -333,6 +333,7 @@ export function createImportSession(parsed: ParsedSchedule, activeId: string, ma
     state: () => state,
     setWorkspaces(list) {
       if (disposed || state.workspaces.state === 'ready') return;
+      if (list.state === 'ready' && list.workspaces.length === 0) list = { state: 'failed', error: EMPTY_LIST };
       if (list.state !== 'ready') {
         set({ ...state, workspaces: list });
         return;
@@ -358,4 +359,58 @@ export function createImportSession(parsed: ParsedSchedule, activeId: string, ma
       checker.dispose();
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// The workspace list as RunwayView reads it.
+
+const EMPTY_LIST = 'No workspaces were found.';
+
+/** The parts of the workspace-config query the preview depends on. */
+export interface WorkspaceQueryState {
+  isError: boolean;
+  error: unknown;
+  isFetching: boolean;
+  isSuccess: boolean;
+  data: import('../../../shared/workspace').VermilianConfig | null | undefined;
+  dataUpdatedAt: number;
+  errorUpdatedAt: number;
+}
+
+/**
+ * The preview's list from the workspace-config query. `openedAt` is when the
+ * file was chosen; RunwayView reads the list again then. Only an answer from
+ * that read or later counts: a read in flight is loading even when a cached
+ * list exists, and so is a cached list from before. A missing configuration
+ * or an empty list is a failed read, with Retry.
+ */
+export function workspaceListFromQuery(q: WorkspaceQueryState, openedAt: number): ImportWorkspaceList {
+  if (q.isFetching) return { state: 'loading' };
+  if (q.isError && q.errorUpdatedAt >= openedAt) {
+    const message = (q.error as { message?: unknown } | null)?.message;
+    return { state: 'failed', error: typeof message === 'string' && message ? message : 'The workspace configuration could not be read.' };
+  }
+  if (!q.isSuccess || q.dataUpdatedAt < openedAt) return { state: 'loading' };
+  if (!q.data) return { state: 'failed', error: 'The workspace configuration could not be read.' };
+  if (q.data.workspaces.length === 0) return { state: 'failed', error: EMPTY_LIST };
+  return {
+    state: 'ready',
+    workspaces: q.data.workspaces
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((w) => ({ id: w.id, name: w.name })),
+  };
+}
+
+/**
+ * What Check tickets using shows for each workspace: its name, and for names
+ * that collide (after trimming and case-folding) its position in the rail
+ * and its ID, so two workspaces called Platform can be told apart.
+ */
+export function workspaceOptionLabels(workspaces: readonly ImportWorkspaceOption[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const w of workspaces) counts.set(fold(w.name), (counts.get(fold(w.name)) ?? 0) + 1);
+  return new Map(
+    workspaces.map((w, i) => [w.id, (counts.get(fold(w.name)) ?? 0) > 1 ? `${w.name.trim()} — rail position ${i + 1}, ID ${w.id}` : w.name.trim()]),
+  );
 }

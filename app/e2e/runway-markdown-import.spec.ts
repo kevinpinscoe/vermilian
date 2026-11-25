@@ -243,7 +243,16 @@ test.describe('Runway: Markdown import preview', () => {
     await expect(group.locator('[data-testid="import-row"][data-kind="unchecked"]')).toHaveCount(2);
     await expect(group.locator('[data-testid="import-row-number"]')).toHaveCount(0);
 
-    await group.locator('[data-testid="import-connection"]').selectOption('ws-e2eq102');
+    // Two workspaces called Platform are told apart by their visible labels.
+    const picker = group.locator('[data-testid="import-connection"]');
+    await expect(picker.locator('option')).toHaveText([
+      'Choose a workspace…',
+      'Workspace A',
+      'Platform — rail position 2, ID ws-e2ep102',
+      'platform — rail position 3, ID ws-e2eq102',
+    ]);
+    await picker.selectOption({ label: 'platform — rail position 3, ID ws-e2eq102' });
+    await expect(picker).toHaveValue('ws-e2eq102');
     await expect(group.locator('[data-testid="import-group-choose"]')).toHaveCount(0);
     await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
     await tid(page, 'import-cancel').click();

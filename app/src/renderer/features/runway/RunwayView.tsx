@@ -48,7 +48,7 @@ import type { SearchScope } from '../search/api';
 import { useRunwayEdit, useRunwayItems, useRunwayTickets, type RunwayEdit } from './api';
 import { RunwayAddBox } from './RunwayAddBox';
 import { RunwayMarkdownImport } from './RunwayMarkdownImport';
-import type { ImportWorkspaceList } from './importPreview';
+import { workspaceListFromQuery, type ImportWorkspaceList } from './importPreview';
 import { useWorkspaceConfig } from '../workspace-nav/api';
 import {
   describeBlockerReport,
@@ -104,18 +104,27 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
   const [importFile, setImportFile] = useState<{ fileName: string; text: string } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
-  // The preview maps headings only after a successful read of the list; a
-  // missing configuration (null) counts as a failed read, with Retry.
-  const importWorkspaces = useMemo((): ImportWorkspaceList => {
-    if (workspaceConfig.isError) return { state: 'failed', error: String((workspaceConfig.error as Error | null)?.message ?? workspaceConfig.error) };
-    if (workspaceConfig.isFetching && !workspaceConfig.data) return { state: 'loading' };
-    if (!workspaceConfig.isSuccess) return { state: 'loading' };
-    if (!workspaceConfig.data) return { state: 'failed', error: 'The workspace configuration could not be read.' };
-    return {
-      state: 'ready',
-      workspaces: workspaceConfig.data.workspaces.slice().sort((a, b) => a.order - b.order).map((w) => ({ id: w.id, name: w.name })),
-    };
-  }, [workspaceConfig.isError, workspaceConfig.error, workspaceConfig.isFetching, workspaceConfig.isSuccess, workspaceConfig.data]);
+  // When a file is chosen the workspace list is read again, and the preview
+  // maps headings only from that read or a later one (workspaceListFromQuery):
+  // never from a cached list or one still loading. A missing configuration or
+  // an empty list is a failed read, with Retry.
+  const [importOpenedAt, setImportOpenedAt] = useState(0);
+  const importWorkspaces = useMemo(
+    (): ImportWorkspaceList =>
+      workspaceListFromQuery(
+        {
+          isError: workspaceConfig.isError,
+          error: workspaceConfig.error,
+          isFetching: workspaceConfig.isFetching,
+          isSuccess: workspaceConfig.isSuccess,
+          data: workspaceConfig.data,
+          dataUpdatedAt: workspaceConfig.dataUpdatedAt,
+          errorUpdatedAt: workspaceConfig.errorUpdatedAt,
+        },
+        importOpenedAt,
+      ),
+    [workspaceConfig.isError, workspaceConfig.error, workspaceConfig.isFetching, workspaceConfig.isSuccess, workspaceConfig.data, workspaceConfig.dataUpdatedAt, workspaceConfig.errorUpdatedAt, importOpenedAt],
+  );
 
   /** Import from Markdown…: the native picker, then the read-only preview. */
   async function chooseImportFile() {
@@ -124,7 +133,11 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
     try {
       const r = await window.vermilian.runwayMarkdownOpen();
       if (!r.ok) setImportError(r.error);
-      else if (!r.canceled) setImportFile({ fileName: r.fileName, text: r.text });
+      else if (!r.canceled) {
+        setImportOpenedAt(Date.now());
+        setImportFile({ fileName: r.fileName, text: r.text });
+        void workspaceConfig.refetch();
+      }
     } catch (err) {
       setImportError(err instanceof Error ? err.message : String(err));
     } finally {

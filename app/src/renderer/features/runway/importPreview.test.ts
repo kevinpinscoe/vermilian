@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseRunwaySchedule } from '../../../shared/runwaySchedule';
 import type { RunwayImportCandidateMatch, RunwayImportMatchArgs, RunwayImportMatchResult } from '../../../shared/runwayImport';
-import { buildGroupPreview, createGroupChecker, createImportSession, proposeGroups, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
+import { buildGroupPreview, createGroupChecker, createImportSession, proposeGroups, workspaceListFromQuery, workspaceOptionLabels, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
 
 // Synthetic keys, names and hosts only.
 const WS: ImportWorkspaceOption[] = [
@@ -360,5 +360,86 @@ describe('createImportSession', () => {
     session.dispose();
     session.choose('g0', 'ws-reader');
     expect(calls).toHaveLength(4);
+  });
+});
+
+describe('workspaceListFromQuery (RunwayView’s query state → the preview’s list)', () => {
+  const A = { id: 'ws-a', name: 'A', order: 0, folders: [] };
+  const B = { id: 'ws-b', name: 'B', order: 1, folders: [] };
+  const OPENED = 1_000;
+  const q = (over: Partial<Parameters<typeof workspaceListFromQuery>[0]>): Parameters<typeof workspaceListFromQuery>[0] => ({
+    isError: false,
+    error: null,
+    isFetching: false,
+    isSuccess: true,
+    data: { version: 1, workspaces: [A], activeWorkspaceId: 'ws-a' },
+    dataUpdatedAt: OPENED - 500,
+    errorUpdatedAt: 0,
+    ...over,
+  });
+
+  function harness(md: string) {
+    const calls: string[] = [];
+    const session = createImportSession(parseRunwaySchedule(md), 'ws-a', async (args) => {
+      calls.push(...args.groups.map((g) => g.workspaceId));
+      return { ok: true, groups: args.groups.map((g) => ({ groupKey: g.groupKey, workspaceId: g.workspaceId, ok: true as const, candidates: [] })) };
+    }, () => undefined);
+    return { calls, session };
+  }
+
+  it('A cached while a refresh brings B: the cached list is loading, A gets no lookup, B gets one when the refresh lands', () => {
+    const { calls, session } = harness('## B\n- READ-1');
+    const inFlight = workspaceListFromQuery(q({ isFetching: true }), OPENED);
+    expect(inFlight).toEqual({ state: 'loading' });
+    session.setWorkspaces(inFlight);
+    expect(calls).toEqual([]);
+
+    const landed = workspaceListFromQuery(q({ data: { version: 1, workspaces: [A, B], activeWorkspaceId: 'ws-a' }, dataUpdatedAt: OPENED + 20 }), OPENED);
+    expect(landed).toEqual({ state: 'ready', workspaces: [{ id: 'ws-a', name: 'A' }, { id: 'ws-b', name: 'B' }] });
+    session.setWorkspaces(landed);
+    expect(session.state().groups?.[0].target).toEqual({ kind: 'existing', workspaceId: 'ws-b', workspaceName: 'B' });
+    expect(calls).toEqual(['ws-b']);
+  });
+
+  it('a cached list read before the preview opened is not used, even when nothing is fetching', () => {
+    expect(workspaceListFromQuery(q({}), OPENED)).toEqual({ state: 'loading' });
+  });
+
+  it('an empty list is a failed read with Retry; a retry returning B is used', () => {
+    const { calls, session } = harness('## B\n- READ-1');
+    const empty = workspaceListFromQuery(q({ data: { version: 1, workspaces: [], activeWorkspaceId: '' }, dataUpdatedAt: OPENED + 1 }), OPENED);
+    expect(empty).toEqual({ state: 'failed', error: 'No workspaces were found.' });
+    session.setWorkspaces(empty);
+    expect(session.state().groups).toBeNull();
+
+    session.setWorkspaces(workspaceListFromQuery(q({ isFetching: true, data: { version: 1, workspaces: [], activeWorkspaceId: '' }, dataUpdatedAt: OPENED + 1 }), OPENED));
+    session.setWorkspaces(workspaceListFromQuery(q({ data: { version: 1, workspaces: [B], activeWorkspaceId: 'ws-b' }, dataUpdatedAt: OPENED + 50 }), OPENED));
+    expect(calls).toEqual(['ws-b']);
+  });
+
+  it('a missing configuration or a query error after opening is a failed read; workspaces come in rail order', () => {
+    expect(workspaceListFromQuery(q({ data: null, dataUpdatedAt: OPENED + 1 }), OPENED)).toEqual({ state: 'failed', error: 'The workspace configuration could not be read.' });
+    expect(workspaceListFromQuery(q({ isError: true, isSuccess: false, error: new Error('offline'), errorUpdatedAt: OPENED + 1 }), OPENED)).toEqual({ state: 'failed', error: 'offline' });
+    expect(workspaceListFromQuery(q({ isError: true, isSuccess: false, error: new Error('old'), errorUpdatedAt: OPENED - 1 }), OPENED)).toEqual({ state: 'loading' });
+    const ordered = workspaceListFromQuery(q({ data: { version: 1, workspaces: [B, A], activeWorkspaceId: 'ws-a' }, dataUpdatedAt: OPENED }), OPENED);
+    expect(ordered).toEqual({ state: 'ready', workspaces: [{ id: 'ws-a', name: 'A' }, { id: 'ws-b', name: 'B' }] });
+  });
+
+  it('the session itself refuses an empty ready list', () => {
+    const { calls, session } = harness('## B\n- READ-1');
+    session.setWorkspaces({ state: 'ready', workspaces: [] });
+    expect(session.state().workspaces).toEqual({ state: 'failed', error: 'No workspaces were found.' });
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('workspaceOptionLabels', () => {
+  it('a unique name is shown as it is; colliding names (trimmed, case-folded) get their rail position and ID', () => {
+    const labels = workspaceOptionLabels(WS);
+    expect(labels.get('ws-active')).toBe('Inbox');
+    expect(labels.get('ws-reader')).toBe('Reader App');
+    expect(labels.get('ws-dup-1')).toBe('Platform — rail position 3, ID ws-dup-1');
+    expect(labels.get('ws-dup-2')).toBe('platform — rail position 4, ID ws-dup-2');
+    expect(new Set(labels.values()).size).toBe(WS.length);
   });
 });
