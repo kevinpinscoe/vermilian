@@ -75,6 +75,7 @@ import {
 } from '../shared/ipc';
 import { maybeBuildAuditComment } from '../shared/recommendationAudit';
 import * as fakeYouTrackForE2E from './api/fakeYouTrack';
+import { e2eProcessLaunches } from './e2eProcessRecorder';
 import { createPriorityOrders } from './services/priorityOrders';
 import { createTaskService, AI_CREATE_WORKSPACE_CHANGED_MESSAGE } from './services/createTask';
 import { runwayWorkspaceTracker } from '../shared/runwayItem';
@@ -1294,6 +1295,10 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
     ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
     ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
+    // VERM-106: the processes and desktop calls the main process made (no command text), and the
+    // ticket reads the fake accepted with the shell-command credential's token.
+    ipcMain.handle('e2e:getProcessLaunches', () => e2eProcessLaunches());
+    ipcMain.handle('e2e:getRequiredTokenReads', () => fakeYouTrackForE2E.requiredTokenReadsForTests());
     ipcMain.handle('e2e:setUnreadableIssues', (_e, keys: string[]) => fakeYouTrackForE2E.setUnreadableIssuesForTests(Array.isArray(keys) ? keys : []));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,

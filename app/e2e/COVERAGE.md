@@ -110,6 +110,41 @@ notifications, or the timer worklog round-trip.
 | Credential storage (safeStorage, fail-closed) | 🚫 Out of harness | keyring |
 | Friendly error messages | 🧪 Unit | `errors.test.ts` |
 
+## workspace-runway.md — ConTower boundary (VERM-106, spec e2e 14)
+
+| Criterion | Status | How |
+|---|---|---|
+| Runway, sort and import actions start no agent, send no input to tmux and never invoke ConTower; a shell-command credential still reads tickets | ✅ E2E | `runway-process-boundary.spec.ts`: the e2e-only recorder (`main/e2eProcessRecorder.ts`) sees every process launch and every `openPath`/`openExternal`; only the configured credential command is allowed, matched by its SHA-256 (no command text is recorded). The fake YouTrack accepts ticket reads only with the token that command prints (`VERMILIAN_E2E_YT_REQUIRE_TOKEN`), so a fresh read in the observation window proves the command ran, the tracker accepted its token and the summary appeared. Each step waits for its action, then fails on any other launch. Only the credential resolver and the recorder may load `child_process` 🧪 `processBoundary.test.ts`, which also proves the recorder is inert outside e2e and records no command text |
+
+Each handler and the step of `runway-process-boundary.spec.ts` that exercises it:
+
+| Handler (IPC) | Step |
+|---|---|
+| `runwayItemsAddByReference` | 1. fresh ticket read (the Runway's Add box), and 2. `runwayItemsAddByReference` (a link) |
+| `runwayItemsResolve` | 1. fresh ticket read, and 2. `runwayItemsResolve` |
+| `runwayItemsList` | 2. `runwayItemsList` |
+| `runwayItemsAddIssue` | 2. `runwayItemsAddIssue` |
+| `runwayItemsAddIssueAtNumber` | 2. `runwayItemsAddIssueAtNumber` |
+| `runwayItemsAddSection` | 2. `runwayItemsAddSection` |
+| `runwayItemsAddNote` | 2. `runwayItemsAddNote` |
+| `runwayItemsMove` | 2. `runwayItemsMove` |
+| `runwayItemsMoveToNumber` | 2. `runwayItemsMoveToNumber` |
+| `runwayItemsMoveUp` | 2. `runwayItemsMoveUp` |
+| `runwayItemsMoveDown` | 2. `runwayItemsMoveDown` |
+| `runwayItemsAddIssueAbove` — the blocker's **Add to Runway** | 2. `runwayItemsAddIssueAbove (Add to Runway)` |
+| `runwayItemsMoveAbove` — **Move prerequisite above** | 2. `runwayItemsMoveAbove (Move prerequisite above)` |
+| `runwayItemsRemove` | 2. `runwayItemsRemove` |
+| `youtrackPriorityOrders` | 3. `youtrackPriorityOrders`, and the All tasks Tracker priority sort |
+| All tasks sort (Runway #, Tracker priority, Ticket ID, direction, clear; remembered locally) | 3. All tasks sort |
+| `runwayMarkdownOpen`, `runwayImportMatch`, `runwayMarkdownApply` (new workspace) | 4. `runwayMarkdownOpen, runwayImportMatch, runwayMarkdownApply (new workspace)` |
+| `runwayImportIdentify`, `runwayMarkdownApply` (repeat import into a Runway with rows) | 4. `runwayImportIdentify and runwayMarkdownApply (repeat import …)` |
+| `runwayImportMatch`, `runwayImportIdentify` (called directly) | 4. `runwayImportMatch and runwayImportIdentify, called directly` |
+| `runwayExportSnapshot` | 5. `runwayExportSnapshot` |
+| `runwayImportPreview`, `runwayImportCancel` | 5. `runwayImportPreview and runwayImportCancel` |
+| `runwayImportPreview`, `runwayImportConfirm` | 5. `runwayImportPreview and runwayImportConfirm` |
+
+The `runway:get` / `runway:update` / `runway:list` handlers are the Jira Priority Desk's `runway_entry` (VERM-37), not the Workspace Runway, and are outside this criterion.
+
 ## create-task.md
 | Section | Status | Where |
 |---|---|---|
