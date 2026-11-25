@@ -37,6 +37,7 @@ import { decodeIssueId, type NamespacedIssueId } from '../../shared/tracker';
 
 // The row shape crosses the IPC boundary (VERM-82), so it lives in shared/.
 import type { RunwayItem, RunwayItemKind } from '../../shared/runwayItem';
+import { destinationRows, sameDestinationRows, type RunwayDestinationRow } from '../../shared/runwayImportAppend';
 export type { RunwayItem, RunwayItemKind };
 
 export type RunwayItemStoreErrorCode =
@@ -49,13 +50,13 @@ export type RunwayItemStoreErrorCode =
   | 'invalid-text' // section/note: empty or whitespace-only text
   | 'not-a-ticket' // moveToNumber: the row is a section or note, which has no Runway #
   | 'dependent-not-on-runway' // addIssueAbove/moveAbove: the row to place above is no longer on the Runway
-  | 'runway-not-empty'; // fillEmpty: a destination Runway already has rows; nothing was written
+  | 'runway-changed'; // appendImport: a destination's rows are not the ones expected; nothing was written
 
 export class RunwayItemStoreError extends Error {
   constructor(
     readonly code: RunwayItemStoreErrorCode,
     message: string,
-    /** For runway-not-empty: the workspaces whose Runway already has rows. */
+    /** For runway-changed: the workspaces whose rows are not the ones expected. */
     readonly workspaceIds: readonly string[] = [],
   ) {
     super(message);
@@ -112,18 +113,21 @@ export interface RunwayItemStore {
    */
   moveAbove(workspaceId: string, itemId: string, anchorItemId: string): RunwayItem[];
   /**
-   * Fills several empty Runways in one transaction (the Markdown import's
-   * Apply, VERM-104): each workspace's rows are written at positions 1..N in
-   * the order given. Every destination must be empty inside the transaction:
-   * if any already has rows, nothing at all is written and the error
-   * (runway-not-empty) names those workspaces.
+   * Appends rows to several Runways in one transaction (the Markdown import's
+   * Apply, VERM-104/105): each workspace's rows go after its last row, in the
+   * order given, so no existing row moves and no Runway # changes. Inside the
+   * transaction every destination's rows must still be exactly `expected` —
+   * by ID, kind, stored text and depth, in order — before anything is written:
+   * if any differs, nothing at all is written and the error (runway-changed)
+   * names those workspaces. A new or empty Runway expects [].
    */
-  fillEmpty(fills: readonly RunwayFill[]): Record<string, RunwayItem[]>;
+  appendImport(appends: readonly RunwayAppend[]): Record<string, RunwayItem[]>;
 }
 
-/** One workspace's rows for fillEmpty, in order. */
-export interface RunwayFill {
+/** One workspace's rows for appendImport, in order, and the rows it must have now. */
+export interface RunwayAppend {
   workspaceId: string;
+  expected: readonly RunwayDestinationRow[];
   rows: readonly RunwayFillRow[];
 }
 
@@ -379,7 +383,7 @@ export function createRunwayItemStore(
       return addStructural(workspaceId, 'section', text, options);
     },
 
-    fillEmpty(fills) {
+    appendImport(fills) {
       // Everything is checked before the transaction opens.
       const seen = new Set<string>();
       const planned = fills.map((fill) => {
@@ -402,18 +406,28 @@ export function createRunwayItemStore(
           requireDepth(row.depth);
           return { id: `${row.kind === 'section' ? 'sec' : 'note'}:${newId()}`, kind: row.kind, depth: row.depth, text: row.text };
         });
-        return { workspaceId: fill.workspaceId, rows };
+        return { workspaceId: fill.workspaceId, expected: fill.expected, rows };
       });
       db.exec('BEGIN IMMEDIATE');
       try {
-        // The emptiness check is inside the transaction, so no write can land between it and the fill.
-        const filled = planned.filter((p) => rows(p.workspaceId).length > 0).map((p) => p.workspaceId);
-        if (filled.length > 0) {
-          throw new RunwayItemStoreError('runway-not-empty', `Already has Runway rows: ${filled.join(', ')}`, filled);
+        // Every destination is compared inside the transaction, before any row is written,
+        // so no edit can land between the check and the append.
+        const current = new Map(planned.map((p) => [p.workspaceId, rows(p.workspaceId)]));
+        const changed = planned
+          .filter((p) => !sameDestinationRows(destinationRows((current.get(p.workspaceId) ?? []).map((r) => ({ itemId: r.item_id, kind: r.kind, text: r.text, depth: r.depth }))), p.expected))
+          .map((p) => p.workspaceId);
+        if (changed.length > 0) {
+          throw new RunwayItemStoreError('runway-changed', `The Runway changed: ${changed.join(', ')}`, changed);
+        }
+        for (const p of planned) {
+          const present = new Set((current.get(p.workspaceId) ?? []).map((r) => r.item_id));
+          const twice = p.rows.find((r) => r.kind === 'issue' && present.has(r.id));
+          if (twice) throw new RunwayItemStoreError('already-on-runway', `${twice.id} is already on workspace ${p.workspaceId}'s Runway`);
         }
         const stamp = now().toISOString();
         for (const p of planned) {
-          p.rows.forEach((r, i) => insert.run(p.workspaceId, r.id, r.kind, i + 1, r.depth, r.text, stamp, stamp));
+          const after = (current.get(p.workspaceId) ?? []).length;
+          p.rows.forEach((r, i) => insert.run(p.workspaceId, r.id, r.kind, after + i + 1, r.depth, r.text, stamp, stamp));
         }
         db.exec('COMMIT');
       } catch (err) {

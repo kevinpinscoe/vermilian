@@ -9,6 +9,8 @@ import type { RunwayItem } from '../../../shared/runwayItem';
 
 /** The stored Runway rows of one workspace (runwayItemsList). */
 export const RUNWAY_ITEMS_QUERY_KEY = (workspaceId: string) => ['runway-items', workspaceId] as const;
+/** The tickets already on an import destination's Runway, read on its own connection (runwayImportIdentify, VERM-105). */
+export const IMPORT_IDENTITY_QUERY_KEY = ['runway-import-identity'] as const;
 /** The tracker reads of one workspace's Runway tickets (runwayItemsResolve). */
 export const RUNWAY_TICKETS_QUERY_KEY = (workspaceId: string) => ['runway-tickets', workspaceId] as const;
 

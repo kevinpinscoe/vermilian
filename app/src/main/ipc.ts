@@ -221,7 +221,7 @@ import {
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
-import { createRunwayImportMatch, type RunwayImportConnection } from './services/runwayImportMatch';
+import { createRunwayImportIdentify, createRunwayImportMatch, type RunwayImportConnection } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
 import { createRunwayMarkdownApply, trackerConnectionKey, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
 import type { LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
@@ -1294,6 +1294,7 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
     ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
     ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
+    ipcMain.handle('e2e:setUnreadableIssues', (_e, keys: string[]) => fakeYouTrackForE2E.setUnreadableIssuesForTests(Array.isArray(keys) ? keys : []));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,
     // read which calls were made, and hold searches back to test a poll in
@@ -2543,6 +2544,10 @@ export function registerIpc(): void {
     connection: runwayImportConnection,
   });
   ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
+  // The tickets already on a destination Runway (VERM-105), read on that
+  // workspace's own connection — resolved once — for a repeat import.
+  const identifyRunwayImport = createRunwayImportIdentify({ workspaces: runwayWorkspaces, connection: runwayImportConnection });
+  ipcMain.handle(IPC.runwayImportIdentify, (_e, args) => identifyRunwayImport(args));
 
   // Choosing a Markdown schedule for the import preview (VERM-102): the
   // native picker, then the file's name and text, read-only, at most 1 MiB
@@ -2614,6 +2619,7 @@ export function registerIpc(): void {
   const applyRunwayImport = createRunwayMarkdownApply({
     workspaces: applyWorkspaces,
     match: matchRunwayImport,
+    identify: identifyRunwayImport,
     connectionKey: applyConnectionKey,
     gate: runwayGate,
     store: openRunwayItemStore,

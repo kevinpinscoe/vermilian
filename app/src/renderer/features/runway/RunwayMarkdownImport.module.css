@@ -124,6 +124,7 @@
 }
 
 .tag,
+.tagNew,
 .tagWarn {
   font-size: 12px;
   padding: 0 6px;
@@ -133,6 +134,11 @@
 
 .tagWarn {
   background: var(--warning-color-selected, #fff3d4);
+}
+
+/* A row a repeat import adds at the end of an existing Runway (VERM-105). */
+.tagNew {
+  background: var(--positive-color-selected, #dcf5e7);
 }
 
 .references {

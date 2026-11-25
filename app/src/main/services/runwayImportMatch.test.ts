@@ -5,7 +5,7 @@ import { parseRunwaySchedule } from '../../shared/runwaySchedule';
 import { scheduleCandidates, type RunwayImportCandidate, type RunwayImportGroupMatch, type RunwayImportMatchResult } from '../../shared/runwayImport';
 import type { RunwayWorkspaces } from './runwayItemIpc';
 import type { RunwayReaderResult, RunwayTicketReader } from './runwayTicketFetch';
-import { createRunwayImportMatch, validateImportMatchArgs, type RunwayImportConnection, type RunwayImportMatchDeps } from './runwayImportMatch';
+import { createRunwayImportIdentify, createRunwayImportMatch, validateImportMatchArgs, type RunwayImportConnection, type RunwayImportMatchDeps } from './runwayImportMatch';
 
 // Synthetic keys, names and hosts only.
 const YT_A = 'ws-aaaaaaaaaaaa';
@@ -366,7 +366,7 @@ describe('runwayImportMatch — ticket states', () => {
       role: 'scheduled',
       reason: null,
       status: 'matched',
-      ticket: { issueId: 'jira:OPS-7', key: 'OPS-7', summary: 'Pager' },
+      ticket: { issueId: 'jira:OPS-7', key: 'OPS-7', summary: 'Pager', aliases: ['jira:OPS-7'] },
     });
   });
 });
@@ -504,6 +504,52 @@ describe('runwayImportMatch — one connection per group (VERM-104)', () => {
     const { d, reader } = deps({}, { connection: vi.fn(async () => null) });
     const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_A, candidates: [sched('READ-1', 1)] }] }));
     expect(g).toMatchObject({ ok: false, code: 'unknown-workspace' });
+    expect(reader).not.toHaveBeenCalled();
+  });
+});
+
+describe('runwayImportIdentify — the destination’s saved tickets (VERM-105)', () => {
+  it('a saved jira:DEMO-101 whose read answers DEMO-150 identifies as both', async () => {
+    const r = fakeReader({ 'DEMO-101': issue('DEMO-150', 'Moved', '10001') });
+    const { d, connection } = deps({ [JIRA]: { ok: true, reader: r.reader } });
+    const out = await createRunwayImportIdentify(d)({ workspaceId: JIRA, itemIds: ['jira:DEMO-101'] });
+    expect(out).toEqual({
+      ok: true,
+      connectionKey: `conn:${BASE[JIRA]}`,
+      items: [{ itemId: 'jira:DEMO-101', state: 'resolved', key: 'DEMO-150', aliases: expect.arrayContaining(['jira:DEMO-101', 'jira:DEMO-150']) }],
+    });
+    expect(connection).toHaveBeenCalledTimes(1);
+  });
+
+  it('the matched file ticket carries every ID it answered to', async () => {
+    const r = fakeReader({ 'READ-1': issue('READ-1', 'One', '2-15') });
+    const { d } = deps({ [YT_A]: { ok: true, reader: r.reader } });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_A, candidates: [sched('READ-1', 1)] }] }));
+    expect(g.ok && g.candidates[0].status === 'matched' && g.candidates[0].ticket.aliases).toEqual(['yt:READ-1', 'yt:2-15']);
+  });
+
+  it('a saved ticket that cannot be read is unverified, with the reason', async () => {
+    const r = fakeReader({}, { answers: { 'DEMO-9': err(403, 'Forbidden') } });
+    const { d } = deps({ [JIRA]: { ok: true, reader: r.reader } });
+    const out = await createRunwayImportIdentify(d)({ workspaceId: JIRA, itemIds: ['jira:DEMO-9'] });
+    expect(out).toMatchObject({ ok: true, items: [{ itemId: 'jira:DEMO-9', state: 'unverified', key: 'DEMO-9' }] });
+  });
+
+  it('a saved row for the other tracker can never match, and is not uncertain', async () => {
+    const { d, reader } = deps({ [JIRA]: { ok: true, reader: fakeReader({}).reader } });
+    const out = await createRunwayImportIdentify(d)({ workspaceId: JIRA, itemIds: ['yt:READ-1'] });
+    expect(out).toMatchObject({ ok: true, items: [{ itemId: 'yt:READ-1', state: 'resolved', aliases: ['yt:READ-1'] }] });
+    expect(reader).toHaveBeenCalledTimes(1);
+  });
+
+  it('a connection failure is one error for the whole read', async () => {
+    const { d } = deps({ [YT_A]: { ok: false, code: 'unauthorized', error: 'HTTP 401' } });
+    expect(await createRunwayImportIdentify(d)({ workspaceId: YT_A, itemIds: ['yt:READ-1'] })).toMatchObject({ ok: false, code: 'unauthorized', retryable: false });
+  });
+
+  it('no saved tickets: the connection key only, and no reader opened', async () => {
+    const { d, reader } = deps({});
+    expect(await createRunwayImportIdentify(d)({ workspaceId: YT_A, itemIds: [] })).toEqual({ ok: true, connectionKey: `conn:${BASE[YT_A]}`, items: [] });
     expect(reader).not.toHaveBeenCalled();
   });
 });

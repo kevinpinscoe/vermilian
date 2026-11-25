@@ -107,6 +107,10 @@ function harness(
         },
       },
       match: matcher().match,
+      identify: async ({ workspaceId, itemIds }) => {
+        events.push(`identify ${workspaceId}`);
+        return { ok: true, connectionKey: connections[workspaceId], items: itemIds.map((itemId) => ({ itemId, state: 'resolved' as const, key: itemId.replace(/^yt:/, ''), aliases: [itemId] })) };
+      },
       connectionKey: async (id) => connections[id] ?? null,
       gate: { run: async (op) => op() },
       store: () => store,
@@ -135,6 +139,7 @@ const EXISTING_GROUP: RunwayImportApplyGroup = {
   target: { kind: 'existing', workspaceId: 'ws-b' },
   connectionKey: 'youtrack https://yt.example.test youtrack-1',
   rows: [ticket('READ-1', 16)],
+  destination: { rows: [], append: [0] },
 };
 
 const shape = (workspaceId: string) => store.list(workspaceId).map((i) => `${i.kind}${i.runwayNumber ? ` #${i.runwayNumber}` : ''} ${i.text ?? i.itemId}${i.depth ? ` @${i.depth}` : ''}`);
@@ -151,7 +156,7 @@ describe('runwayMarkdownApply', () => {
         { groupKey: 'g1', workspaceId: 'ws-b', name: 'Reader App', created: false, rows: 1 },
       ],
     });
-    expect(h.events).toEqual(['backup', 'create Ship the offline reader from ws-a']);
+    expect(h.events).toEqual(['identify ws-b', 'backup', 'create Ship the offline reader from ws-a']);
     expect(shape('ws-new-1')).toEqual(['note Readers lose their place on the train.', 'issue #1 yt:READ-12', 'issue #2 yt:SYNC-3', 'section Later', 'note - Look at READ-9 again']);
     expect(shape('ws-b')).toEqual(['issue #1 yt:READ-1']);
   });
@@ -230,9 +235,9 @@ describe('runwayMarkdownApply', () => {
     store.addIssue('ws-b', 'yt:READ-77');
     const h = harness();
     const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP, EXISTING_GROUP] });
-    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'runway-not-empty' }] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'runway-changed' }] });
     expect(shape('ws-b')).toEqual(['issue #1 yt:READ-77']);
-    expect(h.events).toEqual([]);
+    expect(h.events).toEqual(['identify ws-b']);
   });
 
   it('a destination filled at the transaction boundary: the edit is kept, nothing is written, and only this Apply’s workspace is removed', async () => {
@@ -242,7 +247,7 @@ describe('runwayMarkdownApply', () => {
     expect(r).toMatchObject({
       ok: false,
       code: 'review',
-      problems: [{ groupKey: 'g1', reason: 'runway-not-empty' }],
+      problems: [{ groupKey: 'g1', reason: 'runway-changed' }],
       backupPath: join(dir, 'runway-before-import-1.sqlite'),
       remaining: [],
     });
@@ -281,7 +286,7 @@ describe('runwayMarkdownApply', () => {
     const h = harness({
       store: () => ({
         list: store.list,
-        fillEmpty: () => {
+        appendImport: () => {
           throw new Error('disk full');
         },
       }),
@@ -452,6 +457,131 @@ describe('legacy Apply through the production adapter (VERM-104)', () => {
     expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [] });
     expect(h.events.filter((e) => e.startsWith('remove'))).toEqual([]);
     expect(shared().workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b']);
+  });
+});
+
+describe('a repeat import into a Runway that has rows (VERM-105)', () => {
+  const current = (ws: string) => store.list(ws).map((i) => ({ itemId: i.itemId, kind: i.kind, text: i.text, depth: i.depth }));
+  /** ws-b with READ-20 moved to #1, then READ-12, a Later section and a note. */
+  function seed() {
+    store.addIssue('ws-b', 'yt:READ-12');
+    store.addIssue('ws-b', 'yt:READ-20');
+    store.moveToNumber('ws-b', 'yt:READ-20', 1);
+    store.addSection('ws-b', 'Later');
+    store.addNote('ws-b', 'Look at READ-9 again');
+  }
+  const group = (rows: RunwayImportApplyGroup['rows'], append: number[]): RunwayImportApplyGroup => ({
+    groupKey: 'g1',
+    target: { kind: 'existing', workspaceId: 'ws-b' },
+    connectionKey: 'youtrack https://yt.example.test youtrack-1',
+    rows,
+    destination: { rows: current('ws-b'), append },
+  });
+  const FILE = [ticket('READ-12', 1), ticket('READ-20', 2), section('Later', 3), note('Look at READ-9 again', 4)];
+
+  it('appends only what is new, after the last row: the whole earlier sequence stays a prefix and READ-20 stays #1', async () => {
+    seed();
+    const before = shape('ws-b');
+    const h = harness();
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group([...FILE, ticket('PLAT-1', 5)], [4])] });
+    expect(r).toMatchObject({ ok: true, workspaces: [{ groupKey: 'g1', created: false, rows: 1 }] });
+    expect(shape('ws-b')).toEqual([...before, 'issue #3 yt:PLAT-1']);
+    expect(shape('ws-b')[0]).toBe('issue #1 yt:READ-20');
+  });
+
+  it('nothing new: refused before anything is read or backed up', async () => {
+    seed();
+    const h = harness();
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group(FILE, [])] });
+    expect(r).toMatchObject({ ok: false, code: 'nothing-new', backupPath: null });
+    expect(h.events).toEqual([]);
+  });
+
+  it('a note edited in place between Preview and Apply: the edit is kept, nothing is backed up or written', async () => {
+    seed();
+    const plan = group([...FILE, ticket('PLAT-1', 5)], [4]);
+    const noteId = store.list('ws-b').find((i) => i.kind === 'note')?.itemId as string;
+    db.prepare('UPDATE runway_item SET text = ? WHERE item_id = ?').run('Look at READ-9 again, edited', noteId);
+    const after = shape('ws-b');
+    const h = harness();
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [plan] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'runway-changed' }], backupPath: null });
+    expect(shape('ws-b')).toEqual(after);
+    expect(h.events).not.toContain('backup');
+  });
+
+  it('a mixed new and existing Apply whose existing note is edited at the transaction boundary: nothing is written, and the new workspace is removed', async () => {
+    seed();
+    const plan = group([...FILE, ticket('PLAT-1', 5)], [4]);
+    const noteId = store.list('ws-b').find((i) => i.kind === 'note')?.itemId as string;
+    const h = harness({}, { onCreate: () => db.prepare('UPDATE runway_item SET text = ? WHERE item_id = ?').run('Edited meanwhile', noteId) });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP, plan] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'runway-changed' }], remaining: [] });
+    expect(store.list('ws-new-1')).toEqual([]);
+    expect(h.removed).toEqual(['ws-new-1']);
+    expect(store.list('ws-b').map((i) => i.text ?? i.itemId)).toEqual(['yt:READ-20', 'yt:READ-12', 'Later', 'Edited meanwhile']);
+  });
+
+  it('a saved ticket that answers to the file’s new key is already there (the Runway stores the old key)', async () => {
+    store.addIssue('ws-b', 'yt:READ-101');
+    const h = harness({
+      identify: async ({ itemIds }) => ({
+        ok: true,
+        connectionKey: connections['ws-b'],
+        items: itemIds.map((itemId) => ({ itemId, state: 'resolved' as const, key: 'READ-150', aliases: [itemId, 'yt:READ-150'] })),
+      }),
+    });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group([ticket('READ-150', 1), ticket('READ-160', 2)], [1])] });
+    expect(r).toMatchObject({ ok: true });
+    expect(shape('ws-b')).toEqual(['issue #1 yt:READ-101', 'issue #2 yt:READ-160']);
+  });
+
+  it('an unreadable saved ticket: Unable to verify, nothing added', async () => {
+    store.addIssue('ws-b', 'yt:READ-101');
+    const h = harness({
+      identify: async ({ itemIds }) => ({ ok: true, connectionKey: connections['ws-b'], items: itemIds.map((itemId) => ({ itemId, state: 'unverified' as const, key: 'READ-101', reason: 'not readable' })) }),
+    });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group([ticket('READ-150', 1)], [0])] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'unable-to-verify' }] });
+    expect(r.ok ? '' : r.problems[0].message).toMatch(/READ-101/);
+    expect(shape('ws-b')).toEqual(['issue #1 yt:READ-101']);
+    expect(h.events).not.toContain('backup');
+  });
+
+  it('what would be appended is not what the preview showed: sent back', async () => {
+    seed();
+    const h = harness();
+    // The preview claimed READ-12 was new; it is already on the Runway.
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group([...FILE, ticket('PLAT-1', 5)], [0, 4])] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'append-changed' }] });
+  });
+
+  it('the saved tickets read on a different connection than the preview’s: connection-changed', async () => {
+    seed();
+    const h = harness({ identify: async () => ({ ok: true, connectionKey: 'youtrack https://other.example.test youtrack-1', items: [] }) });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [group([...FILE, ticket('PLAT-1', 5)], [4])] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'connection-changed' }] });
+  });
+
+  it('imported rows are counted apart from the rows compared: a Runway of 20,000 notes plus a new workspace is valid in either order', () => {
+    const big: RunwayImportApplyGroup = {
+      groupKey: 'gA',
+      target: { kind: 'existing', workspaceId: 'ws-b' },
+      connectionKey: 'youtrack https://yt.example.test youtrack-1',
+      rows: [note('One more', 1)],
+      destination: { rows: Array.from({ length: 20000 }, (_, i) => ({ itemId: `note:n${i}`, kind: 'note' as const, text: `Note ${i}`, depth: 0 })), append: [0] },
+    };
+    const small: RunwayImportApplyGroup = { ...NEW_GROUP, groupKey: 'gB', rows: [note('Fresh', 1)] };
+    for (const groups of [[big, small], [small, big]]) {
+      const r = validateApplyArgs({ groups });
+      expect(typeof r === 'string' ? r : r.groups.map((g) => g.groupKey).sort()).toEqual(['gA', 'gB']);
+    }
+  });
+
+  it('an existing destination without the rows the preview compared is refused as invalid', () => {
+    expect(validateApplyArgs({ groups: [{ ...EXISTING_GROUP, destination: undefined }] })).toMatch(/existing destination needs/);
+    expect(validateApplyArgs({ groups: [{ ...EXISTING_GROUP, destination: { rows: [], append: [1] } }] })).toMatch(/rows of the group/);
+    expect(validateApplyArgs({ groups: [{ ...NEW_GROUP, destination: { rows: [], append: [] } }] })).toMatch(/new workspace has no destination/);
   });
 });
 

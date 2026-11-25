@@ -4,7 +4,7 @@
 // in the renderer→main direction beyond the save calls.
 
 import type { RunwayAddByReferenceArgs } from './shared/runwayAdd';
-import type { RunwayImportApplyArgs, RunwayImportMatchArgs } from './shared/runwayImport';
+import type { RunwayImportApplyArgs, RunwayImportIdentifyArgs, RunwayImportMatchArgs } from './shared/runwayImport';
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
@@ -126,6 +126,7 @@ const api: VermilianAPI = {
   jiraPriorityOrders: (args: JiraPriorityOrdersArgs) => ipcRenderer.invoke(IPC.jiraPriorityOrders, args),
   runwayItemsAddByReference: (args: RunwayAddByReferenceArgs) => ipcRenderer.invoke(IPC.runwayItemsAddByReference, args),
   runwayImportMatch: (args: RunwayImportMatchArgs) => ipcRenderer.invoke(IPC.runwayImportMatch, args),
+  runwayImportIdentify: (args: RunwayImportIdentifyArgs) => ipcRenderer.invoke(IPC.runwayImportIdentify, args),
   runwayMarkdownOpen: () => ipcRenderer.invoke(IPC.runwayMarkdownOpen),
   runwayMarkdownApply: (args: RunwayImportApplyArgs) => ipcRenderer.invoke(IPC.runwayMarkdownApply, args),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
@@ -156,6 +157,7 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
   dailyReviewGet: (args: DailyReviewGetArgs) => ipcRenderer.invoke(IPC.dailyReviewGet, args),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
+  debugSetUnreadableIssues: (keys: string[]) => ipcRenderer.invoke('e2e:setUnreadableIssues', keys),
   listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
   readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),
   createWorkspaceArticle: (doc: WorkspaceDocument) => ipcRenderer.invoke(IPC.createWorkspaceArticle, doc),

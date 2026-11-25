@@ -39,11 +39,12 @@
 // Two groups are independent: each is matched through its own workspace's
 // connection and keeps its own result, even for the same key.
 
-import { encodeIssueId, isValidLocalId, type TrackerKind } from '../../shared/tracker';
+import { decodeIssueId, encodeIssueId, isValidLocalId, type TrackerKind } from '../../shared/tracker';
 import { runwayWorkspaceTracker } from '../../shared/runwayItem';
 import { parseRunwayReference, runwayKeyOf } from '../../shared/runwayReference';
 import { RUNWAY_ADD_MISSING_MESSAGE } from '../../shared/runwayAdd';
 import type { ScheduleReferenceReason } from '../../shared/runwaySchedule';
+import type { RunwaySavedIdentity } from '../../shared/runwayImportAppend';
 import {
   RUNWAY_IMPORT_MAX_CANDIDATES,
   RUNWAY_IMPORT_MAX_GROUPS,
@@ -51,7 +52,10 @@ import {
   type RunwayImportCandidate,
   type RunwayImportCandidateMatch,
   type RunwayImportGroupArgs,
+  type RunwayImportGroupErrorCode,
   type RunwayImportGroupMatch,
+  type RunwayImportIdentifyArgs,
+  type RunwayImportIdentifyResult,
   type RunwayImportMatchArgs,
   type RunwayImportMatchResult,
   type RunwayImportTicket,
@@ -241,7 +245,7 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
       case 'resolved': {
         const ids = aliasesOf(tracker, p.localId, read.issue);
         aliases[i] = ids;
-        const ticket: RunwayImportTicket = { issueId: ids[0], key: read.issue.idReadable, summary: read.issue.summary };
+        const ticket: RunwayImportTicket = { issueId: ids[0], key: read.issue.idReadable, summary: read.issue.summary, aliases: ids };
         return { ...base, status: 'matched', ticket };
       }
       case 'not-readable':
@@ -306,4 +310,74 @@ export function createRunwayImportMatch(deps: RunwayImportMatchDeps) {
     }
     return { ok: true, groups };
   };
+}
+
+// ─── The destination's saved tickets (VERM-105) ──────────────────────────────
+// A repeat import matches the file's tickets against the tickets already on
+// the destination Runway by every ID each side answers to. The saved rows are
+// read here, on the destination's own connection — resolved once, as for a
+// group's match — and each answers with its IDs: its stored ID, the key it
+// now has (a moved Jira issue answers with its new key) and, for YouTrack,
+// its entity ID. A row that cannot be read is unverified, with the reason.
+
+export function validateImportIdentifyArgs(args: unknown): RunwayImportIdentifyArgs | string {
+  if (!isRecord(args) || typeof args.workspaceId !== 'string' || args.workspaceId === '') return 'A workspace ID is needed';
+  if (!Array.isArray(args.itemIds) || args.itemIds.some((id) => typeof id !== 'string' || id === '' || id.length > RUNWAY_IMPORT_MAX_TEXT)) {
+    return 'The Runway’s ticket IDs are needed';
+  }
+  if (args.itemIds.length > RUNWAY_IMPORT_MAX_CANDIDATES) return `At most ${RUNWAY_IMPORT_MAX_CANDIDATES} tickets can be checked at once`;
+  return { workspaceId: args.workspaceId, itemIds: [...new Set(args.itemIds as string[])] };
+}
+
+export function createRunwayImportIdentify(deps: Pick<RunwayImportMatchDeps, 'workspaces' | 'connection' | 'timeoutMs'>) {
+  return async function identify(args: unknown): Promise<RunwayImportIdentifyResult> {
+    const request = validateImportIdentifyArgs(args);
+    if (typeof request === 'string') return { ok: false, code: 'invalid-args', error: request, retryable: false };
+    const fail = (code: RunwayImportGroupErrorCode, error: string, retryable: boolean): RunwayImportIdentifyResult => ({ ok: false, code, error, retryable });
+    try {
+      const config = await deps.workspaces();
+      const workspace = config.workspaces.find((w) => w.id === request.workspaceId);
+      if (!workspace) return fail('unknown-workspace', `No workspace ${request.workspaceId} is configured.`, false);
+      const tracker = runwayWorkspaceTracker(workspace);
+      const connection = await deps.connection(request.workspaceId, tracker);
+      if (!connection) return fail('unknown-workspace', `Workspace ${request.workspaceId} is no longer configured.`, false);
+      if (request.itemIds.length === 0) return { ok: true, connectionKey: connection.key, items: [] };
+      const opened = await connection.open();
+      if (!opened.ok) {
+        const f = connectionFailure({ groupKey: '', workspaceId: request.workspaceId, candidates: [] }, opened.code, opened.error);
+        return fail(f.code, f.error, f.retryable);
+      }
+      let reads: Awaited<ReturnType<typeof readRunwayTickets>>;
+      try {
+        reads = await readRunwayTickets(tracker, timed(opened.reader, deps.timeoutMs ?? RUNWAY_IMPORT_READ_TIMEOUT_MS), request.itemIds);
+      } catch (err) {
+        const failure = runwayReadFailure(err);
+        const code = failure && (failure.code === 'unauthorized' || failure.code === 'refresh-failed') ? failure.code : 'refresh-failed';
+        const message = failure?.message ?? messageText(err, 'the tracker could not be reached');
+        const f = connectionFailure({ groupKey: '', workspaceId: request.workspaceId, candidates: [] }, code, message);
+        return fail(f.code, f.error, f.retryable);
+      }
+      const byId = new Map(reads.map((r) => [r.itemId, r]));
+      const items = request.itemIds.map((itemId): RunwaySavedIdentity => {
+        const read = byId.get(itemId);
+        const decoded = decodeIssueId(itemId);
+        const key = decoded ? decoded.localId : itemId;
+        if (read?.state === 'resolved' && decoded) {
+          return { itemId, state: 'resolved', key: read.issue.idReadable, aliases: [...new Set([itemId, ...aliasesOf(tracker, decoded.localId, read.issue)])] };
+        }
+        // A saved row stored for the other tracker can never be one of this tracker's tickets.
+        if (read?.state === 'wrong-tracker') return { itemId, state: 'resolved', key, aliases: [itemId] };
+        const reason = read?.state === 'not-readable' ? `not readable with this workspace’s credential${read.reason ? `: ${read.reason}` : ''}` : read?.state === 'missing' ? 'the tracker says it is gone' : 'missing or not readable';
+        return { itemId, state: 'unverified', key, reason };
+      });
+      return { ok: true, connectionKey: connection.key, items };
+    } catch (err) {
+      return fail('refresh-failed', `The Runway’s tickets could not be checked: ${messageText(err, 'the tracker could not be reached')}. Try again.`, true);
+    }
+  };
+}
+
+function messageText(err: unknown, fallback: string): string {
+  const message = (err as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message ? message : fallback;
 }
