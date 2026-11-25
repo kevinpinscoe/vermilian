@@ -24,6 +24,10 @@
 // dependent, and Move prerequisite above moves a prerequisite immediately
 // above its dependent; every other row keeps its relative order. Refresh
 // re-reads the tickets past the one-minute cache and never writes the order.
+//
+// Import from Markdown… (VERM-102) chooses a schedule file and opens a
+// read-only preview of the workspaces and order it proposes
+// (RunwayMarkdownImport). Cancelling the picker returns straight here.
 
 import React, { useMemo, useState } from 'react';
 import { AttentionBox, Button, Heading, Text } from '@vibe/core';
@@ -43,6 +47,8 @@ import type { TrackerKind } from '../../../shared/tracker';
 import type { SearchScope } from '../search/api';
 import { useRunwayEdit, useRunwayItems, useRunwayTickets, type RunwayEdit } from './api';
 import { RunwayAddBox } from './RunwayAddBox';
+import { RunwayMarkdownImport } from './RunwayMarkdownImport';
+import { useWorkspaceConfig } from '../workspace-nav/api';
 import {
   describeBlockerReport,
   describeOrderConflict,
@@ -93,6 +99,32 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
   const edit = useRunwayEdit(workspaceId);
   const [mode, setMode] = useState<RowMode>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const workspaceConfig = useWorkspaceConfig();
+  const [importFile, setImportFile] = useState<{ fileName: string; text: string; workspaces: { id: string; name: string }[] } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const importWorkspaces = useMemo(
+    () => (workspaceConfig.data?.workspaces ?? []).slice().sort((a, b) => a.order - b.order).map((w) => ({ id: w.id, name: w.name })),
+    [workspaceConfig.data],
+  );
+
+  /** Import from Markdown…: the native picker, then the read-only preview. */
+  async function chooseImportFile() {
+    setImportError(null);
+    setChoosing(true);
+    try {
+      const r = await window.vermilian.runwayMarkdownOpen();
+      if (!r.ok) setImportError(r.error);
+      // The workspace list is taken once, so a later refetch does not recheck every group.
+      else if (!r.canceled) {
+        setImportFile({ fileName: r.fileName, text: r.text, workspaces: importWorkspaces.length > 0 ? importWorkspaces : [{ id: workspaceId, name: workspaceName }] });
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setChoosing(false);
+    }
+  }
 
   const itemsError = items.data && !items.data.ok ? items.data.error : items.error ? String(items.error) : null;
   const readError = tickets.data && !tickets.data.ok ? tickets.data.error : tickets.error ? String(tickets.error) : null;
@@ -178,7 +210,31 @@ export function RunwayView({ workspaceId, workspaceName, tracker, searchScope, o
         >
           {tickets.isFetching ? 'Refreshing…' : 'Refresh'}
         </Button>
+        <Button
+          size="small"
+          kind="tertiary"
+          data-testid="runway-import-markdown"
+          disabled={choosing || importFile !== null}
+          onClick={() => void chooseImportFile()}
+        >
+          Import from Markdown…
+        </Button>
       </div>
+
+      {importError && (
+        <div className={styles.banner}>
+          <AttentionBox type="negative" title="The file could not be imported" text={importError} data-testid="runway-import-error" onClose={() => setImportError(null)} />
+        </div>
+      )}
+      {importFile && (
+        <RunwayMarkdownImport
+          fileName={importFile.fileName}
+          text={importFile.text}
+          activeWorkspaceId={workspaceId}
+          workspaces={importFile.workspaces}
+          onClose={() => setImportFile(null)}
+        />
+      )}
 
       <RunwayAddBox key={workspaceId} workspaceId={workspaceId} tracker={tracker} searchScope={searchScope} />
 

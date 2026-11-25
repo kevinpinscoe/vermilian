@@ -1,0 +1,153 @@
+/* The Markdown import preview (VERM-102). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.lead,
+.empty,
+.muted,
+.status {
+  color: var(--secondary-text-color, #676879);
+}
+
+.group {
+  border: 1px solid var(--layout-border-color, #e0e0e0);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.groupName {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.target {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.connection select {
+  max-width: 100%;
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.rows,
+.references ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ticket,
+.note,
+.reference {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.ticket {
+  border-bottom: 1px solid var(--layout-border-color, #eeeeee);
+}
+
+.number {
+  min-width: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.box {
+  font-family: var(--font-family-monospace, monospace);
+  color: var(--secondary-text-color, #676879);
+}
+
+.key {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.summary,
+.hint {
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--secondary-text-color, #676879);
+}
+
+.section {
+  font-weight: 600;
+  padding-top: 6px;
+}
+
+.noteText {
+  white-space: pre-wrap;
+  color: var(--secondary-text-color, #676879);
+  overflow-wrap: anywhere;
+}
+
+.tag,
+.tagWarn {
+  font-size: 12px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ui-background-color, #f0f0f0);
+}
+
+.tagWarn {
+  background: var(--warning-color-selected, #fff3d4);
+}
+
+.references {
+  border-top: 1px dashed var(--layout-border-color, #e0e0e0);
+  padding-top: 8px;
+}
+
+.referencesTitle {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

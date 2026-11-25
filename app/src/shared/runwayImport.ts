@@ -113,3 +113,21 @@ export function scheduleCandidates(group: ScheduleGroup): RunwayImportCandidate[
   );
   return [...scheduled, ...references].sort((a, b) => a.line - b.line);
 }
+
+// ---------------------------------------------------------------------------
+// Choosing the Markdown file (VERM-102): runwayMarkdownOpen. The main process
+// shows the native picker, reads the chosen file and returns its name and
+// text. It writes nothing.
+
+/** The largest schedule file accepted: exactly 1 MiB. */
+export const RUNWAY_MARKDOWN_MAX_BYTES = 1024 * 1024;
+
+/** The file types the picker offers. */
+export const RUNWAY_MARKDOWN_EXTENSIONS = ['md', 'markdown', 'txt'] as const;
+
+export type RunwayMarkdownOpenErrorCode = 'too-large' | 'not-utf8' | 'read-failed';
+
+export type RunwayMarkdownOpenResult =
+  | { ok: true; canceled: true }
+  | { ok: true; canceled: false; fileName: string; text: string }
+  | { ok: false; code: RunwayMarkdownOpenErrorCode; error: string };
