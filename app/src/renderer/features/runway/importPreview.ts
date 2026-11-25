@@ -7,10 +7,15 @@
 //     trimming and case-folding, maps to it and is checked on its own
 //     connection;
 //   - a heading that matches two or more is ambiguous, left for VERM-103 to
-//     correct; like a new workspace, it is checked on a chosen connection;
+//     correct; its tickets are not checked until a workspace is chosen in
+//     Check tickets using, so no third workspace's tracker sees them;
 //   - any other heading proposes a new workspace, checked by default on the
 //     active workspace's connection (Check tickets using);
 //   - the unnamed group before the first `##` maps to the active workspace.
+// With no active workspace in the list, the new and unnamed groups also wait
+// for a choice. Nothing is mapped or checked until the workspace list has
+// been read (createImportSession): a heading naming an existing workspace
+// must never be mistaken for a new one while the list is loading or failed.
 //
 // Each group's outline is built from the parser's rows in file order and
 // VERM-101's result for each occurrence:
@@ -38,7 +43,9 @@ export type ProposedTarget =
   | { kind: 'existing'; workspaceId: string; workspaceName: string }
   | { kind: 'ambiguous'; workspaceIds: string[]; workspaceNames: string[] }
   | { kind: 'new' }
-  | { kind: 'active'; workspaceId: string; workspaceName: string };
+  | { kind: 'active'; workspaceId: string; workspaceName: string }
+  /** The unnamed group when no active workspace is in the list. */
+  | { kind: 'unassigned' };
 
 export interface ProposedGroup {
   /** Stable within one preview: the group's index in the file. */
@@ -49,8 +56,8 @@ export interface ProposedGroup {
   target: ProposedTarget;
   /** True when the user chooses the connection (a new or ambiguous workspace). */
   chooseConnection: boolean;
-  /** The workspace whose connection checks the group's tickets at first. */
-  connectionId: string;
+  /** The workspace whose connection checks the group's tickets at first; null waits for a choice. */
+  connectionId: string | null;
   group: ScheduleGroup;
   candidates: RunwayImportCandidate[];
 }
@@ -59,17 +66,14 @@ const fold = (name: string) => name.trim().toLowerCase();
 
 /** One proposed workspace per group, mapped and given its connection. */
 export function proposeGroups(parsed: ParsedSchedule, workspaces: readonly ImportWorkspaceOption[], activeId: string): ProposedGroup[] {
-  const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0];
-  const activeConn = active?.id ?? '';
+  // No fallback: an active ID missing from the list means no default connection.
+  const active = workspaces.find((w) => w.id === activeId);
+  const activeConn = active?.id ?? null;
   return parsed.groups.map((group, i): ProposedGroup => {
     const base = { groupKey: `g${i}`, name: group.name, line: group.line, group, candidates: scheduleCandidates(group) };
     if (group.name === null) {
-      return {
-        ...base,
-        target: { kind: 'active', workspaceId: activeConn, workspaceName: active?.name ?? '' },
-        chooseConnection: false,
-        connectionId: activeConn,
-      };
+      if (!active) return { ...base, target: { kind: 'unassigned' }, chooseConnection: true, connectionId: null };
+      return { ...base, target: { kind: 'active', workspaceId: active.id, workspaceName: active.name }, chooseConnection: false, connectionId: active.id };
     }
     const wanted = fold(group.name);
     const matches = workspaces.filter((w) => fold(w.name) === wanted);
@@ -77,9 +81,11 @@ export function proposeGroups(parsed: ParsedSchedule, workspaces: readonly Impor
       const [w] = matches;
       return { ...base, target: { kind: 'existing', workspaceId: w.id, workspaceName: w.name }, chooseConnection: false, connectionId: w.id };
     }
-    const target: ProposedTarget =
-      matches.length > 1 ? { kind: 'ambiguous', workspaceIds: matches.map((w) => w.id), workspaceNames: matches.map((w) => w.name) } : { kind: 'new' };
-    return { ...base, target, chooseConnection: true, connectionId: activeConn };
+    if (matches.length > 1) {
+      const target: ProposedTarget = { kind: 'ambiguous', workspaceIds: matches.map((w) => w.id), workspaceNames: matches.map((w) => w.name) };
+      return { ...base, target, chooseConnection: true, connectionId: null };
+    }
+    return { ...base, target: { kind: 'new' }, chooseConnection: true, connectionId: activeConn };
   });
 }
 
@@ -277,6 +283,79 @@ export function createGroupChecker(match: MatchFn, report: (groupKey: string, ch
     },
     dispose() {
       disposed = true;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// One preview's session: the workspace list, the mapping and the checks.
+
+export type ImportWorkspaceList =
+  | { state: 'loading' }
+  | { state: 'failed'; error: string }
+  | { state: 'ready'; workspaces: readonly ImportWorkspaceOption[] };
+
+export interface ImportSessionState {
+  workspaces: ImportWorkspaceList;
+  /** Null until the workspace list has been read. */
+  groups: ProposedGroup[] | null;
+  /** Each group's selected connection; null waits for a choice. */
+  connections: Record<string, string | null>;
+  checks: Record<string, GroupCheck>;
+}
+
+export interface ImportSession {
+  state(): ImportSessionState;
+  /**
+   * The workspace list as read. Headings are mapped, and groups checked, only
+   * once a list has been read; the first one read is kept, so a later
+   * refetch neither remaps nor rechecks.
+   */
+  setWorkspaces(list: ImportWorkspaceList): void;
+  /** Checks the group on the chosen workspace's connection. */
+  choose(groupKey: string, workspaceId: string): void;
+  /** Checks the group again on its selected connection. */
+  retry(groupKey: string): void;
+  dispose(): void;
+}
+
+export function createImportSession(parsed: ParsedSchedule, activeId: string, match: MatchFn, onChange: (state: ImportSessionState) => void): ImportSession {
+  let state: ImportSessionState = { workspaces: { state: 'loading' }, groups: null, connections: {}, checks: {} };
+  let disposed = false;
+  const set = (next: ImportSessionState) => {
+    state = next;
+    if (!disposed) onChange(state);
+  };
+  const checker = createGroupChecker(match, (groupKey, check) => set({ ...state, checks: { ...state.checks, [groupKey]: check } }));
+  const groupOf = (key: string) => state.groups?.find((g) => g.groupKey === key);
+
+  return {
+    state: () => state,
+    setWorkspaces(list) {
+      if (disposed || state.workspaces.state === 'ready') return;
+      if (list.state !== 'ready') {
+        set({ ...state, workspaces: list });
+        return;
+      }
+      const groups = proposeGroups(parsed, list.workspaces, activeId);
+      set({ ...state, workspaces: list, groups, connections: Object.fromEntries(groups.map((g) => [g.groupKey, g.connectionId])) });
+      for (const g of groups) if (g.connectionId !== null) checker.check(g, g.connectionId);
+    },
+    choose(groupKey, workspaceId) {
+      const g = groupOf(groupKey);
+      if (disposed || !g || !g.chooseConnection) return;
+      set({ ...state, connections: { ...state.connections, [groupKey]: workspaceId } });
+      checker.check(g, workspaceId);
+    },
+    retry(groupKey) {
+      const g = groupOf(groupKey);
+      const conn = state.connections[groupKey];
+      if (disposed || !g || !conn) return;
+      checker.check(g, conn);
+    },
+    dispose() {
+      disposed = true;
+      checker.dispose();
     },
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseRunwaySchedule } from '../../../shared/runwaySchedule';
 import type { RunwayImportCandidateMatch, RunwayImportMatchArgs, RunwayImportMatchResult } from '../../../shared/runwayImport';
-import { buildGroupPreview, createGroupChecker, proposeGroups, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
+import { buildGroupPreview, createGroupChecker, createImportSession, proposeGroups, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
 
 // Synthetic keys, names and hosts only.
 const WS: ImportWorkspaceOption[] = [
@@ -65,10 +65,10 @@ describe('proposeGroups', () => {
     expect(g).toMatchObject({ groupKey: 'g0', name: 'reader APP', target: { kind: 'existing', workspaceId: 'ws-reader', workspaceName: 'Reader App' }, chooseConnection: false, connectionId: 'ws-reader' });
   });
 
-  it('marks a name that matches two workspaces ambiguous, checked on the active connection until corrected', () => {
+  it('marks a name that matches two workspaces ambiguous, with no connection until one is chosen', () => {
     const [g] = proposeGroups(parseRunwaySchedule('## PLATFORM\n- PLAT-1'), WS, 'ws-active');
     expect(g.target).toEqual({ kind: 'ambiguous', workspaceIds: ['ws-dup-1', 'ws-dup-2'], workspaceNames: ['Platform', '  platform '] });
-    expect(g).toMatchObject({ chooseConnection: true, connectionId: 'ws-active' });
+    expect(g).toMatchObject({ chooseConnection: true, connectionId: null });
   });
 
   it('proposes a new workspace for any other name, defaulting to the active workspace’s connection', () => {
@@ -84,9 +84,12 @@ describe('proposeGroups', () => {
     ]);
   });
 
-  it('an unknown active ID falls back to the first workspace', () => {
-    const [g] = proposeGroups(parseRunwaySchedule('## New one\n- READ-1'), WS, 'ws-gone');
-    expect(g.connectionId).toBe('ws-active');
+  it('an unknown active ID falls back to no workspace: new and unnamed groups wait for a choice', () => {
+    const groups = proposeGroups(parseRunwaySchedule('- READ-0\n\n## New one\n- READ-1'), WS, 'ws-gone');
+    expect(groups.map((g) => [g.target.kind, g.chooseConnection, g.connectionId])).toEqual([
+      ['unassigned', true, null],
+      ['new', true, null],
+    ]);
   });
 
   it('carries the group’s candidates as written, in file order', () => {
@@ -250,7 +253,7 @@ describe('createGroupChecker', () => {
       },
       () => undefined,
     );
-    groups.forEach((g) => checker.check(g, g.connectionId));
+    groups.forEach((g) => checker.check(g, g.connectionId as string));
     checker.check(groups[1], 'ws-reader');
     expect(sent).toEqual(['g0@ws-active', 'g1@ws-active', 'g1@ws-reader']);
   });
@@ -284,5 +287,78 @@ describe('createGroupChecker', () => {
     await d.promise;
     await Promise.resolve();
     expect(later.map((r) => r.state)).toEqual(['pending']);
+  });
+});
+
+describe('createImportSession', () => {
+  type Call = RunwayImportMatchArgs['groups'][number];
+  function harness(md: string, activeId: string) {
+    const calls: Call[] = [];
+    const session = createImportSession(
+      parseRunwaySchedule(md),
+      activeId,
+      async (args) => {
+        calls.push(...args.groups);
+        return { ok: true, groups: args.groups.map((g) => ({ groupKey: g.groupKey, workspaceId: g.workspaceId, ok: true as const, candidates: [] })) };
+      },
+      () => undefined,
+    );
+    return { calls, session };
+  }
+
+  it('two workspaces match the heading and a third is active: no lookup until one is chosen, then one on the chosen workspace', () => {
+    const { calls, session } = harness('## Platform\n- PLAT-1\n- PLAT-2', 'ws-active');
+    session.setWorkspaces({ state: 'ready', workspaces: WS });
+    expect(session.state().groups?.[0].target.kind).toBe('ambiguous');
+    expect(session.state().connections).toEqual({ g0: null });
+    expect(calls).toEqual([]);
+
+    session.choose('g0', 'ws-dup-2');
+    expect(calls.map((c) => [c.groupKey, c.workspaceId])).toEqual([['g0', 'ws-dup-2']]);
+    expect(calls.some((c) => c.workspaceId === 'ws-active')).toBe(false);
+  });
+
+  it('A active and a file headed ## B while the workspace list is delayed: A gets no lookup; B is recognised and checked when the list arrives', () => {
+    const A = { id: 'ws-a', name: 'A' };
+    const B = { id: 'ws-b', name: 'B' };
+    const { calls, session } = harness('## B\n- READ-1', 'ws-a');
+    expect(session.state().workspaces).toEqual({ state: 'loading' });
+    expect(session.state().groups).toBeNull();
+    expect(calls).toEqual([]);
+
+    session.setWorkspaces({ state: 'ready', workspaces: [A, B] });
+    expect(session.state().groups?.[0].target).toEqual({ kind: 'existing', workspaceId: 'ws-b', workspaceName: 'B' });
+    expect(calls.map((c) => c.workspaceId)).toEqual(['ws-b']);
+  });
+
+  it('a failed workspace read maps nothing and checks nothing until a retry succeeds', () => {
+    const { calls, session } = harness('## B\n- READ-1', 'ws-a');
+    session.setWorkspaces({ state: 'failed', error: 'The workspace configuration could not be read.' });
+    expect(session.state().workspaces).toEqual({ state: 'failed', error: 'The workspace configuration could not be read.' });
+    expect(session.state().groups).toBeNull();
+    expect(calls).toEqual([]);
+
+    session.setWorkspaces({ state: 'loading' });
+    session.setWorkspaces({ state: 'ready', workspaces: [{ id: 'ws-a', name: 'A' }, { id: 'ws-b', name: 'B' }] });
+    expect(calls.map((c) => c.workspaceId)).toEqual(['ws-b']);
+  });
+
+  it('the first list read is kept: a later refetch neither remaps nor rechecks', () => {
+    const { calls, session } = harness('## New one\n- READ-1', 'ws-active');
+    session.setWorkspaces({ state: 'ready', workspaces: WS });
+    session.setWorkspaces({ state: 'ready', workspaces: [...WS, { id: 'ws-new', name: 'New one' }] });
+    expect(session.state().groups?.[0].target.kind).toBe('new');
+    expect(calls.map((c) => c.workspaceId)).toEqual(['ws-active']);
+  });
+
+  it('choosing and retrying check that group only; nothing is checked after dispose', () => {
+    const { calls, session } = harness('## One\n- READ-1\n## Two\n- READ-2', 'ws-active');
+    session.setWorkspaces({ state: 'ready', workspaces: WS });
+    session.choose('g1', 'ws-reader');
+    session.retry('g1');
+    expect(calls.map((c) => `${c.groupKey}@${c.workspaceId}`)).toEqual(['g0@ws-active', 'g1@ws-active', 'g1@ws-reader', 'g1@ws-reader']);
+    session.dispose();
+    session.choose('g0', 'ws-reader');
+    expect(calls).toHaveLength(4);
   });
 });

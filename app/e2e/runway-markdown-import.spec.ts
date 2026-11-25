@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
+import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from '../src/shared/workspaceSchema';
 
 // The fake YouTrack's Runway projects READ, SYNC and PLAT (VERM-94).
 const RUNWAY_ENV = { VERMILIAN_E2E_YT_RUNWAY_FIXTURES: '1' };
@@ -197,6 +198,54 @@ test.describe('Runway: Markdown import preview', () => {
     await expect(rows.nth(1)).toHaveAttribute('data-kind', 'unmatched');
     await expect(rows.nth(2)).toHaveAttribute('data-kind', 'unmatched');
     await expect(rows.nth(2)).toContainText('Unmatched, kept as a note');
+    await tid(page, 'import-cancel').click();
+  });
+
+  test('a heading matching two workspaces waits for a choice: no numbers until one is chosen, then checked on it', async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), { ...RUNWAY_ENV, VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace' });
+    let page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+    // Fictional values only. Workspace A is active; two others are both named Platform.
+    const doc = (workspaceId: string, name: string, order: number): WorkspaceDocument => ({
+      schema: WORKSPACE_SCHEMA_VERSION,
+      workspaceId,
+      name,
+      order,
+      backend: { kind: 'youtrack', serverUrl: 'http://e2e.local', credentialRef: 'youtrack-1' },
+      ai: { credentialRef: null },
+      folders: [{ id: `folder-${order}`, name: 'Projects', order: 0, parentId: null, projectIds: ['0-e1'] }],
+      boards: {},
+      dismissals: {},
+    });
+    for (const d of [doc('ws-e2ea102', 'Workspace A', 0), doc('ws-e2ep102', 'Platform', 1), doc('ws-e2eq102', ' platform', 2)]) {
+      const r = await page.evaluate((x) => window.vermilian.createWorkspaceArticle(x), d);
+      expect(r.ok).toBe(true);
+    }
+    await page.reload();
+    page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+    const active = (await page.evaluate(() => window.vermilian.getActiveWorkspace())).workspaceId;
+    if (active !== 'ws-e2ea102') {
+      await tid(page, 'workspace-switcher').click();
+      await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Workspace A' }).click();
+    }
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getActiveWorkspace())).workspaceId).toBe('ws-e2ea102');
+    await tid(page, 'nav-runway').click();
+    await expect(tid(page, 'runway-view')).toBeVisible();
+
+    await stubOpenDialog(app, scratchFile('platform.md', ['## PLATFORM', '', '- [ ] READ-14 Sync read state', '- [ ] SYNC-7 Background sync worker', ''].join('\n')));
+    await tid(page, 'runway-import-markdown').click();
+    const group = tid(page, 'runway-markdown-import').locator('[data-testid="import-group"]').first();
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'ambiguous');
+    await expect(group.locator('[data-testid="import-group-choose"]')).toHaveText('Choose a workspace to check these tickets.');
+    await expect(group.locator('[data-testid="import-connection"]')).toHaveValue('');
+    await expect(group.locator('[data-testid="import-group-checking"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid="import-row"][data-kind="unchecked"]')).toHaveCount(2);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveCount(0);
+
+    await group.locator('[data-testid="import-connection"]').selectOption('ws-e2eq102');
+    await expect(group.locator('[data-testid="import-group-choose"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
     await tid(page, 'import-cancel').click();
   });
 });

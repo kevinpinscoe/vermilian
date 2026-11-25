@@ -4,22 +4,25 @@
 // References, and writes nothing. Cancel is the only action; Apply is
 // VERM-104, and correcting the grouping or ticking a Reference is VERM-103.
 //
-// Each group is checked on its own connection (runwayImportMatch, VERM-101):
-// an existing workspace's own, or for a proposed new or ambiguous one the
-// workspace chosen in Check tickets using, which rechecks that group only.
-// The latest choice wins, however the answers arrive. A group whose
-// connection fails keeps its outline with the tickets unchecked. The rules
-// are in importPreview.ts (unit-tested).
+// Nothing is mapped or checked until the workspace list has been read; a
+// failed read offers Retry. Each group is then checked on its own connection
+// (runwayImportMatch, VERM-101): an existing workspace's own, a proposed new
+// workspace's default (the active workspace's), or the workspace chosen in
+// Check tickets using, which rechecks that group only. An ambiguous heading
+// waits for that choice. The latest choice wins, however the answers arrive.
+// A group whose connection fails keeps its outline with the tickets
+// unchecked. The rules are in importPreview.ts (unit-tested).
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AttentionBox, Button, Modal, ModalBasicLayout, ModalContent, ModalHeader, Text } from '@vibe/core';
 import { parseRunwaySchedule, type ScheduleReferenceCue, type ScheduleReferenceReason } from '../../../shared/runwaySchedule';
 import {
   buildGroupPreview,
-  createGroupChecker,
-  proposeGroups,
+  createImportSession,
   type GroupCheck,
-  type GroupChecker,
+  type ImportSession,
+  type ImportSessionState,
+  type ImportWorkspaceList,
   type ImportWorkspaceOption,
   type PreviewReference,
   type PreviewRow,
@@ -32,7 +35,10 @@ export interface RunwayMarkdownImportProps {
   fileName: string;
   text: string;
   activeWorkspaceId: string;
-  workspaces: readonly ImportWorkspaceOption[];
+  /** The workspace list as read now; the first list read is the one used. */
+  workspaces: ImportWorkspaceList;
+  /** Reads the workspace list again after a failure. */
+  onRetryWorkspaces(): void;
   onClose(): void;
 }
 
@@ -48,27 +54,31 @@ const REASON: Record<ScheduleReferenceReason, string> = {
 
 const CUE: Record<ScheduleReferenceCue, string> = { see: 'after “see”', 'moved to': 'after “moved to”', 'replaced by': 'after “replaced by”' };
 
-export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, workspaces, onClose }: RunwayMarkdownImportProps) {
+export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, workspaces, onRetryWorkspaces, onClose }: RunwayMarkdownImportProps) {
   const parsed = useMemo(() => parseRunwaySchedule(text), [text]);
-  const groups = useMemo(() => proposeGroups(parsed, workspaces, activeWorkspaceId), [parsed, workspaces, activeWorkspaceId]);
-  const [connections, setConnections] = useState<Record<string, string>>(() => Object.fromEntries(groups.map((g) => [g.groupKey, g.connectionId])));
-  const [checks, setChecks] = useState<Record<string, GroupCheck>>({});
-  const checker = useRef<GroupChecker | null>(null);
+  const session = useRef<ImportSession | null>(null);
+  const [state, setState] = useState<ImportSessionState | null>(null);
 
   useEffect(() => {
-    const c = createGroupChecker(
-      (args) => window.vermilian.runwayImportMatch(args),
-      (groupKey, check) => setChecks((prev) => ({ ...prev, [groupKey]: check })),
-    );
-    checker.current = c;
-    for (const g of groups) c.check(g, g.connectionId);
-    return () => c.dispose();
-  }, [groups]);
+    const s = createImportSession(parsed, activeWorkspaceId, (args) => window.vermilian.runwayImportMatch(args), setState);
+    session.current = s;
+    setState(s.state());
+    return () => {
+      s.dispose();
+      session.current = null;
+    };
+  }, [parsed, activeWorkspaceId]);
 
-  function changeConnection(group: ProposedGroup, connectionId: string) {
-    setConnections((prev) => ({ ...prev, [group.groupKey]: connectionId }));
-    checker.current?.check(group, connectionId);
-  }
+  // The list is handed to the session as it is read; it keeps the first one.
+  // Declared after the session effect, so it runs once the session exists,
+  // and again for a new session.
+  useEffect(() => {
+    session.current?.setWorkspaces(workspaces);
+  }, [workspaces, parsed, activeWorkspaceId]);
+
+  const list = state?.workspaces ?? { state: 'loading' as const };
+  const groups = state?.groups ?? null;
+  const options = list.state === 'ready' ? list.workspaces : [];
 
   return (
     <Modal id="runway-markdown-import" data-testid="runway-markdown-import" show onClose={onClose} size="large">
@@ -80,20 +90,38 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
               Each <code>##</code> heading proposes a workspace. Scheduled tickets are numbered in file order; other ticket
               mentions are listed under References. Nothing has been written.
             </Text>
-            {groups.length === 0 && (
+            {list.state === 'loading' && (
+              <Text type="text2" className={styles.status} data-testid="import-workspaces-loading">
+                Reading your workspaces…
+              </Text>
+            )}
+            {list.state === 'failed' && (
+              <div className={styles.failure} data-testid="import-workspaces-error">
+                <AttentionBox
+                  className={modalLayout.attention}
+                  type="warning"
+                  title="Your workspaces could not be read"
+                  text={`${list.error} The headings cannot be matched to workspaces, and no tickets are checked, until they are.`}
+                />
+                <Button size="small" kind="tertiary" onClick={onRetryWorkspaces} data-testid="import-workspaces-retry">
+                  Retry
+                </Button>
+              </div>
+            )}
+            {groups && groups.length === 0 && (
               <Text type="text1" className={styles.empty} data-testid="import-empty">
                 This file has no headings, tickets or notes to import.
               </Text>
             )}
-            {groups.map((g) => (
+            {groups?.map((g) => (
               <GroupSection
                 key={g.groupKey}
                 group={g}
-                workspaces={workspaces}
-                connectionId={connections[g.groupKey] ?? g.connectionId}
-                check={checks[g.groupKey]}
-                onConnection={(id) => changeConnection(g, id)}
-                onRetry={() => checker.current?.check(g, connections[g.groupKey] ?? g.connectionId)}
+                workspaces={options}
+                connectionId={state?.connections[g.groupKey] ?? null}
+                check={state?.checks[g.groupKey]}
+                onConnection={(id) => session.current?.choose(g.groupKey, id)}
+                onRetry={() => session.current?.retry(g.groupKey)}
               />
             ))}
             <div className={styles.footer}>
@@ -111,7 +139,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
 interface GroupSectionProps {
   group: ProposedGroup;
   workspaces: readonly ImportWorkspaceOption[];
-  connectionId: string;
+  connectionId: string | null;
   check: GroupCheck | undefined;
   onConnection(id: string): void;
   onRetry(): void;
@@ -119,7 +147,7 @@ interface GroupSectionProps {
 
 function GroupSection({ group, workspaces, connectionId, check, onConnection, onRetry }: GroupSectionProps) {
   // Only the answer for the connection selected now is shown.
-  const current = check && check.connectionId === connectionId ? check : undefined;
+  const current = check && connectionId !== null && check.connectionId === connectionId ? check : undefined;
   const results = current?.state === 'done' && current.match.ok ? current.match.candidates : null;
   const preview = useMemo(() => buildGroupPreview(group.group, group.candidates, results), [group, results]);
   const failure =
@@ -128,7 +156,8 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
       : current?.state === 'done' && !current.match.ok
         ? { error: current.match.error, retryable: current.match.retryable }
         : null;
-  const checking = !current || current.state === 'pending';
+  const waiting = connectionId === null;
+  const checking = !waiting && (!current || current.state === 'pending');
   const title = group.name ?? 'Before the first heading';
 
   return (
@@ -144,7 +173,12 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
       {group.chooseConnection && (
         <label className={styles.connection}>
           <span>Check tickets using</span>
-          <select data-testid="import-connection" value={connectionId} onChange={(e) => onConnection(e.target.value)}>
+          <select data-testid="import-connection" value={connectionId ?? ''} onChange={(e) => e.target.value && onConnection(e.target.value)}>
+            {connectionId === null && (
+              <option value="" disabled>
+                Choose a workspace…
+              </option>
+            )}
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
@@ -152,6 +186,11 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
             ))}
           </select>
         </label>
+      )}
+      {group.candidates.length > 0 && waiting && (
+        <Text type="text2" className={styles.status} data-testid="import-group-choose">
+          Choose a workspace to check these tickets.
+        </Text>
       )}
       {group.candidates.length > 0 && checking && (
         <Text type="text2" className={styles.status} data-testid="import-group-checking">
@@ -198,6 +237,8 @@ function targetText(group: ProposedGroup): string {
       return `Active workspace: ${group.target.workspaceName}`;
     case 'new':
       return 'New workspace';
+    case 'unassigned':
+      return 'No active workspace';
     case 'ambiguous':
       return `Matches ${group.target.workspaceNames.length} workspaces (${group.target.workspaceNames.map((n) => n.trim()).join(', ')}); to be chosen before Apply`;
   }
