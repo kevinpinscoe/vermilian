@@ -997,6 +997,11 @@ export interface VermilianAPI {
   // this outside it rejects. Optional because it carries no production
   // behavior of its own.
   debugGetPostedComments?(): Promise<Array<{ issueId: string; text: string }>>;
+  // e2e-only (VERM-106): every process launch and desktop open/URL call the main process made —
+  // kind, program basename and a SHA-256 of the command, never its text — and how many ticket reads
+  // the fake accepted with the token VERMILIAN_E2E_YT_REQUIRE_TOKEN names.
+  debugGetProcessLaunches?(): Promise<Array<{ seq: number; kind: string; program: string; sha256: string }>>;
+  debugGetRequiredTokenReads?(): Promise<number>;
   // e2e-only (VERM-105): the fake YouTrack's keys whose reads fail with 404.
   debugSetUnreadableIssues?(keys: string[]): Promise<void>;
   // Per-workspace configuration articles (VERM-43). `base` is the document the

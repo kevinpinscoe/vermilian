@@ -1,3 +1,5 @@
+// e2e only, and first: wraps process launches before any module captures them (VERM-106).
+import './main/e2eProcessRecorder';
 import { writeFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { app, BrowserWindow } from 'electron';

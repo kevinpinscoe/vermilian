@@ -157,6 +157,13 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
   dailyReviewGet: (args: DailyReviewGetArgs) => ipcRenderer.invoke(IPC.dailyReviewGet, args),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
+  // VERM-106: only in an e2e build; a release package has neither method.
+  ...(__VERMILIAN_E2E_BUILD__
+    ? {
+        debugGetProcessLaunches: () => ipcRenderer.invoke('e2e:getProcessLaunches'),
+        debugGetRequiredTokenReads: () => ipcRenderer.invoke('e2e:getRequiredTokenReads'),
+      }
+    : {}),
   debugSetUnreadableIssues: (keys: string[]) => ipcRenderer.invoke('e2e:setUnreadableIssues', keys),
   listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
   readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),

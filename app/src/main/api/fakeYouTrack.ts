@@ -316,7 +316,23 @@ export function setUnreadableIssuesForTests(keys: readonly string[]): void {
   unreadable = new Set(keys.filter((k) => typeof k === 'string'));
 }
 
+// e2e only (VERM-106): VERMILIAN_E2E_YT_REQUIRE_TOKEN makes ticket reads accept
+// only that token — the one a workspace's shell-command credential returns —
+// and counts the reads accepted with it, so a test can prove the command's
+// token was what the tracker accepted. Any other token is a 401.
+const REQUIRED_TOKEN = process.env.VERMILIAN_E2E_YT_REQUIRE_TOKEN ?? '';
+let requiredTokenReads = 0;
+export function requiredTokenReadsForTests(): number {
+  return requiredTokenReads;
+}
+function checkToken(token: string): void {
+  if (!REQUIRED_TOKEN) return;
+  if (token !== REQUIRED_TOKEN) throw { status: 401, message: 'Unauthorized' };
+  requiredTokenReads++;
+}
+
 export async function getIssuesByIds(_url: string, _token: string, issueIds: readonly string[]): Promise<BoardIssue[]> {
+  checkToken(_token);
   // An old or unreadable key fails the batch, as an unknown one does; single reads follow.
   if (issueIds.some((id) => unreadable.has(id) || id in MOVED_KEYS)) throw { status: 400, message: "Can't parse search query, please check and update query syntax" };
   const found = issueIds.map((id) => issues.find((x) => x.idReadable === id || x.id === id));
@@ -325,6 +341,7 @@ export async function getIssuesByIds(_url: string, _token: string, issueIds: rea
 }
 
 export async function getBoardIssue(_url: string, _token: string, issueId: string): Promise<BoardIssue> {
+  checkToken(_token);
   if (unreadable.has(issueId)) throw { status: 404, message: `Entity with id ${issueId} not found` };
   const key = MOVED_KEYS[issueId] ?? issueId;
   const i = issues.find((x) => x.id === key || x.idReadable === key);
