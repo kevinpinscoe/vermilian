@@ -29,16 +29,35 @@ if [ "${TARGET%%-*}" = darwin ]; then ASAR="$OUT_DIR/Vermilian.app/Contents/Reso
 
 sha() { node -e "process.stdout.write(require('crypto').createHash('sha256').update(require('fs').readFileSync(process.argv[1])).digest('hex'))" "$1"; }
 
-if [ -f "$ASAR" ] && [ "$(sha "$ASAR")" = "$PINNED_ASAR_SHA256" ]; then
-  echo "REFUSED: $ASAR is the pinned acceptance build. Packaging here would overwrite it." >&2
-  echo "Run the e2e suite in a separate worktree (e.g. ai-wt/<ISSUE>/app) instead." >&2
-  exit 3
+# An existing build's checksum is read in its own checked command, before
+# Forge runs: if it cannot be read, nothing is packaged and the file is left
+# as it is, since it could be the pinned build.
+if [ -f "$ASAR" ]; then
+  if ! CURRENT="$(sha "$ASAR")" || [ -z "$CURRENT" ]; then
+    echo "REFUSED: could not read the checksum of $ASAR, so it may be the pinned acceptance build. Nothing was packaged." >&2
+    exit 4
+  fi
+  if [ "$CURRENT" = "$PINNED_ASAR_SHA256" ]; then
+    echo "REFUSED: $ASAR is the pinned acceptance build. Packaging here would overwrite it." >&2
+    echo "Run the e2e suite in a separate worktree (e.g. ai-wt/<ISSUE>/app) instead." >&2
+    exit 3
+  fi
 fi
+
+# The new build's checksum, checked before success is reported.
+built() {
+  local hash
+  if ! hash="$(sha "$ASAR")" || [ -z "$hash" ]; then
+    echo "FAILED: could not read the checksum of the new build $ASAR." >&2
+    exit 5
+  fi
+  echo "$1: $ASAR ($hash)"
+}
 
 if [ "${1:-}" = --release ]; then
   env -u VERMILIAN_E2E_BUILD pnpm exec electron-forge package
-  echo "Release build: $ASAR ($(sha "$ASAR"))"
+  built "Release build"
 else
   VERMILIAN_E2E_BUILD=1 pnpm exec electron-forge package
-  echo "E2e build: $ASAR ($(sha "$ASAR"))"
+  built "E2e build"
 fi
