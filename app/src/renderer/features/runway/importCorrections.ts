@@ -11,8 +11,9 @@
 //               read-only. A collision is only reported (nameCollisions); Map
 //               to workspace or Merge into is the user's explicit choice.
 //   map         to an existing workspace (checked on its own connection) or
-//               back to New workspace (the active workspace's connection by
-//               default). The unnamed group has no New workspace.
+//               to New workspace (the active workspace's connection by
+//               default). The unnamed group can become a new workspace too,
+//               named with rename.
 //   connection  Check tickets using, for a new or ambiguous workspace.
 //   merge       the source's rows go to the end of the target, its heading
 //               kept as a section at the join; the target keeps its workspace
@@ -28,8 +29,11 @@
 //
 // The session checks only what a correction affected: each group's lookup is
 // keyed by its connection and the exact candidates sent, so rename, skip and
-// ticking send nothing, and a merge, split, mapping or connection change
-// rechecks the groups whose key changed. A skipped group's lookup in flight is
+// ticking send nothing, and a merge or split rechecks the groups whose key
+// changed. A change of a group's connection — Check tickets using, a mapping,
+// or an undo or reset that changes it — always reads again, even for a
+// connection answered before, so access lost since then is seen; until that
+// read answers, nothing in the group is numbered. A skipped group's lookup in flight is
 // dropped, so it cannot fill the group with a stale answer later.
 
 import type { ParsedSchedule } from '../../../shared/runwaySchedule';
@@ -98,7 +102,8 @@ export function workingGroups(parsed: ParsedSchedule, ctx: CorrectionContext): W
 /** The name shown for a group: an existing workspace's own name, or the proposed one. */
 export function displayName(g: WorkingGroup): string {
   if (g.target.kind === 'existing' || g.target.kind === 'active') return g.target.workspaceName.trim();
-  return g.name?.trim() ?? 'Before the first heading';
+  if (g.name !== null) return g.name.trim();
+  return g.target.kind === 'new' ? 'Unnamed new workspace' : 'Before the first heading';
 }
 
 /** Why a proposed name is refused; null when it is acceptable. */
@@ -146,7 +151,7 @@ export function applyCorrection(groups: readonly WorkingGroup[], c: Correction, 
       const g = groups[i];
       if (!g) return null;
       if (c.workspaceId === null) {
-        if (g.name === null || g.target.kind === 'new') return null;
+        if (g.target.kind === 'new') return null;
         const active = workspace(ctx.activeId);
         return replace(i, { ...g, target: { kind: 'new' }, chooseConnection: true, connectionId: active?.id ?? null });
       }
@@ -357,7 +362,20 @@ export function createImportSession(parsed: ParsedSchedule, activeId: string, ma
   };
 
   const recompute = () => {
+    const previous = new Map((groups ?? []).map((g) => [g.groupKey, g.connectionId]));
     groups = base ? applyCorrections(base, corrections, ctx) : null;
+    // A changed connection reads again: drop any earlier answer, or lookup in flight, for it.
+    for (const g of groups ?? []) {
+      if (!previous.has(g.groupKey) || previous.get(g.groupKey) === g.connectionId) continue;
+      const key = lookupKey(g);
+      if (key === null) continue;
+      const flying = inFlight.get(g.groupKey);
+      if (flying) {
+        inFlight.delete(g.groupKey);
+        if (results.get(flying.key)?.state === 'pending') results.delete(flying.key);
+      }
+      results.delete(key);
+    }
     sync();
     publish();
   };

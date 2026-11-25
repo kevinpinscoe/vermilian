@@ -269,7 +269,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry }: Grou
                 Choose a workspace…
               </option>
             )}
-            {group.name !== null && <option value={NEW}>New workspace</option>}
+            <option value={NEW}>New workspace</option>
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
                 {labels.get(w.id) ?? w.name}
@@ -327,6 +327,11 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry }: Grou
         </Button>
       </div>
 
+      {group.target.kind === 'new' && group.name === null && renaming === null && (
+        <Text type="text2" className={styles.status} data-testid="import-needs-name">
+          This new workspace needs a name: choose Rename…
+        </Text>
+      )}
       {(collisions.workspaces.length > 0 || collisions.groups.length > 0) && (
         <div className={styles.collision} data-testid="import-name-collision">
           <Text type="text2">This name is already used.</Text>

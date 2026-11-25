@@ -353,4 +353,31 @@ test.describe('Runway: Markdown import preview', () => {
     await expect(dialog).toHaveCount(0);
     expect(await baseline(page, userDataDir)).toEqual(before);
   });
+
+  test('a headingless file: its tickets can be made a new workspace and named', async () => {
+    const userDataDir = freshUserDataDir();
+    app = await launchAppWithUserDataDir(userDataDir, RUNWAY_ENV);
+    const { page, workspaceId } = await openRunway(app);
+    const before = await baseline(page, userDataDir);
+    await stubOpenDialog(app, scratchFile('list.md', ['- [ ] READ-12 Cache articles locally', '- [ ] READ-14 Sync read state', ''].join('\n')));
+    await tid(page, 'runway-import-markdown').click();
+    const group = tid(page, 'runway-markdown-import').locator('[data-testid="import-group"]').first();
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'active');
+    await expect(group.locator('[data-testid="import-workspace"]')).toHaveValue(workspaceId);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
+
+    await group.locator('[data-testid="import-workspace"]').selectOption({ label: 'New workspace' });
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'new');
+    await expect(group.locator('[data-testid="import-group-name"]')).toHaveText('Unnamed new workspace');
+    await expect(group.locator('[data-testid="import-needs-name"]')).toBeVisible();
+    await group.locator('[data-testid="import-rename"]').click();
+    await group.locator('[data-testid="import-rename-input"]').fill('Reader backlog');
+    await group.locator('[data-testid="import-rename-save"]').click();
+    await expect(group.locator('[data-testid="import-group-name"]')).toHaveText('Reader backlog');
+    await expect(group.locator('[data-testid="import-needs-name"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
+
+    await tid(page, 'import-cancel').click();
+    expect(await baseline(page, userDataDir)).toEqual(before);
+  });
 });

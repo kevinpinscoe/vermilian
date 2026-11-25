@@ -69,7 +69,7 @@ function deferred<T>() {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 /** A session whose lookups answer at once (or are held when `hold` is set). */
-function open(md: string, activeId = 'ws-active', opts: { hold?: boolean } = {}) {
+function open(md: string, activeId = 'ws-active', opts: { hold?: boolean; match?: (args: RunwayImportMatchArgs) => RunwayImportMatchResult } = {}) {
   const calls: { groupKey: string; workspaceId: string; texts: string[] }[] = [];
   const held: { args: RunwayImportMatchArgs; d: ReturnType<typeof deferred<RunwayImportMatchResult>> }[] = [];
   const session = createImportSession(
@@ -82,7 +82,7 @@ function open(md: string, activeId = 'ws-active', opts: { hold?: boolean } = {})
         held.push({ args, d });
         return d.promise;
       }
-      return Promise.resolve(fakeMatch(args));
+      return Promise.resolve((opts.match ?? fakeMatch)(args));
     },
     () => undefined,
   );
@@ -174,7 +174,8 @@ describe('map', () => {
     session.apply({ op: 'map', groupKey: 'g1', workspaceId: null });
     expect(group(session, 'g1')).toMatchObject({ target: { kind: 'new' }, chooseConnection: true, connectionId: 'ws-active' });
     await flush();
-    expect(calls.length).toBe(1); // the active connection's answer is still known
+    // A connection change always reads again, even for a connection answered before.
+    expect(calls.map((c) => `${c.groupKey}@${c.workspaceId}`)).toEqual(['g1@ws-reader', 'g1@ws-active']);
   });
 
   it('an ambiguous heading waits; mapping it to one of the matches checks it there', async () => {
@@ -185,11 +186,23 @@ describe('map', () => {
     expect(calls.map((c) => c.workspaceId)).toEqual(['ws-p2']);
   });
 
-  it('the unnamed group can be mapped to another workspace but has no New workspace', () => {
+  it('the unnamed group can be mapped to another workspace, or made a new workspace and named', async () => {
     const { session } = open('- READ-1\n\n## Reader\n- READ-2');
     expect(group(session, 'g0').target.kind).toBe('active');
-    expect(session.apply({ op: 'map', groupKey: 'g0', workspaceId: null })).toBe(false);
     expect(session.apply({ op: 'map', groupKey: 'g0', workspaceId: 'ws-reader' })).toBe(true);
+    expect(session.apply({ op: 'map', groupKey: 'g0', workspaceId: null })).toBe(true);
+    expect(group(session, 'g0')).toMatchObject({ name: null, target: { kind: 'new' }, chooseConnection: true, connectionId: 'ws-active' });
+  });
+
+  it('a headingless file: its tickets can become a new, named workspace', async () => {
+    const { session } = open('- READ-1 One\n- READ-2 Two\n');
+    await flush();
+    expect(groups(session).map((g) => [g.name, g.target.kind])).toEqual([[null, 'active']]);
+    expect(session.apply({ op: 'map', groupKey: 'g0', workspaceId: null })).toBe(true);
+    expect(session.apply({ op: 'rename', groupKey: 'g0', name: 'Reader backlog' })).toBe(true);
+    await flush();
+    expect(group(session, 'g0')).toMatchObject({ name: 'Reader backlog', target: { kind: 'new' } });
+    expect(outline(preview(session, 'g0').rows)).toEqual(['L1 #1 READ-1', 'L2 #2 READ-2']);
   });
 });
 
@@ -376,6 +389,96 @@ describe('tick and untick', () => {
     session.apply({ op: 'merge', source: 'g0>4', target: 'g1' });
     await flush();
     expect(outline(preview(session, 'g1').rows)).toContain('L7 #4 READ-9 (ticked)');
+  });
+});
+
+describe('connection changes always read again (PR 231 review)', () => {
+  /** A fake whose answers per workspace can change between calls. */
+  function changing() {
+    const denied = new Set<string>(); // `${workspaceId} ${key}` answering 403
+    const gone = new Set<string>(); // `${workspaceId} ${key}` answering 404
+    const match = (args: RunwayImportMatchArgs): RunwayImportMatchResult => {
+      const base = fakeMatch(args);
+      if (!base.ok) return base;
+      return {
+        ok: true,
+        groups: base.groups.map((g) =>
+          !g.ok
+            ? g
+            : {
+                ...g,
+                candidates: g.candidates.map((c): RunwayImportCandidateMatch => {
+                  const k = `${g.workspaceId} ${keyOf(c.text)}`;
+                  if (denied.has(k)) return { text: c.text, line: c.line, role: c.role, reason: c.reason, status: 'unmatched', code: 'not-readable', message: 'Ticket not readable with this workspace’s credential.' };
+                  if (gone.has(k)) return { text: c.text, line: c.line, role: c.role, reason: c.reason, status: 'unmatched', code: 'missing-or-unreadable', message: 'Ticket missing or not readable.' };
+                  return c;
+                }),
+              },
+        ),
+      };
+    };
+    return { denied, gone, match };
+  }
+  const FILE2 = ['## New one', '- READ-1', '', 'See READ-8.'].join('\n');
+
+  it('A → B → A reads A again: a ticked Reference A can no longer read stays unnumbered', async () => {
+    const f = changing();
+    const { session, calls } = open(FILE2, 'ws-active', { match: f.match });
+    await flush();
+    session.apply({ op: 'tick', groupKey: 'g0', refId: refId(session, 'g0', 'READ-8'), ticked: true });
+    expect(outline(preview(session, 'g0').rows)).toContain('L4 #2 READ-8 (ticked)');
+
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-reader' });
+    await flush();
+    f.denied.add('ws-active READ-8'); // A loses access while B is selected
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-active' });
+    // Unnumbered while A is read again.
+    expect(preview(session, 'g0').scheduledCount).toBe(0);
+    await flush();
+    expect(calls.map((c) => c.workspaceId)).toEqual(['ws-active', 'ws-reader', 'ws-active']);
+    expect(outline(preview(session, 'g0').rows)).toEqual(['L2 #1 READ-1', 'L4 note See READ-8.']);
+    expect(preview(session, 'g0').references).toMatchObject([{ text: 'READ-8', status: 'unmatched', code: 'not-readable', ticked: true, scheduledAs: null }]);
+  });
+
+  it('an existing tick can be cleared while unmatched, pending or failed; unticking sends nothing and stays cleared on A', async () => {
+    const f = changing();
+    f.gone.add('ws-reader READ-8');
+    const { session, calls } = open(FILE2, 'ws-active', { match: f.match });
+    await flush();
+    const id = refId(session, 'g0', 'READ-8');
+    session.apply({ op: 'tick', groupKey: 'g0', refId: id, ticked: true });
+
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-reader' });
+    // Pending: still ticked, and the tick can be cleared.
+    expect(preview(session, 'g0').references).toMatchObject([{ status: 'unchecked', ticked: true, tickable: true }]);
+    await flush();
+    expect(preview(session, 'g0').references).toMatchObject([{ status: 'unmatched', ticked: true, tickable: true }]);
+
+    const before = calls.length;
+    expect(session.apply({ op: 'tick', groupKey: 'g0', refId: id, ticked: false })).toBe(true);
+    expect(calls.length).toBe(before);
+    expect(preview(session, 'g0').references).toMatchObject([{ ticked: false, tickable: false }]);
+
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-active' });
+    await flush();
+    expect(preview(session, 'g0').references).toMatchObject([{ status: 'matched', ticked: false, tickable: true, scheduledAs: null }]);
+    expect(outline(preview(session, 'g0').rows)).toEqual(['L2 #1 READ-1', 'L4 note See READ-8.']);
+  });
+
+  it('a failed read leaves an existing tick clearable', async () => {
+    let fail = false;
+    const { session } = open(FILE2, 'ws-active', {
+      match: (args) => (fail ? { ok: false, code: 'workspace-unavailable', error: 'The workspace configuration could not be read' } : fakeMatch(args)),
+    });
+    await flush();
+    const id = refId(session, 'g0', 'READ-8');
+    session.apply({ op: 'tick', groupKey: 'g0', refId: id, ticked: true });
+    fail = true;
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-reader' });
+    await flush();
+    expect(session.state().checks.g0).toMatchObject({ state: 'failed' });
+    expect(preview(session, 'g0').references).toMatchObject([{ ticked: true, tickable: true }]);
+    expect(session.apply({ op: 'tick', groupKey: 'g0', refId: id, ticked: false })).toBe(true);
   });
 });
 

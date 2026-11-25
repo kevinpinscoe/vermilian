@@ -344,7 +344,8 @@ export function buildWorkingPreview(segments: readonly Segment[], results: reado
       ticked: isTicked,
       scheduledAs: null,
       alreadyAs: null,
-      tickable: false,
+      // An existing tick can always be cleared, whatever its lookup says.
+      tickable: isTicked,
     };
     const r = usable?.[i];
     if (!r) listed.push({ rank: i, ref: { ...base, status: 'unchecked' } });
