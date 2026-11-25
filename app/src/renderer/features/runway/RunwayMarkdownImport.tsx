@@ -63,6 +63,7 @@ import {
   canApply,
   destinationOf,
   groupAppend,
+  runwayNumbers,
   type ApplyBlocker,
   type DestinationView,
 } from './importApply';
@@ -283,6 +284,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 problems={problems[g.groupKey] ?? []}
                 append={destinationOf(g) ? (groupAppend(g, state?.checks[g.groupKey], destinationViews) ?? null) : null}
                 nothingNew={!g.skipped && Boolean(state) && addsNothing(g, state?.checks[g.groupKey], destinationViews)}
+                runwayNumberOf={runwayNumbers(g, state?.checks[g.groupKey], destinationViews)}
                 onRetryRunway={() => {
                   const d = destinationOf(g);
                   if (d && !applyingRef.current) retryIdentity(d);
@@ -353,6 +355,8 @@ interface GroupSectionProps {
   append: { previewIndex: number[]; plan: RunwayAppendPlan } | null;
   /** Every row is already on the destination's Runway. */
   nothingNew: boolean;
+  /** An existing destination's Runway # for each preview ticket number (runwayNumbers); null for a new workspace. */
+  runwayNumberOf: ((previewNumber: number) => number | null) | null;
   /** Reads the destination's Runway and saved tickets again. */
   onRetryRunway(): void;
 }
@@ -360,10 +364,20 @@ interface GroupSectionProps {
 /** Blockers already shown another way (the choose and checking lines). */
 const SHOWN_ELSEWHERE: readonly ApplyBlocker[] = ['waiting', 'checking'];
 
-function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen, blockers, problems, append, nothingNew, onRetryRunway }: GroupSectionProps) {
+function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen, blockers, problems, append, nothingNew, runwayNumberOf, onRetryRunway }: GroupSectionProps) {
+  const numberOf: NumberOf = useMemo(
+    () =>
+      runwayNumberOf
+        ? (n) => {
+            const r = runwayNumberOf(n);
+            return r === null ? '#?' : `#${r}`;
+          }
+        : plainNumber,
+    [runwayNumberOf],
+  );
   // Each preview row's place on the destination's Runway: already there, or added at the end.
   const placement = useMemo(() => {
-    const m = new Map<number, { present: boolean; runwayNumber: number | null }>();
+    const m = new Map<number, { present: boolean; runwayNumber: number | null; uncertain?: true }>();
     append?.previewIndex.forEach((p, i) => m.set(p, append.plan.rows[i]));
     return m;
   }, [append]);
@@ -566,7 +580,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen
             {b === 'unable-to-verify' && append && append.plan.unverified.length > 0 ? ` Not readable: ${append.plan.unverified.join(', ')}.` : ''}
           </Text>
         ))}
-      {(blockers.includes('identity-failed') || blockers.includes('runway-failed')) && (
+      {(blockers.includes('identity-failed') || blockers.includes('runway-failed') || blockers.includes('unable-to-verify')) && (
         <Button size="small" kind="tertiary" onClick={onRetryRunway} data-testid="import-runway-retry">
           Retry
         </Button>
@@ -604,6 +618,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen
             key={`${row.line}-${row.kind}-${row.kind === 'ticket' ? (row.refId ?? '') : ''}`}
             row={row}
             placement={append ? (placement.get(i) ?? null) : null}
+            numberOf={numberOf}
             onSplit={(segment, line) => apply({ op: 'split', groupKey: key, segment, line })}
           />
         ))}
@@ -633,6 +648,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen
               <ReferenceItem
                 key={r.id ?? `dup-${r.line}-${i}`}
                 reference={r}
+                numberOf={numberOf}
                 onTick={(ticked) => r.id && apply({ op: 'tick', groupKey: key, refId: r.id, ticked })}
               />
             ))}
@@ -664,11 +680,18 @@ function checkboxText(box: string | null): string | null {
   return box === ' ' ? '[ ]' : `[${box}]`;
 }
 
-type Placement = { present: boolean; runwayNumber: number | null } | null;
+type Placement = { present: boolean; runwayNumber: number | null; uncertain?: true } | null;
 
 /** Where a row lands on an existing destination's Runway (VERM-105). */
 function PlacementTag({ placement }: { placement: Placement }) {
   if (!placement) return null;
+  if (placement.uncertain) {
+    return (
+      <span className={styles.tagWarn} data-testid="import-row-placement" data-state="uncertain">
+        Unable to verify
+      </span>
+    );
+  }
   return (
     <span className={placement.present ? styles.tag : styles.tagNew} data-testid="import-row-placement" data-state={placement.present ? 'present' : 'new'}>
       {placement.present ? 'Already on the Runway' : 'Added at the end'}
@@ -676,14 +699,14 @@ function PlacementTag({ placement }: { placement: Placement }) {
   );
 }
 
-function RowItem({ row, placement, onSplit }: { row: PreviewRow; placement: Placement; onSplit(segment: number, line: number): void }) {
+function RowItem({ row, placement, numberOf, onSplit }: { row: PreviewRow; placement: Placement; numberOf: NumberOf; onSplit(segment: number, line: number): void }) {
   const common = { 'data-testid': 'import-row', 'data-kind': row.kind, 'data-line': row.line } as const;
   switch (row.kind) {
     case 'ticket':
       return (
         <li {...common} className={styles.ticket} data-key={row.key} data-ticked={row.refId ? 'true' : undefined}>
           <span className={styles.number} data-testid="import-row-number">
-            #{placement?.runwayNumber ?? row.number}
+            {numberOf(row.number)}
           </span>
           <PlacementTag placement={placement} />
           {row.checkbox !== null && <span className={styles.box}>{checkboxText(row.checkbox)}</span>}
@@ -723,7 +746,7 @@ function RowItem({ row, placement, onSplit }: { row: PreviewRow; placement: Plac
             {row.text}
             {row.titleHint ? ` ${row.titleHint}` : ''}
           </span>
-          <span className={styles.tag}>Already scheduled{row.ofNumber !== null ? ` as #${row.ofNumber}` : ''}</span>
+          <span className={styles.tag} data-testid="import-row-already">Already scheduled{row.ofNumber !== null ? ` as ${numberOf(row.ofNumber)}` : ''}</span>
           <PlacementTag placement={placement} />
         </li>
       );
@@ -750,7 +773,11 @@ function RowItem({ row, placement, onSplit }: { row: PreviewRow; placement: Plac
   }
 }
 
-function ReferenceItem({ reference: r, onTick }: { reference: PreviewReference; onTick(ticked: boolean): void }) {
+/** How a preview ticket number is shown: its Runway # on an existing destination, `?` while withheld (VERM-105). */
+type NumberOf = (previewNumber: number) => string;
+const plainNumber: NumberOf = (n) => `#${n}`;
+
+function ReferenceItem({ reference: r, numberOf, onTick }: { reference: PreviewReference; numberOf: NumberOf; onTick(ticked: boolean): void }) {
   const why = `${REASON[r.reason]}${r.cue ? `, ${CUE[r.cue]}` : ''}`;
   let result: string;
   switch (r.status) {
@@ -760,16 +787,16 @@ function ReferenceItem({ reference: r, onTick }: { reference: PreviewReference; 
     case 'matched':
       result =
         r.scheduledAs !== null
-          ? `Scheduled as #${r.scheduledAs}: ${r.key} — ${r.summary}`
+          ? `Scheduled as ${numberOf(r.scheduledAs)}: ${r.key} — ${r.summary}`
           : r.alreadyAs !== null
-            ? `Already scheduled as #${r.alreadyAs}: ${r.key}`
+            ? `Already scheduled as ${numberOf(r.alreadyAs)}: ${r.key}`
             : `${r.key} — ${r.summary}`;
       break;
     case 'unmatched':
       result = `Unmatched: ${r.message}`;
       break;
     case 'duplicate':
-      result = r.ofNumber !== null ? `Already scheduled as #${r.ofNumber}` : 'Already scheduled';
+      result = r.ofNumber !== null ? `Already scheduled as ${numberOf(r.ofNumber)}` : 'Already scheduled';
       break;
   }
   return (

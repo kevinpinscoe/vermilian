@@ -305,14 +305,29 @@ export async function searchIssues(
 
 // Runway tickets by ID (VERM-84). Like the real server, one unknown ID fails
 // the whole batch query with 400.
+// e2e-only (VERM-105): VERMILIAN_E2E_YT_MOVED_KEYS maps an old key to the key
+// its issue has now ({"READ-101":"READ-12"}): a single read of the old key
+// answers with the moved issue, as YouTrack does. VERMILIAN_E2E_YT_UNREADABLE
+// lists keys whose reads fail with 404 until setUnreadableIssuesForTests
+// changes the list.
+const MOVED_KEYS: Record<string, string> = process.env.VERMILIAN_E2E_YT_MOVED_KEYS ? (JSON.parse(process.env.VERMILIAN_E2E_YT_MOVED_KEYS) as Record<string, string>) : {};
+let unreadable = new Set((process.env.VERMILIAN_E2E_YT_UNREADABLE ?? '').split(',').filter(Boolean));
+export function setUnreadableIssuesForTests(keys: readonly string[]): void {
+  unreadable = new Set(keys.filter((k) => typeof k === 'string'));
+}
+
 export async function getIssuesByIds(_url: string, _token: string, issueIds: readonly string[]): Promise<BoardIssue[]> {
+  // An old or unreadable key fails the batch, as an unknown one does; single reads follow.
+  if (issueIds.some((id) => unreadable.has(id) || id in MOVED_KEYS)) throw { status: 400, message: "Can't parse search query, please check and update query syntax" };
   const found = issueIds.map((id) => issues.find((x) => x.idReadable === id || x.id === id));
   if (found.some((i) => !i)) throw { status: 400, message: "Can't parse search query, please check and update query syntax" };
   return (found as FakeIssue[]).map(toBoardIssue);
 }
 
 export async function getBoardIssue(_url: string, _token: string, issueId: string): Promise<BoardIssue> {
-  const i = issues.find((x) => x.id === issueId || x.idReadable === issueId);
+  if (unreadable.has(issueId)) throw { status: 404, message: `Entity with id ${issueId} not found` };
+  const key = MOVED_KEYS[issueId] ?? issueId;
+  const i = issues.find((x) => x.id === key || x.idReadable === key);
   if (!i) throw { status: 404, message: `Entity with id ${issueId} not found` };
   return toBoardIssue(i);
 }

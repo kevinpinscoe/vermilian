@@ -563,6 +563,21 @@ describe('a repeat import into a Runway that has rows (VERM-105)', () => {
     expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'connection-changed' }] });
   });
 
+  it('imported rows are counted apart from the rows compared: a Runway of 20,000 notes plus a new workspace is valid in either order', () => {
+    const big: RunwayImportApplyGroup = {
+      groupKey: 'gA',
+      target: { kind: 'existing', workspaceId: 'ws-b' },
+      connectionKey: 'youtrack https://yt.example.test youtrack-1',
+      rows: [note('One more', 1)],
+      destination: { rows: Array.from({ length: 20000 }, (_, i) => ({ itemId: `note:n${i}`, kind: 'note' as const, text: `Note ${i}`, depth: 0 })), append: [0] },
+    };
+    const small: RunwayImportApplyGroup = { ...NEW_GROUP, groupKey: 'gB', rows: [note('Fresh', 1)] };
+    for (const groups of [[big, small], [small, big]]) {
+      const r = validateApplyArgs({ groups });
+      expect(typeof r === 'string' ? r : r.groups.map((g) => g.groupKey).sort()).toEqual(['gA', 'gB']);
+    }
+  });
+
   it('an existing destination without the rows the preview compared is refused as invalid', () => {
     expect(validateApplyArgs({ groups: [{ ...EXISTING_GROUP, destination: undefined }] })).toMatch(/existing destination needs/);
     expect(validateApplyArgs({ groups: [{ ...EXISTING_GROUP, destination: { rows: [], append: [1] } }] })).toMatch(/rows of the group/);

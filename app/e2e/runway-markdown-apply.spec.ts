@@ -350,18 +350,33 @@ test.describe('Runway: a repeat import into a Runway that has rows (VERM-105)', 
     const before = await rowsOf(page, id);
     expect(before[1]).toBe('issue #1 yt:READ-20');
 
-    const dialog = await openImport(app, page, 'again.md', EXAMPLE + '- [ ] PLAT-40 - Platform prerequisite\n');
+    // READ-20 is mentioned twice more: a second scheduled line and a reference in prose.
+    const again = EXAMPLE + '- [ ] PLAT-40 - Platform prerequisite\n- [ ] READ-20 - Offline indicator, second mention\n\nSee READ-20 for the indicator.\n';
+    const dialog = await openImport(app, page, 'again.md', again);
     // Existing tickets show their Runway #; the new key is offered at the end as #6.
     await expect(dialog.locator('[data-testid="import-row-number"]')).toHaveText(['#2', '#3', '#4', '#5', '#1', '#6']);
-    await expect(dialog.locator('[data-testid="import-row-placement"][data-state="new"]')).toHaveCount(1);
     await expect(dialog.locator('[data-testid="import-row"][data-key="PLAT-40"] [data-testid="import-row-placement"]')).toHaveAttribute('data-state', 'new');
+    // Every label naming READ-20 by number says #1, its Runway #, not its place in the file (#5).
+    await expect(dialog.locator('[data-testid="import-row-already"]')).toHaveText(['Already scheduled as #1']);
+    const refs = dialog.locator('[data-testid="import-reference"][data-text="READ-20"]');
+    await expect(refs).toHaveCount(2);
+    for (const r of await refs.all()) await expect(r).toContainText('Already scheduled as #1');
+    // What will be appended, in preview order: PLAT-40, then the second mention and the prose as notes.
+    const added = await dialog.locator('[data-testid="import-row"]:has([data-testid="import-row-placement"][data-state="new"])').evaluateAll((els) =>
+      els.map((e) => `${e.getAttribute('data-kind')} L${e.getAttribute('data-line')}`),
+    );
+    expect(added).toHaveLength(3);
     await expect(tid(page, 'import-apply')).toBeEnabled();
     await tid(page, 'import-apply').click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
     const after = await rowsOf(page, id);
     expect(after.slice(0, before.length)).toEqual(before);
-    expect(after.slice(before.length)).toEqual(['issue #6 yt:PLAT-40']);
+    const appended = after.slice(before.length);
+    expect(appended).toHaveLength(added.length);
+    expect(appended[0]).toBe('issue #6 yt:PLAT-40');
+    expect(appended[1]).toMatch(/^note READ-20 .*second mention/);
+    expect(appended[2]).toBe('note See READ-20 for the indicator.');
     expect(after[1]).toBe('issue #1 yt:READ-20');
   });
 
@@ -406,6 +421,42 @@ test.describe('Runway: a repeat import into a Runway that has rows (VERM-105)', 
     await expect(tid(page, 'import-apply')).toBeDisabled();
     await tid(page, 'import-cancel').click();
     expect(await rowsOf(page, id)).toEqual(first);
+  });
+
+  test('a saved key that cannot be read: Unable to verify with no number and no Not in this file; Retry shows its Runway # once it reads', async () => {
+    // yt:READ-101 is READ-12's old key; its reads fail with 404 until the test clears that.
+    app = await launchAppWithUserDataDir(freshUserDataDir(), {
+      ...RUNWAY_ENV,
+      VERMILIAN_E2E_YT_MOVED_KEYS: JSON.stringify({ 'READ-101': 'READ-12' }),
+      VERMILIAN_E2E_YT_UNREADABLE: 'READ-101',
+    });
+    const page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+    const activeId = (await page.evaluate(() => window.vermilian.getActiveWorkspace())).workspaceId;
+    await tid(page, 'nav-runway').click();
+    const added = await page.evaluate((w) => window.vermilian.runwayItemsAddIssue({ workspaceId: w, issueId: 'yt:READ-101' }), activeId);
+    expect(added.ok, JSON.stringify(added)).toBe(true);
+    const before = await rowsOf(page, activeId);
+
+    // Content before any heading maps to the active workspace; the file names READ-12.
+    const dialog = await openImport(app, page, 'moved.md', '- READ-12 Cache articles locally\n');
+    const group = dialog.locator('[data-testid="import-group"]').first();
+    await expect(group.locator('[data-testid="import-group-blocker"][data-reason="unable-to-verify"]')).toContainText('READ-101');
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#?']);
+    await expect(group.locator('[data-testid="import-row-placement"]')).toHaveAttribute('data-state', 'uncertain');
+    await expect(group.locator('[data-testid="import-not-in-file"]')).toHaveCount(0);
+    await expect(tid(page, 'import-apply')).toBeDisabled();
+
+    // The old key reads again: Retry shows READ-12 as the ticket already at #1.
+    await page.evaluate(() => window.vermilian.debugSetUnreadableIssues?.([]));
+    await group.locator('[data-testid="import-runway-retry"]').click();
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1']);
+    await expect(group.locator('[data-testid="import-row-placement"]')).toHaveAttribute('data-state', 'present');
+    await expect(group.locator('[data-testid="import-group-blocker"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid="import-group-nothing-new"]')).toBeVisible();
+    await expect(tid(page, 'import-apply')).toBeDisabled();
+    await tid(page, 'import-cancel').click();
+    expect(await rowsOf(page, activeId)).toEqual(before);
   });
 
   test('a note edited in place between Preview and Apply sends the group back; the edit is kept and nothing is added', async () => {

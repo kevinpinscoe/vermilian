@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseRunwaySchedule } from '../../../shared/runwaySchedule';
 import type { RunwayImportCandidateMatch, RunwayImportMatchArgs, RunwayImportMatchResult } from '../../../shared/runwayImport';
 import { createImportSession, type ImportSession } from './importCorrections';
-import { addsNothing, appliedSummary, applyBlockers, applyPlan, canApply, groupAppend, type DestinationView } from './importApply';
+import { addsNothing, appliedSummary, applyBlockers, applyPlan, canApply, groupAppend, runwayNumbers, type DestinationView } from './importApply';
+import { groupPreview } from './importCorrections';
 import type { RunwayDestinationRow, RunwaySavedIdentity } from '../../../shared/runwayImportAppend';
 import type { ImportWorkspaceOption } from './importPreview';
 
@@ -269,6 +270,32 @@ describe('a repeat import into a Runway that has rows (VERM-105)', () => {
     const dest = { 'ws-reader': ready([dIssue('yt:READ-12'), dIssue('yt:READ-101')], { 'yt:READ-101': { itemId: 'yt:READ-101', state: 'unverified', key: 'READ-101', reason: 'not readable' } }) };
     expect(applyBlockers(groups, checks, WS, dest).g0).toEqual(['unable-to-verify']);
     expect(groupAppend(groups[0], checks.g0, dest)?.plan.unverified).toEqual(['READ-101']);
+  });
+
+  it('every label uses the ticket’s actual Runway #: READ-20 already #1 shows #1 on its row, its duplicate and its reference', async () => {
+    const s = open('## Reader App\n- READ-12\n- READ-14\n- READ-20\n- READ-20 again\n\nSee READ-20.');
+    await flush();
+    const { groups, checks } = st(s);
+    const check = checks.g0;
+    const preview = groupPreview(groups[0], check?.state === 'done' && check.match.ok ? check.match.candidates : null);
+    const dup = preview.rows.find((r) => r.kind === 'duplicate');
+    const ref = preview.references.find((r) => r.status === 'matched' && r.key === 'READ-20');
+    // The preview's own numbers: READ-20 is #3, and the duplicate and reference point at #3.
+    expect(dup && dup.kind === 'duplicate' && dup.ofNumber).toBe(3);
+    expect(ref && ref.status === 'matched' && ref.alreadyAs).toBe(3);
+    const numberOf = runwayNumbers(groups[0], check, { 'ws-reader': ready([dIssue('yt:READ-20'), dIssue('yt:READ-12')]) });
+    expect([1, 2, 3].map((n) => numberOf?.(n))).toEqual([2, 3, 1]);
+    // A new workspace keeps the preview's numbers.
+    expect(runwayNumbers({ ...groups[0], target: { kind: 'new' } }, check, {})).toBeNull();
+  });
+
+  it('while a saved ticket cannot be read, a new ticket has no number to show', async () => {
+    const s = open('## Reader App\n- READ-12\n- PLAT-1');
+    await flush();
+    const { groups, checks } = st(s);
+    const dest = { 'ws-reader': ready([dIssue('yt:READ-12'), dIssue('yt:READ-101')], { 'yt:READ-101': { itemId: 'yt:READ-101', state: 'unverified', key: 'READ-101', reason: 'gone' } }) };
+    expect([1, 2].map((n) => runwayNumbers(groups[0], checks.g0, dest)?.(n))).toEqual([1, null]);
+    expect(groupAppend(groups[0], checks.g0, dest)?.plan.absent).toEqual([]);
   });
 
   it('tickets on the Runway but not in the file are listed by key', async () => {

@@ -46,6 +46,7 @@
 
 import {
   RUNWAY_IMPORT_MAX_APPLY_ROWS,
+  RUNWAY_IMPORT_MAX_COMPARED_ROWS,
   RUNWAY_IMPORT_MAX_GROUPS,
   RUNWAY_IMPORT_MAX_TEXT,
   type RunwayImportApplyArgs,
@@ -118,7 +119,9 @@ export function validateApplyArgs(args: unknown): RunwayImportApplyArgs | string
   if (args.groups.length === 0) return 'Nothing to apply';
   if (args.groups.length > RUNWAY_IMPORT_MAX_GROUPS) return `At most ${RUNWAY_IMPORT_MAX_GROUPS} groups can be applied at once`;
   const keys = new Set<string>();
+  // Imported rows and the rows they are compared with are counted apart, so the order of the groups never matters.
   let total = 0;
+  let compared = 0;
   const groups: RunwayImportApplyGroup[] = [];
   for (const g of args.groups) {
     if (!isRecord(g) || typeof g.groupKey !== 'string' || g.groupKey === '' || g.groupKey.length > 200) return 'Each group needs a groupKey';
@@ -156,8 +159,8 @@ export function validateApplyArgs(args: unknown): RunwayImportApplyArgs | string
     if (target.kind === 'existing') {
       const d = g.destination;
       if (!isRecord(d) || !Array.isArray(d.rows) || !Array.isArray(d.append)) return 'An existing destination needs the rows the preview compared and what it appends';
-      total += d.rows.length;
-      if (total > RUNWAY_IMPORT_MAX_APPLY_ROWS * 2) return 'Too many rows to compare';
+      compared += d.rows.length;
+      if (compared > RUNWAY_IMPORT_MAX_COMPARED_ROWS) return `At most ${RUNWAY_IMPORT_MAX_COMPARED_ROWS} existing Runway rows can be compared at once`;
       const saved: RunwayDestinationRow[] = [];
       for (const r of d.rows) {
         if (!isRecord(r) || typeof r.itemId !== 'string' || r.itemId === '' || (r.kind !== 'issue' && r.kind !== 'section' && r.kind !== 'note')) return 'Each compared row needs its ID and kind';

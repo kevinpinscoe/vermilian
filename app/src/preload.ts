@@ -157,6 +157,7 @@ const api: VermilianAPI = {
     ipcRenderer.invoke(IPC.postRecommendationAudit, args),
   dailyReviewGet: (args: DailyReviewGetArgs) => ipcRenderer.invoke(IPC.dailyReviewGet, args),
   debugGetPostedComments: () => ipcRenderer.invoke('e2e:getPostedComments'),
+  debugSetUnreadableIssues: (keys: string[]) => ipcRenderer.invoke('e2e:setUnreadableIssues', keys),
   listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
   readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),
   createWorkspaceArticle: (doc: WorkspaceDocument) => ipcRenderer.invoke(IPC.createWorkspaceArticle, doc),

@@ -997,6 +997,8 @@ export interface VermilianAPI {
   // this outside it rejects. Optional because it carries no production
   // behavior of its own.
   debugGetPostedComments?(): Promise<Array<{ issueId: string; text: string }>>;
+  // e2e-only (VERM-105): the fake YouTrack's keys whose reads fail with 404.
+  debugSetUnreadableIssues?(keys: string[]): Promise<void>;
   // Per-workspace configuration articles (VERM-43). `base` is the document the
   // edit started from, exactly as read; the merge needs it to tell this
   // machine's changes from another machine's.

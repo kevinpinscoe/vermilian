@@ -84,6 +84,20 @@ describe('planRunwayAppend (VERM-105)', () => {
     expect(p).toMatchObject({ unverified: ['DEMO-101'], unableToVerify: true });
   });
 
+  it('saved DEMO-101 returns 404 and the file has DEMO-150: no proposed number for DEMO-150, and DEMO-101 is not "not in this file"', () => {
+    const destination = [dIssue('jira:DEMO-7'), dIssue('jira:DEMO-101')];
+    const identities = ids(ok('jira:DEMO-7', 'DEMO-7'), { itemId: 'jira:DEMO-101', state: 'unverified', key: 'DEMO-101', reason: 'the tracker says it is gone' });
+    const p = planRunwayAppend([t('DEMO-7', 1, 'jira'), t('DEMO-150', 2, 'jira')], [], destination, identities);
+    expect(p.unableToVerify).toBe(true);
+    expect(p.rows[1]).toEqual({ present: false, runwayNumber: null, uncertain: true });
+    expect(p.absent).toEqual([]);
+    expect(p.unverified).toEqual(['DEMO-101']);
+    // Once the lookup succeeds (the old key answers DEMO-150), DEMO-150 shows its existing number.
+    const again = planRunwayAppend([t('DEMO-7', 1, 'jira'), t('DEMO-150', 2, 'jira')], [], destination, ids(ok('jira:DEMO-7', 'DEMO-7'), ok('jira:DEMO-101', 'DEMO-150', ['jira:DEMO-101', 'jira:DEMO-150'])));
+    expect(again.rows[1]).toEqual({ present: true, runwayNumber: 2 });
+    expect(again).toMatchObject({ unableToVerify: false, append: [] });
+  });
+
   it('an unreadable saved ticket does not block sections and notes alone, nor a file whose tickets all match', () => {
     const destination = [dIssue('jira:DEMO-101'), dIssue('jira:DEMO-7')];
     const identities = ids({ itemId: 'jira:DEMO-101', state: 'unverified', key: 'DEMO-101', reason: 'not readable' }, ok('jira:DEMO-7', 'DEMO-7'));

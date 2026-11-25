@@ -290,4 +290,7 @@ export function applyRecoveryLines(r: RunwayImportApplyRemaining): { workspace: 
   };
 }
 
+/** At most this many rows imported by one Apply, across its groups. */
 export const RUNWAY_IMPORT_MAX_APPLY_ROWS = 20000;
+/** At most this many existing destination rows compared by one Apply, across its groups; counted apart from imported rows. */
+export const RUNWAY_IMPORT_MAX_COMPARED_ROWS = 200000;

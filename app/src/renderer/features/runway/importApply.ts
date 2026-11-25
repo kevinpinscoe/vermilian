@@ -137,6 +137,31 @@ export function groupAppend(
 }
 
 /**
+ * For an existing destination, the Runway # each of the preview's ticket
+ * numbers stands for there: the ticket's existing number, or the one it will
+ * get at the end; null when it is withheld (Unable to verify). Every label
+ * that names a ticket by number — the row, "Already scheduled as" on a
+ * duplicate or a reference — uses it. Null for a new workspace (the preview's
+ * numbers are its Runway numbers) or until the destination is known.
+ */
+export function runwayNumbers(
+  g: WorkingGroup,
+  check: GroupCheck | undefined,
+  destinations: Readonly<Record<string, DestinationView | undefined>>,
+): ((previewNumber: number) => number | null) | null {
+  if (!destinationOf(g) || !check || check.state !== 'done' || !check.match.ok) return null;
+  const a = groupAppend(g, check, destinations);
+  if (!a) return null;
+  const preview = groupPreview(g, check.match.candidates);
+  const byNumber = new Map<number, number | null>();
+  a.previewIndex.forEach((p, i) => {
+    const row = preview.rows[p];
+    if (row?.kind === 'ticket') byNumber.set(row.number, a.plan.rows[i].runwayNumber);
+  });
+  return (n) => (byNumber.has(n) ? (byNumber.get(n) as number | null) : null);
+}
+
+/**
  * Why each included group cannot be applied yet. `destinations` holds each
  * existing destination's rows and saved-ticket identities as read so far.
  */

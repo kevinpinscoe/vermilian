@@ -12,7 +12,9 @@
 // same connection. A saved jira:DEMO-101 whose read answers DEMO-150 matches a
 // file that only says DEMO-150. A saved ticket that could not be read leaves
 // its identity uncertain: while one does, no new ticket is offered (Unable to
-// verify), since it might be the same ticket.
+// verify), since it might be the same ticket under an old key — so a new
+// ticket gets no proposed Runway #, and the unreadable one is not listed as
+// missing from the file.
 //
 // Sections and notes match by kind, text and occurrence: the first `Later`
 // heading in the file matches the first `Later` section on the Runway, the
@@ -39,8 +41,12 @@ export type RunwaySavedIdentity =
   | { itemId: string; state: 'unverified'; key: string; reason: string };
 
 export interface RunwayAppendPlan {
-  /** Per file row, in order: already on the Runway, and the Runway # a ticket has or will have. */
-  rows: { present: boolean; runwayNumber: number | null }[];
+  /**
+   * Per file row, in order: already on the Runway, and the Runway # a ticket
+   * has or will have. `uncertain`: a ticket that might already be on the
+   * Runway under a key that could not be read; it has no number.
+   */
+  rows: { present: boolean; runwayNumber: number | null; uncertain?: true }[];
   /** Indices into the file rows to append, in file order. */
   append: number[];
   /** Keys of the Runway's tickets the file does not have: listed only. */
@@ -126,13 +132,20 @@ export function planRunwayAppend(
     }
   });
 
-  const unverified = savedTickets.filter((t) => !t.verified && !matched.has(savedTickets.indexOf(t))).map((t) => t.key);
+  const unverified = savedTickets.filter((t, i) => !t.verified && !matched.has(i)).map((t) => t.key);
+  const unableToVerify = unverified.length > 0 && newTickets > 0;
+  if (unableToVerify) {
+    // A new ticket might be one of the unreadable ones: no proposed number, and they are not "missing".
+    append.forEach((i) => {
+      if (rows[i].kind === 'ticket') out[i] = { present: false, runwayNumber: null, uncertain: true };
+    });
+  }
   return {
     rows: out,
     append,
-    absent: savedTickets.filter((_, i) => !matched.has(i)).map((t) => t.key),
+    absent: savedTickets.filter((t, i) => !matched.has(i) && !(unableToVerify && !t.verified)).map((t) => t.key),
     unverified,
-    unableToVerify: unverified.length > 0 && newTickets > 0,
+    unableToVerify,
   };
 }
 
