@@ -49,7 +49,7 @@ import {
   type ImportSessionState,
   type WorkingGroup,
 } from './importCorrections';
-import type { RunwayImportApplyResult } from '../../../shared/runwayImport';
+import { applyRecoveryLines, type RunwayImportApplyResult } from '../../../shared/runwayImport';
 import { appliedSummary, applyBlockers, applyPlan, BLOCKER_MESSAGE, canApply, destinationOf, type ApplyBlocker } from './importApply';
 import { RUNWAY_ITEMS_QUERY_KEY } from './api';
 import { ACTIVE_WORKSPACE_QUERY_KEY, WORKSPACE_CONFIG_QUERY_KEY } from '../workspace-nav/api';
@@ -226,13 +226,18 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 <AttentionBox className={modalLayout.attention} type="negative" title="The import was not applied" text={applyError.error} />
                 {applyError.remaining.length > 0 && (
                   <div data-testid="import-apply-remaining">
-                    <Text type="text2">These workspaces were created and could not be confirmed removed; check and remove them by hand:</Text>
+                    <Text type="text2">The cleanup of these workspaces could not be confirmed:</Text>
                     <ul>
-                      {applyError.remaining.map((w) => (
-                        <li key={w.workspaceId}>
-                          {w.name} ({w.workspaceId}){w.articleIds.length > 0 ? `, article ${w.articleIds.join(', ')}` : ''}
-                        </li>
-                      ))}
+                      {applyError.remaining.map((w) => {
+                        const lines = applyRecoveryLines(w);
+                        return (
+                          <li key={w.workspaceId} data-testid="import-apply-remaining-item">
+                            {lines.workspace}
+                            {lines.remove && <div data-testid="import-apply-remaining-remove">{lines.remove}</div>}
+                            {lines.inspect && <div data-testid="import-apply-remaining-inspect">{lines.inspect}</div>}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 )}

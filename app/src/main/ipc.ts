@@ -2600,14 +2600,7 @@ export function registerIpc(): void {
   });
   const applyWorkspaces: ApplyWorkspaceStore = {
     async list() {
-      if (workspaceStorageMode() === 'per-workspace') {
-        const client = await workspaceArticleClient();
-        if (!client) throw new Error(NOT_CONFIGURED_WS.message);
-        const listed = await workspaceArticles.listWorkspaceArticles(client);
-        if (!listed.ok) throw new Error(listed.message);
-        return listed.workspaces.flatMap((e) => (e.status === 'ok' ? [{ id: e.document.workspaceId, name: e.document.name }] : []));
-      }
-      return legacyApply.list();
+      return workspaceStorageMode() === 'per-workspace' ? perWorkspaceApply.list() : legacyApply.list();
     },
     async create(name, connectionWorkspaceId, expectedKey) {
       if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.create(name, connectionWorkspaceId, expectedKey);

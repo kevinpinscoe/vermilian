@@ -74,7 +74,7 @@ export interface ApplyWorkspaceStore {
    * Removes a workspace this Apply created, including exactly the articles
    * given; a failure names the articles it could not confirm removed.
    */
-  remove(workspaceId: string, articleIds: string[]): Promise<{ ok: true } | { ok: false; error: string; articleIds?: string[] }>;
+  remove(workspaceId: string, articleIds: string[]): Promise<{ ok: true } | { ok: false; error: string; articleIds?: string[]; inspectArticleIds?: string[] }>;
 }
 
 export interface RunwayMarkdownApplyDeps {
@@ -280,10 +280,11 @@ type Created = { groupKey: string; workspaceId: string; name: string; articleIds
 async function cleanup(deps: RunwayMarkdownApplyDeps, created: readonly Created[]): Promise<RunwayImportApplyRemaining[]> {
   const remaining: RunwayImportApplyRemaining[] = [];
   for (const c of created) {
-    const left = (articleIds: string[] = c.articleIds) => remaining.push({ workspaceId: c.workspaceId, name: c.name, articleIds });
+    const left = (articleIds: string[] = c.articleIds, inspectArticleIds: string[] = []) =>
+      remaining.push({ workspaceId: c.workspaceId, name: c.name, articleIds, inspectArticleIds });
     try {
       const r = await deps.workspaces.remove(c.workspaceId, c.articleIds);
-      if (!r.ok) left(r.articleIds);
+      if (!r.ok) left(r.articleIds, r.inspectArticleIds);
     } catch {
       left();
     }

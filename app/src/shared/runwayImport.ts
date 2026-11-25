@@ -230,11 +230,33 @@ export type RunwayImportApplyResult =
       remaining: RunwayImportApplyRemaining[];
     };
 
-/** A workspace an Apply created and could not confirm removed: its ID, name and any article still holding it. */
+/**
+ * A workspace an Apply created whose cleanup it could not confirm: its ID and
+ * name; the articles this import created that may still be there
+ * (articleIds, to remove by hand); and articles under its title this import
+ * did not create, or cannot confirm creating, which were deliberately left in
+ * place (inspectArticleIds, to inspect, never to remove blindly).
+ */
 export interface RunwayImportApplyRemaining {
   workspaceId: string;
   name: string;
   articleIds: string[];
+  inspectArticleIds: string[];
+}
+
+/** The recovery message for one remaining workspace, as the dialog shows it. */
+export function applyRecoveryLines(r: RunwayImportApplyRemaining): { workspace: string; remove: string | null; inspect: string | null } {
+  const ids = (list: string[]) => `article ${list.join(', ')}`;
+  return {
+    workspace: `${r.name} (${r.workspaceId})`,
+    remove:
+      r.articleIds.length > 0
+        ? `Created by this import and not confirmed removed; remove by hand: ${ids(r.articleIds)}`
+        : r.inspectArticleIds.length === 0
+          ? 'Created by this import and not confirmed removed; remove it by hand.'
+          : null,
+    inspect: r.inspectArticleIds.length > 0 ? `Left in place for inspection: ${ids(r.inspectArticleIds)}` : null,
+  };
 }
 
 export const RUNWAY_IMPORT_MAX_APPLY_ROWS = 20000;

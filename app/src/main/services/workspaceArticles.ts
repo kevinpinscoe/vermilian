@@ -73,6 +73,17 @@ export interface WorkspaceArticleClient {
   delete(articleId: string): Promise<boolean>;
 }
 
+/** One article by ID: found (with its actual title), confirmed absent, or the read failed. */
+export type ArticleLookup =
+  | { state: 'found'; article: WorkspaceArticleRecord }
+  | { state: 'absent' }
+  | { state: 'failed'; message: string };
+
+/** A client that can confirm an article is gone (the import's cleanup, VERM-104). */
+export interface ArticleLookupClient {
+  lookup(articleId: string): Promise<ArticleLookup>;
+}
+
 export const MAX_WRITE_ATTEMPTS = 3;
 
 // ─── Discovery ───────────────────────────────────────────────────────────────

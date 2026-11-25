@@ -1,10 +1,16 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultBoardConfig } from '../../shared/boardConfig';
 import { WORKSPACE_SCHEMA_VERSION, serialiseNewWorkspaceDocument, type WorkspaceDocument } from '../../shared/workspaceSchema';
 import { workspaceArticleTitle } from '../../shared/workspaceArticle';
-import type { WorkspaceArticleClient, WorkspaceArticleRecord } from './workspaceArticles';
-import { trackerConnectionKey } from './runwayMarkdownApply';
+import { applyRecoveryLines, type RunwayImportMatchArgs, type RunwayImportMatchResult } from '../../shared/runwayImport';
+import type { ArticleLookup, WorkspaceArticleClient, WorkspaceArticleRecord } from './workspaceArticles';
+import { createRunwayMarkdownApply, trackerConnectionKey } from './runwayMarkdownApply';
 import { createPerWorkspaceApplyWorkspaces } from './runwayApplyWorkspaces';
+import { openRunwayDb } from './runwayDb';
+import { createRunwayItemStore } from './runwayItemStore';
 
 // Synthetic IDs, names and hosts only.
 
@@ -32,6 +38,10 @@ class FakeArticles implements WorkspaceArticleClient {
   async get(id: string) {
     const a = this.articles.get(id);
     return a ? { ...a } : null;
+  }
+  async lookup(id: string): Promise<ArticleLookup> {
+    const a = this.articles.get(id);
+    return a ? { state: 'found', article: { ...a } } : { state: 'absent' };
   }
   async create(workspaceId: string, content: string) {
     return { ...this.put(workspaceArticleTitle(workspaceId), content) };
@@ -109,7 +119,7 @@ describe('per-workspace Apply create and cleanup (VERM-104)', () => {
     const r = await store().remove(NEW_ID, [ours.id]);
     expect(yt.deleted).toEqual([ours.id]);
     expect(yt.articles.has(other.id)).toBe(true);
-    expect(r).toMatchObject({ ok: false, articleIds: [other.id] });
+    expect(r).toMatchObject({ ok: false, articleIds: [], inspectArticleIds: [other.id] });
     expect(r.ok ? '' : r.error).toMatch(new RegExp(`${other.id}.*not created by this import|inspect`));
   });
 
@@ -126,17 +136,17 @@ describe('per-workspace Apply create and cleanup (VERM-104)', () => {
     const removed = await store().remove(NEW_ID, ['art-2']);
     expect(yt.deleted).toEqual(['art-2']);
     expect(yt.articles.has(other)).toBe(true);
-    expect(removed).toMatchObject({ ok: false, articleIds: [other] });
+    expect(removed).toMatchObject({ ok: false, articleIds: [], inspectArticleIds: [other] });
   });
 
   it('with no confirmed article, nothing is deleted: an article under the generated ID’s title is reported, not removed', async () => {
     const found = yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Ship the offline reader' }));
-    expect(await store().remove(NEW_ID, [])).toMatchObject({ ok: false, articleIds: [found.id] });
+    expect(await store().remove(NEW_ID, [])).toMatchObject({ ok: false, articleIds: [], inspectArticleIds: [found.id] });
     expect(yt.deleted).toEqual([]);
   });
 
   it('never deletes an article given by ID that does not hold the generated ID’s title', async () => {
-    expect(await store().remove(NEW_ID, ['art-1'])).toMatchObject({ ok: false, articleIds: ['art-1'] });
+    expect(await store().remove(NEW_ID, ['art-1'])).toMatchObject({ ok: false, articleIds: [], inspectArticleIds: ['art-1'] });
     expect(yt.deleted).toEqual([]);
   });
 
@@ -145,5 +155,93 @@ describe('per-workspace Apply create and cleanup (VERM-104)', () => {
     expect(r).toMatchObject({ ok: false });
     expect(r.ok ? null : r.workspaceId).toBeUndefined();
     expect(yt.articles.size).toBe(1);
+  });
+});
+
+describe('an article that already holds the generated ID is not this import’s (VERM-104)', () => {
+  it('a pre-existing article at the generated ID: Apply refuses the destination, writes nothing, and keeps it out of rollback', async () => {
+    const existing = yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Someone else’s' }));
+    const before = existing.content;
+    const r = await store().create('Ship the offline reader', SOURCE.workspaceId, KEY);
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok ? 'created' : r.workspaceId).toBeUndefined();
+    expect(r.ok ? [] : (r.articleIds ?? [])).toEqual([]);
+    expect(yt.articles.get(existing.id)?.content).toBe(before);
+    expect(yt.articles.size).toBe(2);
+  });
+
+  it('an article that appears at the generated ID just before the create: the save is not counted as this import’s, and the article survives', async () => {
+    let existing = '';
+    yt.onList = (n) => {
+      // After the adapter's own check, before createWorkspaceArticle's.
+      if (n === 2) existing = yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Ship the offline reader' })).id;
+    };
+    const r = await store().create('Ship the offline reader', SOURCE.workspaceId, KEY);
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok ? 'created' : r.workspaceId).toBeUndefined();
+    expect(yt.articles.has(existing)).toBe(true);
+    expect(yt.deleted).toEqual([]);
+  });
+});
+
+describe('the same-title case through Apply to the recovery message (VERM-104)', () => {
+  let dir: string;
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('our article is removed; the other is left in place for inspection, and the message never says to remove it', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'vermilian-apply-'));
+    const db = openRunwayDb(join(dir, 'runway.sqlite'));
+    try {
+      const items = createRunwayItemStore(db);
+      let other = '';
+      // Listings: Apply, Apply under the gate, the create's source read, its existence check, its verification.
+      // During the verification, another article appears under the same title (ambiguous).
+      yt.onList = (n) => {
+        if (n === 5) other = yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Someone else' })).id;
+      };
+      const match = async (args: RunwayImportMatchArgs): Promise<RunwayImportMatchResult> => ({
+        ok: true,
+        groups: args.groups.map((g) => ({
+          groupKey: g.groupKey,
+          workspaceId: g.workspaceId,
+          ok: true as const,
+          connectionKey: KEY,
+          candidates: g.candidates.map((c) => ({ ...c, status: 'matched' as const, ticket: { issueId: 'jira:DEMO-1', key: 'DEMO-1', summary: 'One' } })),
+        })),
+      });
+      const apply = createRunwayMarkdownApply({
+        workspaces: store(),
+        match,
+        connectionKey: async (id) => (id === SOURCE.workspaceId ? KEY : null),
+        gate: { run: async (op) => op() },
+        store: () => items,
+        backup: async () => join(dir, 'runway-before-import-1.sqlite'),
+      });
+      const r = await apply({
+        groups: [{ groupKey: 'g0', target: { kind: 'new', name: 'Ship the offline reader', connectionWorkspaceId: SOURCE.workspaceId }, connectionKey: KEY, rows: [{ kind: 'ticket', issueId: 'jira:DEMO-1', text: 'DEMO-1', line: 1 }] }],
+      });
+      if (r.ok) throw new Error('expected the create to be unverified');
+      expect(yt.deleted).toEqual(['art-2']);
+      expect(yt.articles.has(other)).toBe(true);
+      expect(r.remaining).toEqual([{ workspaceId: NEW_ID, name: 'Ship the offline reader', articleIds: [], inspectArticleIds: [other] }]);
+      expect(applyRecoveryLines(r.remaining[0])).toEqual({
+        workspace: `Ship the offline reader (${NEW_ID})`,
+        remove: null,
+        inspect: `Left in place for inspection: article ${other}`,
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('a confirmed import leftover is labelled to remove by hand, separately from one left for inspection', () => {
+    expect(applyRecoveryLines({ workspaceId: 'ws-1', name: 'One', articleIds: ['art-2'], inspectArticleIds: ['art-7'] })).toEqual({
+      workspace: 'One (ws-1)',
+      remove: 'Created by this import and not confirmed removed; remove by hand: article art-2',
+      inspect: 'Left in place for inspection: article art-7',
+    });
+    expect(applyRecoveryLines({ workspaceId: 'workspace-1', name: 'Legacy', articleIds: [], inspectArticleIds: [] }).remove).toBe(
+      'Created by this import and not confirmed removed; remove it by hand.',
+    );
   });
 });

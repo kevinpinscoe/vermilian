@@ -17,6 +17,7 @@ import type {
   CreateIssueResult,
   StandupIssues,
   VermilianArticle,
+  ArticleLookupResult,
   MasterPlanDiscovery,
   RecommendationIssue,
   WorkspaceArticleListing,
@@ -829,7 +830,7 @@ export async function getVermilianArticle(
   _url: string, _token: string, articleId: string,
 ): Promise<VermilianArticle | null> {
   const ws = wsArticles.get(articleId);
-  if (ws) return { id: ws.id, content: ws.content, updated: ws.updated };
+  if (ws) return { id: ws.id, summary: ws.summary, content: ws.content, updated: ws.updated };
   if (articleId === 'e2e-jira-article') return jiraArticle ? { ...jiraArticle } : null;
   if (!article || article.id !== articleId) return null;
   return { id: article.id, content: article.content, updated: article.updated };
@@ -896,6 +897,11 @@ export async function createWorkspaceArticle(
   _url: string, _token: string, workspaceId: string, content: string,
 ): Promise<(VermilianArticle & { summary: string }) | null> {
   return { ...addWsArticle(workspaceArticleTitle(workspaceId), content) };
+}
+
+export async function lookupVermilianArticle(_url: string, _token: string, articleId: string): Promise<ArticleLookupResult> {
+  const ws = wsArticles.get(articleId);
+  return ws ? { state: 'found', article: { ...ws } } : { state: 'absent' };
 }
 
 export async function deleteVermilianArticle(_url: string, _token: string, articleId: string): Promise<boolean> {
