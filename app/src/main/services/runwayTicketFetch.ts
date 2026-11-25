@@ -130,6 +130,14 @@ function workspaceFailure(err: unknown): WorkspaceFailure {
   return new WorkspaceFailure('refresh-failed', `The Runway could not be refreshed: ${why}`);
 }
 
+/**
+ * The code and message of a failure readRunwayTickets threw for the whole
+ * workspace (401, no answer, a server error); null for any other error.
+ */
+export function runwayReadFailure(err: unknown): { code: RunwayTicketsErrorCode; message: string } | null {
+  return err instanceof WorkspaceFailure ? { code: err.code, message: err.message } : null;
+}
+
 /** A failed batch: null when its tickets should be read one at a time. */
 function batchFailure(err: unknown): WorkspaceFailure | null {
   const status = statusOf(err);
