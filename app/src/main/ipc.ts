@@ -223,7 +223,8 @@ import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
 import { createRunwayImportMatch } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
-import { createRunwayMarkdownApply, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
+import { createRunwayMarkdownApply, trackerConnectionKey, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
+import { addLegacyWorkspace, removeLegacyWorkspace, type LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
 import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
@@ -2473,10 +2474,23 @@ export function registerIpc(): void {
   // through the existing workspace chosen for it, on that workspace's own
   // connection (runwayReader) and no other. Nothing is written. The rules
   // live in services/runwayImportMatch.ts (unit-tested).
+  // A workspace's tracker connection as a comparable key (VERM-104): tracker,
+  // server or site, email and credential reference; null when it is gone.
+  // Under legacy storage every workspace uses the one configured YouTrack.
+  async function applyConnectionKey(workspaceId: string): Promise<string | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      return doc ? trackerConnectionKey(doc.backend) : null;
+    }
+    const legacy = await loadLegacyWorkspaceConfig();
+    if (!legacy?.workspaces.some((w) => w.id === workspaceId)) return null;
+    return trackerConnectionKey({ kind: 'youtrack', serverUrl: (await readConfig()).youtrackUrl ?? '', credentialRef: 'legacy-youtrack-token' });
+  }
   const matchRunwayImport = createRunwayImportMatch({
     workspaces: runwayWorkspaces,
     trackerBaseUrl: runwayTrackerBaseUrl,
     reader: runwayReader,
+    connectionKey: applyConnectionKey,
   });
   ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
 
@@ -2498,12 +2512,27 @@ export function registerIpc(): void {
     return readRunwayMarkdownFile(choice.filePaths[0]);
   });
 
-  // Applying the Markdown import preview (VERM-104): verify the previewed
-  // tickets on each group's connection, then under the write gate check the
-  // destinations, back up the Runway database, create the new workspaces and
-  // fill their Runways in one transaction. The rules live in
-  // services/runwayMarkdownApply.ts (unit-tested); this supplies the
-  // workspace configuration for the storage mode in use.
+  // Applying the Markdown import preview (VERM-104): check that each group's
+  // connection is the one previewed and verify its tickets on it, then under
+  // the write gate check again, check the destinations, back up the Runway
+  // database, create the new workspaces and fill their Runways in one
+  // transaction. The rules live in services/runwayMarkdownApply.ts
+  // (unit-tested); this supplies the workspace configuration for the storage
+  // mode in use. Legacy edits go through services/legacyWorkspaceEdit.ts,
+  // which changes only the one workspace and never prunes projects.
+  const legacyEdit: LegacyWorkspaceEditDeps = {
+    read: loadLegacyWorkspaceConfig,
+    updateShared: (config) => articleConfig.updateWorkspaceConfig(config),
+    writeLocal: writeWorkspaceConfig,
+    scheduleShared: () => {
+      void (async () => {
+        const cfg = await readConfig();
+        const token = await loadYtToken(cfg);
+        if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
+      })();
+    },
+    refusedMessage: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE,
+  };
   const applyWorkspaces: ApplyWorkspaceStore = {
     async list() {
       if (workspaceStorageMode() === 'per-workspace') {
@@ -2516,7 +2545,7 @@ export function registerIpc(): void {
       const legacy = await loadLegacyWorkspaceConfig();
       return (legacy?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name }));
     },
-    async create(name, connectionWorkspaceId) {
+    async create(name, connectionWorkspaceId, expectedKey) {
       if (workspaceStorageMode() === 'per-workspace') {
         let createdId = '';
         const written = await guardedWorkspaceWrite(async (client) => {
@@ -2525,7 +2554,8 @@ export function registerIpc(): void {
           const docs = listed.workspaces.flatMap((e) => (e.status === 'ok' ? [e.document] : []));
           const source = docs.find((d) => d.workspaceId === connectionWorkspaceId);
           if (!source) return { ok: false, error: 'The workspace supplying the connection no longer exists.' };
-          // Only the tracker connection and its credential reference are copied; the AI credential stays empty.
+          // Copy only the connection that was checked: the very settings read here must match it.
+          if (trackerConnectionKey(source.backend) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
           const b = source.backend;
           const built = buildWorkspaceDocument({
             workspaceId: generateWorkspaceId(),
@@ -2544,30 +2574,26 @@ export function registerIpc(): void {
         return written.ok ? { ok: true, workspaceId: createdId } : { ok: false, error: written.error ?? 'The workspace could not be created.' };
       }
       // Legacy storage: every workspace is on the one configured YouTrack.
+      if ((await applyConnectionKey(connectionWorkspaceId)) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
       const config = await loadLegacyWorkspaceConfig();
       if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
-      if (!config.workspaces.some((w) => w.id === connectionWorkspaceId)) return { ok: false, error: 'The workspace supplying the connection no longer exists.' };
       const id = `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const order = config.workspaces.reduce((m, w) => Math.max(m, w.order + 1), 0);
-      const saved = await saveLegacyWorkspaceConfig({ ...config, workspaces: [...config.workspaces, { id, name, order, folders: [] }] });
-      return saved.ok ? { ok: true, workspaceId: id } : { ok: false, error: saved.error ?? 'The workspace could not be created.' };
+      const added = await addLegacyWorkspace(legacyEdit, { id, name, order, folders: [] });
+      return added.ok ? { ok: true, workspaceId: id } : { ok: false, error: added.error };
     },
     async remove(workspaceId) {
       if (workspaceStorageMode() === 'per-workspace') {
         const r = await deletePerWorkspace(workspaceId, null);
         return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The workspace could not be removed.' };
       }
-      // Read afresh and drop only this workspace, so unrelated edits are kept.
-      const config = await loadLegacyWorkspaceConfig();
-      if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
-      if (!config.workspaces.some((w) => w.id === workspaceId)) return { ok: true };
-      const saved = await saveLegacyWorkspaceConfig({ ...config, workspaces: config.workspaces.filter((w) => w.id !== workspaceId) });
-      return saved.ok ? { ok: true } : { ok: false, error: saved.error ?? 'The workspace could not be removed.' };
+      return removeLegacyWorkspace(legacyEdit, workspaceId);
     },
   };
   const applyRunwayImport = createRunwayMarkdownApply({
     workspaces: applyWorkspaces,
     match: matchRunwayImport,
+    connectionKey: applyConnectionKey,
     gate: runwayGate,
     store: openRunwayItemStore,
     backup: async () => {
@@ -2575,6 +2601,11 @@ export function registerIpc(): void {
       const written = await writeRunwayBackup(openJiraRunwayStore().db, dir);
       pruneRunwayBackups(dir, RUNWAY_BACKUP_KEEP, written);
       return written;
+    },
+    // e2e only: hold before verification, so the dialog's frozen state can be tested.
+    beforeVerify: async () => {
+      const ms = IS_E2E ? Number(process.env.VERMILIAN_E2E_RUNWAY_APPLY_HOLD_MS ?? 0) : 0;
+      if (Number.isFinite(ms) && ms > 0) await new Promise((r) => setTimeout(r, ms));
     },
   });
   ipcMain.handle(IPC.runwayMarkdownApply, (_e, args) => applyRunwayImport(args));

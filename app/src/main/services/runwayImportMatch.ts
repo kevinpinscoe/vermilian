@@ -66,6 +66,12 @@ export interface RunwayImportMatchDeps {
   reader: (workspaceId: string, tracker: TrackerKind) => Promise<RunwayReaderResult>;
   /** Defaults to RUNWAY_IMPORT_READ_TIMEOUT_MS. */
   timeoutMs?: number;
+  /**
+   * The workspace's tracker connection as a comparable key (VERM-104):
+   * tracker, server or site, email and credential reference. Reported on each
+   * successful group so Apply can require the same connection.
+   */
+  connectionKey?: (workspaceId: string) => Promise<string | null>;
 }
 
 const REASONS: readonly ScheduleReferenceReason[] = ['prose', 'heading', 'nested', 'table', 'code', 'trailing', 'duplicate'];
@@ -172,6 +178,8 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
     };
   }
   const tracker = runwayWorkspaceTracker(workspace);
+  // The connection as it stands before the read; compared again afterwards.
+  const keyBefore = deps.connectionKey ? await deps.connectionKey(group.workspaceId) : undefined;
   const baseUrl = await deps.trackerBaseUrl(group.workspaceId, tracker);
   // A parser duplicate keeps its scheduling intent until validated (step 5).
   const candidates = group.candidates.map(
@@ -246,6 +254,13 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
     }
   }
 
+  if (deps.connectionKey) {
+    const keyAfter = await deps.connectionKey(group.workspaceId);
+    if (keyBefore === null || keyAfter !== keyBefore) {
+      return connectionFailure(group, 'refresh-failed', 'The workspace’s tracker connection changed while its tickets were being checked');
+    }
+    return { groupKey: group.groupKey, workspaceId: group.workspaceId, ok: true, candidates: results, connectionKey: keyAfter };
+  }
   return { groupKey: group.groupKey, workspaceId: group.workspaceId, ok: true, candidates: results };
 }
 

@@ -52,7 +52,7 @@ function fakeMatch(args: RunwayImportMatchArgs): RunwayImportMatchResult {
           if (earlier !== undefined) out[i] = { ...r, status: 'duplicate', duplicateOfLine: earlier };
           else first.set(r.ticket.issueId, c.line);
         });
-      return { groupKey: g.groupKey, workspaceId: g.workspaceId, ok: true as const, candidates: out };
+      return { groupKey: g.groupKey, workspaceId: g.workspaceId, ok: true as const, candidates: out, connectionKey: `conn:${g.workspaceId}` };
     }),
   };
 }
@@ -76,6 +76,7 @@ describe('applyPlan', () => {
         {
           groupKey: 'g0',
           target: { kind: 'new', name: 'Ship the offline reader', connectionWorkspaceId: 'ws-active' },
+          connectionKey: 'conn:ws-active',
           rows: [
             { kind: 'note', text: 'Readers lose their place on the train.', depth: 0, line: 3 },
             { kind: 'ticket', issueId: 'yt:READ-12', text: 'https://yt.example.test/issue/READ-12', line: 5 },

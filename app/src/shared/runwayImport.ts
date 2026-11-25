@@ -79,7 +79,18 @@ export type RunwayImportCandidateMatch =
 export type RunwayImportGroupErrorCode = 'refresh-failed' | 'unauthorized' | 'credential' | 'unknown-workspace';
 
 export type RunwayImportGroupMatch =
-  | { groupKey: string; workspaceId: string; ok: true; candidates: RunwayImportCandidateMatch[] }
+  | {
+      groupKey: string;
+      workspaceId: string;
+      ok: true;
+      candidates: RunwayImportCandidateMatch[];
+      /**
+       * The tracker connection the group was read on: its tracker, server or
+       * site, email and credential reference (VERM-104). Apply requires the
+       * same connection; absent when the matcher was given no way to tell.
+       */
+      connectionKey?: string;
+    }
   | { groupKey: string; workspaceId: string; ok: false; code: RunwayImportGroupErrorCode; error: string; retryable: boolean };
 
 export type RunwayImportMatchResult =
@@ -151,6 +162,8 @@ export type RunwayImportApplyTarget =
 export interface RunwayImportApplyGroup {
   groupKey: string;
   target: RunwayImportApplyTarget;
+  /** The connection the preview checked the group on (the match's connectionKey). */
+  connectionKey: string;
   rows: RunwayImportApplyRow[];
 }
 
@@ -164,6 +177,9 @@ export interface RunwayImportApplyArgs {
  *                       on the group's connection: check it again and review
  *   check-failed        the tickets could not be read to verify them
  *   connection-missing  the workspace supplying the connection is gone
+ *   connection-changed  that workspace's tracker connection (site, server,
+ *                       email or credential reference) is not the one the
+ *                       preview checked: check again and review
  *   workspace-missing   the existing destination workspace is gone
  *   name-taken          a new workspace's name is already used
  *   same-destination    two groups go to one existing workspace: merge or skip
@@ -173,6 +189,7 @@ export type RunwayImportApplyReason =
   | 'tickets-changed'
   | 'check-failed'
   | 'connection-missing'
+  | 'connection-changed'
   | 'workspace-missing'
   | 'name-taken'
   | 'same-destination'

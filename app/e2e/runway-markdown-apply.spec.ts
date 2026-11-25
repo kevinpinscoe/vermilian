@@ -242,4 +242,44 @@ test.describe('Runway: applying a Markdown import', () => {
     await expect(tid(page, 'import-apply')).toBeEnabled();
     await tid(page, 'import-cancel').click();
   });
+
+  test('while Apply runs the preview is frozen: Skip, Undo and Escape do nothing, and what is written is what stayed on screen', async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), { ...RUNWAY_ENV, VERMILIAN_E2E_RUNWAY_APPLY_HOLD_MS: '2500' });
+    const page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+    await tid(page, 'nav-runway').click();
+    await stubOpenDialog(app, scratchFile('two.md', ['## Keep me', '- READ-12 Cache', '', '## Also keep', '- SYNC-3 Merge', ''].join('\n')));
+    await tid(page, 'runway-import-markdown').click();
+    const dialog = tid(page, 'runway-markdown-import');
+    const groups = dialog.locator('[data-testid="import-group"]');
+    await expect(dialog.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#1']);
+    // One edit, so Undo would have something to undo.
+    await groups.nth(0).locator('[data-testid="import-rename"]').click();
+    await groups.nth(0).locator('[data-testid="import-rename-input"]').fill('Keep me (renamed)');
+    await groups.nth(0).locator('[data-testid="import-rename-save"]').click();
+    await expect(tid(page, 'import-undo')).toBeEnabled();
+
+    await tid(page, 'import-apply').click();
+    await expect(tid(page, 'import-apply')).toHaveText('Applying…');
+    const skip = groups.nth(1).locator('[data-testid="import-skip"]');
+    await expect(skip).toBeDisabled();
+    await skip.click({ force: true });
+    await expect(tid(page, 'import-undo')).toBeDisabled();
+    await expect(tid(page, 'import-cancel')).toBeDisabled();
+    await expect(groups.nth(0).locator('[data-testid="import-workspace"]')).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await expect(groups.nth(1)).not.toHaveAttribute('data-skipped', 'true');
+
+    // Released: both groups, as they stayed on screen, are written.
+    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    const config = await page.evaluate(() => window.vermilian.getWorkspaceConfig());
+    const byName = (n: string) => config?.workspaces.find((w) => w.name === n);
+    expect(byName('Keep me (renamed)')).toBeDefined();
+    expect(byName('Also keep')).toBeDefined();
+    for (const [name, issue] of [['Keep me (renamed)', 'yt:READ-12'], ['Also keep', 'yt:SYNC-3']] as const) {
+      const r = await page.evaluate((w) => window.vermilian.runwayItemsList({ workspaceId: w }), byName(name)?.id as string);
+      expect(r.ok && r.items.map((i) => i.itemId)).toEqual([issue]);
+    }
+  });
 });

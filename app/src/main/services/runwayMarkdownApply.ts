@@ -4,12 +4,18 @@
 //
 // The renderer sends the plan it shows. In order:
 //   1. The plan is checked field by field.
-//   2. Every numbered ticket is read again, on the connection the group was
-//      previewed on (the existing destination's own, or the chosen workspace
-//      for a new one), through the same matcher as the preview (VERM-101). A
-//      ticket that no longer reads as the same ticket, or a connection that is
-//      gone, sends the group back to the preview. Nothing is written.
-//   3. Under the Runway write gate: destinations are checked — an existing
+//   2. The group's connection must be the one the preview checked: the
+//      workspace supplying it (the existing destination, or the chosen one for
+//      a new workspace) must still have the same tracker, server or site,
+//      email and credential reference (its connectionKey). Every numbered
+//      ticket is then read again on it, through the same matcher as the
+//      preview (VERM-101), and the read must report the same connection. A
+//      changed connection, a ticket that no longer reads as the same ticket,
+//      or a connection that is gone, sends the group back to the preview.
+//      Nothing is written. Two Jira sites can both have OPS-7, so a matching
+//      stored ID alone proves nothing.
+//   3. Under the Runway write gate: each group's connection is compared
+//      again, and destinations are checked — an existing
 //      workspace must still exist and have an empty Runway, two groups may not
 //      share one, and a new workspace's name (trimmed, case-folded, as in the
 //      preview) may not match an existing workspace or another new group. Any
@@ -17,8 +23,10 @@
 //   4. The Runway database is backed up (verified). If that fails, nothing
 //      changes.
 //   5. The new workspaces are created, each copying only its connection
-//      workspace's tracker connection and credential reference. If one fails,
-//      the ones this Apply created are removed and no rows are written.
+//      workspace's tracker connection and credential reference — and only if
+//      that connection is still the one checked (create is given its key). If
+//      one fails, the ones this Apply created are removed (including one whose
+//      ID was allocated before it failed) and no rows are written.
 //   6. Every destination's rows are written in one transaction, which checks
 //      again that each destination is empty. If it is not — another edit
 //      filled it — that edit is kept, nothing is written, and the group goes
@@ -49,16 +57,29 @@ export interface ApplyWorkspace {
 /** The workspace configuration, for the storage mode in use. */
 export interface ApplyWorkspaceStore {
   list(): Promise<ApplyWorkspace[]>;
-  /** Creates a workspace copying `connectionWorkspaceId`'s tracker connection and credential reference. */
-  create(name: string, connectionWorkspaceId: string): Promise<{ ok: true; workspaceId: string } | { ok: false; error: string }>;
+  /**
+   * Creates a workspace copying `connectionWorkspaceId`'s tracker connection
+   * and credential reference, refusing when that connection's key is no
+   * longer `expectedKey`. A failure that had already allocated the new
+   * workspace's ID returns it, so it can be cleaned up.
+   */
+  create(
+    name: string,
+    connectionWorkspaceId: string,
+    expectedKey: string,
+  ): Promise<{ ok: true; workspaceId: string } | { ok: false; error: string; workspaceId?: string }>;
   /** Removes a workspace this Apply created. */
   remove(workspaceId: string): Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 export interface RunwayMarkdownApplyDeps {
   workspaces: ApplyWorkspaceStore;
-  /** The preview's matcher (createRunwayImportMatch), read-only. */
+  /** The preview's matcher (createRunwayImportMatch, given connectionKey), read-only. */
   match: (args: RunwayImportMatchArgs) => Promise<RunwayImportMatchResult>;
+  /** A workspace's tracker connection as a key (trackerConnectionKey); null when it is gone. */
+  connectionKey: (workspaceId: string) => Promise<string | null>;
+  /** e2e only: runs before the tickets are verified. */
+  beforeVerify?: () => Promise<void>;
   gate: { run<T>(operation: () => T | Promise<T>): Promise<T> };
   store: () => Pick<RunwayItemStore, 'list' | 'fillEmpty'>;
   /** Writes a verified backup of the Runway database and returns its path. */
@@ -93,6 +114,7 @@ export function validateApplyArgs(args: unknown): RunwayImportApplyArgs | string
       if (name === '' || name.length > 200) return 'A new workspace needs a name of 1 to 200 characters';
       target = { kind: 'new', name, connectionWorkspaceId: t.connectionWorkspaceId };
     } else return 'Each group needs an existing workspace or a new workspace with a name and a connection';
+    if (typeof g.connectionKey !== 'string' || g.connectionKey === '') return 'Each group needs the connection it was checked on';
     if (!Array.isArray(g.rows)) return 'Each group needs its rows';
     total += g.rows.length;
     if (total > RUNWAY_IMPORT_MAX_APPLY_ROWS) return `At most ${RUNWAY_IMPORT_MAX_APPLY_ROWS} rows can be applied at once`;
@@ -111,7 +133,7 @@ export function validateApplyArgs(args: unknown): RunwayImportApplyArgs | string
         rows.push({ kind: r.kind, text: r.text, depth: r.depth as number, line });
       } else return 'Each row must be a ticket, a section or a note';
     }
-    groups.push({ groupKey: g.groupKey, target, rows });
+    groups.push({ groupKey: g.groupKey, target, connectionKey: g.connectionKey, rows });
   }
   return { groups };
 }
@@ -119,6 +141,37 @@ export function validateApplyArgs(args: unknown): RunwayImportApplyArgs | string
 const connectionOf = (g: RunwayImportApplyGroup) => (g.target.kind === 'existing' ? g.target.workspaceId : g.target.connectionWorkspaceId);
 
 const problem = (groupKey: string, reason: RunwayImportApplyProblem['reason'], message: string): RunwayImportApplyProblem => ({ groupKey, reason, message });
+
+const CONNECTION_CHANGED =
+  'The tracker connection that checked these tickets has changed since the preview (its site, server, email or credential). The preview has been checked again; review it, then Apply.';
+
+/**
+ * A workspace's tracker connection as a comparable key: tracker, server or
+ * site, email and credential reference. Two workspaces with the same key
+ * read tickets the same way.
+ */
+export function trackerConnectionKey(backend: { kind: string; serverUrl?: string; siteUrl?: string; email?: string; credentialRef?: string | null }): string {
+  const url = (backend.kind === 'jira' ? backend.siteUrl : backend.serverUrl) ?? '';
+  return JSON.stringify([backend.kind, url.trim().replace(/\/+$/, '').toLowerCase(), (backend.email ?? '').trim().toLowerCase(), backend.credentialRef ?? null]);
+}
+
+/** Each group's connection compared with the one previewed. */
+async function checkConnections(deps: RunwayMarkdownApplyDeps, groups: readonly RunwayImportApplyGroup[]): Promise<RunwayImportApplyProblem[]> {
+  const problems: RunwayImportApplyProblem[] = [];
+  for (const g of groups) {
+    const now = await deps.connectionKey(connectionOf(g));
+    if (now === null) {
+      problems.push(
+        g.target.kind === 'existing'
+          ? problem(g.groupKey, 'workspace-missing', 'This workspace no longer exists. Choose another destination.')
+          : problem(g.groupKey, 'connection-missing', 'The workspace whose connection checked these tickets no longer exists. Choose another in Check tickets using.'),
+      );
+    } else if (now !== g.connectionKey) {
+      problems.push(problem(g.groupKey, 'connection-changed', CONNECTION_CHANGED));
+    }
+  }
+  return problems;
+}
 
 function refused(
   code: Exclude<RunwayImportApplyResult, { ok: true }>['code'],
@@ -156,6 +209,10 @@ async function verifyTickets(deps: RunwayMarkdownApplyDeps, groups: readonly Run
     if (!result.ok || !answer || !answer.ok) {
       const why = !result.ok ? result.error : answer && !answer.ok ? answer.error : 'no answer';
       problems.push(problem(g.groupKey, 'check-failed', `The tickets could not be checked again: ${why}`));
+      continue;
+    }
+    if (answer.connectionKey !== g.connectionKey) {
+      problems.push(problem(g.groupKey, 'connection-changed', CONNECTION_CHANGED));
       continue;
     }
     const changed = tickets.filter((t, i) => {
@@ -238,7 +295,10 @@ export function createRunwayMarkdownApply(deps: RunwayMarkdownApplyDeps) {
       return refused('workspace-unavailable', `The workspace configuration could not be read: ${messageOf(err, 'unknown error')}`);
     }
 
-    // 2. The tickets as previewed, on each group's own connection.
+    // 2. The connection and the tickets as previewed, on each group's own connection.
+    await deps.beforeVerify?.();
+    const connections = await checkConnections(deps, plan.groups);
+    if (connections.length > 0) return refused('review', 'Some groups changed since the preview. Nothing was written.', { problems: connections });
     const verify = await verifyTickets(deps, plan.groups, new Set(before.map((w) => w.id)));
     if (verify.length > 0) return refused('review', 'Some groups changed since the preview. Nothing was written.', { problems: verify });
 
@@ -251,7 +311,9 @@ export function createRunwayMarkdownApply(deps: RunwayMarkdownApplyDeps) {
       }
       const store = deps.store();
 
-      // 3. Destinations.
+      // 3. The connections again, now that nothing else can write, then the destinations.
+      const changed = await checkConnections(deps, plan.groups);
+      if (changed.length > 0) return refused('review', 'Some groups changed since the preview. Nothing was written.', { problems: changed });
       const destinations = checkDestinations(plan.groups, workspaces, store);
       if (destinations.length > 0) return refused('review', 'Some groups need correcting. Nothing was written.', { problems: destinations });
 
@@ -269,12 +331,14 @@ export function createRunwayMarkdownApply(deps: RunwayMarkdownApplyDeps) {
         if (g.target.kind !== 'new') continue;
         let r: Awaited<ReturnType<ApplyWorkspaceStore['create']>>;
         try {
-          r = await deps.workspaces.create(g.target.name, g.target.connectionWorkspaceId);
+          r = await deps.workspaces.create(g.target.name, g.target.connectionWorkspaceId, g.connectionKey);
         } catch (err) {
           r = { ok: false, error: messageOf(err, 'unknown error') };
         }
         if (!r.ok) {
-          const remaining = await cleanup(deps, created);
+          // An ID allocated before the failure is this Apply's to remove too.
+          const allocated = r.workspaceId ? [{ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name }] : [];
+          const remaining = await cleanup(deps, [...created, ...allocated]);
           return refused('create-failed', `The workspace ${g.target.name} could not be created, so no rows were written: ${r.error}`, { backupPath, remaining });
         }
         created.push({ groupKey: g.groupKey, workspaceId: r.workspaceId, name: g.target.name });

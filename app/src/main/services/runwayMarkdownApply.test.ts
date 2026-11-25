@@ -14,6 +14,7 @@ let db: DatabaseSync;
 let store: RunwayItemStore;
 
 beforeEach(() => {
+  connections = { 'ws-a': 'youtrack https://yt.example.test youtrack-1', 'ws-b': 'youtrack https://yt.example.test youtrack-1', 'ws-c': 'jira https://site-a.example.test jira-1' };
   dir = mkdtempSync(join(tmpdir(), 'vermilian-apply-'));
   db = openRunwayDb(join(dir, 'runway-metadata.sqlite'));
   store = createRunwayItemStore(db);
@@ -24,6 +25,9 @@ afterEach(() => {
 });
 
 const keyOf = (text: string) => /([A-Z][A-Z0-9_]*-\d+)$/.exec(text)?.[1] ?? text;
+
+/** Each workspace's tracker connection, as the matcher and Apply see it now. */
+let connections: Record<string, string>;
 
 /** Every key reads as yt:<key>, except those listed as changed (they read as another ticket). */
 function matcher(changed: Record<string, string> = {}) {
@@ -36,6 +40,7 @@ function matcher(changed: Record<string, string> = {}) {
         groupKey: g.groupKey,
         workspaceId: g.workspaceId,
         ok: true as const,
+        connectionKey: connections[g.workspaceId],
         candidates: g.candidates.map((c) => {
           const key = changed[`${g.workspaceId} ${keyOf(c.text)}`] ?? keyOf(c.text);
           return key === 'GONE'
@@ -55,7 +60,10 @@ interface Harness {
   removed: string[];
 }
 
-function harness(over: Partial<RunwayMarkdownApplyDeps> = {}, opts: { failCreate?: string; failRemove?: string; onCreate?: () => void } = {}): Harness {
+function harness(
+  over: Partial<RunwayMarkdownApplyDeps> = {},
+  opts: { failCreate?: string; failCreateAllocated?: string; failRemove?: string; onCreate?: () => void } = {},
+): Harness {
   const workspaces: ApplyWorkspace[] = [
     { id: 'ws-a', name: 'Inbox' },
     { id: 'ws-b', name: 'Reader App' },
@@ -71,9 +79,16 @@ function harness(over: Partial<RunwayMarkdownApplyDeps> = {}, opts: { failCreate
     deps: {
       workspaces: {
         list: async () => workspaces.map((w) => ({ ...w })),
-        create: async (name, connectionWorkspaceId) => {
+        create: async (name, connectionWorkspaceId, expectedKey) => {
           events.push(`create ${name} from ${connectionWorkspaceId}`);
+          if (connections[connectionWorkspaceId] !== expectedKey) return { ok: false, error: 'the connection changed' };
           if (name === opts.failCreate) return { ok: false, error: 'the tracker refused the article' };
+          if (name === opts.failCreateAllocated) {
+            // Partly written: the ID was allocated before the failure.
+            const id = `ws-new-${++n}`;
+            workspaces.push({ id, name });
+            return { ok: false, error: 'the shared configuration refused the change', workspaceId: id };
+          }
           opts.onCreate?.();
           const id = `ws-new-${++n}`;
           workspaces.push({ id, name });
@@ -89,6 +104,7 @@ function harness(over: Partial<RunwayMarkdownApplyDeps> = {}, opts: { failCreate
         },
       },
       match: matcher().match,
+      connectionKey: async (id) => connections[id] ?? null,
       gate: { run: async (op) => op() },
       store: () => store,
       backup: async () => {
@@ -108,9 +124,15 @@ const note = (text: string, line: number, depth = 0) => ({ kind: 'note' as const
 const NEW_GROUP: RunwayImportApplyGroup = {
   groupKey: 'g0',
   target: { kind: 'new', name: 'Ship the offline reader', connectionWorkspaceId: 'ws-a' },
+  connectionKey: 'youtrack https://yt.example.test youtrack-1',
   rows: [note('Readers lose their place on the train.', 3), ticket('READ-12', 5), ticket('SYNC-3', 6), section('Later', 11), note('- Look at READ-9 again', 13)],
 };
-const EXISTING_GROUP: RunwayImportApplyGroup = { groupKey: 'g1', target: { kind: 'existing', workspaceId: 'ws-b' }, rows: [ticket('READ-1', 16)] };
+const EXISTING_GROUP: RunwayImportApplyGroup = {
+  groupKey: 'g1',
+  target: { kind: 'existing', workspaceId: 'ws-b' },
+  connectionKey: 'youtrack https://yt.example.test youtrack-1',
+  rows: [ticket('READ-1', 16)],
+};
 
 const shape = (workspaceId: string) => store.list(workspaceId).map((i) => `${i.kind}${i.runwayNumber ? ` #${i.runwayNumber}` : ''} ${i.text ?? i.itemId}${i.depth ? ` @${i.depth}` : ''}`);
 
@@ -289,6 +311,77 @@ describe('runwayMarkdownApply', () => {
     });
     await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
     expect(order).toEqual(['gate in', 'backup', 'gate out']);
+  });
+});
+
+describe('the previewed connection (PR 232 review)', () => {
+  const JIRA_GROUP: RunwayImportApplyGroup = {
+    groupKey: 'g0',
+    target: { kind: 'new', name: 'Ops', connectionWorkspaceId: 'ws-c' },
+    connectionKey: 'jira https://site-a.example.test jira-1',
+    rows: [ticket('OPS-7', 2)],
+  };
+
+  it('two Jira sites both resolve OPS-7: a switch of site after the preview sends the group back, though the stored ID is the same', async () => {
+    connections['ws-c'] = 'jira https://site-b.example.test jira-1';
+    const h = harness();
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [JIRA_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g0', reason: 'connection-changed' }] });
+    expect(h.events).toEqual([]);
+  });
+
+  it('a switch of site while Apply waits at the write gate: nothing is backed up, created or written', async () => {
+    const h = harness({
+      gate: {
+        run: async (op) => {
+          connections['ws-c'] = 'jira https://site-b.example.test jira-1';
+          return op();
+        },
+      },
+    });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [JIRA_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g0', reason: 'connection-changed' }] });
+    expect(h.events).toEqual([]);
+  });
+
+  it('a credential reference change counts too, for an existing destination', async () => {
+    connections['ws-b'] = 'youtrack https://yt.example.test youtrack-2';
+    const h = harness();
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [EXISTING_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ groupKey: 'g1', reason: 'connection-changed' }] });
+  });
+
+  it('a read that answers on another connection than the preview is refused', async () => {
+    const m = matcher();
+    const h = harness({
+      match: async (args) => {
+        const r = await m.match(args);
+        return r.ok ? { ...r, groups: r.groups.map((g) => (g.ok ? { ...g, connectionKey: 'jira https://site-b.example.test jira-1' } : g)) } : r;
+      },
+    });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [JIRA_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'review', problems: [{ reason: 'connection-changed' }] });
+  });
+
+  it('creation is told the connection checked, and copies only that one', async () => {
+    let seen = '';
+    const h = harness();
+    const create = h.deps.workspaces.create;
+    h.deps.workspaces.create = async (name, conn, key) => {
+      seen = key;
+      return create(name, conn, key);
+    };
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [JIRA_GROUP] });
+    expect(r.ok).toBe(true);
+    expect(seen).toBe('jira https://site-a.example.test jira-1');
+  });
+
+  it('a creation that fails after allocating its ID is still cleaned up', async () => {
+    const h = harness({}, { failCreateAllocated: 'Ship the offline reader' });
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [] });
+    expect(h.removed).toEqual(['ws-new-1']);
+    expect(h.workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b', 'ws-c']);
   });
 });
 

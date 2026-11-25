@@ -93,7 +93,7 @@ export function applyBlockers(
       const check = checks[g.groupKey];
       if (g.connectionId === null) out.push('waiting');
       else if (!check || check.state === 'pending') out.push('checking');
-      else if (check.state === 'failed' || !check.match.ok) out.push('check-failed');
+      else if (check.state === 'failed' || !check.match.ok || !check.match.connectionKey) out.push('check-failed');
       return [g.groupKey, out];
     }),
   );
@@ -113,7 +113,8 @@ export function applyPlan(groups: readonly WorkingGroup[], checks: Readonly<Reco
   for (const g of groups) {
     if (g.skipped) continue;
     const check = checks[g.groupKey];
-    if (!check || check.state !== 'done' || !check.match.ok || g.connectionId === null) return null;
+    if (!check || check.state !== 'done' || !check.match.ok || g.connectionId === null || !check.match.connectionKey) return null;
+    const connectionKey = check.match.connectionKey;
     const preview = groupPreview(g, check.match.candidates);
     const rows: RunwayImportApplyRow[] = [];
     for (const r of preview.rows) {
@@ -136,8 +137,9 @@ export function applyPlan(groups: readonly WorkingGroup[], checks: Readonly<Reco
       }
     }
     const d = destinationOf(g);
-    if (d) out.push({ groupKey: g.groupKey, target: { kind: 'existing', workspaceId: d }, rows });
-    else if (g.target.kind === 'new' && g.name !== null) out.push({ groupKey: g.groupKey, target: { kind: 'new', name: g.name, connectionWorkspaceId: g.connectionId }, rows });
+    // The connection the preview checked travels with the plan; Apply requires the same one.
+    if (d) out.push({ groupKey: g.groupKey, target: { kind: 'existing', workspaceId: d }, connectionKey, rows });
+    else if (g.target.kind === 'new' && g.name !== null) out.push({ groupKey: g.groupKey, target: { kind: 'new', name: g.name, connectionWorkspaceId: g.connectionId }, connectionKey, rows });
     else return null;
   }
   return out.length > 0 ? { groups: out } : null;

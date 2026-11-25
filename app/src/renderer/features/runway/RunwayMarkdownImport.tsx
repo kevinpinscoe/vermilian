@@ -19,8 +19,10 @@
 // (importApply.ts): the main process verifies the tickets again, backs up the
 // Runway database, creates the new workspaces and fills their empty Runways.
 // A group it sends back is shown with the reason (and rechecked when its
-// tickets changed); after success the dialog closes and the current workspace
-// stays active.
+// tickets or connection changed); after success the dialog closes and the
+// current workspace stays active. While Apply runs, the preview is frozen:
+// no correction, Undo, Reset or way to close the dialog until it returns, so
+// what is written is what stays on screen.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
@@ -107,7 +109,9 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
   const groups = state?.groups ?? null;
   const options = list.state === 'ready' ? list.workspaces : [];
   const edits = state?.corrections.length ?? 0;
-  const apply = (c: Correction) => session.current?.apply(c) ?? false;
+  const applyingRef = useRef(false);
+  // Every correction goes through here, so nothing changes while Apply runs.
+  const apply = (c: Correction) => (applyingRef.current ? false : (session.current?.apply(c) ?? false));
 
   // Apply (VERM-104).
   const queryClient = useQueryClient();
@@ -139,6 +143,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
     if (!groups || !state) return;
     const plan = applyPlan(groups, state.checks);
     if (!plan) return;
+    applyingRef.current = true;
     setApplying(true);
     setApplyError(null);
     setProblems({});
@@ -156,7 +161,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
       for (const p of result.problems) {
         byGroup[p.groupKey] = [...(byGroup[p.groupKey] ?? []), p.message];
         // Changed tickets are read again, so the preview shows the new order before another Apply.
-        if (p.reason === 'tickets-changed' || p.reason === 'check-failed') session.current?.retry(p.groupKey);
+        if (p.reason === 'tickets-changed' || p.reason === 'check-failed' || p.reason === 'connection-changed') session.current?.retry(p.groupKey);
       }
       for (const id of destinations) await queryClient.invalidateQueries({ queryKey: RUNWAY_ITEMS_QUERY_KEY(id) });
       setProblems(byGroup);
@@ -164,12 +169,13 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
     } catch (err) {
       setApplyError({ ok: false, code: 'write-failed', error: err instanceof Error ? err.message : String(err), problems: [], backupPath: null, remaining: [] });
     } finally {
+      applyingRef.current = false;
       setApplying(false);
     }
   }
 
   return (
-    <Modal id="runway-markdown-import" data-testid="runway-markdown-import" show onClose={onClose} size="large">
+    <Modal id="runway-markdown-import" data-testid="runway-markdown-import" show onClose={() => (applyingRef.current ? undefined : onClose())} size="large">
       <ModalBasicLayout className={modalLayout.layout}>
         <ModalHeader title={`Import preview — ${fileName}`} />
         <ModalContent>
@@ -209,7 +215,8 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 workspaces={options}
                 check={state?.checks[g.groupKey]}
                 apply={apply}
-                onRetry={() => session.current?.retry(g.groupKey)}
+                onRetry={() => (applyingRef.current ? undefined : session.current?.retry(g.groupKey))}
+                frozen={applying}
                 blockers={blockers[g.groupKey] ?? []}
                 problems={problems[g.groupKey] ?? []}
               />
@@ -237,10 +244,10 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
               </div>
             )}
             <div className={styles.footer}>
-              <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.undo()} data-testid="import-undo">
+              <Button size="small" kind="tertiary" disabled={edits === 0 || applying} onClick={() => session.current?.undo()} data-testid="import-undo">
                 Undo
               </Button>
-              <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.reset()} data-testid="import-reset">
+              <Button size="small" kind="tertiary" disabled={edits === 0 || applying} onClick={() => session.current?.reset()} data-testid="import-reset">
                 Reset
               </Button>
               <Button size="small" kind="secondary" onClick={onClose} disabled={applying} data-testid="import-cancel">
@@ -264,6 +271,8 @@ interface GroupSectionProps {
   check: GroupCheck | undefined;
   apply(c: Correction): boolean;
   onRetry(): void;
+  /** True while Apply runs: every control is disabled. */
+  frozen: boolean;
   blockers: readonly ApplyBlocker[];
   /** Why the last Apply sent this group back. */
   problems: readonly string[];
@@ -272,7 +281,7 @@ interface GroupSectionProps {
 /** Blockers already shown another way (the choose and checking lines). */
 const SHOWN_ELSEWHERE: readonly ApplyBlocker[] = ['waiting', 'checking'];
 
-function GroupSection({ group, groups, workspaces, check, apply, onRetry, blockers, problems }: GroupSectionProps) {
+function GroupSection({ group, groups, workspaces, check, apply, onRetry, frozen, blockers, problems }: GroupSectionProps) {
   const labels = useMemo(() => workspaceOptionLabels(workspaces), [workspaces]);
   const results = check?.state === 'done' && check.match.ok ? check.match.candidates : null;
   const preview = useMemo(() => groupPreview(group, results), [group, results]);
@@ -295,6 +304,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, blocke
   if (group.skipped) {
     return (
       <section className={`${styles.group} ${styles.skipped}`} data-testid="import-group" data-group-key={key} data-skipped="true">
+        <fieldset className={styles.fieldset} disabled={frozen}>
         <div className={styles.groupHeader}>
           <h3 className={styles.groupName} data-testid="import-group-name">
             {title}
@@ -304,7 +314,8 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, blocke
             Include again
           </Button>
         </div>
-      </section>
+        </fieldset>
+    </section>
     );
   }
 
@@ -313,6 +324,8 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, blocke
 
   return (
     <section className={styles.group} data-testid="import-group" data-group-key={key}>
+      {/* Disabled while Apply runs: every control inside is frozen. */}
+      <fieldset className={styles.fieldset} disabled={frozen}>
       <div className={styles.groupHeader}>
         {renaming === null ? (
           <h3 className={styles.groupName} data-testid="import-group-name">
@@ -513,6 +526,7 @@ function GroupSection({ group, groups, workspaces, check, apply, onRetry, blocke
           </ul>
         </div>
       )}
+      </fieldset>
     </section>
   );
 }
