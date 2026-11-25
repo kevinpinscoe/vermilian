@@ -219,6 +219,8 @@ import { createRunwayItemStore, type RunwayItemStore } from './services/runwayIt
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
 import { createRunwayImportMatch } from './services/runwayImportMatch';
+import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
+import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
   jiraRunwayReader,
@@ -2465,6 +2467,24 @@ export function registerIpc(): void {
     reader: runwayReader,
   });
   ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
+
+  // Choosing a Markdown schedule for the import preview (VERM-102): the
+  // native picker, then the file's name and text, read-only, at most 1 MiB
+  // (services/runwayMarkdownFile.ts). Separate from the snapshot import's
+  // runwayImportPreview.
+  ipcMain.handle(IPC.runwayMarkdownOpen, async (e): Promise<RunwayMarkdownOpenResult> => {
+    const options: Electron.OpenDialogOptions = {
+      title: 'Import a schedule from Markdown',
+      defaultPath: app.getPath('documents'),
+      buttonLabel: 'Preview import',
+      filters: [{ name: 'Markdown schedule', extensions: [...RUNWAY_MARKDOWN_EXTENSIONS] }],
+      properties: ['openFile'],
+    };
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const choice = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+    if (choice.canceled || choice.filePaths.length === 0) return { ok: true, canceled: true };
+    return readRunwayMarkdownFile(choice.filePaths[0]);
+  });
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {

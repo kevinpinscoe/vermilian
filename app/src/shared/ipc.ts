@@ -83,6 +83,7 @@ export const IPC = {
   workspaceLinkTypes: 'workspace:linkTypes',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   runwayImportMatch: 'runway-import:match',
+  runwayMarkdownOpen: 'runway-markdown:open',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -937,6 +938,10 @@ export interface VermilianAPI {
   // groups (VERM-101): read-only, each group on its own workspace's
   // connection. See shared/runwayImport.ts.
   runwayImportMatch(args: import('./runwayImport').RunwayImportMatchArgs): Promise<import('./runwayImport').RunwayImportMatchResult>;
+  // Choose a Markdown schedule file for the import preview (VERM-102): the
+  // native picker, then the file's name and UTF-8 text (at most 1 MiB).
+  // Read-only; a cancelled picker resolves { ok: true, canceled: true }.
+  runwayMarkdownOpen(): Promise<import('./runwayImport').RunwayMarkdownOpenResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

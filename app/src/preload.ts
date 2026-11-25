@@ -126,6 +126,7 @@ const api: VermilianAPI = {
   jiraPriorityOrders: (args: JiraPriorityOrdersArgs) => ipcRenderer.invoke(IPC.jiraPriorityOrders, args),
   runwayItemsAddByReference: (args: RunwayAddByReferenceArgs) => ipcRenderer.invoke(IPC.runwayItemsAddByReference, args),
   runwayImportMatch: (args: RunwayImportMatchArgs) => ipcRenderer.invoke(IPC.runwayImportMatch, args),
+  runwayMarkdownOpen: () => ipcRenderer.invoke(IPC.runwayMarkdownOpen),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   openUserData: () => ipcRenderer.invoke(IPC.openUserData),
   getProjects: () => ipcRenderer.invoke(IPC.getProjects),
