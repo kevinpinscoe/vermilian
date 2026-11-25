@@ -106,7 +106,7 @@ test.describe('Runway, sort and import start no agent, send nothing to tmux and 
     // The recorder exists only in an e2e build.
     expect(
       await page.evaluate(() => typeof window.vermilian.debugGetProcessLaunches === 'function'),
-      'this package has no process recorder: build it with VERMILIAN_E2E_BUILD=1 (pnpm test:e2e:fresh)',
+      'this package has no process recorder: run the suite with pnpm test:e2e, which packages an e2e build (VERMILIAN_E2E_BUILD=1)',
     ).toBe(true);
 
     // ── Setup: two workspaces whose YouTrack credential comes from a shell command.

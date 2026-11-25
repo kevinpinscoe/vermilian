@@ -131,7 +131,7 @@ cd ~/Projects/private/vermilian/app
 pnpm test
 ```
 
-**Expected output:** Vitest reports all suites passing (e.g. `Test Files  2 passed`). Runs in ~0.3s from source — no packaging needed. E2E (`pnpm test:e2e`) packages first and runs under `xvfb-run`.
+**Expected output:** Vitest reports all suites passing (e.g. `Test Files  2 passed`). Runs in ~0.3s from source — no packaging needed. E2E (`pnpm test:e2e`) always packages an e2e build first (`e2e/package-e2e-build.sh`, `VERMILIAN_E2E_BUILD=1`) and runs under `xvfb-run`.
 
 **E2E profile directories.** Each e2e run gets one folder, `vermilian-e2e-run-*`, in `$TMPDIR`
 (`/tmp` by default). Every Electron profile of the run goes inside it. For the length of the run,
@@ -842,6 +842,19 @@ pnpm lint && pnpm typecheck && pnpm test
 pnpm package
 pnpm test:e2e:fresh          # packaged e2e; not in CI, so run it locally
 ```
+
+`pnpm test:e2e` and `pnpm test:e2e:fresh` are the same: both package an **e2e build**
+(`e2e/package-e2e-build.sh`, which sets `VERMILIAN_E2E_BUILD=1`) before running Playwright,
+even when `out/` already holds the release package `pnpm package` just made. Only an e2e
+build contains the e2e process recorder that `runway-process-boundary.spec.ts` reads
+(VERM-106); a release package does not, so running Playwright directly on `pnpm package`'s
+output fails that spec, with a message saying to use `pnpm test:e2e`. The script refuses,
+like `test:live:package`, when `out/` holds the pinned acceptance build.
+
+`pnpm test:release-isolation` checks the other side: it packages a release build
+(`e2e/package-e2e-build.sh --release`) and proves that, even launched with
+`VERMILIAN_E2E=1`, it exposes neither recorder debug method and registers neither of its
+channels. Run `pnpm test:e2e` afterwards to put an e2e build back in `out/`.
 
 CI runs everything except e2e. The `SQLite packaged check` workflow, which tests the
 packaged SQLite module on every platform, runs by itself on any PR that changes
