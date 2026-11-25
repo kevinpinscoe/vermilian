@@ -218,6 +218,7 @@ import {
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
+import { createRunwayImportMatch } from './services/runwayImportMatch';
 import {
   createRunwayTicketFetch,
   jiraRunwayReader,
@@ -2432,23 +2433,38 @@ export function registerIpc(): void {
   // connection as the refresh (runwayReader), and the add goes through the
   // Runway write handlers above. Search and detail admission are unchanged.
   // The rules live in services/runwayAddByReference.ts (unit-tested).
+  // A workspace's own tracker address: its YouTrack server URL or Jira site
+  // URL, '' when it has none for that tracker. Shared by the add by reference
+  // and the import match, so both check links against the same host.
+  async function runwayTrackerBaseUrl(workspaceId: string, tracker: TrackerKind): Promise<string> {
+    if (tracker === 'jira' || workspaceStorageMode() === 'per-workspace') {
+      const backend = (await perWorkspaceDocument(workspaceId))?.backend;
+      if (backend?.kind === 'jira') return tracker === 'jira' ? backend.siteUrl : '';
+      if (backend?.kind === 'youtrack') return tracker === 'youtrack' ? backend.serverUrl : '';
+      return '';
+    }
+    return (await readConfig()).youtrackUrl ?? '';
+  }
   const addRunwayByReference = createRunwayAddByReference({
     workspaces: runwayWorkspaces,
-    async trackerBaseUrl(workspaceId, tracker) {
-      if (tracker === 'jira' || workspaceStorageMode() === 'per-workspace') {
-        const backend = (await perWorkspaceDocument(workspaceId))?.backend;
-        if (backend?.kind === 'jira') return tracker === 'jira' ? backend.siteUrl : '';
-        if (backend?.kind === 'youtrack') return tracker === 'youtrack' ? backend.serverUrl : '';
-        return '';
-      }
-      return (await readConfig()).youtrackUrl ?? '';
-    },
+    trackerBaseUrl: runwayTrackerBaseUrl,
     items: (workspaceId) => openRunwayItemStore().list(workspaceId),
     reader: runwayReader,
     generation: activeWorkspaceGeneration,
     addIssueOnce: (args) => runwayItems.addIssueOnce(args),
   });
   ipcMain.handle(IPC.runwayItemsAddByReference, (_e, args) => addRunwayByReference(args));
+
+  // Matching an imported schedule's tickets (VERM-101): read-only, each group
+  // through the existing workspace chosen for it, on that workspace's own
+  // connection (runwayReader) and no other. Nothing is written. The rules
+  // live in services/runwayImportMatch.ts (unit-tested).
+  const matchRunwayImport = createRunwayImportMatch({
+    workspaces: runwayWorkspaces,
+    trackerBaseUrl: runwayTrackerBaseUrl,
+    reader: runwayReader,
+  });
+  ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {

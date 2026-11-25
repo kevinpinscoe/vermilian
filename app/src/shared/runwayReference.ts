@@ -86,7 +86,16 @@ export function parseRunwayReference(text: string, tracker: TrackerKind, tracker
       candidate = /^\/browse\/([^/]+)\/?$/.exec(rest)?.[1] ?? url.searchParams.get('selectedIssue');
     }
   }
-  const linked = candidate ? runwayKeyOf(tracker, decodeURIComponent(candidate)) : null;
+  let decoded: string | null = null;
+  if (candidate) {
+    try {
+      decoded = decodeURIComponent(candidate);
+    } catch {
+      // A malformed percent-escape (`/issue/%ZZ`) names no ticket.
+      decoded = null;
+    }
+  }
+  const linked = decoded ? runwayKeyOf(tracker, decoded) : null;
   if (!linked) {
     return { ok: false, code: 'not-a-ticket-url', message: `That link does not point at a ${trackerName(tracker)} ticket.` };
   }

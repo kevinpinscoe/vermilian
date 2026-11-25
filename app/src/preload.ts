@@ -4,6 +4,7 @@
 // in the renderer→main direction beyond the save calls.
 
 import type { RunwayAddByReferenceArgs } from './shared/runwayAdd';
+import type { RunwayImportMatchArgs } from './shared/runwayImport';
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
@@ -124,6 +125,7 @@ const api: VermilianAPI = {
   workspaceLinkTypes: (workspaceId: string) => ipcRenderer.invoke(IPC.workspaceLinkTypes, workspaceId),
   jiraPriorityOrders: (args: JiraPriorityOrdersArgs) => ipcRenderer.invoke(IPC.jiraPriorityOrders, args),
   runwayItemsAddByReference: (args: RunwayAddByReferenceArgs) => ipcRenderer.invoke(IPC.runwayItemsAddByReference, args),
+  runwayImportMatch: (args: RunwayImportMatchArgs) => ipcRenderer.invoke(IPC.runwayImportMatch, args),
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   openUserData: () => ipcRenderer.invoke(IPC.openUserData),
   getProjects: () => ipcRenderer.invoke(IPC.getProjects),

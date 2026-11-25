@@ -82,6 +82,7 @@ export const IPC = {
   jiraPriorityOrders: 'jira:priorityOrders',
   workspaceLinkTypes: 'workspace:linkTypes',
   runwayItemsAddByReference: 'runway-items:add-by-reference',
+  runwayImportMatch: 'runway-import:match',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -932,6 +933,10 @@ export interface VermilianAPI {
   // checked once on the workspace's own connection, then added through the
   // write gate. See shared/runwayAdd.ts.
   runwayItemsAddByReference(args: import('./runwayAdd').RunwayAddByReferenceArgs): Promise<import('./runwayAdd').RunwayAddResult>;
+  // Match a Markdown schedule's tickets to the workspaces chosen for its
+  // groups (VERM-101): read-only, each group on its own workspace's
+  // connection. See shared/runwayImport.ts.
+  runwayImportMatch(args: import('./runwayImport').RunwayImportMatchArgs): Promise<import('./runwayImport').RunwayImportMatchResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board
