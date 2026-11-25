@@ -340,3 +340,68 @@ it('accepts CRLF line endings', () => {
   const p = parseRunwaySchedule('## A\r\n- [ ] READ-1 One\r\n- [ ] READ-2 Two\r\n');
   expect(outline(p.groups[0])).toEqual(['ticket READ-1 [ ] One', 'ticket READ-2 [ ] Two']);
 });
+
+// Review of PR 228: each case below failed on 65755b6.
+describe('review fixes', () => {
+  const keys = (g: ScheduleGroup) => scheduledTickets(g).map((t) => `${t.ticket.key} L${t.line}`);
+
+  it('finds a duplicate before the first ##', () => {
+    const p = parseRunwaySchedule(md('- READ-1', '- READ-1'));
+    expect(p.groups.map((g) => g.name)).toEqual([null]);
+    expect(keys(p.groups[0])).toEqual(['READ-1 L1']);
+    expect(refs(p.groups[0])).toEqual(['READ-1 duplicate L2']);
+  });
+
+  it('after a ticket’s lazily wrapped description, the next left-margin bullet is scheduled', () => {
+    const p = parseRunwaySchedule(md('## A', '- [ ] READ-1 Title that', 'wraps onto the margin, see READ-7', '- [ ] READ-2 Next', '- [ ] READ-3 Last'));
+    expect(keys(p.groups[0])).toEqual(['READ-1 L2', 'READ-2 L4', 'READ-3 L5']);
+    expect(outline(p.groups[0])).toEqual([
+      'ticket READ-1 [ ] Title that',
+      'note 1 nested: wraps onto the margin, see READ-7',
+      'ticket READ-2 [ ] Next',
+      'ticket READ-3 [ ] Last',
+    ]);
+    expect(refs(p.groups[0])).toEqual(['READ-7 nested (see) L3']);
+  });
+
+  it('keeps a ticket’s wrapped lines in one note, with a nested bullet still one level down', () => {
+    const p = parseRunwaySchedule(md('## A', '- [ ] READ-1 Title', '  line a', '  line b', '  - READ-8 detail', '- [ ] READ-2 Next'));
+    expect(keys(p.groups[0])).toEqual(['READ-1 L2', 'READ-2 L6']);
+    expect(outline(p.groups[0])).toEqual(['ticket READ-1 [ ] Title', 'note 1 nested: line a\nline b', 'note 1 nested: - READ-8 detail', 'ticket READ-2 [ ] Next']);
+    expect(refs(p.groups[0])).toEqual(['READ-8 nested L5']);
+  });
+
+  it('a ticket bullet under an indented heading inside a note item stays incidental', () => {
+    const p = parseRunwaySchedule(md('## A', '- Parent note', '  ### Inside the item', '  - [ ] READ-5 under the heading', '- [ ] READ-6 Real'));
+    expect(keys(p.groups[0])).toEqual(['READ-6 L5']);
+    expect(outline(p.groups[0])).toEqual([
+      'note 0 item: - Parent note\n  ### Inside the item',
+      'note 1 nested: - [ ] READ-5 under the heading',
+      'ticket READ-6 [ ] Real',
+    ]);
+    expect(refs(p.groups[0])).toEqual(['READ-5 nested L4']);
+  });
+
+  it('a ticket bullet under an indented heading inside a ticket item stays incidental', () => {
+    const p = parseRunwaySchedule(md('## A', '- [ ] READ-1 Parent', '  ### Details', '  - [ ] READ-5 under the heading', '- [ ] READ-6 Real'));
+    expect(keys(p.groups[0])).toEqual(['READ-1 L2', 'READ-6 L5']);
+    expect(refs(p.groups[0])).toEqual(['READ-5 nested L4']);
+  });
+
+  it('a four-space-indented fence line does not close a top-level fence', () => {
+    const p = parseRunwaySchedule(md('## A', '```text', '- [ ] READ-1 example', '    ```', '- [ ] READ-2 still example', '```', '- [ ] READ-3 Real'));
+    expect(keys(p.groups[0])).toEqual(['READ-3 L7']);
+    expect(outline(p.groups[0])).toEqual([
+      'note 0 code: ```text\n- [ ] READ-1 example\n    ```\n- [ ] READ-2 still example\n```',
+      'ticket READ-3 [ ] Real',
+    ]);
+    expect(refs(p.groups[0])).toEqual(['READ-1 code L3', 'READ-2 code L5']);
+  });
+
+  it('a fence opened directly after a list marker is code, and the next ticket is scheduled', () => {
+    const p = parseRunwaySchedule(md('## A', '- ```', '  - [ ] READ-1 example', '  ```', '- [ ] READ-2 Real'));
+    expect(keys(p.groups[0])).toEqual(['READ-2 L5']);
+    expect(outline(p.groups[0])).toEqual(['note 0 code: - ```\n  - [ ] READ-1 example\n  ```', 'ticket READ-2 [ ] Real']);
+    expect(refs(p.groups[0])).toEqual(['READ-1 code L3']);
+  });
+});

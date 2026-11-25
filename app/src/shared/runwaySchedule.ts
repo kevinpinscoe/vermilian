@@ -27,6 +27,11 @@
 //     occurrence is kept as a note and listed as a duplicate reference. An
 //     earlier incidental mention does not take the ticket's place, and each
 //     group starts fresh.
+//   - List nesting survives wrapped text and headings: a line indented into
+//     an item (a heading included) is that item's content, and text under a
+//     ticket becomes an indented note without opening a list level.
+//   - A fence closes only on a fence indented at most 3 columns into its
+//     container; a fence straight after a list marker makes that item code.
 
 export interface ScheduleTicket {
   /** The key as written, or as it appears in the link's path. Not normalised. */
@@ -212,14 +217,22 @@ function dedent(lines: string[]): string {
     .trim();
 }
 
+type NoteRow = Extract<ScheduleRow, { kind: 'note' }>;
+
 interface OpenItem {
   /** Column where this item's content starts; deeper lines belong to it. */
   contentCol: number;
-  /** The row its text is kept in, or null when it is a scheduled ticket. */
-  noteRow: Extract<ScheduleRow, { kind: 'note' }> | null;
-  noteLines: string[];
   /** Nesting depth: 0 for a top-level item. */
   depth: number;
+  /**
+   * The note row this item's text is currently going into, or null when
+   * there is none open: a scheduled ticket's own line, a fenced item that
+   * has closed, or a parent whose child item has started. The next
+   * continuation line then opens a new indented note, so rows stay in file
+   * order and no list level is invented.
+   */
+  textRow: NoteRow | null;
+  textLines: string[];
 }
 
 /** Parses a Markdown schedule. Never throws; any text produces an outline. */
@@ -234,7 +247,8 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
     if (!current) {
       current = { name: null, line: lineNo, rows: [], references: [] };
       groups.push(current);
-      scheduled = new Set();
+      // `scheduled` is not reset here: the unnamed group is the first, and
+      // this runs lazily, after its first ticket may already be recorded.
     }
     return current;
   };
@@ -248,7 +262,7 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
     }
   };
   const note = (lineNo: number, text: string, depth: number, source: ScheduleNoteSource) => {
-    const row: Extract<ScheduleRow, { kind: 'note' }> = { kind: 'note', text, depth, source, line: lineNo };
+    const row: NoteRow = { kind: 'note', text, depth, source, line: lineNo };
     group(lineNo).rows.push(row);
     return row;
   };
@@ -260,17 +274,49 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
   let indentedCode: { start: number; lines: string[] } | null = null;
   let lastWasBlank = true;
 
-  /** Opens a list item whose text is kept in `row` (null for a scheduled ticket). */
-  const openItem = (contentCol: number, depth: number, row: OpenItem['noteRow'], first: string | null) => {
-    const it: OpenItem = { contentCol, noteRow: row, noteLines: [], depth };
+  /** Pops items the column is not inside, and ends the parent's open text. */
+  const nestAt = (col: number): number => {
+    while (items.length && col < items[items.length - 1].contentCol) items.pop();
+    const parent = items[items.length - 1];
+    if (parent) {
+      parent.textRow = null;
+      parent.textLines = [];
+    }
+    return items.length;
+  };
+  /** Opens a list item whose text goes into `row` (null when none is open). */
+  const openItem = (contentCol: number, depth: number, row: NoteRow | null, first: string | null) => {
+    const it: OpenItem = { contentCol, depth, textRow: row, textLines: [] };
     items.push(it);
     if (first !== null) appendItemLine(it, first);
   };
   // The note's text is kept current on every line, so an item closed by
   // any route (popped, ended by a heading, end of file) is never empty.
   const appendItemLine = (it: OpenItem, line: string) => {
-    it.noteLines.push(line);
-    if (it.noteRow) it.noteRow.text = dedent(it.noteLines);
+    it.textLines.push(line);
+    if (it.textRow) it.textRow.text = dedent(it.textLines);
+  };
+  /** A continuation line of `it`: into its open note, or a new note under it. */
+  const continueItem = (it: OpenItem, lineNo: number, line: string) => {
+    it.textRow ??= note(lineNo, '', it.depth + 1, 'nested');
+    appendItemLine(it, line);
+    referencesIn(lineNo, line, it.textRow.source === 'item' ? 'prose' : 'nested');
+  };
+  /**
+   * Consumes a fenced block opened on line `start` with `marker`, inside a
+   * container whose content starts at `containerCol` (0 at the top level).
+   * A closing fence may be indented at most 3 columns into its container;
+   * a deeper one is code. Returns the index of the block's last line.
+   */
+  const fenceEnd = (start: number, marker: string, containerCol: number): number => {
+    const close = new RegExp(`^ *${marker[0] === '`' ? '`' : '~'}{${marker.length},}[ \\t]*$`);
+    for (let j = start + 1; j < lines.length; j++) {
+      if (close.test(lines[j]) && indentOf(lines[j]) <= containerCol + 3) return j;
+    }
+    return lines.length - 1;
+  };
+  const codeReferences = (start: number, end: number) => {
+    for (let k = start; k <= end; k++) referencesIn(k + 1, lines[k], 'code');
   };
   const closeItems = () => {
     items = [];
@@ -311,7 +357,7 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
 
     if (isBlank(raw)) {
       closeLeaf();
-      if (deepest?.noteRow) deepest.noteLines.push(''); // kept for spacing; trimmed at the end
+      if (deepest?.textRow) deepest.textLines.push(''); // kept for spacing; trimmed at the end
       lastWasBlank = true;
       continue;
     }
@@ -321,19 +367,11 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
     const fence = FENCE_RE.exec(raw);
     if (fence && fence[1].length <= (deepest ? deepest.contentCol + 3 : 3)) {
       closeLeaf();
-      while (items.length && indent < items[items.length - 1].contentCol) items.pop();
-      const depth = items.length;
-      const marker = fence[2];
-      const block = [raw];
-      let j = i + 1;
-      for (; j < lines.length; j++) {
-        block.push(lines[j]);
-        const close = new RegExp(`^ *${marker[0] === '`' ? '`' : '~'}{${marker.length},}[ \\t]*$`);
-        if (close.test(lines[j])) break;
-      }
-      note(lineNo, dedent(block), depth, 'code');
-      block.forEach((l, k) => referencesIn(lineNo + k, l, 'code'));
-      i = Math.min(j, lines.length - 1);
+      const depth = nestAt(indent);
+      const end = fenceEnd(i, fence[2], depth ? items[depth - 1].contentCol : 0);
+      note(lineNo, dedent(lines.slice(i, end + 1)), depth, 'code');
+      codeReferences(i, end);
+      i = end;
       lastWasBlank = false;
       continue;
     }
@@ -348,7 +386,11 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
       continue;
     }
 
-    const heading = indent <= 3 ? HEADING_RE.exec(raw) : null;
+    // A line indented into an open list item is that item's content, so a
+    // heading or rule there is text and never ends the list (VERM-100 review).
+    const insideItem = items.length > 0 && indent >= items[0].contentCol;
+
+    const heading = indent <= 3 && !insideItem ? HEADING_RE.exec(raw) : null;
     if (heading) {
       closeAll();
       const level = heading[1].length;
@@ -369,7 +411,7 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
       continue;
     }
 
-    if (THEMATIC_RE.test(raw)) {
+    if (!insideItem && THEMATIC_RE.test(raw)) {
       closeAll();
       lastWasBlank = false;
       continue;
@@ -379,11 +421,23 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
     if (item && !(item[4] === undefined && paragraph)) {
       closeLeaf();
       const markerIndent = item[1].length;
-      while (items.length && markerIndent < items[items.length - 1].contentCol) items.pop();
-      const depth = items.length;
+      const depth = nestAt(markerIndent);
       const spacing = item[3]?.length ?? 1;
       const contentCol = markerIndent + item[2].length + (spacing > 4 ? 1 : spacing);
       const content = (item[4] ?? '').trim();
+
+      // A fence opened right after the marker: the item is a code note, and
+      // nothing in the fence is scheduled.
+      const itemFence = /^(`{3,}|~{3,})/.exec(content);
+      if (itemFence) {
+        const end = fenceEnd(i, itemFence[1], contentCol);
+        note(lineNo, dedent(lines.slice(i, end + 1)), depth, 'code');
+        codeReferences(i, end);
+        openItem(contentCol, depth, null, null);
+        i = end;
+        lastWasBlank = false;
+        continue;
+      }
 
       if (depth === 0) {
         const box = BOX_RE.exec(content);
@@ -432,18 +486,12 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
       continue;
     }
 
-    // Continuation of the deepest open list item: indented to its content,
-    // or a lazy continuation line straight after it.
-    if (deepest && (indent >= deepest.contentCol || (!lastWasBlank && !TABLE_RE.test(raw)))) {
-      if (deepest.noteRow) {
-        appendItemLine(deepest, raw);
-        referencesIn(lineNo, raw, deepest.depth === 0 ? 'prose' : 'nested');
-      } else {
-        // Text under a scheduled ticket: an indented note after it.
-        const row = note(lineNo, '', 1, 'nested');
-        referencesIn(lineNo, raw, 'nested');
-        openItem(indent, 1, row, raw);
-      }
+    // Continuation of an open list item: indented into an item's content
+    // (it belongs to the deepest item it reaches), or a lazy continuation
+    // line straight after the deepest item. It never opens a list level.
+    if (insideItem || (deepest && !lastWasBlank && !TABLE_RE.test(raw))) {
+      if (insideItem) while (items.length > 1 && indent < items[items.length - 1].contentCol) items.pop();
+      continueItem(items[items.length - 1], lineNo, raw);
       lastWasBlank = false;
       continue;
     }
