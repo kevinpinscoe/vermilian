@@ -14,7 +14,7 @@
 //   - the unnamed group before the first `##` maps to the active workspace.
 // With no active workspace in the list, the new and unnamed groups also wait
 // for a choice. Nothing is mapped or checked until the workspace list has
-// been read (createImportSession): a heading naming an existing workspace
+// been read (createImportSession, importCorrections.ts): a heading naming an existing workspace
 // must never be mistaken for a new one while the list is loading or failed.
 //
 // Each group's outline is built from the parser's rows in file order and
@@ -31,7 +31,7 @@
 // References are listed read-only and unticked, with their line, reason or
 // cue, and match result. Nothing here writes anything.
 
-import { parseRunwaySchedule, type ParsedSchedule, type ScheduleCheckbox, type ScheduleGroup, type ScheduleNoteSource, type ScheduleReferenceCue, type ScheduleReferenceReason } from '../../../shared/runwaySchedule';
+import { parseRunwaySchedule, type ParsedSchedule, type ScheduleCheckbox, type ScheduleGroup, type ScheduleNoteSource, type ScheduleReference, type ScheduleReferenceCue, type ScheduleReferenceReason, type ScheduleRow } from '../../../shared/runwaySchedule';
 import { scheduleCandidates, type RunwayImportCandidate, type RunwayImportCandidateMatch, type RunwayImportGroupMatch, type RunwayImportUnmatchedCode } from '../../../shared/runwayImport';
 
 export interface ImportWorkspaceOption {
@@ -90,34 +90,52 @@ export function proposeGroups(parsed: ParsedSchedule, workspaces: readonly Impor
 }
 
 // ---------------------------------------------------------------------------
+// Rows and References, from a group's segments in preview order.
 
 interface TicketText {
   /** The ticket as written: its key or link. */
   text: string;
   titleHint: string | null;
   checkbox: ScheduleCheckbox | null;
+  /** Its line in the Markdown file, whatever the preview order. */
   line: number;
 }
 
 export type PreviewRow =
-  | (TicketText & { kind: 'ticket'; number: number; key: string; summary: string })
+  /** Numbered. `refId` is set when a ticked Reference was scheduled here (VERM-103). */
+  | (TicketText & { kind: 'ticket'; number: number; key: string; summary: string; issueId: string; refId?: string })
   /** Matching has not answered for this group, or its connection failed. */
   | (TicketText & { kind: 'unchecked' })
   /** Becomes a note: this occurrence's own result was unmatched. */
   | (TicketText & { kind: 'unmatched'; code: RunwayImportUnmatchedCode; message: string })
   /** Stays a note in place; listed under References too. */
   | (TicketText & { kind: 'duplicate'; ofNumber: number | null })
-  | { kind: 'section'; text: string; depth: number; line: number }
+  /**
+   * A heading row. `segment` is its segment's index in the group; `join` marks
+   * a merged group's heading kept at the join; only a top-level `###` from the
+   * file can be split into its own workspace.
+   */
+  | { kind: 'section'; text: string; depth: number; line: number; segment: number; join: boolean; splittable: boolean }
   | { kind: 'note'; text: string; depth: number; source: ScheduleNoteSource; line: number };
 
 export type PreviewReference = {
+  /** The reference's identity within the preview (null for a listed duplicate). */
+  id: string | null;
   text: string;
   line: number;
   reason: ScheduleReferenceReason;
   cue: ScheduleReferenceCue | null;
+  /** Ticked to schedule it (VERM-103). */
+  ticked: boolean;
+  /** Whether its box can be changed: matched, and not already scheduled under another occurrence. */
+  tickable: boolean;
+  /** Its number when its tick is in effect. */
+  scheduledAs: number | null;
+  /** The number of the occurrence already scheduled for the same ticket. */
+  alreadyAs: number | null;
 } & (
   | { status: 'unchecked' }
-  | { status: 'matched'; key: string; summary: string }
+  | { status: 'matched'; key: string; summary: string; issueId: string }
   | { status: 'unmatched'; code: RunwayImportUnmatchedCode; message: string }
   | { status: 'duplicate'; key: string; ofNumber: number | null }
 );
@@ -129,6 +147,59 @@ export interface GroupPreview {
   scheduledCount: number;
 }
 
+/**
+ * A run of one file group's rows inside a proposed workspace. A group starts
+ * as one segment; a merge appends the source's segments (VERM-103), the first
+ * one carrying the source's heading as `join`; a split takes rows out.
+ */
+export interface Segment {
+  /** The file group it came from (its base groupKey). */
+  origin: string;
+  /** A merged group's `##` heading, kept as a section where it joins. */
+  join: { text: string; line: number } | null;
+  rows: ScheduleRow[];
+  references: { id: string; ref: ScheduleReference }[];
+}
+
+export function segmentOf(group: ScheduleGroup, origin: string): Segment {
+  return { origin, join: null, rows: group.rows, references: group.references.map((ref, i) => ({ id: `${origin}#${i}`, ref })) };
+}
+
+export interface CandidateMeta {
+  segment: number;
+  /** The candidate's line in the file. */
+  line: number;
+  refId: string | null;
+}
+
+/**
+ * The matcher's candidates, in preview order: segment by segment, and within
+ * a segment by line, scheduled before references. Each candidate's `line` is
+ * its preview position (1..N), so the matcher's first-occurrence rule follows
+ * the preview order after a merge; `meta` keeps the file line.
+ */
+export function segmentCandidates(segments: readonly Segment[]): { candidates: RunwayImportCandidate[]; meta: CandidateMeta[] } {
+  const all: (RunwayImportCandidate & { meta: CandidateMeta })[] = [];
+  segments.forEach((seg, si) => {
+    const scheduled = seg.rows.flatMap((r): (RunwayImportCandidate & { meta: CandidateMeta })[] =>
+      r.kind === 'ticket' ? [{ text: r.ticket.url ?? r.ticket.key, line: r.line, role: 'scheduled', reason: null, meta: { segment: si, line: r.line, refId: null } }] : [],
+    );
+    // A line the parser set aside as a duplicate was written as a scheduled item (VERM-101).
+    const refs = seg.references.map(({ id, ref }): RunwayImportCandidate & { meta: CandidateMeta } => ({
+      text: ref.ticket.url ?? ref.ticket.key,
+      line: ref.line,
+      role: ref.reason === 'duplicate' ? 'scheduled' : 'reference',
+      reason: ref.reason === 'duplicate' ? null : ref.reason,
+      meta: { segment: si, line: ref.line, refId: ref.reason === 'duplicate' ? null : id },
+    }));
+    all.push(...[...scheduled, ...refs].sort((a, b) => a.line - b.line));
+  });
+  return {
+    candidates: all.map((c, i) => ({ text: c.text, line: i + 1, role: c.role, reason: c.reason })),
+    meta: all.map((c) => c.meta),
+  };
+}
+
 /** A parser-duplicate item's own checkbox and title hint, read from its first line. */
 function itemTicketText(noteText: string, written: string, line: number): TicketText {
   const first = noteText.split('\n')[0];
@@ -138,20 +209,40 @@ function itemTicketText(noteText: string, written: string, line: number): Ticket
 }
 
 /**
- * One group's outline and References. `results` is VERM-101's answer for the
- * group's candidates, in the order they were sent; null while it is pending
- * or when the group's connection failed.
+ * One proposed workspace's outline and References. `results` is VERM-101's
+ * answer for segmentCandidates(segments), in that order; null while it is
+ * pending or when the group's connection failed. `ticked` holds the ticked
+ * References' IDs.
+ *
+ * A ticked Reference is numbered at its source position — after the row its
+ * line belongs to, so after a scheduled ticket on the same line — only when
+ * its own result matched and no scheduled occurrence, or earlier ticked one,
+ * has the same ticket (the matcher's ticket identity, so another mention or a
+ * moved Jira issue's old key cannot add a second copy).
  */
-export function buildGroupPreview(group: ScheduleGroup, candidates: readonly RunwayImportCandidate[], results: readonly RunwayImportCandidateMatch[] | null): GroupPreview {
+export function buildWorkingPreview(segments: readonly Segment[], results: readonly RunwayImportCandidateMatch[] | null, ticked: ReadonlySet<string>): GroupPreview {
+  const { candidates, meta } = segmentCandidates(segments);
   const usable = results && results.length === candidates.length ? results : null;
-  // A line leads with at most one scheduled ticket.
-  const scheduledAt = new Map<number, number>();
-  candidates.forEach((c, i) => {
-    if (c.role === 'scheduled' && !scheduledAt.has(c.line)) scheduledAt.set(c.line, i);
-  });
-  const parserDuplicateLines = new Set(group.references.filter((r) => r.reason === 'duplicate').map((r) => r.line));
 
-  const numberAt = new Map<number, number>();
+  // Which ticks are in effect: scheduled tickets come first, then ticks in preview order.
+  const scheduledIds = new Set<string>();
+  candidates.forEach((c, i) => {
+    const r = usable?.[i];
+    if (c.role === 'scheduled' && r?.status === 'matched') scheduledIds.add(r.ticket.issueId);
+  });
+  const effective = new Set<string>();
+  const tickedIds = new Set<string>();
+  candidates.forEach((c, i) => {
+    const r = usable?.[i];
+    const id = meta[i].refId;
+    if (c.role !== 'reference' || !id || !ticked.has(id) || r?.status !== 'matched') return;
+    if (scheduledIds.has(r.ticket.issueId) || tickedIds.has(r.ticket.issueId)) return;
+    effective.add(id);
+    tickedIds.add(r.ticket.issueId);
+  });
+
+  const numberAtRank = new Map<number, number>();
+  const numberOfIssue = new Map<string, number>();
   const duplicates: { index: number; ticket: TicketText }[] = [];
   const rows: PreviewRow[] = [];
   let n = 0;
@@ -165,11 +256,12 @@ export function buildGroupPreview(group: ScheduleGroup, candidates: readonly Run
     switch (r.status) {
       case 'matched':
         n += 1;
-        numberAt.set(ticket.line, n);
-        rows.push({ ...ticket, kind: 'ticket', number: n, key: r.ticket.key, summary: r.ticket.summary });
+        numberAtRank.set(index + 1, n);
+        if (!numberOfIssue.has(r.ticket.issueId)) numberOfIssue.set(r.ticket.issueId, n);
+        rows.push({ ...ticket, kind: 'ticket', number: n, key: r.ticket.key, summary: r.ticket.summary, issueId: r.ticket.issueId });
         return;
       case 'duplicate':
-        rows.push({ ...ticket, kind: 'duplicate', ofNumber: numberAt.get(r.duplicateOfLine) ?? null });
+        rows.push({ ...ticket, kind: 'duplicate', ofNumber: numberAtRank.get(r.duplicateOfLine) ?? null });
         duplicates.push({ index, ticket });
         return;
       case 'unmatched':
@@ -178,53 +270,144 @@ export function buildGroupPreview(group: ScheduleGroup, candidates: readonly Run
     }
   };
 
-  for (const row of group.rows) {
-    if (row.kind === 'ticket') {
-      const ticket: TicketText = { text: row.ticket.url ?? row.ticket.key, titleHint: row.titleHint, checkbox: row.checkbox, line: row.line };
-      const index = scheduledAt.get(row.line);
-      if (index === undefined) rows.push({ ...ticket, kind: 'unchecked' });
-      else place(index, ticket, { ...ticket, kind: 'unchecked' });
-    } else if (row.kind === 'note' && row.source === 'item' && parserDuplicateLines.has(row.line) && scheduledAt.has(row.line)) {
-      // The parser set this item aside as a duplicate; the matcher decides.
-      const index = scheduledAt.get(row.line) as number;
-      place(index, itemTicketText(row.text, candidates[index].text, row.line), row);
-    } else {
-      rows.push(row);
-    }
-  }
+  const placeTicked = (index: number) => {
+    const r = usable?.[index];
+    if (r?.status !== 'matched') return;
+    n += 1;
+    numberAtRank.set(index + 1, n);
+    numberOfIssue.set(r.ticket.issueId, n);
+    rows.push({
+      kind: 'ticket',
+      number: n,
+      key: r.ticket.key,
+      summary: r.ticket.summary,
+      issueId: r.ticket.issueId,
+      text: candidates[index].text,
+      titleHint: null,
+      checkbox: null,
+      line: meta[index].line,
+      refId: meta[index].refId as string,
+    });
+  };
 
-  // References: the parser's, read-only, with their cue; then confirmed duplicates.
-  const cues = new Map<number, (typeof group.references)[number][]>();
-  for (const r of group.references) {
-    if (r.reason === 'duplicate') continue;
-    cues.set(r.line, [...(cues.get(r.line) ?? []), r]);
-  }
-  const references: PreviewReference[] = [];
+  segments.forEach((seg, si) => {
+    const scheduledAt = new Map<number, number>();
+    const tickedAt = new Map<number, number[]>(); // anchor row index → candidate indexes
+    const parserDuplicateLines = new Set(seg.references.filter((r) => r.ref.reason === 'duplicate').map((r) => r.ref.line));
+    candidates.forEach((c, i) => {
+      if (meta[i].segment !== si) return;
+      if (c.role === 'scheduled' && !scheduledAt.has(meta[i].line)) scheduledAt.set(meta[i].line, i);
+      const id = meta[i].refId;
+      if (c.role === 'reference' && id && effective.has(id)) {
+        let anchor = -1;
+        seg.rows.forEach((row, ri) => {
+          if (row.line <= meta[i].line) anchor = ri;
+        });
+        tickedAt.set(anchor, [...(tickedAt.get(anchor) ?? []), i]);
+      }
+    });
+
+    if (seg.join) rows.push({ kind: 'section', text: seg.join.text, depth: 0, line: seg.join.line, segment: si, join: true, splittable: false });
+    for (const i of tickedAt.get(-1) ?? []) placeTicked(i);
+    seg.rows.forEach((row, ri) => {
+      if (row.kind === 'ticket') {
+        const ticket: TicketText = { text: row.ticket.url ?? row.ticket.key, titleHint: row.titleHint, checkbox: row.checkbox, line: row.line };
+        const index = scheduledAt.get(row.line);
+        if (index === undefined) rows.push({ ...ticket, kind: 'unchecked' });
+        else place(index, ticket, { ...ticket, kind: 'unchecked' });
+      } else if (row.kind === 'note' && row.source === 'item' && parserDuplicateLines.has(row.line) && scheduledAt.has(row.line)) {
+        // The parser set this item aside as a duplicate; the matcher decides.
+        const index = scheduledAt.get(row.line) as number;
+        place(index, itemTicketText(row.text, candidates[index].text, row.line), row);
+      } else if (row.kind === 'section') {
+        rows.push({ kind: 'section', text: row.text, depth: row.depth, line: row.line, segment: si, join: false, splittable: row.depth === 0 });
+      } else {
+        rows.push(row);
+      }
+      for (const i of tickedAt.get(ri) ?? []) placeTicked(i);
+    });
+  });
+
+  // References, in preview order: the parser's, with their cue; then confirmed duplicates.
+  const listed: { rank: number; ref: PreviewReference }[] = [];
   candidates.forEach((c, i) => {
     if (c.role !== 'reference') return;
-    const parsed = cues.get(c.line)?.shift();
-    const base = { text: c.text, line: c.line, reason: (c.reason ?? parsed?.reason ?? 'prose') as ScheduleReferenceReason, cue: parsed?.cue ?? null };
+    const id = meta[i].refId as string;
+    const parsed = segments[meta[i].segment].references.find((r) => r.id === id)?.ref;
+    const isTicked = ticked.has(id);
+    const base = {
+      id,
+      text: c.text,
+      line: meta[i].line,
+      reason: (c.reason ?? parsed?.reason ?? 'prose') as ScheduleReferenceReason,
+      cue: parsed?.cue ?? null,
+      ticked: isTicked,
+      scheduledAs: null,
+      alreadyAs: null,
+      tickable: false,
+    };
     const r = usable?.[i];
-    if (!r) references.push({ ...base, status: 'unchecked' });
-    else if (r.status === 'unmatched') references.push({ ...base, status: 'unmatched', code: r.code, message: r.message });
-    else references.push({ ...base, status: 'matched', key: r.ticket.key, summary: r.ticket.summary });
+    if (!r) listed.push({ rank: i, ref: { ...base, status: 'unchecked' } });
+    else if (r.status === 'unmatched') listed.push({ rank: i, ref: { ...base, status: 'unmatched', code: r.code, message: r.message } });
+    else {
+      const inEffect = effective.has(id);
+      const already = inEffect ? null : (numberOfIssue.get(r.ticket.issueId) ?? null);
+      listed.push({
+        rank: i,
+        ref: {
+          ...base,
+          status: 'matched',
+          key: r.ticket.key,
+          summary: r.ticket.summary,
+          issueId: r.ticket.issueId,
+          scheduledAs: inEffect ? (numberAtRank.get(i + 1) ?? null) : null,
+          alreadyAs: already,
+          // A tick can always be taken back; a new one only when nothing else schedules this ticket.
+          tickable: inEffect || isTicked || already === null,
+        },
+      });
+    }
   });
   for (const { index, ticket } of duplicates) {
     const r = usable?.[index];
     if (r?.status !== 'duplicate') continue;
-    references.push({
-      text: ticket.text,
-      line: ticket.line,
-      reason: 'duplicate',
-      cue: null,
-      status: 'duplicate',
-      key: r.ticket.key,
-      ofNumber: numberAt.get(r.duplicateOfLine) ?? null,
+    listed.push({
+      rank: index,
+      ref: {
+        id: null,
+        text: ticket.text,
+        line: ticket.line,
+        reason: 'duplicate',
+        cue: null,
+        ticked: false,
+        tickable: false,
+        scheduledAs: null,
+        alreadyAs: numberAtRank.get(r.duplicateOfLine) ?? null,
+        status: 'duplicate',
+        key: r.ticket.key,
+        ofNumber: numberAtRank.get(r.duplicateOfLine) ?? null,
+      },
     });
   }
-  references.sort((a, b) => a.line - b.line);
+  listed.sort((a, b) => a.rank - b.rank);
 
-  return { rows, references, scheduledCount: n };
+  return { rows, references: listed.map((l) => l.ref), scheduledCount: n };
+}
+
+/**
+ * One file group's outline and References, as first proposed (VERM-102).
+ * `results` answers `candidates` (scheduleCandidates(group), file lines) in
+ * that order; a duplicate's `duplicateOfLine` is a file line here.
+ */
+export function buildGroupPreview(group: ScheduleGroup, candidates: readonly RunwayImportCandidate[], results: readonly RunwayImportCandidateMatch[] | null): GroupPreview {
+  const usable = results && results.length === candidates.length ? results : null;
+  // Same order as segmentCandidates; translate file lines to preview positions.
+  const rankOfLine = new Map<number, number>();
+  candidates.forEach((c, i) => {
+    if (c.role === 'scheduled' && !rankOfLine.has(c.line)) rankOfLine.set(c.line, i + 1);
+  });
+  const ranked = usable?.map((r) => (r.status === 'duplicate' ? { ...r, duplicateOfLine: rankOfLine.get(r.duplicateOfLine) ?? r.duplicateOfLine } : r)) ?? null;
+  return buildWorkingPreview([segmentOf(group, 'g')], ranked, new Set());
 }
 
 // ---------------------------------------------------------------------------
@@ -288,78 +471,12 @@ export function createGroupChecker(match: MatchFn, report: (groupKey: string, ch
 }
 
 // ---------------------------------------------------------------------------
-// One preview's session: the workspace list, the mapping and the checks.
+// The workspace list (the session is in importCorrections.ts).
 
 export type ImportWorkspaceList =
   | { state: 'loading' }
   | { state: 'failed'; error: string }
   | { state: 'ready'; workspaces: readonly ImportWorkspaceOption[] };
-
-export interface ImportSessionState {
-  workspaces: ImportWorkspaceList;
-  /** Null until the workspace list has been read. */
-  groups: ProposedGroup[] | null;
-  /** Each group's selected connection; null waits for a choice. */
-  connections: Record<string, string | null>;
-  checks: Record<string, GroupCheck>;
-}
-
-export interface ImportSession {
-  state(): ImportSessionState;
-  /**
-   * The workspace list as read. Headings are mapped, and groups checked, only
-   * once a list has been read; the first one read is kept, so a later
-   * refetch neither remaps nor rechecks.
-   */
-  setWorkspaces(list: ImportWorkspaceList): void;
-  /** Checks the group on the chosen workspace's connection. */
-  choose(groupKey: string, workspaceId: string): void;
-  /** Checks the group again on its selected connection. */
-  retry(groupKey: string): void;
-  dispose(): void;
-}
-
-export function createImportSession(parsed: ParsedSchedule, activeId: string, match: MatchFn, onChange: (state: ImportSessionState) => void): ImportSession {
-  let state: ImportSessionState = { workspaces: { state: 'loading' }, groups: null, connections: {}, checks: {} };
-  let disposed = false;
-  const set = (next: ImportSessionState) => {
-    state = next;
-    if (!disposed) onChange(state);
-  };
-  const checker = createGroupChecker(match, (groupKey, check) => set({ ...state, checks: { ...state.checks, [groupKey]: check } }));
-  const groupOf = (key: string) => state.groups?.find((g) => g.groupKey === key);
-
-  return {
-    state: () => state,
-    setWorkspaces(list) {
-      if (disposed || state.workspaces.state === 'ready') return;
-      if (list.state === 'ready' && list.workspaces.length === 0) list = { state: 'failed', error: EMPTY_LIST };
-      if (list.state !== 'ready') {
-        set({ ...state, workspaces: list });
-        return;
-      }
-      const groups = proposeGroups(parsed, list.workspaces, activeId);
-      set({ ...state, workspaces: list, groups, connections: Object.fromEntries(groups.map((g) => [g.groupKey, g.connectionId])) });
-      for (const g of groups) if (g.connectionId !== null) checker.check(g, g.connectionId);
-    },
-    choose(groupKey, workspaceId) {
-      const g = groupOf(groupKey);
-      if (disposed || !g || !g.chooseConnection) return;
-      set({ ...state, connections: { ...state.connections, [groupKey]: workspaceId } });
-      checker.check(g, workspaceId);
-    },
-    retry(groupKey) {
-      const g = groupOf(groupKey);
-      const conn = state.connections[groupKey];
-      if (disposed || !g || !conn) return;
-      checker.check(g, conn);
-    },
-    dispose() {
-      disposed = true;
-      checker.dispose();
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // The workspace list as RunwayView reads it.
