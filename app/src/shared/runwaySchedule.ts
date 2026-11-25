@@ -198,7 +198,18 @@ const identity = (t: ScheduleTicket) => `${t.host ?? ''} ${t.key.toUpperCase()}`
 // Block structure
 
 const HEADING_RE = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
-const FENCE_RE = /^( *)(`{3,}|~{3,})/;
+const FENCE_RE = /^( *)(`{3,}|~{3,})(.*)$/;
+
+/**
+ * The fence marker `text` opens with, or null. A backtick fence's info
+ * string may not contain a backtick, so ```READ-1``` on one line is an
+ * inline code span, not a fence (CommonMark); a tilde fence's may.
+ */
+function fenceMarker(text: string): string | null {
+  const m = /^(`{3,}|~{3,})(.*)$/.exec(text);
+  if (!m || (m[1][0] === '`' && m[2].includes('`'))) return null;
+  return m[1];
+}
 const ITEM_RE = /^( *)([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/;
 const THEMATIC_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const TABLE_RE = /^ {0,3}\|/;
@@ -306,14 +317,20 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
    * Consumes a fenced block opened on line `start` with `marker`, inside a
    * container whose content starts at `containerCol` (0 at the top level).
    * A closing fence may be indented at most 3 columns into its container;
-   * a deeper one is code. Returns the index of the block's last line.
+   * a deeper one is code. Inside a list item the block also ends with the
+   * item, at the first non-blank line indented less than the item's content;
+   * an unclosed top-level fence runs to the end of the file. Returns the
+   * index of the block's last line.
    */
   const fenceEnd = (start: number, marker: string, containerCol: number): number => {
     const close = new RegExp(`^ *${marker[0] === '`' ? '`' : '~'}{${marker.length},}[ \\t]*$`);
+    let lastContent = start;
     for (let j = start + 1; j < lines.length; j++) {
+      if (containerCol > 0 && !isBlank(lines[j]) && indentOf(lines[j]) < containerCol) return lastContent;
       if (close.test(lines[j]) && indentOf(lines[j]) <= containerCol + 3) return j;
+      if (!isBlank(lines[j])) lastContent = j;
     }
-    return lines.length - 1;
+    return containerCol > 0 ? lastContent : lines.length - 1;
   };
   const codeReferences = (start: number, end: number) => {
     for (let k = start; k <= end; k++) referencesIn(k + 1, lines[k], 'code');
@@ -365,10 +382,11 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
     // Fenced code: one note, every key a code reference. Inside a list item
     // when indented to its content; otherwise it ends the list.
     const fence = FENCE_RE.exec(raw);
-    if (fence && fence[1].length <= (deepest ? deepest.contentCol + 3 : 3)) {
+    const marker = fence ? fenceMarker(raw.trimStart()) : null;
+    if (fence && marker && fence[1].length <= (deepest ? deepest.contentCol + 3 : 3)) {
       closeLeaf();
       const depth = nestAt(indent);
-      const end = fenceEnd(i, fence[2], depth ? items[depth - 1].contentCol : 0);
+      const end = fenceEnd(i, marker, depth ? items[depth - 1].contentCol : 0);
       note(lineNo, dedent(lines.slice(i, end + 1)), depth, 'code');
       codeReferences(i, end);
       i = end;
@@ -428,9 +446,9 @@ export function parseRunwaySchedule(markdown: string): ParsedSchedule {
 
       // A fence opened right after the marker: the item is a code note, and
       // nothing in the fence is scheduled.
-      const itemFence = /^(`{3,}|~{3,})/.exec(content);
+      const itemFence = fenceMarker(content);
       if (itemFence) {
-        const end = fenceEnd(i, itemFence[1], contentCol);
+        const end = fenceEnd(i, itemFence, contentCol);
         note(lineNo, dedent(lines.slice(i, end + 1)), depth, 'code');
         codeReferences(i, end);
         openItem(contentCol, depth, null, null);

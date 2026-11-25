@@ -405,3 +405,57 @@ describe('review fixes', () => {
     expect(refs(p.groups[0])).toEqual(['READ-1 code L3']);
   });
 });
+
+// Review of PR 228, round 2: the first two cases failed on 0ba658f.
+describe('review fixes, round 2', () => {
+  const keys = (g: ScheduleGroup) => scheduledTickets(g).map((t) => t.ticket.key);
+  const codeRefs = (g: ScheduleGroup) => g.references.filter((r) => r.reason === 'code').map((r) => `${r.ticket.key} L${r.line}`);
+
+  it('a same-line triple-backtick span is inline code, not a fence', () => {
+    const p = parseRunwaySchedule(
+      md('## A', '```READ-1``` is an inline span', '- ```READ-2``` inline in an item', '- [ ] READ-3 Real', '## B', '- [ ] READ-4 Also real'),
+    );
+    expect(p.groups.map((g) => g.name)).toEqual(['A', 'B']);
+    expect(p.groups.map(keys)).toEqual([['READ-3'], ['READ-4']]);
+    expect(p.groups.map(codeRefs)).toEqual([['READ-1 L2', 'READ-2 L3'], []]);
+  });
+
+  it('a fence inside a list item stops when its item ends', () => {
+    const p = parseRunwaySchedule(
+      md(
+        '## A',
+        '- [ ] READ-1 Parent',
+        '  ```',
+        '  - [ ] READ-8 example',
+        '',
+        '- [ ] READ-2 Next',
+        '- ```',
+        '  - [ ] READ-9 example',
+        '## B',
+        '- [ ] READ-3 Real',
+      ),
+    );
+    expect(p.groups.map((g) => g.name)).toEqual(['A', 'B']);
+    expect(p.groups.map(keys)).toEqual([['READ-1', 'READ-2'], ['READ-3']]);
+    expect(p.groups.map(codeRefs)).toEqual([['READ-8 L4', 'READ-9 L8'], []]);
+    expect(outline(p.groups[0])).toEqual([
+      'ticket READ-1 [ ] Parent',
+      'note 1 code: ```\n- [ ] READ-8 example',
+      'ticket READ-2 [ ] Next',
+      'note 0 code: - ```\n  - [ ] READ-9 example',
+    ]);
+  });
+
+  it('an unclosed top-level fence still runs to the end of the file', () => {
+    const p = parseRunwaySchedule(md('## A', '```', '- [ ] READ-1 example', '## B', '- [ ] READ-2 example'));
+    expect(p.groups.map((g) => g.name)).toEqual(['A']);
+    expect(p.groups.map(keys)).toEqual([[]]);
+    expect(p.groups.map(codeRefs)).toEqual([['READ-1 L3', 'READ-2 L5']]);
+  });
+
+  it('a tilde fence may carry backticks in its info string', () => {
+    const p = parseRunwaySchedule(md('## A', '~~~ `info`', '- [ ] READ-1 example', '~~~', '- [ ] READ-2 Real'));
+    expect(p.groups.map(keys)).toEqual([['READ-2']]);
+    expect(p.groups.map(codeRefs)).toEqual([['READ-1 L3']]);
+  });
+});
