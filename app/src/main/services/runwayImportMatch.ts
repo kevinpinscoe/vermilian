@@ -21,7 +21,10 @@
 //      timeout, a server error — is one error for the group, and no
 //      candidate is classified. A timeout or server error is retryable at
 //      once; a 401 or a missing credential says what to correct first.
-//   5. Within the group, the first scheduled occurrence of a matched ticket
+//   5. A reference the parser marked as a duplicate was written as a
+//      scheduled line; it is matched as scheduled, since the parser compared
+//      host and key only and the line it deferred to may be refused here.
+//      Within the group, the first scheduled occurrence of a matched ticket
 //      keeps its place, in file order. A later scheduled occurrence of the
 //      same ticket — by any ID it answered under, so a Jira issue read under
 //      an old and a current key is one ticket — is a duplicate. References
@@ -114,7 +117,8 @@ function timed(reader: RunwayTicketReader, ms: number): RunwayTicketReader {
   return {
     batch: (ids) => withTimeout(reader.batch(ids), ms),
     one: (id) => withTimeout(reader.one(id), ms),
-    ...(admits ? { admits: (key: string) => admits.call(reader, key) } : {}),
+    // A moved key's admission check can ask the tracker too (Jira board membership).
+    ...(admits ? { admits: (key: string) => withTimeout(admits.call(reader, key), ms) } : {}),
   };
 }
 
@@ -169,9 +173,13 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
   }
   const tracker = runwayWorkspaceTracker(workspace);
   const baseUrl = await deps.trackerBaseUrl(group.workspaceId, tracker);
+  // A parser duplicate keeps its scheduling intent until validated (step 5).
+  const candidates = group.candidates.map(
+    (c): RunwayImportCandidate => (c.role === 'reference' && c.reason === 'duplicate' ? { ...c, role: 'scheduled', reason: null } : c),
+  );
 
   // 2. Each candidate on its own, as written.
-  const parsed = group.candidates.map((c) => parseRunwayReference(c.text, tracker, baseUrl));
+  const parsed = candidates.map((c) => parseRunwayReference(c.text, tracker, baseUrl));
   const localIds = [...new Set(parsed.flatMap((p) => (p.ok ? [p.localId] : [])))];
 
   // 3. One lookup per distinct key, on this workspace's own connection.
@@ -195,7 +203,7 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
 
   // 4. Each candidate's own result, from the shared lookup.
   const aliases: (string[] | null)[] = [];
-  const results: RunwayImportCandidateMatch[] = group.candidates.map((c, i): RunwayImportCandidateMatch => {
+  const results: RunwayImportCandidateMatch[] = candidates.map((c, i): RunwayImportCandidateMatch => {
     const base = { text: c.text, line: c.line, role: c.role, reason: c.reason };
     aliases.push(null);
     const p = parsed[i];
@@ -224,7 +232,7 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
   });
 
   // 5. The first scheduled occurrence of a matched ticket keeps its place.
-  const order = group.candidates.map((c, i) => ({ c, i })).sort((a, b) => a.c.line - b.c.line || a.i - b.i);
+  const order = candidates.map((c, i) => ({ c, i })).sort((a, b) => a.c.line - b.c.line || a.i - b.i);
   const firstLine = new Map<string, number>();
   for (const { c, i } of order) {
     const r = results[i];

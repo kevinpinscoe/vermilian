@@ -46,6 +46,10 @@ describe('parseRunwayReference', () => {
     expect(parseRunwayReference(`${YT}/projects/READ/issues/not-a-key`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
     // A Jira link shape on the YouTrack host is not a YouTrack ticket link.
     expect(parseRunwayReference(`${YT}/browse/READ-12`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+    // A malformed percent-escape is refused, not thrown (PR 229 review).
+    expect(parseRunwayReference(`${YT}/issue/%ZZ`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+    expect(parseRunwayReference(`${YT}/issue/READ-%E0%A4%A`, 'youtrack', YT)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
+    expect(parseRunwayReference(`${JIRA}/browse/OPS-%ZZ`, 'jira', JIRA)).toMatchObject({ ok: false, code: 'not-a-ticket-url' });
   });
 
   it('a project-view link under the configured server path', () => {

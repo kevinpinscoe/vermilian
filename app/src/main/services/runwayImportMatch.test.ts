@@ -12,12 +12,14 @@ const YT_A = 'ws-aaaaaaaaaaaa';
 const YT_B = 'ws-bbbbbbbbbbbb';
 const JIRA = 'ws-cccccccccccc';
 const LEGACY = 'ws-dddddddddddd';
+const YT_PATH = 'ws-eeeeeeeeeeee';
 
 const BASE: Record<string, string> = {
   [YT_A]: 'https://yt.example.test',
   [YT_B]: 'https://yt2.example.test',
   [JIRA]: 'https://site.example.test',
   [LEGACY]: 'https://legacy.example.test',
+  [YT_PATH]: 'https://tracker.example.test/youtrack',
 };
 
 const CONFIG: RunwayWorkspaces = {
@@ -27,6 +29,7 @@ const CONFIG: RunwayWorkspaces = {
     { id: YT_B, backend: { kind: 'youtrack' } },
     { id: JIRA, backend: { kind: 'jira' } },
     { id: LEGACY },
+    { id: YT_PATH, backend: { kind: 'youtrack' } },
   ],
 };
 
@@ -127,6 +130,94 @@ describe('runwayImportMatch — Kevin’s regressions', () => {
     expect(summary(groups[0])).toEqual(['L2 scheduled matched READ-1']);
     expect(groups[0].ok && groups[0].candidates[0].status === 'matched' && groups[0].candidates[0].ticket.summary).toBe('From A');
     expect(summary(groups[1])).toEqual(['L5 scheduled unmatched missing-or-unreadable']);
+  });
+});
+
+describe('runwayImportMatch — PR 229 review corrections', () => {
+  it('a refused link does not take a valid scheduled ticket’s place: the parser’s duplicate stays scheduled until validated', async () => {
+    const file = ['- https://tracker.example.test/other/issue/OPS-7', '- https://tracker.example.test/youtrack/issue/OPS-7'].join('\n');
+    const group = parseRunwaySchedule(file).groups[0];
+    // Same host and key, so the parser records line 2 as a duplicate.
+    expect(group.references.map((r) => [r.line, r.reason])).toEqual([[2, 'duplicate']]);
+    const candidates = scheduleCandidates(group);
+    expect(candidates).toEqual([
+      sched('https://tracker.example.test/other/issue/OPS-7', 1),
+      sched('https://tracker.example.test/youtrack/issue/OPS-7', 2),
+    ]);
+
+    const r = fakeReader({ 'OPS-7': issue('OPS-7') });
+    const { d } = deps({ [YT_PATH]: { ok: true, reader: r.reader } });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_PATH, candidates }] }));
+    expect(summary(g)).toEqual(['L1 scheduled unmatched not-a-ticket-url', 'L2 scheduled matched OPS-7']);
+  });
+
+  it('two identical valid scheduled lines: the second is a duplicate pointing back to the first', async () => {
+    const group = parseRunwaySchedule(['- OPS-7', '- OPS-7'].join('\n')).groups[0];
+    const candidates = scheduleCandidates(group);
+    expect(candidates).toEqual([sched('OPS-7', 1), sched('OPS-7', 2)]);
+
+    const r = fakeReader({ 'OPS-7': issue('OPS-7') });
+    const { d } = deps({ [YT_A]: { ok: true, reader: r.reader } });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: YT_A, candidates }] }));
+    expect(r.batch).toHaveBeenCalledWith(['OPS-7']);
+    expect(summary(g)).toEqual(['L1 scheduled matched OPS-7', 'L2 scheduled duplicate OPS-7 of L1']);
+  });
+
+  it('a parser duplicate sent as a reference is still treated as scheduled', async () => {
+    const r = fakeReader({ 'OPS-7': issue('OPS-7') });
+    const { d } = deps({ [YT_PATH]: { ok: true, reader: r.reader } });
+    const [g] = okGroups(
+      await createRunwayImportMatch(d)({
+        groups: [
+          {
+            groupKey: 'g',
+            workspaceId: YT_PATH,
+            candidates: [
+              sched('https://tracker.example.test/other/issue/OPS-7', 1),
+              ref('https://tracker.example.test/youtrack/issue/OPS-7', 2, 'duplicate'),
+              ref('OPS-7', 3, 'duplicate'),
+            ],
+          },
+        ],
+      }),
+    );
+    expect(summary(g)).toEqual(['L1 scheduled unmatched not-a-ticket-url', 'L2 scheduled matched OPS-7', 'L3 scheduled duplicate OPS-7 of L2']);
+  });
+
+  it('a malformed percent-escape in a same-host link is refused alone; the rest of the group is looked up', async () => {
+    const r = fakeReader({ 'OPS-7': issue('OPS-7') });
+    const { d } = deps({ [YT_A]: { ok: true, reader: r.reader } });
+    const [g] = okGroups(
+      await createRunwayImportMatch(d)({
+        groups: [{ groupKey: 'g', workspaceId: YT_A, candidates: [sched('https://yt.example.test/issue/%ZZ', 1), sched('OPS-7', 2)] }],
+      }),
+    );
+    expect(r.batch).toHaveBeenCalledTimes(1);
+    expect(r.batch).toHaveBeenCalledWith(['OPS-7']);
+    expect(summary(g)).toEqual(['L1 scheduled unmatched not-a-ticket-url', 'L2 scheduled matched OPS-7']);
+  });
+
+  it('a held moved-key admission check is bounded by the deadline: one retryable group error, nothing classified', async () => {
+    const r = fakeReader({}, { answers: { 'OLD-1': issue('NEW-1') } });
+    r.admits.mockImplementation(() => new Promise<boolean>(() => undefined));
+    const { d } = deps({ [JIRA]: { ok: true, reader: r.reader } }, { timeoutMs: 5 });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: JIRA, candidates: [sched('OLD-1', 1)] }] }));
+    expect(r.one).toHaveBeenCalledWith('OLD-1');
+    expect(r.admits).toHaveBeenCalledWith('NEW-1');
+    expect(g).toMatchObject({ ok: false, code: 'refresh-failed', retryable: true });
+    expect(g.ok ? '' : g.error).toMatch(/did not answer in time.*try again/);
+    expect('candidates' in g).toBe(false);
+  });
+
+  it.each([
+    [true, 'L1 scheduled matched NEW-1'],
+    [false, 'L1 scheduled unmatched not-readable'],
+  ])('the workspace admission rule for a moved key still applies (admits %s)', async (admitted, expected) => {
+    const r = fakeReader({}, { answers: { 'OLD-1': issue('NEW-1') } });
+    r.admits.mockResolvedValue(admitted);
+    const { d } = deps({ [JIRA]: { ok: true, reader: r.reader } }, { timeoutMs: 1000 });
+    const [g] = okGroups(await createRunwayImportMatch(d)({ groups: [{ groupKey: 'g', workspaceId: JIRA, candidates: [sched('OLD-1', 1)] }] }));
+    expect(summary(g)).toEqual([expected]);
   });
 });
 

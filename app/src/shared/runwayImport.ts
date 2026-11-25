@@ -94,13 +94,22 @@ export const RUNWAY_IMPORT_MAX_TEXT = 2048;
 /**
  * A parsed group's candidates, in file order: every scheduled ticket and
  * every reference, each as written (its original link when it had one).
+ *
+ * A line the parser set aside as a duplicate was written as a scheduled
+ * item, so it is sent as scheduled: the parser compares host and key only,
+ * and the earlier link it deferred to may yet be refused (a path outside the
+ * workspace's tracker). The matcher decides duplicates after validating each
+ * link.
  */
 export function scheduleCandidates(group: ScheduleGroup): RunwayImportCandidate[] {
   const scheduled = group.rows.flatMap((r): RunwayImportCandidate[] =>
     r.kind === 'ticket' ? [{ text: r.ticket.url ?? r.ticket.key, line: r.line, role: 'scheduled', reason: null }] : [],
   );
   const references = group.references.map(
-    (r): RunwayImportCandidate => ({ text: r.ticket.url ?? r.ticket.key, line: r.line, role: 'reference', reason: r.reason }),
+    (r): RunwayImportCandidate =>
+      r.reason === 'duplicate'
+        ? { text: r.ticket.url ?? r.ticket.key, line: r.line, role: 'scheduled', reason: null }
+        : { text: r.ticket.url ?? r.ticket.key, line: r.line, role: 'reference', reason: r.reason },
   );
   return [...scheduled, ...references].sort((a, b) => a.line - b.line);
 }
