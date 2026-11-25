@@ -1,34 +1,44 @@
 // The Markdown import preview (VERM-102), opened from the Runway header's
-// Import from Markdown… once a file has been chosen. Read-only: it shows
-// each proposed workspace with its numbered tickets, sections, notes and
-// References, and writes nothing. Cancel is the only action; Apply is
-// VERM-104, and correcting the grouping or ticking a Reference is VERM-103.
+// Import from Markdown… once a file has been chosen. It shows each proposed
+// workspace with its numbered tickets, sections, notes and References, and
+// writes nothing. Apply is VERM-104.
 //
 // Nothing is mapped or checked until the workspace list has been read; a
 // failed read offers Retry. Each group is then checked on its own connection
-// (runwayImportMatch, VERM-101): an existing workspace's own, a proposed new
-// workspace's default (the active workspace's), or the workspace chosen in
-// Check tickets using, which rechecks that group only. An ambiguous heading
-// waits for that choice. The latest choice wins, however the answers arrive.
-// A group whose connection fails keeps its outline with the tickets
-// unchecked. The rules are in importPreview.ts (unit-tested).
+// (runwayImportMatch, VERM-101). An ambiguous heading waits for a choice.
+//
+// Corrections (VERM-103), kept in memory until Cancel: rename a proposed new
+// workspace (an existing workspace's name is read-only), map to an existing
+// workspace or New workspace, Check tickets using, merge into another group,
+// split a top-level ### into its own workspace, skip and include again, and
+// tick a matched Reference to schedule it. Undo reverses the last edit and
+// Reset restores the preview as first opened. The rules are in
+// importCorrections.ts and importPreview.ts (unit-tested).
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AttentionBox, Button, Modal, ModalBasicLayout, ModalContent, ModalHeader, Text } from '@vibe/core';
 import { parseRunwaySchedule, type ScheduleReferenceCue, type ScheduleReferenceReason } from '../../../shared/runwaySchedule';
 import {
-  buildGroupPreview,
-  createImportSession,
   type GroupCheck,
-  type ImportSession,
-  type ImportSessionState,
   type ImportWorkspaceList,
   type ImportWorkspaceOption,
   workspaceOptionLabels,
   type PreviewReference,
   type PreviewRow,
-  type ProposedGroup,
 } from './importPreview';
+import {
+  createImportSession,
+  displayName,
+  groupCandidates,
+  groupPreview,
+  MAX_GROUP_NAME,
+  nameCollisions,
+  nameProblem,
+  type Correction,
+  type ImportSession,
+  type ImportSessionState,
+  type WorkingGroup,
+} from './importCorrections';
 import modalLayout from '../../components/ModalLayout.module.css';
 import styles from './RunwayMarkdownImport.module.css';
 
@@ -55,6 +65,9 @@ const REASON: Record<ScheduleReferenceReason, string> = {
 
 const CUE: Record<ScheduleReferenceCue, string> = { see: 'after “see”', 'moved to': 'after “moved to”', 'replaced by': 'after “replaced by”' };
 
+/** The Workspace selector's value for a proposed new workspace. */
+const NEW = '__new__';
+
 export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, workspaces, onRetryWorkspaces, onClose }: RunwayMarkdownImportProps) {
   const parsed = useMemo(() => parseRunwaySchedule(text), [text]);
   const session = useRef<ImportSession | null>(null);
@@ -80,6 +93,8 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
   const list = state?.workspaces ?? { state: 'loading' as const };
   const groups = state?.groups ?? null;
   const options = list.state === 'ready' ? list.workspaces : [];
+  const edits = state?.corrections.length ?? 0;
+  const apply = (c: Correction) => session.current?.apply(c) ?? false;
 
   return (
     <Modal id="runway-markdown-import" data-testid="runway-markdown-import" show onClose={onClose} size="large">
@@ -88,8 +103,8 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
         <ModalContent>
           <div className={styles.body}>
             <Text type="text2" className={styles.lead}>
-              Each <code>##</code> heading proposes a workspace. Scheduled tickets are numbered in file order; other ticket
-              mentions are listed under References. Nothing has been written.
+              Each <code>##</code> heading proposes a workspace. Scheduled tickets are numbered in order; other ticket
+              mentions are listed under References. Correct the grouping here; nothing has been written.
             </Text>
             {list.state === 'loading' && (
               <Text type="text2" className={styles.status} data-testid="import-workspaces-loading">
@@ -118,14 +133,20 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
               <GroupSection
                 key={g.groupKey}
                 group={g}
+                groups={groups}
                 workspaces={options}
-                connectionId={state?.connections[g.groupKey] ?? null}
                 check={state?.checks[g.groupKey]}
-                onConnection={(id) => session.current?.choose(g.groupKey, id)}
+                apply={apply}
                 onRetry={() => session.current?.retry(g.groupKey)}
               />
             ))}
             <div className={styles.footer}>
+              <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.undo()} data-testid="import-undo">
+                Undo
+              </Button>
+              <Button size="small" kind="tertiary" disabled={edits === 0} onClick={() => session.current?.reset()} data-testid="import-reset">
+                Reset
+              </Button>
               <Button size="small" kind="secondary" onClick={onClose} data-testid="import-cancel">
                 Cancel
               </Button>
@@ -138,49 +159,117 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
 }
 
 interface GroupSectionProps {
-  group: ProposedGroup;
+  group: WorkingGroup;
+  groups: readonly WorkingGroup[];
   workspaces: readonly ImportWorkspaceOption[];
-  connectionId: string | null;
   check: GroupCheck | undefined;
-  onConnection(id: string): void;
+  apply(c: Correction): boolean;
   onRetry(): void;
 }
 
-function GroupSection({ group, workspaces, connectionId, check, onConnection, onRetry }: GroupSectionProps) {
+function GroupSection({ group, groups, workspaces, check, apply, onRetry }: GroupSectionProps) {
   const labels = useMemo(() => workspaceOptionLabels(workspaces), [workspaces]);
-  // Only the answer for the connection selected now is shown.
-  const current = check && connectionId !== null && check.connectionId === connectionId ? check : undefined;
-  const results = current?.state === 'done' && current.match.ok ? current.match.candidates : null;
-  const preview = useMemo(() => buildGroupPreview(group.group, group.candidates, results), [group, results]);
+  const results = check?.state === 'done' && check.match.ok ? check.match.candidates : null;
+  const preview = useMemo(() => groupPreview(group, results), [group, results]);
+  const hasTickets = useMemo(() => groupCandidates(group).candidates.length > 0, [group]);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const failure =
-    current?.state === 'failed'
-      ? { error: current.error, retryable: current.retryable }
-      : current?.state === 'done' && !current.match.ok
-        ? { error: current.match.error, retryable: current.match.retryable }
+    check?.state === 'failed'
+      ? { error: check.error, retryable: check.retryable }
+      : check?.state === 'done' && !check.match.ok
+        ? { error: check.match.error, retryable: check.match.retryable }
         : null;
-  const waiting = connectionId === null;
-  const checking = !waiting && (!current || current.state === 'pending');
-  const title = group.name ?? 'Before the first heading';
+  const waiting = group.connectionId === null;
+  const checking = !waiting && (!check || check.state === 'pending');
+  const title = displayName(group);
+  const key = group.groupKey;
+  const collisions = nameCollisions(group, groups, workspaces);
+  const mergeTargets = groups.filter((o) => o.groupKey !== key && !o.skipped);
+  const renameProblem = renaming === null ? null : nameProblem(renaming);
+
+  if (group.skipped) {
+    return (
+      <section className={`${styles.group} ${styles.skipped}`} data-testid="import-group" data-group-key={key} data-skipped="true">
+        <div className={styles.groupHeader}>
+          <h3 className={styles.groupName} data-testid="import-group-name">
+            {title}
+          </h3>
+          <span className={styles.tag}>Skipped</span>
+          <Button size="small" kind="tertiary" onClick={() => apply({ op: 'skip', groupKey: key, skipped: false })} data-testid="import-include">
+            Include again
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  const workspaceValue =
+    group.target.kind === 'existing' ? group.target.workspaceId : group.target.kind === 'active' ? group.target.workspaceId : group.target.kind === 'new' ? NEW : '';
 
   return (
-    <section className={styles.group} data-testid="import-group" data-group-key={group.groupKey}>
+    <section className={styles.group} data-testid="import-group" data-group-key={key}>
       <div className={styles.groupHeader}>
-        <h3 className={styles.groupName} data-testid="import-group-name">
-          {title}
-        </h3>
+        {renaming === null ? (
+          <h3 className={styles.groupName} data-testid="import-group-name">
+            {title}
+          </h3>
+        ) : (
+          <form
+            className={styles.rename}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (renameProblem === null && (apply({ op: 'rename', groupKey: key, name: renaming }) || renaming.trim() === group.name)) setRenaming(null);
+            }}
+          >
+            <input
+              autoFocus
+              aria-label="Workspace name"
+              maxLength={MAX_GROUP_NAME + 1}
+              value={renaming}
+              onChange={(e) => setRenaming(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setRenaming(null);
+                }
+              }}
+              data-testid="import-rename-input"
+            />
+            <Button size="small" type="submit" disabled={renameProblem !== null} data-testid="import-rename-save">
+              Save
+            </Button>
+            <Button size="small" kind="tertiary" onClick={() => setRenaming(null)} data-testid="import-rename-cancel">
+              Cancel
+            </Button>
+            {renameProblem && (
+              <span className={styles.tagWarn} data-testid="import-rename-error">
+                {renameProblem}
+              </span>
+            )}
+          </form>
+        )}
         <span className={styles.target} data-testid="import-group-target" data-kind={group.target.kind}>
           {targetText(group)}
         </span>
       </div>
-      {group.chooseConnection && (
+
+      <div className={styles.controls}>
         <label className={styles.connection}>
-          <span>Check tickets using</span>
-          <select data-testid="import-connection" value={connectionId ?? ''} onChange={(e) => e.target.value && onConnection(e.target.value)}>
-            {connectionId === null && (
+          <span>Workspace</span>
+          <select
+            data-testid="import-workspace"
+            value={workspaceValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v) apply({ op: 'map', groupKey: key, workspaceId: v === NEW ? null : v });
+            }}
+          >
+            {workspaceValue === '' && (
               <option value="" disabled>
                 Choose a workspace…
               </option>
             )}
+            <option value={NEW}>New workspace</option>
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
                 {labels.get(w.id) ?? w.name}
@@ -188,13 +277,83 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
             ))}
           </select>
         </label>
+        {group.chooseConnection && (
+          <label className={styles.connection}>
+            <span>Check tickets using</span>
+            <select
+              data-testid="import-connection"
+              value={group.connectionId ?? ''}
+              onChange={(e) => e.target.value && apply({ op: 'connection', groupKey: key, workspaceId: e.target.value })}
+            >
+              {group.connectionId === null && (
+                <option value="" disabled>
+                  Choose a workspace…
+                </option>
+              )}
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {labels.get(w.id) ?? w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {group.target.kind === 'new' && renaming === null && (
+          <Button size="small" kind="tertiary" onClick={() => setRenaming(group.name ?? '')} data-testid="import-rename">
+            Rename…
+          </Button>
+        )}
+        {mergeTargets.length > 0 && (
+          <label className={styles.connection}>
+            <span className={styles.visuallyHidden}>Merge into another workspace</span>
+            <select
+              data-testid="import-merge"
+              value=""
+              onChange={(e) => e.target.value && apply({ op: 'merge', source: key, target: e.target.value })}
+            >
+              <option value="" disabled>
+                Merge into…
+              </option>
+              {mergeTargets.map((o) => (
+                <option key={o.groupKey} value={o.groupKey}>
+                  {displayName(o)} (line {o.line})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <Button size="small" kind="tertiary" onClick={() => apply({ op: 'skip', groupKey: key, skipped: true })} data-testid="import-skip">
+          Skip
+        </Button>
+      </div>
+
+      {group.target.kind === 'new' && group.name === null && renaming === null && (
+        <Text type="text2" className={styles.status} data-testid="import-needs-name">
+          This new workspace needs a name: choose Rename…
+        </Text>
       )}
-      {group.candidates.length > 0 && waiting && (
+      {(collisions.workspaces.length > 0 || collisions.groups.length > 0) && (
+        <div className={styles.collision} data-testid="import-name-collision">
+          <Text type="text2">This name is already used.</Text>
+          {collisions.workspaces.map((w) => (
+            <Button key={w.id} size="small" kind="tertiary" onClick={() => apply({ op: 'map', groupKey: key, workspaceId: w.id })} data-testid="import-collision-map">
+              Map to {labels.get(w.id) ?? w.name}
+            </Button>
+          ))}
+          {collisions.groups.map((o) => (
+            <Button key={o.groupKey} size="small" kind="tertiary" onClick={() => apply({ op: 'merge', source: key, target: o.groupKey })} data-testid="import-collision-merge">
+              Merge into {displayName(o)} (line {o.line})
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {hasTickets && waiting && (
         <Text type="text2" className={styles.status} data-testid="import-group-choose">
           Choose a workspace to check these tickets.
         </Text>
       )}
-      {group.candidates.length > 0 && checking && (
+      {hasTickets && checking && (
         <Text type="text2" className={styles.status} data-testid="import-group-checking">
           Checking tickets…
         </Text>
@@ -213,7 +372,11 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
       <ol className={styles.rows} data-testid="import-rows">
         {preview.rows.length === 0 && <li className={styles.muted}>No tickets, sections or notes under this heading.</li>}
         {preview.rows.map((row) => (
-          <RowItem key={`${row.line}-${row.kind}`} row={row} />
+          <RowItem
+            key={`${row.line}-${row.kind}-${row.kind === 'ticket' ? (row.refId ?? '') : ''}`}
+            row={row}
+            onSplit={(segment, line) => apply({ op: 'split', groupKey: key, segment, line })}
+          />
         ))}
       </ol>
 
@@ -222,7 +385,11 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
           <h4 className={styles.referencesTitle}>References</h4>
           <ul>
             {preview.references.map((r, i) => (
-              <ReferenceItem key={`${r.line}-${i}`} reference={r} />
+              <ReferenceItem
+                key={r.id ?? `dup-${r.line}-${i}`}
+                reference={r}
+                onTick={(ticked) => r.id && apply({ op: 'tick', groupKey: key, refId: r.id, ticked })}
+              />
             ))}
           </ul>
         </div>
@@ -231,18 +398,18 @@ function GroupSection({ group, workspaces, connectionId, check, onConnection, on
   );
 }
 
-function targetText(group: ProposedGroup): string {
+function targetText(group: WorkingGroup): string {
   switch (group.target.kind) {
     case 'existing':
-      return `Existing workspace: ${group.target.workspaceName}`;
+      return 'Existing workspace';
     case 'active':
-      return `Active workspace: ${group.target.workspaceName}`;
+      return 'Active workspace';
     case 'new':
       return 'New workspace';
     case 'unassigned':
       return 'No active workspace';
     case 'ambiguous':
-      return `Matches ${group.target.workspaceNames.length} workspaces (${group.target.workspaceNames.map((n) => n.trim()).join(', ')}); to be chosen before Apply`;
+      return `Matches ${group.target.workspaceNames.length} workspaces (${group.target.workspaceNames.map((n) => n.trim()).join(', ')}); choose one`;
   }
 }
 
@@ -251,12 +418,12 @@ function checkboxText(box: string | null): string | null {
   return box === ' ' ? '[ ]' : `[${box}]`;
 }
 
-function RowItem({ row }: { row: PreviewRow }) {
+function RowItem({ row, onSplit }: { row: PreviewRow; onSplit(segment: number, line: number): void }) {
   const common = { 'data-testid': 'import-row', 'data-kind': row.kind, 'data-line': row.line } as const;
   switch (row.kind) {
     case 'ticket':
       return (
-        <li {...common} className={styles.ticket} data-key={row.key}>
+        <li {...common} className={styles.ticket} data-key={row.key} data-ticked={row.refId ? 'true' : undefined}>
           <span className={styles.number} data-testid="import-row-number">
             #{row.number}
           </span>
@@ -264,6 +431,7 @@ function RowItem({ row }: { row: PreviewRow }) {
           <span className={styles.key}>{row.key}</span>
           <span className={styles.summary}>{row.summary}</span>
           {row.titleHint && row.titleHint !== row.summary && <span className={styles.hint}>— {row.titleHint}</span>}
+          {row.refId && <span className={styles.tag}>From a reference, line {row.line}</span>}
         </li>
       );
     case 'unchecked':
@@ -300,8 +468,14 @@ function RowItem({ row }: { row: PreviewRow }) {
       );
     case 'section':
       return (
-        <li {...common} className={styles.section} style={{ paddingLeft: row.depth * 16 }}>
-          {row.text}
+        <li {...common} className={styles.section} style={{ paddingLeft: row.depth * 16 }} data-join={row.join ? 'true' : undefined}>
+          <span data-testid="import-section-text">{row.text}</span>
+          {row.join && <span className={styles.tag}>Merged heading</span>}
+          {row.splittable && (
+            <Button size="xs" kind="tertiary" onClick={() => onSplit(row.segment, row.line)} data-testid="import-split">
+              Make its own workspace
+            </Button>
+          )}
         </li>
       );
     case 'note':
@@ -313,7 +487,7 @@ function RowItem({ row }: { row: PreviewRow }) {
   }
 }
 
-function ReferenceItem({ reference: r }: { reference: PreviewReference }) {
+function ReferenceItem({ reference: r, onTick }: { reference: PreviewReference; onTick(ticked: boolean): void }) {
   const why = `${REASON[r.reason]}${r.cue ? `, ${CUE[r.cue]}` : ''}`;
   let result: string;
   switch (r.status) {
@@ -321,7 +495,12 @@ function ReferenceItem({ reference: r }: { reference: PreviewReference }) {
       result = 'Not checked';
       break;
     case 'matched':
-      result = `${r.key} — ${r.summary}`;
+      result =
+        r.scheduledAs !== null
+          ? `Scheduled as #${r.scheduledAs}: ${r.key} — ${r.summary}`
+          : r.alreadyAs !== null
+            ? `Already scheduled as #${r.alreadyAs}: ${r.key}`
+            : `${r.key} — ${r.summary}`;
       break;
     case 'unmatched':
       result = `Unmatched: ${r.message}`;
@@ -331,9 +510,15 @@ function ReferenceItem({ reference: r }: { reference: PreviewReference }) {
       break;
   }
   return (
-    <li className={styles.reference} data-testid="import-reference" data-line={r.line} data-status={r.status}>
-      {/* Read-only here: ticking a Reference to schedule it is VERM-103. */}
-      <input type="checkbox" checked={false} disabled readOnly aria-label={`Schedule ${r.text}`} data-testid="import-reference-tick" />
+    <li className={styles.reference} data-testid="import-reference" data-line={r.line} data-status={r.status} data-text={r.text}>
+      <input
+        type="checkbox"
+        checked={r.ticked}
+        disabled={!r.tickable}
+        onChange={(e) => onTick(e.target.checked)}
+        aria-label={`Schedule ${r.text} from line ${r.line}`}
+        data-testid="import-reference-tick"
+      />
       <span className={styles.key}>{r.text}</span>
       <span className={styles.muted}>line {r.line}</span>
       <span className={styles.muted}>{why}</span>

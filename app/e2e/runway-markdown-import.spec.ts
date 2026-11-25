@@ -131,10 +131,10 @@ test.describe('Runway: Markdown import preview', () => {
     ]);
     await expect(rows.nth(0)).toContainText('Readers lose their place on the train.');
     await expect(rows.nth(1)).toContainText('Cache articles locally');
-    await expect(rows.nth(6)).toHaveText('Later');
+    await expect(rows.nth(6).locator('[data-testid="import-section-text"]')).toHaveText('Later');
     await expect(rows.nth(7)).toContainText('Look at READ-9 again');
 
-    // READ-9 is a Reference: unticked and read-only, with its line and reason.
+    // READ-9 is a Reference: unticked, with its line and reason.
     const refs = group.locator('[data-testid="import-reference"]');
     await expect(refs).toHaveCount(1);
     await expect(refs.first()).toHaveAttribute('data-line', '13');
@@ -143,7 +143,8 @@ test.describe('Runway: Markdown import preview', () => {
     await expect(refs.first()).toContainText('In prose');
     const tick = refs.first().locator('[data-testid="import-reference-tick"]');
     await expect(tick).not.toBeChecked();
-    await expect(tick).toBeDisabled();
+    // Unticked, and since VERM-103 it can be ticked (the corrections test ticks it).
+    await expect(tick).toBeEnabled();
 
     // Cancel is the only footer action.
     await expect(dialog.getByRole('button', { name: 'Apply' })).toHaveCount(0);
@@ -188,7 +189,8 @@ test.describe('Runway: Markdown import preview', () => {
     await stubOpenDialog(app, scratchFile('mixed.md', [`## ${activeName.toUpperCase()}`, '', '- [x] READ-14 Done already', '- [ ] GONE-404 Never existed', '- https://other.example.test/issue/READ-20', ''].join('\n')));
     await tid(page, 'runway-import-markdown').click();
     const group = tid(page, 'runway-markdown-import').locator('[data-testid="import-group"]').first();
-    await expect(group.locator('[data-testid="import-group-target"]')).toHaveText(`Existing workspace: ${activeName}`);
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveText('Existing workspace');
+    await expect(group.locator('[data-testid="import-group-name"]')).toHaveText(activeName.trim());
     await expect(group.locator('[data-testid="import-connection"]')).toHaveCount(0);
     const rows = group.locator('[data-testid="import-row"]');
     await expect(rows).toHaveCount(3);
@@ -256,5 +258,126 @@ test.describe('Runway: Markdown import preview', () => {
     await expect(group.locator('[data-testid="import-group-choose"]')).toHaveCount(0);
     await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
     await tid(page, 'import-cancel').click();
+  });
+
+  test('corrections: tick, split, rename (with a Map to workspace offer), merge and skip change the preview; Undo, Reset; Cancel writes nothing', async () => {
+    const userDataDir = freshUserDataDir();
+    app = await launchAppWithUserDataDir(userDataDir, RUNWAY_ENV);
+    const { page, workspaceId } = await openRunway(app);
+    const config = await page.evaluate(() => window.vermilian.getWorkspaceConfig());
+    const activeName = (config?.workspaces.find((w) => w.id === workspaceId)?.name ?? '').trim();
+    expect(activeName).not.toBe('');
+
+    const before = await baseline(page, userDataDir);
+    const file = scratchFile(
+      'plan.md',
+      [
+        '## Reader plan', // 1
+        '- READ-12 Cache articles locally', // 2
+        '- READ-14 Sync read state', // 3
+        '', // 4
+        'See READ-9 for the old attempt.', // 5
+        '', // 6
+        '### Later', // 7
+        '- READ-20 Offline indicator', // 8
+        '', // 9
+        '## Sync work', // 10
+        '- SYNC-3 Merge library', // 11
+        '', // 12
+        '## Notes to drop', // 13
+        '- SYNC-7 Background worker', // 14
+        '',
+      ].join('\n'),
+    );
+    await stubOpenDialog(app, file);
+    await tid(page, 'runway-import-markdown').click();
+    const dialog = tid(page, 'runway-markdown-import');
+    const groups = dialog.locator('[data-testid="import-group"]');
+    const named = (name: string) => groups.filter({ has: page.locator('[data-testid="import-group-name"]', { hasText: name }) });
+    const names = () => groups.locator('[data-testid="import-group-name"]').allTextContents();
+    const numbers = (name: string) =>
+      named(name).locator('[data-testid="import-row"][data-kind="ticket"]').evaluateAll((els) => els.map((e) => `${e.querySelector('[data-testid="import-row-number"]')?.textContent} ${e.getAttribute('data-key')} L${e.getAttribute('data-line')}`));
+
+    await expect(groups).toHaveCount(3);
+    await expect.poll(() => numbers('Reader plan')).toEqual(['#1 READ-12 L2', '#2 READ-14 L3', '#3 READ-20 L8']);
+    await expect(tid(page, 'import-undo')).toBeDisabled();
+
+    // Tick READ-9: scheduled at line 5, after the paragraph; READ-20 moves to #4.
+    const read9 = named('Reader plan').locator('[data-testid="import-reference"][data-text="READ-9"]');
+    await expect(read9).toHaveAttribute('data-status', 'matched');
+    await read9.locator('[data-testid="import-reference-tick"]').check();
+    await expect.poll(() => numbers('Reader plan')).toEqual(['#1 READ-12 L2', '#2 READ-14 L3', '#3 READ-9 L5', '#4 READ-20 L8']);
+    await expect(read9).toContainText('Scheduled as #3');
+
+    // Split "### Later" into its own workspace, right after its parent.
+    await named('Reader plan').locator('[data-testid="import-row"][data-kind="section"][data-line="7"] [data-testid="import-split"]').click();
+    await expect.poll(names).toEqual(['Reader plan', 'Later', 'Sync work', 'Notes to drop']);
+    await expect.poll(() => numbers('Later')).toEqual(['#1 READ-20 L8']);
+    await expect.poll(() => numbers('Reader plan')).toEqual(['#1 READ-12 L2', '#2 READ-14 L3', '#3 READ-9 L5']);
+
+    // Rename "Later" to the active workspace's name: Map to workspace is offered, and only applies when chosen.
+    await named('Later').locator('[data-testid="import-rename"]').click();
+    // The heading becomes the name field while renaming, so the group is found by position.
+    await groups.nth(1).locator('[data-testid="import-rename-input"]').fill(activeName.toUpperCase());
+    await groups.nth(1).locator('[data-testid="import-rename-save"]').click();
+    const renamed = groups.nth(1);
+    await expect(renamed.locator('[data-testid="import-group-name"]')).toHaveText(activeName.toUpperCase());
+    await expect(renamed.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'new');
+    await renamed.locator('[data-testid="import-collision-map"]').click();
+    await expect(renamed.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'existing');
+    await expect(renamed.locator('[data-testid="import-group-name"]')).toHaveText(activeName);
+    await expect(renamed.locator('[data-testid="import-rename"]')).toHaveCount(0);
+
+    // Merge "Sync work" into "Reader plan": its heading stays as a section at the join.
+    await named('Sync work').locator('[data-testid="import-merge"]').selectOption({ label: 'Reader plan (line 1)' });
+    await expect.poll(names).toEqual(['Reader plan', activeName, 'Notes to drop']);
+    await expect.poll(() => numbers('Reader plan')).toEqual(['#1 READ-12 L2', '#2 READ-14 L3', '#3 READ-9 L5', '#4 SYNC-3 L11']);
+    await expect(named('Reader plan').locator('[data-testid="import-row"][data-kind="section"][data-join="true"] [data-testid="import-section-text"]')).toHaveText('Sync work');
+
+    // Skip "Notes to drop", then Undo brings it back.
+    await named('Notes to drop').locator('[data-testid="import-skip"]').click();
+    await expect(named('Notes to drop')).toHaveAttribute('data-skipped', 'true');
+    await expect(named('Notes to drop').locator('[data-testid="import-row"]')).toHaveCount(0);
+    await tid(page, 'import-undo').click();
+    await expect(named('Notes to drop')).not.toHaveAttribute('data-skipped', 'true');
+
+    // Reset: the preview as first opened.
+    await tid(page, 'import-reset').click();
+    await expect.poll(names).toEqual(['Reader plan', 'Sync work', 'Notes to drop']);
+    await expect.poll(() => numbers('Reader plan')).toEqual(['#1 READ-12 L2', '#2 READ-14 L3', '#3 READ-20 L8']);
+    await expect(read9.locator('[data-testid="import-reference-tick"]')).not.toBeChecked();
+    await expect(tid(page, 'import-undo')).toBeDisabled();
+
+    // Cancel: nothing was written.
+    await tid(page, 'import-cancel').click();
+    await expect(dialog).toHaveCount(0);
+    expect(await baseline(page, userDataDir)).toEqual(before);
+  });
+
+  test('a headingless file: its tickets can be made a new workspace and named', async () => {
+    const userDataDir = freshUserDataDir();
+    app = await launchAppWithUserDataDir(userDataDir, RUNWAY_ENV);
+    const { page, workspaceId } = await openRunway(app);
+    const before = await baseline(page, userDataDir);
+    await stubOpenDialog(app, scratchFile('list.md', ['- [ ] READ-12 Cache articles locally', '- [ ] READ-14 Sync read state', ''].join('\n')));
+    await tid(page, 'runway-import-markdown').click();
+    const group = tid(page, 'runway-markdown-import').locator('[data-testid="import-group"]').first();
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'active');
+    await expect(group.locator('[data-testid="import-workspace"]')).toHaveValue(workspaceId);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
+
+    await group.locator('[data-testid="import-workspace"]').selectOption({ label: 'New workspace' });
+    await expect(group.locator('[data-testid="import-group-target"]')).toHaveAttribute('data-kind', 'new');
+    await expect(group.locator('[data-testid="import-group-name"]')).toHaveText('Unnamed new workspace');
+    await expect(group.locator('[data-testid="import-needs-name"]')).toBeVisible();
+    await group.locator('[data-testid="import-rename"]').click();
+    await group.locator('[data-testid="import-rename-input"]').fill('Reader backlog');
+    await group.locator('[data-testid="import-rename-save"]').click();
+    await expect(group.locator('[data-testid="import-group-name"]')).toHaveText('Reader backlog');
+    await expect(group.locator('[data-testid="import-needs-name"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid="import-row-number"]')).toHaveText(['#1', '#2']);
+
+    await tid(page, 'import-cancel').click();
+    expect(await baseline(page, userDataDir)).toEqual(before);
   });
 });

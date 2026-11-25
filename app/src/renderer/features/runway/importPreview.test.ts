@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseRunwaySchedule } from '../../../shared/runwaySchedule';
 import type { RunwayImportCandidateMatch, RunwayImportMatchArgs, RunwayImportMatchResult } from '../../../shared/runwayImport';
-import { buildGroupPreview, createGroupChecker, createImportSession, proposeGroups, workspaceListFromQuery, workspaceOptionLabels, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
+import { createImportSession } from './importCorrections';
+import { buildGroupPreview, createGroupChecker, proposeGroups, workspaceListFromQuery, workspaceOptionLabels, type GroupCheck, type GroupPreview, type ImportWorkspaceOption, type PreviewRow } from './importPreview';
 
 // Synthetic keys, names and hosts only.
 const WS: ImportWorkspaceOption[] = [
@@ -122,7 +123,7 @@ describe('buildGroupPreview', () => {
       'note - Look at READ-9 again; it was the first attempt and is mostly obsolete.',
     ]);
     expect(p.scheduledCount).toBe(5);
-    expect(p.references).toEqual([{ text: 'READ-9', line: 13, reason: 'prose', cue: null, status: 'matched', key: 'READ-9', summary: 'Summary of READ-9' }]);
+    expect(p.references).toMatchObject([{ text: 'READ-9', line: 13, reason: 'prose', cue: null, status: 'matched', key: 'READ-9', summary: 'Summary of READ-9' }]);
   });
 
   it('before the result arrives, or after the connection failed, the outline stays with tickets unchecked and unnumbered', () => {
@@ -154,7 +155,7 @@ describe('buildGroupPreview', () => {
     const g = one('- READ-5\n- READ-1 First\n- OLD-1 Again');
     const p = buildGroupPreview(g.group, g.candidates, answer(g.candidates, { 3: { status: 'duplicate', duplicateOfLine: 2, ticket: { issueId: 'yt:READ-1', key: 'READ-1', summary: 'S' } } as Partial<RunwayImportCandidateMatch> }));
     expect(outline(p)).toEqual(['#1 READ-5', '#2 READ-1 First', 'note(duplicate of #2) OLD-1']);
-    expect(p.references).toEqual([{ text: 'OLD-1', line: 3, reason: 'duplicate', cue: null, status: 'duplicate', key: 'READ-1', ofNumber: 2 }]);
+    expect(p.references).toMatchObject([{ text: 'OLD-1', line: 3, reason: 'duplicate', cue: null, status: 'duplicate', key: 'READ-1', ofNumber: 2 }]);
   });
 
   it('a parser duplicate the matcher accepts (the earlier link was refused) is numbered there, exactly once', () => {
@@ -163,7 +164,7 @@ describe('buildGroupPreview', () => {
     const p = buildGroupPreview(g.group, g.candidates, answer(g.candidates, { 1: { status: 'unmatched', code: 'not-a-ticket-url', message: 'That link does not point at a YouTrack ticket.' } }));
     expect(outline(p)).toEqual(['note(unmatched not-a-ticket-url) https://tracker.example.test/other/issue/OPS-7', '#1 OPS-7 [ ] Second']);
     expect(p.rows.filter((r) => r.kind === 'ticket')).toHaveLength(1);
-    expect(p.references).toEqual([]);
+    expect(p.references).toMatchObject([]);
   });
 
   it('two identical valid scheduled lines: the second is a note listed as Already scheduled as #1', () => {
@@ -171,7 +172,7 @@ describe('buildGroupPreview', () => {
     const p = buildGroupPreview(g.group, g.candidates, answer(g.candidates, { 2: { status: 'duplicate', duplicateOfLine: 1 } as Partial<RunwayImportCandidateMatch> }));
     expect(outline(p)).toEqual(['#1 OPS-7 One', 'note(duplicate of #1) OPS-7']);
     expect(p.rows[1]).toMatchObject({ titleHint: 'Two' });
-    expect(p.references).toEqual([{ text: 'OPS-7', line: 2, reason: 'duplicate', cue: null, status: 'duplicate', key: 'OPS-7', ofNumber: 1 }]);
+    expect(p.references).toMatchObject([{ text: 'OPS-7', line: 2, reason: 'duplicate', cue: null, status: 'duplicate', key: 'OPS-7', ofNumber: 1 }]);
   });
 
   it('a pending parser duplicate stays the parser’s note until the matcher decides', () => {
