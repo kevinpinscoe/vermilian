@@ -31,7 +31,12 @@ export interface LegacyWorkspaceEditDeps {
   refusedMessage: string;
 }
 
-export type LegacyEditResult = { ok: true } | { ok: false; error: string };
+/**
+ * mayRemain: the shared configuration took the edit and could not be put
+ * back, so the edit may have survived — the caller must keep the workspace's
+ * ID to reconcile it.
+ */
+export type LegacyEditResult = { ok: true } | { ok: false; error: string; mayRemain?: true };
 
 type Edit = (config: VermilianConfig) => VermilianConfig;
 
@@ -46,7 +51,7 @@ async function write(deps: LegacyWorkspaceEditDeps, before: VermilianConfig, edi
     const failed = `The workspace configuration could not be saved: ${typeof message === 'string' ? message : 'unknown error'}`;
     const latest = await deps.read().catch(() => null);
     if (!latest || !deps.updateShared(undo(latest))) {
-      return { ok: false, error: `${failed}. The shared configuration could not be put back; reload the workspaces and check them.` };
+      return { ok: false, error: `${failed}. The shared configuration could not be put back; reload the workspaces and check them.`, mayRemain: true };
     }
     // Another edit may already have sent the shared configuration with this change in it.
     deps.scheduleShared();

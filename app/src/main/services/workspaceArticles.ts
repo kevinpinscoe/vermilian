@@ -330,7 +330,11 @@ export async function createWorkspaceArticle(
   });
   if (!recheck.ok) return unverified(`it could not be confirmed (${recheck.message})`);
   if (!recheck.parsed) return unverified('discovery did not find it afterwards');
-  if (recheck.parsed.kind !== 'ok') return refusal(recheck.parsed.entry); // ambiguous or invalid
+  if (recheck.parsed.kind !== 'ok') {
+    // Ambiguous or invalid: say which article this create made, so it alone can be cleaned up.
+    const refused = refusal(recheck.parsed.entry);
+    return !refused.ok && (refused.reason === 'ambiguous' || refused.reason === 'invalid-remote') ? { ...refused, createdArticleId: created.id } : refused;
+  }
   const { entry } = recheck.parsed;
   if (entry.articleId !== created.id) return unverified(`discovery found a different article (${entry.articleId}) under its title`);
 

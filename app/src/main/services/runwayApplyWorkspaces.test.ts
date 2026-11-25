@@ -102,11 +102,37 @@ describe('per-workspace Apply create and cleanup (VERM-104)', () => {
     expect(removed.ok ? '' : removed.error).toMatch(/art-2/);
   });
 
-  it('with no confirmed article, cleanup finds the article under the generated ID’s title, and only that one', async () => {
-    yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Ship the offline reader' }));
-    expect(await store().remove(NEW_ID, [])).toEqual({ ok: true });
+  it('cleanup deletes only the confirmed article: another article with the same title survives and is reported for inspection', async () => {
+    const title = workspaceArticleTitle(NEW_ID);
+    const ours = yt.put(title, serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Ship the offline reader' }));
+    const other = yt.put(title, serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Someone else' }));
+    const r = await store().remove(NEW_ID, [ours.id]);
+    expect(yt.deleted).toEqual([ours.id]);
+    expect(yt.articles.has(other.id)).toBe(true);
+    expect(r).toMatchObject({ ok: false, articleIds: [other.id] });
+    expect(r.ok ? '' : r.error).toMatch(new RegExp(`${other.id}.*not created by this import|inspect`));
+  });
+
+  it('verification finds an ambiguous title: create keeps only the ID its own create returned, and rollback leaves the other article', async () => {
+    const title = workspaceArticleTitle(NEW_ID);
+    let other = '';
+    // During the verifying discovery, another article appears under the same title.
+    yt.onList = (n) => {
+      if (n === 3) other = yt.put(title, serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Someone else' })).id;
+    };
+    const r = await store().create('Ship the offline reader', SOURCE.workspaceId, KEY);
+    expect(r).toMatchObject({ ok: false, workspaceId: NEW_ID, articleIds: ['art-2'] });
+    yt.onList = null;
+    const removed = await store().remove(NEW_ID, ['art-2']);
     expect(yt.deleted).toEqual(['art-2']);
-    expect(yt.articles.has('art-1')).toBe(true);
+    expect(yt.articles.has(other)).toBe(true);
+    expect(removed).toMatchObject({ ok: false, articleIds: [other] });
+  });
+
+  it('with no confirmed article, nothing is deleted: an article under the generated ID’s title is reported, not removed', async () => {
+    const found = yt.put(workspaceArticleTitle(NEW_ID), serialiseNewWorkspaceDocument({ ...SOURCE, workspaceId: NEW_ID, name: 'Ship the offline reader' }));
+    expect(await store().remove(NEW_ID, [])).toMatchObject({ ok: false, articleIds: [found.id] });
+    expect(yt.deleted).toEqual([]);
   });
 
   it('never deletes an article given by ID that does not hold the generated ID’s title', async () => {

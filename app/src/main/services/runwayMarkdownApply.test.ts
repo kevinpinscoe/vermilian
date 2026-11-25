@@ -7,6 +7,9 @@ import type { RunwayImportApplyGroup, RunwayImportMatchArgs, RunwayImportMatchRe
 import { openRunwayDb } from './runwayDb';
 import { createRunwayItemStore, type RunwayItemStore } from './runwayItemStore';
 import { createRunwayMarkdownApply, validateApplyArgs, type ApplyWorkspace, type RunwayMarkdownApplyDeps } from './runwayMarkdownApply';
+import type { VermilianConfig } from '../../shared/workspace';
+import type { LegacyWorkspaceEditDeps } from './legacyWorkspaceEdit';
+import { createLegacyApplyWorkspaces } from './runwayApplyWorkspaces';
 
 // Synthetic keys, names and hosts only.
 let dir: string;
@@ -389,6 +392,66 @@ describe('the previewed connection (PR 232 review)', () => {
     expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [] });
     expect(h.removed).toEqual(['ws-new-1']);
     expect(h.workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b', 'ws-c']);
+  });
+});
+
+describe('legacy Apply through the production adapter (VERM-104)', () => {
+  /** The shared configuration in memory; the local write fails once; the shared update refuses from its second call while `refuse` says so. */
+  function legacy(refuse: (call: number) => boolean) {
+    let shared: VermilianConfig = {
+      version: 1,
+      activeWorkspaceId: 'ws-a',
+      workspaces: [
+        { id: 'ws-a', name: 'Inbox', order: 0, folders: [] },
+        { id: 'ws-b', name: 'Reader App', order: 1, folders: [] },
+      ],
+    } as VermilianConfig;
+    let updates = 0;
+    let localWrites = 0;
+    const edit: LegacyWorkspaceEditDeps = {
+      read: async () => JSON.parse(JSON.stringify(shared)) as VermilianConfig,
+      updateShared: (c) => {
+        if (refuse(++updates)) return false;
+        shared = c;
+        return true;
+      },
+      writeLocal: async () => {
+        if (++localWrites === 1) throw new Error('disk full');
+      },
+      scheduleShared: () => undefined,
+      refusedMessage: 'Per-workspace storage is being activated.',
+    };
+    const h = harness();
+    h.deps.workspaces = createLegacyApplyWorkspaces({ edit, connectionKey: h.deps.connectionKey, generateWorkspaceId: () => 'workspace-new-1' });
+    return { h, shared: () => shared };
+  }
+
+  it('a failed local write whose rollback is refused: the workspace is cleaned up once the configuration accepts again', async () => {
+    // Call 1 adds, call 2 (the rollback) is refused, call 3 (Apply's cleanup) is accepted.
+    const { h, shared } = legacy((n) => n === 2);
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [], backupPath: join(dir, 'runway-before-import-1.sqlite') });
+    expect(shared().workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b']);
+  });
+
+  it('a failed local write whose rollback is refused, and the cleanup too: the workspace is reported by name and ID with the backup', async () => {
+    const { h, shared } = legacy((n) => n >= 2);
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
+    expect(r).toMatchObject({
+      ok: false,
+      code: 'create-failed',
+      remaining: [{ workspaceId: 'workspace-new-1', name: 'Ship the offline reader', articleIds: [] }],
+      backupPath: join(dir, 'runway-before-import-1.sqlite'),
+    });
+    expect(shared().workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b', 'workspace-new-1']);
+  });
+
+  it('a refusal before anything was added reports no workspace', async () => {
+    const { h, shared } = legacy(() => true);
+    const r = await createRunwayMarkdownApply(h.deps)({ groups: [NEW_GROUP] });
+    expect(r).toMatchObject({ ok: false, code: 'create-failed', remaining: [] });
+    expect(h.events.filter((e) => e.startsWith('remove'))).toEqual([]);
+    expect(shared().workspaces.map((w) => w.id)).toEqual(['ws-a', 'ws-b']);
   });
 });
 

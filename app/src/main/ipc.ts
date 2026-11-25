@@ -224,8 +224,8 @@ import { createRunwayAddByReference } from './services/runwayAddByReference';
 import { createRunwayImportMatch, type RunwayImportConnection } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
 import { createRunwayMarkdownApply, trackerConnectionKey, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
-import { addLegacyWorkspace, removeLegacyWorkspace, type LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
-import { createPerWorkspaceApplyWorkspaces } from './services/runwayApplyWorkspaces';
+import type { LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
+import { createLegacyApplyWorkspaces, createPerWorkspaceApplyWorkspaces } from './services/runwayApplyWorkspaces';
 import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
@@ -2593,6 +2593,11 @@ export function registerIpc(): void {
     },
     generateWorkspaceId,
   });
+  const legacyApply = createLegacyApplyWorkspaces({
+    edit: legacyEdit,
+    connectionKey: applyConnectionKey,
+    generateWorkspaceId: () => `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  });
   const applyWorkspaces: ApplyWorkspaceStore = {
     async list() {
       if (workspaceStorageMode() === 'per-workspace') {
@@ -2602,23 +2607,15 @@ export function registerIpc(): void {
         if (!listed.ok) throw new Error(listed.message);
         return listed.workspaces.flatMap((e) => (e.status === 'ok' ? [{ id: e.document.workspaceId, name: e.document.name }] : []));
       }
-      const legacy = await loadLegacyWorkspaceConfig();
-      return (legacy?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name }));
+      return legacyApply.list();
     },
     async create(name, connectionWorkspaceId, expectedKey) {
       if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.create(name, connectionWorkspaceId, expectedKey);
-      // Legacy storage: every workspace is on the one configured YouTrack.
-      if ((await applyConnectionKey(connectionWorkspaceId)) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
-      const config = await loadLegacyWorkspaceConfig();
-      if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
-      const id = `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const order = config.workspaces.reduce((m, w) => Math.max(m, w.order + 1), 0);
-      const added = await addLegacyWorkspace(legacyEdit, { id, name, order, folders: [] });
-      return added.ok ? { ok: true, workspaceId: id } : { ok: false, error: added.error };
+      return legacyApply.create(name, connectionWorkspaceId, expectedKey);
     },
     async remove(workspaceId, articleIds) {
       if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.remove(workspaceId, articleIds);
-      return removeLegacyWorkspace(legacyEdit, workspaceId);
+      return legacyApply.remove(workspaceId, articleIds);
     },
   };
   const applyRunwayImport = createRunwayMarkdownApply({

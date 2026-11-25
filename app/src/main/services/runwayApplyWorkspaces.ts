@@ -8,14 +8,14 @@
 // identity is kept from the moment the ID is generated: a create that reached
 // YouTrack but could not be verified (createWorkspaceArticle's
 // create-unverified, invalid-remote or ambiguous outcomes) still returns the
-// generated workspace ID and the article it created, so the cleanup can find
-// it.
+// generated workspace ID and the article its own create call returned — never
+// the other articles discovery found under the title, which this attempt
+// cannot confirm it made.
 //
-// Remove is the cleanup of such a create. It removes exactly the articles
-// this attempt made: the article IDs it was told about, and any article under
-// the generated ID's title (the ID was generated for this attempt and found
-// absent just before the create, so no one else holds it). An article given
-// by ID that does not hold that title is never deleted. Each removal is
+// Remove is the cleanup of such a create. It deletes only the articles whose
+// creation this attempt confirmed (the IDs it is given), and only while they
+// hold the generated ID's title. Any other article under that title is never
+// deleted: it is reported by ID for inspection by hand. Each removal is
 // confirmed by reading the article again; whatever cannot be confirmed gone
 // is reported by ID.
 
@@ -25,6 +25,7 @@ import type { WorkspaceDocument } from '../../shared/workspaceSchema';
 import * as workspaceArticles from './workspaceArticles';
 import type { WorkspaceArticleClient } from './workspaceArticles';
 import { trackerConnectionKey, type ApplyWorkspaceStore } from './runwayMarkdownApply';
+import { addLegacyWorkspace, removeLegacyWorkspace, type LegacyWorkspaceEditDeps } from './legacyWorkspaceEdit';
 
 export interface PerWorkspaceApplyDeps {
   /** The article client when per-workspace writes are allowed; otherwise why not. */
@@ -35,11 +36,11 @@ export interface PerWorkspaceApplyDeps {
 type Create = ApplyWorkspaceStore['create'];
 type Remove = ApplyWorkspaceStore['remove'];
 
-/** The article IDs a failed save says were written. */
+/** The article this attempt's own create call returned, when it got that far. */
 function writtenArticles(saved: Awaited<ReturnType<typeof workspaceArticles.createWorkspaceArticle>>): string[] {
   if (saved.ok) return [saved.articleId];
-  if (saved.reason === 'create-unverified' || saved.reason === 'invalid-remote') return [saved.articleId];
-  if (saved.reason === 'ambiguous') return [...saved.articleIds];
+  if (saved.reason === 'create-unverified') return [saved.articleId];
+  if ((saved.reason === 'ambiguous' || saved.reason === 'invalid-remote') && saved.createdArticleId) return [saved.createdArticleId];
   return [];
 }
 
@@ -84,10 +85,9 @@ export function createPerWorkspaceApplyWorkspaces(deps: PerWorkspaceApplyDeps): 
     if (typeof client === 'string') return { ok: false, error: client, articleIds: known };
     const title = workspaceArticleTitle(workspaceId);
 
-    const listing = await client.list();
-    const targets = [...new Set([...known, ...(listing.ok ? listing.articles.filter((a) => a.summary === title).map((a) => a.id) : [])])];
+    // Only the confirmed articles are deleted, and only while they hold the title.
     const refused: string[] = [];
-    for (const id of targets) {
+    for (const id of known) {
       const record = await client.get(id);
       if (!record) continue;
       if (record.summary !== title) {
@@ -97,20 +97,55 @@ export function createPerWorkspaceApplyWorkspaces(deps: PerWorkspaceApplyDeps): 
       await client.delete(id);
     }
 
-    // Confirm: each target read again, and nothing left under the title.
-    const left = new Set(refused);
-    for (const id of targets) if (!left.has(id) && (await client.get(id))) left.add(id);
+    // Confirm: each one read again. Any other article under the title is left alone and reported.
+    const stillThere: string[] = [...refused];
+    for (const id of known) if (!refused.includes(id) && (await client.get(id))) stillThere.push(id);
     const recheck = await client.list();
-    if (recheck.ok) for (const a of recheck.articles) if (a.summary === title) left.add(a.id);
-    const remaining = [...left];
-    if (remaining.length > 0) {
-      return { ok: false, error: `Workspace ${workspaceId} could not be confirmed removed: article ${remaining.join(', ')} is still there.`, articleIds: remaining };
-    }
-    if (!listing.ok || !recheck.ok) {
-      return { ok: false, error: `Workspace ${workspaceId}: YouTrack did not list the workspace articles, so its removal could not be confirmed.`, articleIds: known };
+    const uncertain = recheck.ok ? recheck.articles.filter((a) => a.summary === title && !known.includes(a.id)).map((a) => a.id) : [];
+    const problems: string[] = [];
+    if (stillThere.length > 0) problems.push(`article ${stillThere.join(', ')} could not be confirmed removed`);
+    if (uncertain.length > 0) problems.push(`article ${uncertain.join(', ')} also holds its title but was not created by this import, so it was left; inspect it by hand`);
+    if (!recheck.ok) problems.push('YouTrack did not list the workspace articles, so nothing else under its title could be checked');
+    if (problems.length > 0) {
+      const articleIds = [...new Set([...stillThere, ...uncertain, ...(recheck.ok ? [] : known)])];
+      return { ok: false, error: `Workspace ${workspaceId}: ${problems.join('; ')}.`, articleIds };
     }
     return { ok: true };
   };
 
   return { create, remove };
+}
+
+// ─── Legacy storage ──────────────────────────────────────────────────────────
+// Every workspace is on the one configured YouTrack; edits go through
+// legacyWorkspaceEdit.ts, which changes only the one workspace.
+
+export interface LegacyApplyDeps {
+  edit: LegacyWorkspaceEditDeps;
+  /** A workspace's tracker connection as a key; null when it is gone. */
+  connectionKey(workspaceId: string): Promise<string | null>;
+  generateWorkspaceId(): string;
+}
+
+export function createLegacyApplyWorkspaces(deps: LegacyApplyDeps): ApplyWorkspaceStore {
+  return {
+    async list() {
+      const config = await deps.edit.read();
+      return (config?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name }));
+    },
+    async create(name, connectionWorkspaceId, expectedKey) {
+      if ((await deps.connectionKey(connectionWorkspaceId)) !== expectedKey) return { ok: false, error: 'The connection changed after it was checked.' };
+      const config = await deps.edit.read();
+      if (!config) return { ok: false, error: 'The workspace configuration could not be read.' };
+      const id = deps.generateWorkspaceId();
+      const order = config.workspaces.reduce((m, w) => Math.max(m, w.order + 1), 0);
+      const added = await addLegacyWorkspace(deps.edit, { id, name, order, folders: [] });
+      if (added.ok) return { ok: true, workspaceId: id };
+      // The addition may have survived a failed rollback: keep its ID so Apply can remove it, or report it.
+      return added.mayRemain ? { ok: false, error: added.error, workspaceId: id } : { ok: false, error: added.error };
+    },
+    async remove(workspaceId) {
+      return removeLegacyWorkspace(deps.edit, workspaceId);
+    },
+  };
 }

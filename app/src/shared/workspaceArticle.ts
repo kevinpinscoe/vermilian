@@ -73,8 +73,10 @@ export type SaveWorkspaceArticleResult =
   // through the update path with no base. Nothing was written; the
   // caller still has its edit, and `remote` is what the article holds now.
   | { ok: false; reason: 'conflict'; conflicts: WorkspaceMergeConflict[]; remote: WorkspaceDocument; message: string }
-  | { ok: false; reason: 'ambiguous'; articleIds: string[]; message: string }
-  | { ok: false; reason: 'invalid-remote'; articleId: string; errors: WorkspaceValidationError[]; message: string }
+  // createdArticleId: after a create reached YouTrack, the article its own
+  // create call returned — the only one this attempt can confirm it made.
+  | { ok: false; reason: 'ambiguous'; articleIds: string[]; message: string; createdArticleId?: string }
+  | { ok: false; reason: 'invalid-remote'; articleId: string; errors: WorkspaceValidationError[]; message: string; createdArticleId?: string }
   | { ok: false; reason: 'invalid-edit'; errors: WorkspaceValidationError[]; message: string }
   | { ok: false; reason: 'not-found'; message: string }
   // Another writer kept changing the article between our read and our

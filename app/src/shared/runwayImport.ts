@@ -226,7 +226,7 @@ export type RunwayImportApplyResult =
       problems: RunwayImportApplyProblem[];
       /** The pre-Apply backup, when one was written. */
       backupPath: string | null;
-      /** Workspaces this Apply created that could not be removed again. */
+      /** Workspaces this Apply created that it could not confirm removed, with any article left under their title for inspection. */
       remaining: RunwayImportApplyRemaining[];
     };
 

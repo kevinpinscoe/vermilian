@@ -226,7 +226,7 @@ export function RunwayMarkdownImport({ fileName, text, activeWorkspaceId, worksp
                 <AttentionBox className={modalLayout.attention} type="negative" title="The import was not applied" text={applyError.error} />
                 {applyError.remaining.length > 0 && (
                   <div data-testid="import-apply-remaining">
-                    <Text type="text2">These workspaces were created and could not be removed again; remove them by hand:</Text>
+                    <Text type="text2">These workspaces were created and could not be confirmed removed; check and remove them by hand:</Text>
                     <ul>
                       {applyError.remaining.map((w) => (
                         <li key={w.workspaceId}>
