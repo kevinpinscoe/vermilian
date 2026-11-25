@@ -114,7 +114,7 @@ notifications, or the timer worklog round-trip.
 
 | Criterion | Status | How |
 |---|---|---|
-| Runway, sort and import actions start no agent, send no input to tmux and never invoke ConTower; a shell-command credential still reads tickets | ✅ E2E | `runway-process-boundary.spec.ts`: the e2e-only recorder (`main/e2eProcessRecorder.ts`) sees every process launch and every `openPath`/`openExternal`; only the configured credential command is allowed, matched by its SHA-256 (no command text is recorded). The fake YouTrack accepts ticket reads only with the token that command prints (`VERMILIAN_E2E_YT_REQUIRE_TOKEN`), so a fresh read in the observation window proves the command ran, the tracker accepted its token and the summary appeared. Each step waits for its action, then fails on any other launch. Only the credential resolver and the recorder may load `child_process` 🧪 `processBoundary.test.ts`, which also proves the recorder is inert outside e2e and records no command text |
+| Runway, sort and import actions start no agent, send no input to tmux and never invoke ConTower; a shell-command credential still reads tickets | ✅ E2E | `runway-process-boundary.spec.ts`: the e2e-only recorder (`main/e2eProcessRecorder.ts`) sees every process launch and every `openPath`/`openExternal`; only the configured credential command is allowed, matched by its SHA-256. No command text is recorded: a shell-string launch is labelled `shell`, a direct launch by its plain basename only. The recorder and its debug methods exist only in a package built with `VERMILIAN_E2E_BUILD=1` (`pnpm test:e2e:fresh`); a release package contains neither, even when launched with `VERMILIAN_E2E=1`. The fake YouTrack accepts ticket reads only with the token that command prints (`VERMILIAN_E2E_YT_REQUIRE_TOKEN`), so a fresh read in the observation window proves the command ran, the tracker accepted its token and the summary appeared. Each step waits for its action, then fails on any other launch. Only the credential resolver and the recorder may load `child_process` 🧪 `processBoundary.test.ts`, which also proves the recorder is inert outside e2e and records no command text |
 
 Each handler and the step of `runway-process-boundary.spec.ts` that exercises it:
 
@@ -123,7 +123,7 @@ Each handler and the step of `runway-process-boundary.spec.ts` that exercises it
 | `runwayItemsAddByReference` | 1. fresh ticket read (the Runway's Add box), and 2. `runwayItemsAddByReference` (a link) |
 | `runwayItemsResolve` | 1. fresh ticket read, and 2. `runwayItemsResolve` |
 | `runwayItemsList` | 2. `runwayItemsList` |
-| `runwayItemsAddIssue` | 2. `runwayItemsAddIssue` |
+| `runwayItemsAddIssue` | 2. `runwayItemsAddIssue`, and 4b. `runwayItemsAddIssue (Jira, outside its projects)` |
 | `runwayItemsAddIssueAtNumber` | 2. `runwayItemsAddIssueAtNumber` |
 | `runwayItemsAddSection` | 2. `runwayItemsAddSection` |
 | `runwayItemsAddNote` | 2. `runwayItemsAddNote` |
@@ -134,7 +134,8 @@ Each handler and the step of `runway-process-boundary.spec.ts` that exercises it
 | `runwayItemsAddIssueAbove` — the blocker's **Add to Runway** | 2. `runwayItemsAddIssueAbove (Add to Runway)` |
 | `runwayItemsMoveAbove` — **Move prerequisite above** | 2. `runwayItemsMoveAbove (Move prerequisite above)` |
 | `runwayItemsRemove` | 2. `runwayItemsRemove` |
-| `youtrackPriorityOrders` | 3. `youtrackPriorityOrders`, and the All tasks Tracker priority sort |
+| `youtrackPriorityOrders` | 3. `youtrackPriorityOrders` (asserts READ's own order), and the All tasks Tracker priority sort |
+| `jiraPriorityOrders` — a Runway card from outside the Jira workspace's projects | 4b. `jiraPriorityOrders, from the Jira All tasks board’s Tracker priority sort`, and `jiraPriorityOrders, called directly` (asserts PLAT's P1, P2, P3) |
 | All tasks sort (Runway #, Tracker priority, Ticket ID, direction, clear; remembered locally) | 3. All tasks sort |
 | `runwayMarkdownOpen`, `runwayImportMatch`, `runwayMarkdownApply` (new workspace) | 4. `runwayMarkdownOpen, runwayImportMatch, runwayMarkdownApply (new workspace)` |
 | `runwayImportIdentify`, `runwayMarkdownApply` (repeat import into a Runway with rows) | 4. `runwayImportIdentify and runwayMarkdownApply (repeat import …)` |

@@ -23,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
 import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from '../src/shared/workspaceSchema';
+import type { FakeJiraChange } from '../src/main/api/fakeJira';
 
 const TOKEN = 'e2e-command-token-verm106';
 const COMMAND = `printf %s ${TOKEN}`;
@@ -31,6 +32,9 @@ const tid = (page: Page, id: string) => page.locator(`[data-testid="${id}"]`);
 
 const WS_A = 'ws-e2ea106';
 const WS_B = 'ws-e2eb106';
+const WS_J = 'ws-e2ej106';
+/** READ's own Priority bundle in the fake YouTrack, so the direct read has an exact answer. */
+const READ_PRIORITIES = ['Urgent', 'Soon', 'Later'];
 
 const EXAMPLE = ['## Ship the offline reader', '', 'Readers lose their place on the train.', '', '- [ ] READ-14 - Sync read state', '- [ ] SYNC-3 - Merge library', '', '### Later', '', 'Look again.', ''].join('\n');
 
@@ -69,7 +73,7 @@ function stepper(page: Page) {
         expect({ step: name, kind: l.kind, program: l.program, sha256: l.sha256 }, `step "${name}" launched something other than the credential command`).toEqual({
           step: name,
           kind: 'exec',
-          program: 'printf',
+          program: 'shell',
           sha256: COMMAND_SHA,
         });
       }
@@ -95,12 +99,21 @@ test.describe('Runway, sort and import start no agent, send nothing to tmux and 
       VERMILIAN_E2E_YT_RUNWAY_FIXTURES: '1',
       VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace',
       VERMILIAN_E2E_YT_REQUIRE_TOKEN: TOKEN,
+      VERMILIAN_E2E_YT_PRIORITY_BUNDLES: JSON.stringify({ READ: READ_PRIORITIES }),
     });
     let page = await app.firstWindow();
     await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+    // The recorder exists only in an e2e build.
+    expect(
+      await page.evaluate(() => typeof window.vermilian.debugGetProcessLaunches === 'function'),
+      'this package has no process recorder: build it with VERMILIAN_E2E_BUILD=1 (pnpm test:e2e:fresh)',
+    ).toBe(true);
 
     // ── Setup: two workspaces whose YouTrack credential comes from a shell command.
-    ok(await page.evaluate((c) => window.vermilian.setCredentialRefSources('youtrack-cmd', { command: c, file: '' }), COMMAND), 'credential source');
+    // The YouTrack and the Jira workspaces' references both come from the one command.
+    for (const ref of ['youtrack-cmd', 'jira-cmd']) {
+      ok(await page.evaluate(([r, c]) => window.vermilian.setCredentialRefSources(r, { command: c, file: '' }), [ref, COMMAND] as const), `credential source ${ref}`);
+    }
     const doc = (workspaceId: string, name: string, order: number): WorkspaceDocument => ({
       schema: WORKSPACE_SCHEMA_VERSION,
       workspaceId,
@@ -112,7 +125,15 @@ test.describe('Runway, sort and import start no agent, send nothing to tmux and 
       boards: {},
       dismissals: {},
     });
-    for (const d of [doc(WS_A, 'Workspace A', 0), doc(WS_B, 'Workspace B', 1)]) ok(await page.evaluate((x) => window.vermilian.createWorkspaceArticle(x), d), `create ${d.name}`);
+    const jiraDoc: WorkspaceDocument = {
+      ...doc(WS_J, 'Workspace J', 2),
+      backend: { kind: 'jira', siteUrl: 'https://example.atlassian.net', email: 'user@example.com', cloudId: '', credentialRef: 'jira-cmd' },
+      folders: [{ id: 'folder-j', name: 'Projects', order: 0, parentId: null, projectIds: ['DEMO'] }],
+    };
+    for (const d of [doc(WS_A, 'Workspace A', 0), doc(WS_B, 'Workspace B', 1), jiraDoc]) ok(await page.evaluate((x) => window.vermilian.createWorkspaceArticle(x), d), `create ${d.name}`);
+    // PLAT-4: a Jira ticket from outside Workspace J's projects, ranked by PLAT's own scheme (P1, P2, P3).
+    const plat: FakeJiraChange = { op: 'create', id: '20304', key: 'PLAT-4', summary: 'Outside card', priority: 'P2' };
+    expect(await page.evaluate((x) => window.vermilian.debugJiraChange!(x), plat)).toBe(true);
     await page.reload();
     page = await app.firstWindow();
     await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
@@ -167,7 +188,10 @@ test.describe('Runway, sort and import start no agent, send nothing to tmux and 
     await s.step('runwayItemsResolve', async () => ok(await page.evaluate((w) => window.vermilian.runwayItemsResolve({ workspaceId: w }), WS_A), 'resolve'));
 
     // ── 3. Sorts: the priority read, and the All tasks sort control.
-    await s.step('youtrackPriorityOrders', () => page.evaluate((w) => window.vermilian.youtrackPriorityOrders({ workspaceId: w, projectShortNames: ['READ', 'SYNC', 'PLAT'] }), WS_A));
+    await s.step('youtrackPriorityOrders', async () => {
+      const r = await page.evaluate((w) => window.vermilian.youtrackPriorityOrders({ workspaceId: w, projectShortNames: ['READ'] }), WS_A);
+      expect(r).toEqual({ ok: true, orders: { READ: READ_PRIORITIES } });
+    });
     await s.step('All tasks sort: Runway #, Tracker priority, Ticket ID, direction, clear', async () => {
       await tid(page, 'nav-all-tasks').click();
       for (const key of ['runwayNumber', 'priority', 'ticketId']) {
@@ -204,6 +228,22 @@ test.describe('Runway, sort and import start no agent, send nothing to tmux and 
       const m = await page.evaluate((w) => window.vermilian.runwayImportMatch({ groups: [{ groupKey: 'g', workspaceId: w, candidates: [{ text: 'READ-14', line: 1, role: 'scheduled', reason: null }] }] }), WS_B);
       ok(m, 'match');
       ok(await page.evaluate((w) => window.vermilian.runwayImportIdentify({ workspaceId: w, itemIds: ['yt:READ-12'] }), WS_A), 'identify');
+    });
+
+    // ── 4b. Jira's sort: priority orders for a Runway card from outside the workspace's projects.
+    await tid(page, 'workspace-switcher').click();
+    await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Workspace J' }).click();
+    await expect.poll(async () => (await page.evaluate(() => window.vermilian.getActiveWorkspace())).workspaceId).toBe(WS_J);
+    await call('runwayItemsAddIssue (Jira, outside its projects)', () => window.vermilian.runwayItemsAddIssue({ workspaceId: 'ws-e2ej106', issueId: 'jira:PLAT-4' }));
+    await s.step('jiraPriorityOrders, from the Jira All tasks board’s Tracker priority sort', async () => {
+      await tid(page, 'nav-all-tasks').click();
+      await tid(page, 'jira-sort-select').selectOption('priority');
+      await expect(tid(page, 'jira-sort-select')).toHaveValue('priority');
+      await expect(page.locator('[data-testid="jira-card"][data-issue-key="PLAT-4"]')).toBeVisible({ timeout: 15_000 });
+    });
+    await s.step('jiraPriorityOrders, called directly', async () => {
+      const r = await page.evaluate((w) => window.vermilian.jiraPriorityOrders({ workspaceId: w, projectKeys: ['PLAT'] }), WS_J);
+      expect(r).toEqual({ ok: true, orders: { PLAT: ['P1', 'P2', 'P3'] } });
     });
 
     // ── 5. Snapshot export and import: export, preview, cancel, preview again, confirm.

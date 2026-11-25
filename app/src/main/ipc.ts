@@ -1297,8 +1297,11 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
     // VERM-106: the processes and desktop calls the main process made (no command text), and the
     // ticket reads the fake accepted with the shell-command credential's token.
-    ipcMain.handle('e2e:getProcessLaunches', () => e2eProcessLaunches());
-    ipcMain.handle('e2e:getRequiredTokenReads', () => fakeYouTrackForE2E.requiredTokenReadsForTests());
+    // Compiled out of a release package (__VERMILIAN_E2E_BUILD__ is false there).
+    if (__VERMILIAN_E2E_BUILD__) {
+      ipcMain.handle('e2e:getProcessLaunches', () => e2eProcessLaunches());
+      ipcMain.handle('e2e:getRequiredTokenReads', () => fakeYouTrackForE2E.requiredTokenReadsForTests());
+    }
     ipcMain.handle('e2e:setUnreadableIssues', (_e, keys: string[]) => fakeYouTrackForE2E.setUnreadableIssuesForTests(Array.isArray(keys) ? keys : []));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,

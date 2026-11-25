@@ -3,17 +3,22 @@
 // Runway, sort and import actions start no agent, send nothing to tmux and
 // never invoke ConTower — while a shell-command credential still runs.
 //
-// Inert unless VERMILIAN_E2E=1, like the fake YouTrack: outside the e2e
-// harness nothing is wrapped and nothing is recorded, and the debug method
-// that reads the record is registered only under the harness (main/ipc.ts).
+// Exclusive to the e2e build: __VERMILIAN_E2E_BUILD__ is false in a release
+// package (vite.main.config.ts), so the install below and the debug channel
+// that reads the record (main/ipc.ts) are compiled out and no flag can turn
+// them on. In an e2e build it still installs only when VERMILIAN_E2E=1.
 //
 // It must be the main entry's first import: services/credentials.ts captures
 // child_process.exec when it loads (promisify), so the wrapper has to be in
 // place before then.
 //
-// No credential value is recorded. A launch keeps only its kind, the
-// program's basename and a SHA-256 of the full command line, which a test
-// compares with the hash of the command it configured.
+// No credential value is recorded. A launch keeps only its kind, a program
+// label and a SHA-256 of the full command line, which a test compares with
+// the hash of the command it configured. A shell-string launch (exec,
+// execSync, or anything given a `shell` option) is labelled `shell`, never by
+// its first word, which can itself carry a secret (`TOKEN=… printf …`). A
+// direct launch is labelled by the program's basename only when that is a
+// plain name; anything else is `unrecognised`.
 
 import childProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -26,7 +31,7 @@ export interface E2eProcessLaunch {
   /** 1, 2, 3… in launch order. */
   seq: number;
   kind: 'exec' | 'execFile' | 'spawn' | 'fork' | 'execSync' | 'execFileSync' | 'spawnSync' | 'openPath' | 'openExternal';
-  /** The program's basename (a shell command's first word), or the URL scheme / "path" for the desktop calls. */
+  /** `shell` for a shell-string launch; a direct launch's plain basename, else `unrecognised`; "path" or the URL scheme for the desktop calls. */
   program: string;
   /** SHA-256 of the full command line (or path, or URL). */
   sha256: string;
@@ -40,17 +45,23 @@ function record(kind: E2eProcessLaunch['kind'], program: string, full: string): 
   launches.push({ seq: launches.length + 1, kind, program, sha256: sha256(full) });
 }
 
-/** A shell command string: its first word is the program. */
+/** A shell command string: only its hash identifies it. */
 function recordCommand(kind: E2eProcessLaunch['kind'], command: unknown): void {
-  const text = typeof command === 'string' ? command : String(command);
-  record(kind, basename(text.trim().split(/\s+/)[0] ?? ''), text);
+  record(kind, 'shell', typeof command === 'string' ? command : String(command));
 }
 
-/** A program and its arguments; with `shell`, the "program" may be a whole command line, so only its first word is kept. */
-function recordFile(kind: E2eProcessLaunch['kind'], file: unknown, args: unknown): void {
-  const program = typeof file === 'string' ? file : String(file);
-  const list = Array.isArray(args) ? args.map(String) : [];
-  record(kind, basename(program.trim().split(/\s+/)[0] ?? ''), JSON.stringify([program, ...list]));
+/** Whether a launch's options ask for a shell (execFile/spawn take them second or third). */
+function usesShell(rest: unknown[]): boolean {
+  return rest.some((o) => typeof o === 'object' && o !== null && !Array.isArray(o) && Boolean((o as { shell?: unknown }).shell));
+}
+
+/** A program and its arguments. */
+function recordFile(kind: E2eProcessLaunch['kind'], a: unknown[]): void {
+  const program = typeof a[0] === 'string' ? a[0] : String(a[0]);
+  const list = Array.isArray(a[1]) ? a[1].map(String) : [];
+  const name = basename(program);
+  const label = usesShell(a.slice(1, 3)) ? 'shell' : /^[A-Za-z0-9._+-]{1,64}$/.test(name) ? name : 'unrecognised';
+  record(kind, label, JSON.stringify([program, ...list]));
 }
 
 /** Every launch so far, as copies. */
@@ -99,11 +110,11 @@ function wrap(name: keyof typeof childProcess, onCall: (args: unknown[]) => void
 function install(): void {
   wrap('exec', (a) => recordCommand('exec', a[0]));
   wrap('execSync', (a) => recordCommand('execSync', a[0]));
-  wrap('execFile', (a) => recordFile('execFile', a[0], a[1]));
-  wrap('execFileSync', (a) => recordFile('execFileSync', a[0], a[1]));
-  wrap('spawn', (a) => recordFile('spawn', a[0], a[1]));
-  wrap('spawnSync', (a) => recordFile('spawnSync', a[0], a[1]));
-  wrap('fork', (a) => recordFile('fork', a[0], a[1]));
+  wrap('execFile', (a) => recordFile('execFile', a));
+  wrap('execFileSync', (a) => recordFile('execFileSync', a));
+  wrap('spawn', (a) => recordFile('spawn', a));
+  wrap('spawnSync', (a) => recordFile('spawnSync', a));
+  wrap('fork', (a) => recordFile('fork', a));
 
   const desktop = shell as unknown as Record<string, AnyFn>;
   const openPath = desktop.openPath;
@@ -114,9 +125,10 @@ function install(): void {
   const openExternal = desktop.openExternal;
   desktop.openExternal = (...args: unknown[]) => {
     const url = String(args[0]);
-    record('openExternal', url.split(':')[0] ?? '', url);
+    const scheme = url.split(':')[0] ?? '';
+    record('openExternal', /^[a-z][a-z0-9+.-]{0,31}$/i.test(scheme) ? scheme : 'unrecognised', url);
     return openExternal.apply(shell, args);
   };
 }
 
-if (IS_E2E) install();
+if (__VERMILIAN_E2E_BUILD__ && IS_E2E) install();

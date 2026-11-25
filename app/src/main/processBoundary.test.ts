@@ -60,44 +60,67 @@ describe('process boundary (VERM-106)', () => {
 });
 
 describe('the e2e process recorder', () => {
-  const originalExec = childProcess.exec;
+  // Every function the recorder wraps, restored after each test.
+  const WRAPPED = ['exec', 'execSync', 'execFile', 'execFileSync', 'spawn', 'spawnSync', 'fork'] as const;
+  const cp = childProcess as unknown as Record<string, unknown>;
+  const originals = Object.fromEntries(WRAPPED.map((n) => [n, cp[n]]));
   afterEach(() => {
-    childProcess.exec = originalExec;
+    for (const n of WRAPPED) cp[n] = originals[n];
     vi.unstubAllEnvs();
     vi.resetModules();
     vi.doUnmock('electron');
   });
 
+  const SECRET = 'synthetic-secret-value';
   const mockElectron = () => vi.doMock('electron', () => ({ shell: { openPath: vi.fn(async () => ''), openExternal: vi.fn(async () => undefined) } }));
+  async function underHarness() {
+    vi.stubEnv('VERMILIAN_E2E', '1');
+    mockElectron();
+    return import('./e2eProcessRecorder');
+  }
+  const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
   it('is inert outside the e2e harness: nothing is wrapped', async () => {
     vi.stubEnv('VERMILIAN_E2E', '');
     mockElectron();
     const recorder = await import('./e2eProcessRecorder');
-    expect(childProcess.exec).toBe(originalExec);
+    for (const n of WRAPPED) expect(cp[n], n).toBe(originals[n]);
     expect(recorder.e2eProcessLaunches()).toEqual([]);
   });
 
-  it('under the harness, records a launch by program and hash only — never the command text', async () => {
-    vi.stubEnv('VERMILIAN_E2E', '1');
-    mockElectron();
-    const recorder = await import('./e2eProcessRecorder');
-    expect(childProcess.exec).not.toBe(originalExec);
-    const command = 'printf %s synthetic-secret-value';
+  it('under the harness wraps every launch function, and the teardown restores them all', async () => {
+    await underHarness();
+    for (const n of WRAPPED) expect(cp[n], n).not.toBe(originals[n]);
+  });
+
+  it('a shell command is labelled shell and kept only as its hash — even when its first word carries the secret', async () => {
+    const recorder = await underHarness();
+    const command = `TOKEN=${SECRET} printf %s "$TOKEN"`;
     await new Promise<void>((resolve) => childProcess.exec(command, () => resolve()));
-    const [launch] = recorder.e2eProcessLaunches();
-    expect(launch).toEqual({ seq: 1, kind: 'exec', program: 'printf', sha256: createHash('sha256').update(command).digest('hex') });
-    expect(JSON.stringify(recorder.e2eProcessLaunches())).not.toContain('synthetic-secret-value');
+    expect(recorder.e2eProcessLaunches()).toEqual([{ seq: 1, kind: 'exec', program: 'shell', sha256: sha(command) }]);
+    expect(JSON.stringify(recorder.e2eProcessLaunches())).not.toContain(SECRET);
   });
 
   it('a promisified exec, as the credential resolver uses it, is recorded once and still returns { stdout }', async () => {
-    vi.stubEnv('VERMILIAN_E2E', '1');
-    mockElectron();
-    const recorder = await import('./e2eProcessRecorder');
+    const recorder = await underHarness();
     const { promisify } = await import('node:util');
-    const run = promisify(childProcess.exec);
-    const out = await run('printf %s synthetic-secret-value');
-    expect(out.stdout).toBe('synthetic-secret-value');
-    expect(recorder.e2eProcessLaunches().map((l) => [l.kind, l.program])).toEqual([['exec', 'printf']]);
+    const out = await promisify(childProcess.exec)(`printf %s ${SECRET}`);
+    expect(out.stdout).toBe(SECRET);
+    expect(recorder.e2eProcessLaunches().map((l) => [l.kind, l.program])).toEqual([['exec', 'shell']]);
+    expect(JSON.stringify(recorder.e2eProcessLaunches())).not.toContain(SECRET);
+  });
+
+  it('a direct launch keeps a plain program name; a shell option, or a name that is not plain, keeps no text', async () => {
+    const recorder = await underHarness();
+    childProcess.execFileSync('true');
+    childProcess.spawnSync(`TOKEN=${SECRET} true`, [], { shell: true });
+    childProcess.spawnSync(`/tmp/run ${SECRET}`, []);
+    const events = recorder.e2eProcessLaunches();
+    expect(events.map((l) => [l.kind, l.program])).toEqual([
+      ['execFileSync', 'true'],
+      ['spawnSync', 'shell'],
+      ['spawnSync', 'unrecognised'],
+    ]);
+    expect(JSON.stringify(events)).not.toContain(SECRET);
   });
 });
