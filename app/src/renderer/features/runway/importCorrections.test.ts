@@ -482,6 +482,44 @@ describe('connection changes always read again (PR 231 review)', () => {
   });
 });
 
+describe('each group keeps its own results (PR 231 review)', () => {
+  it('two groups list READ-8: the second group’s older answer never overrides the first group’s newer one', async () => {
+    const { session, held } = open(['## One', '- READ-8', '', '## Two', '- READ-8'].join('\n'), 'ws-active', { hold: true });
+    const answer = (i: number, transform: (r: RunwayImportMatchResult) => RunwayImportMatchResult = (r) => r) => held[i].d.resolve(transform(fakeMatch(held[i].args)));
+    const unmatched = (r: RunwayImportMatchResult): RunwayImportMatchResult =>
+      r.ok
+        ? {
+            ok: true,
+            groups: r.groups.map((g) =>
+              g.ok ? { ...g, candidates: g.candidates.map((c) => ({ text: c.text, line: c.line, role: c.role, reason: c.reason, status: 'unmatched' as const, code: 'not-readable' as const, message: 'Ticket not readable with this workspace’s credential.' })) } : g,
+            ),
+          }
+        : r;
+    expect(held.map((h) => `${h.args.groups[0].groupKey}@${h.args.groups[0].workspaceId}`)).toEqual(['g0@ws-active', 'g1@ws-active']);
+
+    // 1. The first group is checked on B; the second group's lookup on A stays delayed.
+    answer(0);
+    session.apply({ op: 'connection', groupKey: 'g0', workspaceId: 'ws-reader' });
+    answer(2);
+    await flush();
+    expect(preview(session, 'g0').scheduledCount).toBe(1);
+
+    // 2. Map the first group to A: its fresh lookup answers unmatched.
+    session.apply({ op: 'map', groupKey: 'g0', workspaceId: 'ws-active' });
+    expect(held[3].args.groups[0]).toMatchObject({ groupKey: 'g0', workspaceId: 'ws-active' });
+    answer(3, unmatched);
+    await flush();
+    expect(outline(preview(session, 'g0').rows)).toEqual(['L2 note(unmatched) READ-8']);
+
+    // 3. The second group's older matched answer arrives.
+    answer(1);
+    await flush();
+    expect(outline(preview(session, 'g0').rows)).toEqual(['L2 note(unmatched) READ-8']);
+    expect(preview(session, 'g0').scheduledCount).toBe(0);
+    expect(outline(preview(session, 'g1').rows)).toEqual(['L5 #1 READ-8']);
+  });
+});
+
 describe('undo and reset', () => {
   it('Undo reverses the last edit; Reset restores the preview as first opened, reusing known answers', async () => {
     const { session, calls } = open(FILE);

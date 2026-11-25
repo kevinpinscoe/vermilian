@@ -28,7 +28,7 @@
 //               untick reverses it (buildWorkingPreview applies the rules).
 //
 // The session checks only what a correction affected: each group's lookup is
-// keyed by its connection and the exact candidates sent, so rename, skip and
+// keyed by the group, its connection and the exact candidates sent, so rename, skip and
 // ticking send nothing, and a merge or split rechecks the groups whose key
 // changed. A change of a group's connection — Check tickets using, a mapping,
 // or an undo or reset that changes it — always reads again, even for a
@@ -274,10 +274,16 @@ export interface ImportSession {
 
 const EMPTY_LIST = 'No workspaces were found.';
 
-/** What a group's lookup depends on: its connection and the candidates sent. */
+/**
+ * A group's own result key: the group, its connection and the candidates
+ * sent. The group is part of it, so two groups listing the same tickets on
+ * the same connection keep separate results, and one group's older answer can
+ * never land on another; a result is written only by the group's latest
+ * request (its generation in inFlight).
+ */
 function lookupKey(g: WorkingGroup): string | null {
   if (g.connectionId === null) return null;
-  return JSON.stringify([g.connectionId, groupCandidates(g).candidates.map((c) => [c.text, c.line, c.role, c.reason])]);
+  return JSON.stringify([g.groupKey, g.connectionId, groupCandidates(g).candidates.map((c) => [c.text, c.line, c.role, c.reason])]);
 }
 
 export function createImportSession(parsed: ParsedSchedule, activeId: string, match: MatchFn, onChange: (state: ImportSessionState) => void): ImportSession {
