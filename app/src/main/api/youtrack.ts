@@ -801,6 +801,8 @@ export interface VermilianArticle {
   id: string;
   content: string;
   updated: number;
+  /** The article's title, when the read returned it. */
+  summary?: string;
 }
 
 export async function findVermilianArticle(
@@ -885,9 +887,30 @@ export async function getVermilianArticle(
       token,
       `/api/articles/${articleId}?fields=${ARTICLE_FIELDS}`,
     );
-    return { id: result.id, content: result.content ?? '{}', updated: result.updated ?? 0 };
+    return { id: result.id, summary: result.summary ?? '', content: result.content ?? '{}', updated: result.updated ?? 0 };
   } catch {
     return null;
+  }
+}
+
+/**
+ * One article by ID, telling absence (404) apart from a read that failed —
+ * which getVermilianArticle collapses into null. Used where "gone" must be
+ * confirmed, not assumed (the import's cleanup, VERM-104).
+ */
+export type ArticleLookupResult =
+  | { state: 'found'; article: { id: string; summary: string; content: string; updated: number } }
+  | { state: 'absent' }
+  | { state: 'failed'; message: string };
+
+export async function lookupVermilianArticle(url: string, token: string, articleId: string): Promise<ArticleLookupResult> {
+  try {
+    const r = await request<RawArticle>(url, token, `/api/articles/${encodeURIComponent(articleId)}?fields=${ARTICLE_FIELDS}`);
+    return { state: 'found', article: { id: r.id, summary: r.summary ?? '', content: r.content ?? '', updated: r.updated ?? 0 } };
+  } catch (err) {
+    const e = err as { status?: unknown; message?: unknown } | null;
+    if (e?.status === 404) return { state: 'absent' };
+    return { state: 'failed', message: typeof e?.message === 'string' && e.message ? e.message : 'the article could not be read' };
   }
 }
 

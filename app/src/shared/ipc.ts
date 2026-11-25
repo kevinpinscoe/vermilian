@@ -84,6 +84,7 @@ export const IPC = {
   runwayItemsAddByReference: 'runway-items:add-by-reference',
   runwayImportMatch: 'runway-import:match',
   runwayMarkdownOpen: 'runway-markdown:open',
+  runwayMarkdownApply: 'runway-markdown:apply',
   pickFolder: 'dialog:pickFolder',
   openUserData: 'app:openUserData',
   // Workspace / board
@@ -459,6 +460,7 @@ export type RunwayItemsErrorCode =
   | 'invalid-text'
   | 'not-a-ticket'
   | 'dependent-not-on-runway'
+  | 'runway-not-empty' // fillEmpty only (the Markdown import's Apply); never from these handlers
   // From the handlers (main/services/runwayItemIpc.ts).
   | 'invalid-args' // not an argument object
   | 'unknown-workspace' // no workspace with this ID in the configuration
@@ -942,6 +944,9 @@ export interface VermilianAPI {
   // native picker, then the file's name and UTF-8 text (at most 1 MiB).
   // Read-only; a cancelled picker resolves { ok: true, canceled: true }.
   runwayMarkdownOpen(): Promise<import('./runwayImport').RunwayMarkdownOpenResult>;
+  // Apply the Markdown import preview (VERM-104): verify, back up, create the
+  // new workspaces and fill their empty Runways. See shared/runwayImport.ts.
+  runwayMarkdownApply(args: import('./runwayImport').RunwayImportApplyArgs): Promise<import('./runwayImport').RunwayImportApplyResult>;
   pickFolder(): Promise<string | null>;
   openUserData(): Promise<void>;
   // Workspace / board

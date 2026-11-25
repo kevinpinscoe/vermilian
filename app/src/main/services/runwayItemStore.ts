@@ -48,12 +48,15 @@ export type RunwayItemStoreErrorCode =
   | 'invalid-depth' // section/note: depth is not a whole number 0..4
   | 'invalid-text' // section/note: empty or whitespace-only text
   | 'not-a-ticket' // moveToNumber: the row is a section or note, which has no Runway #
-  | 'dependent-not-on-runway'; // addIssueAbove/moveAbove: the row to place above is no longer on the Runway
+  | 'dependent-not-on-runway' // addIssueAbove/moveAbove: the row to place above is no longer on the Runway
+  | 'runway-not-empty'; // fillEmpty: a destination Runway already has rows; nothing was written
 
 export class RunwayItemStoreError extends Error {
   constructor(
     readonly code: RunwayItemStoreErrorCode,
     message: string,
+    /** For runway-not-empty: the workspaces whose Runway already has rows. */
+    readonly workspaceIds: readonly string[] = [],
   ) {
     super(message);
     this.name = 'RunwayItemStoreError';
@@ -108,7 +111,25 @@ export interface RunwayItemStore {
    * on the Runway. Every other row keeps its relative order.
    */
   moveAbove(workspaceId: string, itemId: string, anchorItemId: string): RunwayItem[];
+  /**
+   * Fills several empty Runways in one transaction (the Markdown import's
+   * Apply, VERM-104): each workspace's rows are written at positions 1..N in
+   * the order given. Every destination must be empty inside the transaction:
+   * if any already has rows, nothing at all is written and the error
+   * (runway-not-empty) names those workspaces.
+   */
+  fillEmpty(fills: readonly RunwayFill[]): Record<string, RunwayItem[]>;
 }
+
+/** One workspace's rows for fillEmpty, in order. */
+export interface RunwayFill {
+  workspaceId: string;
+  rows: readonly RunwayFillRow[];
+}
+
+export type RunwayFillRow =
+  | { kind: 'issue'; issueId: string }
+  | { kind: 'section' | 'note'; text: string; depth: number };
 
 export interface StructuralRowOptions {
   /** Indent level, 0..4 (default 0). */
@@ -356,6 +377,50 @@ export function createRunwayItemStore(
 
     addSection(workspaceId, text, options) {
       return addStructural(workspaceId, 'section', text, options);
+    },
+
+    fillEmpty(fills) {
+      // Everything is checked before the transaction opens.
+      const seen = new Set<string>();
+      const planned = fills.map((fill) => {
+        requireWorkspace(fill.workspaceId);
+        if (seen.has(fill.workspaceId)) {
+          throw new RunwayItemStoreError('invalid-workspace', `Workspace ${fill.workspaceId} is filled twice`);
+        }
+        seen.add(fill.workspaceId);
+        const tickets = new Set<string>();
+        const rows = fill.rows.map((row): NewRow => {
+          if (row.kind === 'issue') {
+            requireTicketId(row.issueId);
+            if (tickets.has(row.issueId)) {
+              throw new RunwayItemStoreError('already-on-runway', `${row.issueId} appears twice in workspace ${fill.workspaceId}'s rows`);
+            }
+            tickets.add(row.issueId);
+            return ticketRow(row.issueId);
+          }
+          requireText(row.text);
+          requireDepth(row.depth);
+          return { id: `${row.kind === 'section' ? 'sec' : 'note'}:${newId()}`, kind: row.kind, depth: row.depth, text: row.text };
+        });
+        return { workspaceId: fill.workspaceId, rows };
+      });
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        // The emptiness check is inside the transaction, so no write can land between it and the fill.
+        const filled = planned.filter((p) => rows(p.workspaceId).length > 0).map((p) => p.workspaceId);
+        if (filled.length > 0) {
+          throw new RunwayItemStoreError('runway-not-empty', `Already has Runway rows: ${filled.join(', ')}`, filled);
+        }
+        const stamp = now().toISOString();
+        for (const p of planned) {
+          p.rows.forEach((r, i) => insert.run(p.workspaceId, r.id, r.kind, i + 1, r.depth, r.text, stamp, stamp));
+        }
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      }
+      return Object.fromEntries(planned.map((p) => [p.workspaceId, rows(p.workspaceId).map((r) => toItem(p.workspaceId, r))]));
     },
 
     addNote(workspaceId, text, options) {

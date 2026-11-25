@@ -552,6 +552,12 @@ type ExportFn = (source: DatabaseSync, destination: string) => Promise<RunwaySna
 // Writes a verified backup under a name nothing else holds. The export
 // refuses an existing destination atomically, so a name taken in a race
 // just moves on to the next sequence number; nothing is ever overwritten.
+// Also the Markdown import's pre-Apply backup (VERM-104).
+export async function writeRunwayBackup(live: DatabaseSync, dir: string, now: Date = new Date(), exportFn: ExportFn = exportRunwaySnapshot): Promise<string> {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return writeBackup(live, dir, now, exportFn);
+}
+
 async function writeBackup(live: DatabaseSync, dir: string, now: Date, exportFn: ExportFn): Promise<string> {
   for (let sequence = 1; sequence <= 1000; sequence++) {
     const path = join(dir, backupFileName(now, sequence));

@@ -7,7 +7,11 @@
 //
 // Per group, in order:
 //   1. The group names the existing workspace chosen to supply its
-//      connection. An unknown one fails the group.
+//      connection. An unknown one fails the group. Its connection is resolved
+//      once, from one reading of its settings: the host links are validated
+//      against, the reader that is opened and the connection key reported
+//      all come from that one resolution (VERM-104), so a result read on one
+//      site can never be labelled as another's.
 //   2. Every candidate is validated on its own, as written, against that
 //      workspace's own tracker and host (parseRunwayReference). A link to
 //      another host keeps its refusal even when its key also appears as a
@@ -15,8 +19,9 @@
 //   3. The distinct valid keys are read once each, on that workspace's own
 //      connection and no other (readRunwayTickets: batches, then single
 //      reads; 403, 404 and 410 are ticket states). Scheduled tickets and
-//      references share the one lookup. When no candidate is valid, no
-//      connection is opened.
+//      references share the one lookup. When no candidate is valid — or the
+//      group has only sections and notes — no connection is opened, but the
+//      group still reports its connection key, so Apply can bind to it.
 //   4. A failure of the whole connection — 401, no credential, no answer, a
 //      timeout, a server error — is one error for the group, and no
 //      candidate is classified. A timeout or server error is retryable at
@@ -60,12 +65,23 @@ export const RUNWAY_IMPORT_READ_TIMEOUT_MS = 15_000;
 export interface RunwayImportMatchDeps {
   /** Reads the workspace configuration (legacy or per-workspace storage). */
   workspaces: () => Promise<RunwayWorkspaces>;
-  /** The workspace's own tracker address: its YouTrack server URL or Jira site URL. */
-  trackerBaseUrl: (workspaceId: string, tracker: TrackerKind) => Promise<string>;
-  /** Opens a reader on this workspace's own connection, for its tracker. */
-  reader: (workspaceId: string, tracker: TrackerKind) => Promise<RunwayReaderResult>;
+  /**
+   * The workspace's own connection for its tracker, resolved once from one
+   * reading of its settings; null when the workspace is gone.
+   */
+  connection: (workspaceId: string, tracker: TrackerKind) => Promise<RunwayImportConnection | null>;
   /** Defaults to RUNWAY_IMPORT_READ_TIMEOUT_MS. */
   timeoutMs?: number;
+}
+
+/** One workspace's connection, as resolved once for one group's match. */
+export interface RunwayImportConnection {
+  /** Tracker, server or site, email and credential reference (trackerConnectionKey); reported so Apply can require the same connection. */
+  key: string;
+  /** Its YouTrack server URL or Jira site URL; '' when it has none for the tracker. */
+  baseUrl: string;
+  /** Opens a reader on exactly this connection. */
+  open: () => Promise<RunwayReaderResult>;
 }
 
 const REASONS: readonly ScheduleReferenceReason[] = ['prose', 'heading', 'nested', 'table', 'code', 'trailing', 'duplicate'];
@@ -172,7 +188,19 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
     };
   }
   const tracker = runwayWorkspaceTracker(workspace);
-  const baseUrl = await deps.trackerBaseUrl(group.workspaceId, tracker);
+  // 1. One resolution: validation, the reader and the reported key all use it.
+  const connection = await deps.connection(group.workspaceId, tracker);
+  if (!connection) {
+    return {
+      groupKey: group.groupKey,
+      workspaceId: group.workspaceId,
+      ok: false,
+      code: 'unknown-workspace',
+      retryable: false,
+      error: `Workspace ${group.workspaceId} is no longer configured. Choose another workspace to supply this group’s connection.`,
+    };
+  }
+  const { baseUrl } = connection;
   // A parser duplicate keeps its scheduling intent until validated (step 5).
   const candidates = group.candidates.map(
     (c): RunwayImportCandidate => (c.role === 'reference' && c.reason === 'duplicate' ? { ...c, role: 'scheduled', reason: null } : c),
@@ -185,7 +213,7 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
   // 3. One lookup per distinct key, on this workspace's own connection.
   const reads = new Map<string, Awaited<ReturnType<typeof readRunwayTickets>>[number]>();
   if (localIds.length > 0) {
-    const opened = await deps.reader(group.workspaceId, tracker);
+    const opened = await connection.open();
     if (!opened.ok) return connectionFailure(group, opened.code, opened.error);
     try {
       const itemIds = localIds.map((id) => encodeIssueId(tracker, id));
@@ -246,7 +274,7 @@ async function matchGroup(deps: RunwayImportMatchDeps, config: RunwayWorkspaces,
     }
   }
 
-  return { groupKey: group.groupKey, workspaceId: group.workspaceId, ok: true, candidates: results };
+  return { groupKey: group.groupKey, workspaceId: group.workspaceId, ok: true, candidates: results, connectionKey: connection.key };
 }
 
 export function createRunwayImportMatch(deps: RunwayImportMatchDeps) {

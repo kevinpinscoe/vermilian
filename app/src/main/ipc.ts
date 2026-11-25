@@ -178,7 +178,7 @@ import {
   type OpenBaoWriteResult,
 } from '../shared/openbao';
 import { cleanupBlocker, migrateToOpenBao } from './services/openbaoMigration';
-import { isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
+import { generateWorkspaceId, isCredentialRef, workspaceBoardIds, workspaceProjectIds, type CredentialRef } from '../shared/workspaceSchema';
 import { isJiraIssueKey, jiraProjectKeyOf } from '../shared/jiraBoardIssue';
 import { e2eFakeJiraTokenAllowed, isJiraUnauthorized, type WorkspaceJiraFailure } from '../shared/jiraConnection';
 import type { WorkspaceMigrationOptions, WorkspaceMigrationResult } from '../shared/workspaceMigration';
@@ -201,11 +201,14 @@ import { openRunwayDb, RUNWAY_DB_FILENAME } from './services/runwayDb';
 import { defaultSnapshotFileName, exportRunwaySnapshot, runwayRowCounts } from './services/runwaySnapshot';
 import {
   RUNWAY_BACKUP_DIRNAME,
+  RUNWAY_BACKUP_KEEP,
   RUNWAY_IMPORT_STAGING_DIRNAME,
   RunwayImportError,
   RunwayWriteGate,
   importRunwaySnapshot,
+  pruneRunwayBackups,
   runwayImportWarnings,
+  writeRunwayBackup,
 } from './services/runwayImport';
 import { RunwayImportSession } from './services/runwayImportSession';
 import {
@@ -218,8 +221,11 @@ import {
 import { createRunwayItemStore, type RunwayItemStore } from './services/runwayItemStore';
 import { createRunwayItemHandlers } from './services/runwayItemIpc';
 import { createRunwayAddByReference } from './services/runwayAddByReference';
-import { createRunwayImportMatch } from './services/runwayImportMatch';
+import { createRunwayImportMatch, type RunwayImportConnection } from './services/runwayImportMatch';
 import { readRunwayMarkdownFile } from './services/runwayMarkdownFile';
+import { createRunwayMarkdownApply, trackerConnectionKey, type ApplyWorkspaceStore } from './services/runwayMarkdownApply';
+import type { LegacyWorkspaceEditDeps } from './services/legacyWorkspaceEdit';
+import { createLegacyApplyWorkspaces, createPerWorkspaceApplyWorkspaces } from './services/runwayApplyWorkspaces';
 import { RUNWAY_MARKDOWN_EXTENSIONS, type RunwayMarkdownOpenResult } from '../shared/runwayImport';
 import {
   createRunwayTicketFetch,
@@ -945,6 +951,14 @@ export function registerIpc(): void {
         const r = await savePerWorkspaceLayout(config);
         return r.ok ? { ok: true } : { ok: false, error: r.error };
       }
+      return saveLegacyWorkspaceConfig(config);
+    },
+  );
+
+  // Legacy storage's save: the local file, then the shared Article (debounced).
+  // Also the Markdown import's Apply (VERM-104).
+  async function saveLegacyWorkspaceConfig(config: VermilianConfig): Promise<{ ok: boolean; error?: string }> {
+    {
       const cfg = await readConfig();
       const token = await loadYtToken(cfg);
 
@@ -969,8 +983,8 @@ export function registerIpc(): void {
       if (!articleConfig.updateWorkspaceConfig(toSave)) return { ok: false, error: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE };
       if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
       return { ok: true };
-    },
-  );
+    }
+  }
 
   ipcMain.handle(
     IPC.deleteWorkspace,
@@ -1399,18 +1413,26 @@ export function registerIpc(): void {
   // call. The token never leaves the main process.
   const jiraProviders = new Map<string, { key: string; provider: Promise<JiraProvider> }>();
 
+  // `given`: the workspace's document as already read by the caller, so the
+  // provider is built from exactly those settings (the import match, VERM-104).
   async function workspaceJiraProvider(
     workspaceId: unknown,
+    given?: WorkspaceDocument,
   ): Promise<{ ok: true; provider: JiraProvider; doc: WorkspaceDocument } | WorkspaceJiraFailure> {
     const fail = (message: string, reason: WorkspaceJiraFailure['reason'] = 'error', credentialRef: string | null = null): WorkspaceJiraFailure =>
       ({ ok: false, message, reason, credentialRef });
-    const client = await workspaceArticleClient();
-    if (!client) return fail(NOT_CONFIGURED_WS.message);
     if (typeof workspaceId !== 'string' || workspaceId === '') return fail('No workspace ID was given.');
-    const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
-    if (!read.ok) return fail(read.message);
-    if (read.entry.status !== 'ok') return fail(read.entry.message);
-    const doc = read.entry.document;
+    let doc: WorkspaceDocument;
+    if (given && given.workspaceId === workspaceId) {
+      doc = given;
+    } else {
+      const client = await workspaceArticleClient();
+      if (!client) return fail(NOT_CONFIGURED_WS.message);
+      const read = await workspaceArticles.readWorkspaceArticle(client, workspaceId);
+      if (!read.ok) return fail(read.message);
+      if (read.entry.status !== 'ok') return fail(read.entry.message);
+      doc = read.entry.document;
+    }
     if (doc.backend.kind !== 'jira') return fail(`"${doc.name}" is not a Jira workspace.`);
     const { siteUrl, email, cloudId, credentialRef } = doc.backend;
     const key = JSON.stringify([siteUrl, email, cloudId, credentialRef, doc.jiraProjects ?? {}]);
@@ -2461,10 +2483,64 @@ export function registerIpc(): void {
   // through the existing workspace chosen for it, on that workspace's own
   // connection (runwayReader) and no other. Nothing is written. The rules
   // live in services/runwayImportMatch.ts (unit-tested).
+  // A workspace's tracker connection as a comparable key (VERM-104): tracker,
+  // server or site, email and credential reference; null when it is gone.
+  // Under legacy storage every workspace uses the one configured YouTrack.
+  const LEGACY_YOUTRACK_CREDENTIAL_REF = 'legacy-youtrack-token';
+  async function applyConnectionKey(workspaceId: string): Promise<string | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      return doc ? trackerConnectionKey(doc.backend) : null;
+    }
+    const legacy = await loadLegacyWorkspaceConfig();
+    if (!legacy?.workspaces.some((w) => w.id === workspaceId)) return null;
+    return trackerConnectionKey({ kind: 'youtrack', serverUrl: (await readConfig()).youtrackUrl ?? '', credentialRef: LEGACY_YOUTRACK_CREDENTIAL_REF });
+  }
+  // The match's connection for one group, resolved from one reading of the
+  // workspace's settings: the key, the host links are checked against and the
+  // reader all come from that reading, so a result read on one site cannot be
+  // labelled as another's. Same connection rules as runwayReader.
+  async function runwayImportConnection(workspaceId: string, tracker: TrackerKind): Promise<RunwayImportConnection | null> {
+    if (workspaceStorageMode() === 'per-workspace') {
+      const doc = await perWorkspaceDocument(workspaceId);
+      if (!doc) return null;
+      const b = doc.backend;
+      const baseUrl = b.kind === 'jira' ? (tracker === 'jira' ? b.siteUrl : '') : tracker === 'youtrack' ? b.serverUrl : '';
+      return {
+        key: trackerConnectionKey(b),
+        baseUrl,
+        async open(): Promise<RunwayReaderResult> {
+          if (tracker !== b.kind) return { ok: false, code: 'credential', error: `This workspace is not on ${tracker === 'jira' ? 'Jira' : 'YouTrack'}.` };
+          if (b.kind === 'jira') {
+            const r = await workspaceJiraProvider(workspaceId, doc);
+            if (!r.ok) return { ok: false, code: r.reason === 'error' ? 'refresh-failed' : r.reason, error: r.message };
+            return { ok: true, reader: jiraRunwayReader(r.provider, workspaceAdmission(r.provider, r.doc)) };
+          }
+          const yt = await resolveWorkspaceYouTrackConnection(doc, await readConfig(), credentialSourceIO, IS_E2E);
+          if (!yt.ok) return { ok: false, code: 'credential', error: yt.error };
+          return { ok: true, reader: youtrackRunwayReader(youtrackTracker(yt.url, yt.token)) };
+        },
+      };
+    }
+    // Legacy storage: every workspace uses the one Settings YouTrack, read once here.
+    const legacy = await loadLegacyWorkspaceConfig();
+    if (!legacy?.workspaces.some((w) => w.id === workspaceId)) return null;
+    const cfg = await readConfig();
+    const url = cfg.youtrackUrl ?? '';
+    return {
+      key: trackerConnectionKey({ kind: 'youtrack', serverUrl: url, credentialRef: LEGACY_YOUTRACK_CREDENTIAL_REF }),
+      baseUrl: tracker === 'youtrack' ? url : '',
+      async open(): Promise<RunwayReaderResult> {
+        if (tracker !== 'youtrack') return { ok: false, code: 'credential', error: 'Under shared storage a workspace’s tickets are read on YouTrack.' };
+        const token = await loadYtToken(cfg);
+        if (!url || !token) return { ok: false, code: 'credential', error: 'YouTrack is not configured.' };
+        return { ok: true, reader: youtrackRunwayReader(youtrackTracker(url, token)) };
+      },
+    };
+  }
   const matchRunwayImport = createRunwayImportMatch({
     workspaces: runwayWorkspaces,
-    trackerBaseUrl: runwayTrackerBaseUrl,
-    reader: runwayReader,
+    connection: runwayImportConnection,
   });
   ipcMain.handle(IPC.runwayImportMatch, (_e, args) => matchRunwayImport(args));
 
@@ -2485,6 +2561,75 @@ export function registerIpc(): void {
     if (choice.canceled || choice.filePaths.length === 0) return { ok: true, canceled: true };
     return readRunwayMarkdownFile(choice.filePaths[0]);
   });
+
+  // Applying the Markdown import preview (VERM-104): check that each group's
+  // connection is the one previewed and verify its tickets on it, then under
+  // the write gate check again, check the destinations, back up the Runway
+  // database, create the new workspaces and fill their Runways in one
+  // transaction. The rules live in services/runwayMarkdownApply.ts
+  // (unit-tested); this supplies the workspace configuration for the storage
+  // mode in use. Legacy edits go through services/legacyWorkspaceEdit.ts,
+  // which changes only the one workspace and never prunes projects.
+  const legacyEdit: LegacyWorkspaceEditDeps = {
+    read: loadLegacyWorkspaceConfig,
+    updateShared: (config) => articleConfig.updateWorkspaceConfig(config),
+    writeLocal: writeWorkspaceConfig,
+    scheduleShared: () => {
+      void (async () => {
+        const cfg = await readConfig();
+        const token = await loadYtToken(cfg);
+        if (cfg.youtrackUrl && token) articleConfig.scheduleSave(cfg.youtrackUrl, token);
+      })();
+    },
+    refusedMessage: articleConfig.ACTIVATION_IN_PROGRESS_MESSAGE,
+  };
+  // Per-workspace create and cleanup keep the new workspace's identity, and
+  // remove exactly the articles this Apply wrote (services/runwayApplyWorkspaces.ts).
+  const perWorkspaceApply = createPerWorkspaceApplyWorkspaces({
+    async client() {
+      const guard = await storageGuard('per-workspace');
+      if (!guard.allowed) return guard.message;
+      return (await workspaceArticleClient()) ?? NOT_CONFIGURED_WS.message;
+    },
+    generateWorkspaceId,
+  });
+  const legacyApply = createLegacyApplyWorkspaces({
+    edit: legacyEdit,
+    connectionKey: applyConnectionKey,
+    generateWorkspaceId: () => `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  });
+  const applyWorkspaces: ApplyWorkspaceStore = {
+    async list() {
+      return workspaceStorageMode() === 'per-workspace' ? perWorkspaceApply.list() : legacyApply.list();
+    },
+    async create(name, connectionWorkspaceId, expectedKey) {
+      if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.create(name, connectionWorkspaceId, expectedKey);
+      return legacyApply.create(name, connectionWorkspaceId, expectedKey);
+    },
+    async remove(workspaceId, articleIds) {
+      if (workspaceStorageMode() === 'per-workspace') return perWorkspaceApply.remove(workspaceId, articleIds);
+      return legacyApply.remove(workspaceId, articleIds);
+    },
+  };
+  const applyRunwayImport = createRunwayMarkdownApply({
+    workspaces: applyWorkspaces,
+    match: matchRunwayImport,
+    connectionKey: applyConnectionKey,
+    gate: runwayGate,
+    store: openRunwayItemStore,
+    backup: async () => {
+      const dir = path.join(app.getPath('userData'), RUNWAY_BACKUP_DIRNAME);
+      const written = await writeRunwayBackup(openJiraRunwayStore().db, dir);
+      pruneRunwayBackups(dir, RUNWAY_BACKUP_KEEP, written);
+      return written;
+    },
+    // e2e only: hold before verification, so the dialog's frozen state can be tested.
+    beforeVerify: async () => {
+      const ms = IS_E2E ? Number(process.env.VERMILIAN_E2E_RUNWAY_APPLY_HOLD_MS ?? 0) : 0;
+      if (Number.isFinite(ms) && ms > 0) await new Promise((r) => setTimeout(r, ms));
+    },
+  });
+  ipcMain.handle(IPC.runwayMarkdownApply, (_e, args) => applyRunwayImport(args));
 
   ipcMain.handle(IPC.runwayExportSnapshot, async (e): Promise<RunwayExportSnapshotResult> => {
     try {

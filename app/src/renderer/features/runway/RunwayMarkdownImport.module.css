@@ -204,3 +204,14 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Apply (VERM-104): a group's controls are frozen through its fieldset. */
+.fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
