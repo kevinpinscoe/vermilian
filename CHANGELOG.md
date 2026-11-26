@@ -7,33 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-25
+
 ### Added
 
-- **Sorting cards within Kanban columns** (VERM-93). Jira's All tasks board has the **Sort**
-  control too: Runway #, Tracker priority or Ticket ID, ascending or descending, ordering the cards
-  inside each status column; the columns stay where they are, and Clear sort returns to the usual
-  order. It shares the All tasks sort. Tracker priority ranks each card by its own project's
-  priority scheme, Runway tickets from other projects included. The Kanban view of YouTrack project
-  boards gets the same control, with its **own** remembered sort per workspace on this computer,
-  and each Kanban card now shows the Runway # cell with its Add / Move / Remove popover; pressing it
-  never drags the card.
-- **All tasks sort** (VERM-92). YouTrack's All tasks has a **Sort** control: **Runway #**,
-  **Tracker priority** or **Ticket ID**, each ascending or descending, and **Clear sort**. A chosen
-  sort lists every visible ticket as one flat list, with no status sections, so the Runway # reads
-  straight down; filters still apply. Clicking the **Runway #** or **Priority** column header
-  chooses the same sort; the other headers stay a temporary sort inside the status sections.
-  Tracker priority ranks each ticket by **its own project's configured Priority bundle** — read
-  from YouTrack on the workspace's own connection, including for tickets added to the Runway from
-  outside the workspace's projects — not by a built-in list. Each
-  workspace remembers its own sort on this computer (in `app-config.json`), so it survives a
-  restart; it is never in a Runway snapshot or the tracker. Sorting never writes a Runway position
-  or a tracker field.
-- **Runway # in All tasks** (VERM-90). YouTrack's All tasks table has a **Runway #** column,
-  and each Jira card a Runway # badge beside its key. It shows the ticket's Runway # on the active
-  workspace's Runway, blank when it has none. Clicking it opens the detail panel's Runway #
-  control in a popover — Add at end, Add at #, Move to #, Remove — without opening the ticket.
-  Focus moves into the popover and Escape returns it to the badge; opening another closes it; a
-  bottom row opens it above so its controls stay on screen.
+- **Workspace Runways** (VERM-75). Each workspace keeps its own ordered list of the tickets to work
+  on, from YouTrack or Jira: numbered **Runway #1**, **#2**, **#3**…, with section headings and
+  notes between them, stored on this computer in `runway-metadata.sqlite`. The entries below make up
+  the feature.
+- **Runway storage and the IPC contract** (VERM-78, VERM-80, VERM-81, VERM-82).
+  - **Runway database schema version 2** (VERM-78), the storage for Workspace Runways: a new
+    `runway_item` table holds each workspace's numbered Runway order. An existing version 1
+    `runway-metadata.sqlite` is upgraded on first open, additively, after a verified copy of it is
+    written to `runway-backups/runway-pre-v2-migration-<time>.sqlite`. If that copy cannot be
+    written the file is left at version 1, unchanged. Priority Desk data is not altered.
+  - **Runway order store** (VERM-80), the main-process operations behind a Workspace Runway: add a
+    ticket at the end or at #N, remove a row, move a row to #N, and move it up or down. Each
+    operation is one database transaction that renumbers the workspace, so positions are always
+    1..N with no gaps. A number past the end means last. Only rows whose position actually changes
+    get a new change time, so a move that changes nothing records no change. The same ticket can
+    sit at different positions in different workspaces. Adding a ticket never changes a
+    workspace's projects or folders, and never writes to the tracker.
+  - **Runway section and note rows, and a ticket-only Runway #** (VERM-81). A Runway can hold
+    section headings and notes, each with its text and an indent of 0 to 4, at any row. The
+    Runway # counts tickets only: it is worked out each time the Runway is read, so a section or
+    note never uses up a number. Adding a ticket at #N puts it just before the ticket that holds
+    #N now; moving a ticket to #N moves it in among the tickets while sections and notes stay where
+    they are. A number past the last ticket puts it right after the last ticket.
+  - **Runway IPC and preload contract** (VERM-82). The renderer can now list a workspace's Runway
+    and add, remove and move its tickets, sections and notes through `window.vermilian.runwayItems*`.
+    The main process looks up the workspace in the workspace configuration and refuses an unknown
+    one. Changes are accepted for the active workspace only. A ticket must come from the
+    workspace's own tracker, from any project on it. A workspace with no tracker setting (older
+    shared storage) counts as YouTrack. Every refusal happens before anything is written. Listing
+    is read-only. Every change waits its turn behind the Runway write gate, so it cannot land in
+    the middle of a snapshot import. The workspace and its tracker are checked again inside the
+    gate, just before the write, so a change made for one workspace is refused if you switch to
+    another while it waits.
+- **Reading Runway tickets from their tracker** (VERM-83, VERM-84).
+  - **Runway tickets are read from their tracker** (VERM-84). A new main-process read,
+    `runwayItemsResolve`, fetches every ticket on a workspace's Runway in batches, on that
+    workspace's own connection, and nothing falls back to another credential. Under per-workspace
+    storage that is the workspace's own YouTrack credential reference or Jira connection, never the
+    Settings YouTrack token. Under legacy shared storage, where no workspace has a credential of its
+    own, it is the Settings YouTrack connection every workspace already uses. Each ticket row reads
+    as resolved, **Missing or not readable** (the tracker answered 404, which means either),
+    **Not readable** (an explicit refusal), **Missing** (the tracker confirmed it is gone), or
+    **Wrong tracker** (the row names a ticket on the other tracker; it is kept and not read). The
+    row and its number are always kept. If a batch fails because one ticket is unavailable, the
+    tickets are read one at a time so the readable ones still load. A rejected credential is one
+    workspace-level error with no further reads. A network failure, a timeout, a rate limit or a
+    server error is a refresh error, never a ticket state.
+  **Jira Runway tickets open in the detail panel and exact-key search** (VERM-83). A Jira workspace
+      reads a ticket that is in one of its projects, on its own Runway, or on one of its boards,
+      checked in that order by one rule shared by the detail panel, the moved-issue recheck and
+      exact-key search. Boards are asked only when the project and Runway checks say no, on the
+      workspace's own connection. A key the workspace may not read is never sent to Jira, and text
+      search still covers only its projects and boards.
+- **The Runway view: add, reorder and remove** (VERM-85, VERM-86, VERM-87).
+  - **Runway view** (VERM-85). A new **Runway** entry in the left rail, between Priority Desk and
+    All tasks, shows the active workspace's Runway in its saved order: numbered tickets, section
+    headings and notes. It works for YouTrack and Jira workspaces, including one with no board
+    projects. A ticket that could not be read stays in place with its number, its state and the
+    reason. Clicking a resolved ticket opens the workspace's detail panel, and closing it keeps the
+    list's order and scroll position. A Jira ticket that is only on the Runway now opens in the Jira
+    panel too.
+  - **Add a ticket to the Runway** (VERM-86). The Runway view has an **Add** box that takes a ticket
+    key, a ticket link, or search text, with an optional **at #N** (the end by default). A link must
+    be on the workspace's own tracker; a link to any other host, the other tracker included, is
+    refused before any request. Add or Enter checks that exact key once, on the workspace's own
+    connection, and adds it through the Runway write gate. That works for a Jira workspace with no
+    projects or boards too, without widening search or detail reads. A key the tracker answers 404
+    for is refused with *Ticket missing or not readable with this workspace's credential.*, a
+    timeout can be retried, and a ticket already on the Runway — under its key, or for YouTrack its
+    entity ID — is refused and keeps its number. Any workspace switch while the add is pending,
+    including a round trip back to the same workspace, cancels it. YouTrack project-view links
+    (`…/projects/PROJECT/issues/KEY`) are accepted too. The order is unchanged by every refusal, and
+    no project ever moves.
+  - **Reorder and remove on the Runway** (VERM-87). Every Runway view row has a drag handle, **↑**
+    and **↓**, and **Remove**; ticket rows also have **Move to #** and a **#** field you can click
+    and type a number into. ↑ and ↓ swap the row with the one immediately beside it: crossing a
+    heading or note keeps the Runway #, crossing a ticket changes it by one. A typed # past the end
+    moves the ticket last; one that is not a whole number of 1 or more is refused and nothing moves.
+    Remove asks first, on the row (*Remove READ-12 from this Runway?*, or a heading's or note's own
+    text), and takes that row off the active workspace's Runway only — the tracker ticket and any
+    other workspace's Runway are untouched. Each action is one write through the Runway write gate,
+    positions and Runway # stay dense, and the order survives a restart. Any workspace switch while
+    an edit waits for the write gate cancels it — a round trip back to the same workspace included —
+    and leaves both Runways as they were.
+- **Runway # outside the Runway view** (VERM-88, VERM-90).
+  - **Runway # in the ticket detail panel** (VERM-88). The YouTrack and Jira detail panels show the
+    ticket's **Runway #** on the active workspace's Runway. A ticket not on it offers **Add at end**
+    and **Add at #**; one on it offers **Move to #** and **Remove**, which asks first
+    (*Remove READ-12 from this Runway?*). The Runway view follows each change at once. The control
+    does not depend on the Priority Desk, so a Jira ticket with no Desk slot has it too. The panel
+    finds the ticket's row under any ID it goes by — including a YouTrack entity ID, or a Jira key
+    the ticket has since moved from — and moves or removes that row as stored, rather than adding
+    the ticket a second time. Adds use the Runway view's own checked, gated add; nothing is written
+    to the tracker.
+  - **Runway # in All tasks** (VERM-90). YouTrack's All tasks table has a **Runway #** column,
+    and each Jira card a Runway # badge beside its key. It shows the ticket's Runway # on the active
+    workspace's Runway, blank when it has none. Clicking it opens the detail panel's Runway #
+    control in a popover — Add at end, Add at #, Move to #, Remove — without opening the ticket.
+    Focus moves into the popover and Escape returns it to the badge; opening another closes it; a
+    bottom row opens it above so its controls stay on screen.
 - **Runway tickets in All tasks** (VERM-89). All tasks, YouTrack and Jira, lists the workspace's
   project (and Jira board) issues plus the tickets added to its Runway from outside them, each
   exactly once: a ticket both in a project and on the Runway appears once. A workspace with no
@@ -46,96 +123,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Runway tickets cannot be read, it says so and offers **Open Runway**, beside the toggle when
   closed tickets are hidden too. A ticket removed from the Runway leaves All tasks at once (one in
   a project stays, through its project). Inline edits to an outside Runway ticket show in its row.
-- **Runway # in the ticket detail panel** (VERM-88). The YouTrack and Jira detail panels show the
-  ticket's **Runway #** on the active workspace's Runway. A ticket not on it offers **Add at end**
-  and **Add at #**; one on it offers **Move to #** and **Remove**, which asks first
-  (*Remove READ-12 from this Runway?*). The Runway view follows each change at once. The control
-  does not depend on the Priority Desk, so a Jira ticket with no Desk slot has it too. The panel
-  finds the ticket's row under any ID it goes by — including a YouTrack entity ID, or a Jira key
-  the ticket has since moved from — and moves or removes that row as stored, rather than adding
-  the ticket a second time. Adds use the Runway view's own checked, gated add; nothing is written
-  to the tracker.
-- **Reorder and remove on the Runway** (VERM-87). Every Runway view row has a drag handle, **↑**
-  and **↓**, and **Remove**; ticket rows also have **Move to #** and a **#** field you can click
-  and type a number into. ↑ and ↓ swap the row with the one immediately beside it: crossing a
-  heading or note keeps the Runway #, crossing a ticket changes it by one. A typed # past the end
-  moves the ticket last; one that is not a whole number of 1 or more is refused and nothing moves.
-  Remove asks first, on the row (*Remove READ-12 from this Runway?*, or a heading's or note's own
-  text), and takes that row off the active workspace's Runway only — the tracker ticket and any
-  other workspace's Runway are untouched. Each action is one write through the Runway write gate,
-  positions and Runway # stay dense, and the order survives a restart. Any workspace switch while
-  an edit waits for the write gate cancels it — a round trip back to the same workspace included —
-  and leaves both Runways as they were.
-- **Add a ticket to the Runway** (VERM-86). The Runway view has an **Add** box that takes a ticket
-  key, a ticket link, or search text, with an optional **at #N** (the end by default). A link must
-  be on the workspace's own tracker; a link to any other host, the other tracker included, is
-  refused before any request. Add or Enter checks that exact key once, on the workspace's own
-  connection, and adds it through the Runway write gate. That works for a Jira workspace with no
-  projects or boards too, without widening search or detail reads. A key the tracker answers 404
-  for is refused with *Ticket missing or not readable with this workspace's credential.*, a
-  timeout can be retried, and a ticket already on the Runway — under its key, or for YouTrack its
-  entity ID — is refused and keeps its number. Any workspace switch while the add is pending,
-  including a round trip back to the same workspace, cancels it. YouTrack project-view links
-  (`…/projects/PROJECT/issues/KEY`) are accepted too. The order is unchanged by every refusal, and
-  no project ever moves.
-- **Runway view** (VERM-85). A new **Runway** entry in the left rail, between Priority Desk and
-  All tasks, shows the active workspace's Runway in its saved order: numbered tickets, section
-  headings and notes. It works for YouTrack and Jira workspaces, including one with no board
-  projects. A ticket that could not be read stays in place with its number, its state and the
-  reason. Clicking a resolved ticket opens the workspace's detail panel, and closing it keeps the
-  list's order and scroll position. A Jira ticket that is only on the Runway now opens in the Jira
-  panel too. Adding (VERM-86), removing and reordering (VERM-87) followed.
-- **Runway tickets are read from their tracker** (VERM-84). A new main-process read,
-  `runwayItemsResolve`, fetches every ticket on a workspace's Runway in batches, on that
-  workspace's own connection, and nothing falls back to another credential. Under per-workspace
-  storage that is the workspace's own YouTrack credential reference or Jira connection, never the
-  Settings YouTrack token. Under legacy shared storage, where no workspace has a credential of its
-  own, it is the Settings YouTrack connection every workspace already uses. Each ticket row reads
-  as resolved, **Missing or not readable** (the tracker answered 404, which means either),
-  **Not readable** (an explicit refusal), **Missing** (the tracker confirmed it is gone), or
-  **Wrong tracker** (the row names a ticket on the other tracker; it is kept and not read). The
-  row and its number are always kept. If a batch fails because one ticket is unavailable, the
-  tickets are read one at a time so the readable ones still load. A rejected credential is one
-  workspace-level error with no further reads. A network failure, a timeout, a rate limit or a
-  server error is a refresh error, never a ticket state. The Runway view that shows these states
-  comes with VERM-85.
-- **Runway database schema version 2** (VERM-78), the storage for Workspace Runways: a new
-  `runway_item` table holds each workspace's numbered Runway order. An existing version 1
-  `runway-metadata.sqlite` is upgraded on first open, additively, after a verified copy of it is
-  written to `runway-backups/runway-pre-v2-migration-<time>.sqlite`. If that copy cannot be
-  written the file is left at version 1, unchanged. Priority Desk data is not altered.
-- **Runway snapshots record where they came from** (VERM-79). An exported snapshot is version 2,
-  includes the Runway order, and records the computer that exported it and when. The import
-  preview shows both, and warns before you confirm when this computer has Runway changes newer
-  than the snapshot, naming the latest one. It also compares records where no timestamp can tell
-  which copy is newer: it warns when the import would change a dismissal, or restore a Desk entry
-  or Runway row that is not on this computer (perhaps removed after the export). A snapshot that
-  holds exactly this computer's data shows no warning.
-- **Runway order store** (VERM-80), the main-process operations behind a Workspace Runway: add a
-  ticket at the end or at #N, remove a row, move a row to #N, and move it up or down. Each
-  operation is one database transaction that renumbers the workspace, so positions are always
-  1..N with no gaps. A number past the end means last. Only rows whose position actually changes
-  get a new change time, so a move that changes nothing records no change. The same ticket can
-  sit at different positions in different workspaces. Adding a ticket never changes a
-  workspace's projects or folders, and never writes to the tracker. Nothing in the app uses this
-  yet; the IPC contract follows in VERM-82.
-- **Runway section and note rows, and a ticket-only Runway #** (VERM-81). A Runway can hold
-  section headings and notes, each with its text and an indent of 0 to 4, at any row. The
-  Runway # counts tickets only: it is worked out each time the Runway is read, so a section or
-  note never uses up a number. Adding a ticket at #N puts it just before the ticket that holds
-  #N now; moving a ticket to #N moves it in among the tickets while sections and notes stay where
-  they are. A number past the last ticket puts it right after the last ticket. Nothing in the app
-  uses this yet; the IPC contract follows in VERM-82.
-- **Runway IPC and preload contract** (VERM-82). The renderer can now list a workspace's Runway
-  and add, remove and move its tickets, sections and notes through `window.vermilian.runwayItems*`.
-  The main process looks up the workspace in the workspace configuration and refuses an unknown
-  one. Changes are accepted for the active workspace only. A ticket must come from the
-  workspace's own tracker, from any project on it. A workspace with no tracker setting (older
-  shared storage) counts as YouTrack. Every refusal happens before anything is written. Listing
-  is read-only. Every change waits its turn behind the Runway write gate, so it cannot land in
-  the middle of a snapshot import. The workspace and its tracker are checked again inside the
-  gate, just before the write, so a change made for one workspace is refused if you switch to
-  another while it waits. No screen uses this yet.
+- **Sorting** (VERM-91, VERM-92, VERM-93).
+  **Ticket ID and priority sort rules** (VERM-91). **Ticket ID** compares the project prefix as
+      text, then the final number numerically: `OPS-956` before `OPS-4089` ascending, the reverse
+      descending. Under **Tracker priority** a ticket whose priority is unknown comes after every
+      ranked one in both directions, before tickets with no priority. **Runway #** and **Tracker
+      priority** break ties by ascending ticket ID in either direction.
+  - **All tasks sort** (VERM-92). YouTrack's All tasks has a **Sort** control: **Runway #**,
+    **Tracker priority** or **Ticket ID**, each ascending or descending, and **Clear sort**. A chosen
+    sort lists every visible ticket as one flat list, with no status sections, so the Runway # reads
+    straight down; filters still apply. Clicking the **Runway #** or **Priority** column header
+    chooses the same sort; the other headers stay a temporary sort inside the status sections.
+    Tracker priority ranks each ticket by **its own project's configured Priority bundle** — read
+    from YouTrack on the workspace's own connection, including for tickets added to the Runway from
+    outside the workspace's projects — not by a built-in list. Each
+    workspace remembers its own sort on this computer (in `app-config.json`), so it survives a
+    restart; it is never in a Runway snapshot or the tracker. Sorting never writes a Runway position
+    or a tracker field.
+  - **Sorting cards within Kanban columns** (VERM-93). Jira's All tasks board has the **Sort**
+    control too: Runway #, Tracker priority or Ticket ID, ascending or descending, ordering the cards
+    inside each status column; the columns stay where they are, and Clear sort returns to the usual
+    order. It shares the All tasks sort. Tracker priority ranks each card by its own project's
+    priority scheme, Runway tickets from other projects included. The Kanban view of YouTrack project
+    boards gets the same control, with its **own** remembered sort per workspace on this computer,
+    and each Kanban card now shows the Runway # cell with its Add / Move / Remove popover; pressing it
+    never drags the card.
+- **Blockers and order conflicts** (VERM-94, VERM-95, VERM-96, VERM-97, VERM-98). Each Runway
+  ticket's links are read on its workspace's own connection, YouTrack links and Jira issue links
+  alike, and its state is worked out on every read: **Ready**, **Blocked**, **Unknown** or **Done**.
+  A prerequisite on the Runway is named with its number (*Blocked by SYNC-3 (#2 here).*); one
+  outside it is *external*, with **Add KEY to Runway**, which puts it immediately above the blocked
+  ticket. A prerequisite placed after its dependent shows *Order conflict — SYNC-3 is #5, after this
+  (#2)* with **Move prerequisite above**. Nothing moves until you click, and both actions find the
+  dependent's current position inside the write. All tasks shows a badge beside the Runway # only
+  for Blocked or Unknown, with the reason on hover. Which link types count is set per workspace
+  under per-workspace storage, in **Manage workspaces → Prerequisites…**; the defaults are
+  YouTrack's Depend and Jira's Blocks, and Subtask never counts. Blocker state is never written
+  anywhere.
+- **Runway # on the Desk, Desk slot on the Runway** (VERM-99). Desk cards and Choose next candidates
+  show the ticket's **Runway #N** in the active workspace (**Runway #?** when its position cannot be
+  verified). Runway and All tasks rows show a read-only **Now**, **Next** or **Then** chip when the
+  ticket holds that Desk slot in this workspace. The two stay independent: Runway #1 is not the
+  Desk's Now, and promoting or demoting on the Desk never moves a Runway position.
+- **Import a schedule from Markdown** (VERM-100, VERM-101, VERM-102, VERM-103, VERM-104, VERM-105).
+  **Import from Markdown…** in the Runway view reads a Markdown file of at most 1 MiB and shows a
+  preview; nothing is written until **Apply**, and **Cancel** leaves the Runway database
+  byte-identical. Each `##` heading proposes a workspace, new or mapped to an existing one by name.
+  List items that start with a key or ticket link become numbered tickets in file order, `###`
+  headings become sections and paragraphs become notes; keys in prose, nested bullets, tables or
+  code are listed under **References**, unticked. Each group's tickets are checked on the chosen
+  workspace's own connection, and a key that cannot be read is kept as a note. The grouping can be
+  corrected — rename, merge, split a `###` into its own workspace, map to another workspace, choose
+  the connection, skip, tick References — with **Undo** and **Reset**. **Apply** checks the tickets
+  again, backs up the Runway database to `runway-backups/`, creates any new workspaces (each copying
+  only the chosen workspace's connection and credential reference), then writes all Runway rows in
+  one transaction. If the import fails, no partial set of Runway rows is committed. A backup already
+  created is kept. Vermilian attempts to remove workspaces it created and reports anything that
+  needs manual cleanup or inspection.
+  Importing into a Runway that already has rows is append-only: rows already there keep their place
+  and Runway #, only missing tickets, sections and notes are added at the end, *Not in this file*
+  lists the Runway's other tickets, *Nothing new to add* disables **Apply**, and *Unable to verify*
+  holds back new tickets while a saved one cannot be read. Importing never adds a project to a
+  workspace.
+- **Runway, sort and import never start an agent** (VERM-106). They never start an agent such as
+  Claude Code, never send input to tmux and never invoke ConTower; the only process they can start
+  is a workspace's own shell-command credential, when a ticket read needs its token. A packaged test
+  checks every Runway, sort and import handler with a process recorder compiled only into e2e
+  builds; `pnpm test:e2e` now always packages that build, and `pnpm test:release-isolation` checks a
+  release package has none of it.
+- **Runway snapshots** (VERM-79).
+  - **Runway snapshots record where they came from** (VERM-79). An exported snapshot is version 2,
+    includes the Runway order, and records the computer that exported it and when. The import
+    preview shows both, and warns before you confirm when this computer has Runway changes newer
+    than the snapshot, naming the latest one. It also compares records where no timestamp can tell
+    which copy is newer: it warns when the import would change a dismissal, or restore a Desk entry
+    or Runway row that is not on this computer (perhaps removed after the export). A snapshot that
+    holds exactly this computer's data shows no warning.
+- **Documentation** (VERM-76, VERM-77, VERM-107). The Workspace Runways spec
+  (`spec/features/workspace-runway.md`) and ADR-0012, and the feature in the README, the RUNBOOK
+  (*Runway database, backups and recovery*) and the AI help desk.
 
 ### Changed
 
@@ -159,6 +225,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Electron Forge 8** (VERM-55). Packaging moves from Electron Forge 7.11.2 to 8.0.1 and the
   Linux AppImage maker from 5.3.1 to 6.0.0. The main and preload bundles are now `main.cjs` and
   `preload.cjs`. Nothing changes for users.
+- **Ticket fields use each project's own values** (VERM-117). Boards, filters, the Priority Desk and
+  the detail panel's dropdowns (Status, Priority, Category and the other select fields) read each
+  project's own configured values instead of fixed built-in lists. While a project's values are
+  being re-read, its editors show the saved value and wait; a failed read offers **Retry**.
 
 ### Fixed
 
@@ -210,6 +280,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   issues were remembered by the time each read finished, and two projects' reads can finish in the
   same millisecond, so switching workspace could leave the old workspace's issues in the table.
   They are now remembered by project as well.
+- **Dialog headings and warnings are no longer clipped** (VERM-109, VERM-116, VERM-118). Every
+  dialog — Stand-Up, Create task, AI create, Daily Review, the Settings confirmations, Manage
+  workspaces and the rest — now uses the layout that keeps its heading clear of the close button;
+  before, headings sat in the top-left corner under it. Warning boxes in the Runway snapshot import
+  dialog no longer run past its right edge.
 
 ## [1.6.0] - 2026-11-19
 
@@ -1023,7 +1098,8 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
-[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kevinpinscoe/vermilian/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.4.0

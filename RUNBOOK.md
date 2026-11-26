@@ -283,7 +283,7 @@ folder**), is local to this computer and holds, for **every** workspace:
 
 | Table | What it is |
 | --- | --- |
-| `runway_item` | Each workspace's **Workspace Runway**: its ordered tickets (YouTrack and Jira), sections and notes. *Available on main for the upcoming release; not in v1.6.0.* |
+| `runway_item` | Each workspace's **Workspace Runway**: its ordered tickets (YouTrack and Jira), sections and notes (v1.7.0) |
 | `runway_entry` | Jira workspaces' Priority Desk metadata: Focus, Focus rank, Why now |
 | `dismissal` | Jira workspaces' "Not this week" dismissals |
 
@@ -409,7 +409,7 @@ configuration is not touched.
 
 ### Markdown import Apply (VERM-104, VERM-105)
 
-*Available on main for the upcoming release; not in v1.6.0.*
+*New in v1.7.0.*
 
 **Import from Markdown…** (Runway view) previews a schedule file; **Apply** writes it. Apply:
 
@@ -422,8 +422,11 @@ configuration is not touched.
    every destination's rows are still exactly the ones the preview compared. Nothing already on a
    Runway moves, changes or is removed, so no Runway # changes.
 
-If any step fails, nothing is written, and the workspaces this Apply created are removed again
-(any it could not remove are listed in the dialog with the backup path).
+If Apply fails, no partial set of Runway rows is committed. Any backup already created is kept.
+Vermilian attempts to remove the workspaces this Apply created. If cleanup is incomplete, the dialog
+shows the backup path and identifies what needs attention. Remove only items the dialog identifies
+as created by this import and requiring manual removal. Leave articles listed under "Left in place
+for inspection" in place while you investigate.
 
 ### Recovery: what "restore" means
 
