@@ -274,40 +274,65 @@ Verify the signed tag with `git tag -v vX.Y.Z`. Watch the run with
 
 ---
 
-## Runway metadata snapshot (Jira workspaces)
+## Runway database, backups and recovery
 
-Jira workspaces keep their Priority Desk metadata (Focus, Focus rank, Why now,
-"Not this week" dismissals) in a local SQLite file,
-`runway-metadata.sqlite`, in Vermilian's user-data directory. YouTrack
-workspaces keep theirs in YouTrack custom fields and are not in this file.
+### What the Runway database holds
 
-To take a manual backup (VERM-50):
+`runway-metadata.sqlite`, in Vermilian's user-data directory (**Settings → Advanced → Open config
+folder**), is local to this computer and holds, for **every** workspace:
+
+| Table | What it is |
+| --- | --- |
+| `runway_item` | Each workspace's **Workspace Runway**: its ordered tickets (YouTrack and Jira), sections and notes. *Available on main for the upcoming release; not in v1.6.0.* |
+| `runway_entry` | Jira workspaces' Priority Desk metadata: Focus, Focus rank, Why now |
+| `dismissal` | Jira workspaces' "Not this week" dismissals |
+
+It does **not** hold:
+
+- **Workspace configuration** — workspaces, their names, folders, projects and credential
+  references live in `_vermilian-config` or the per-workspace articles (see
+  [Per-workspace configuration storage](#per-workspace-configuration-storage-verm-53)), and the
+  active workspace in `active-workspace.json`.
+- **Tracker data** — tickets, their fields and their links stay in YouTrack and Jira. YouTrack
+  workspaces keep their Priority Desk metadata in YouTrack custom fields.
+- **Credentials** — see [OpenBao credential storage](#openbao-credential-storage-verm-64) and
+  Settings.
+
+Nothing in this section ever writes to YouTrack or Jira.
+
+**Process boundary (VERM-106).** Runway, sort and import actions never start an agent (such as
+Claude Code), never send input to tmux and never invoke ConTower. The only process they can start
+is a workspace's own **shell-command credential**, which runs when a ticket read needs that
+workspace's token, exactly as it does for the board. `e2e/runway-process-boundary.spec.ts` checks
+this with an e2e-build-only process recorder.
+
+### Exporting a snapshot (VERM-50)
 
 1. Open **Settings → Advanced → Export Runway snapshot…**.
 2. Choose a new file name. The suggested name is
    `vermilian-runway-YYYYMMDD-HHMMSS.sqlite` in your Documents folder.
-3. A toast reports the path and the number of entries and dismissals written.
+3. A toast reads "Exported Runway snapshot (N entries, M dismissals) to …". The counts are Jira
+   Desk entries and dismissals only; the file also holds every workspace's Runway rows.
 
 What the snapshot is:
 
-- The whole database, every workspace, as an ordinary SQLite file with the
-  same schema, `application_id` (`VRML`) and `user_version` as the live one.
-  It is the format the snapshot import (below) restores.
-- Taken with SQLite's online backup, so Vermilian keeps reading and writing
-  the live database while it runs. The live file is never copied directly.
-- Verified before it appears: the copy must pass `PRAGMA integrity_check`
-  and carry the Runway `application_id` and a supported schema version.
+- The whole database, every workspace and both trackers' Runway rows, as an ordinary SQLite file
+  with the same schema, `application_id` (`VRML`) and `user_version` (2) as the live one, plus a
+  `runway_snapshot_info` table recording when and on which computer it was exported. It is the
+  format the snapshot import (below) restores.
+- Taken with SQLite's online backup, so Vermilian keeps reading and writing the live database while
+  it runs. The live file is never copied directly.
+- Verified before it appears: the copy must pass `PRAGMA integrity_check` and carry the Runway
+  `application_id` and a supported schema version.
 
-It never replaces an existing file. If the chosen name already exists (even
-after the save dialog asked to replace it), the export is refused and the
-existing file is left untouched; choose a new name. A cancelled or failed
-export leaves no file behind.
+It never replaces an existing file. If the chosen name already exists (even after the save dialog
+asked to replace it), the export is refused and the existing file is left untouched; choose a new
+name. A cancelled or failed export leaves no file behind.
 
-The finished snapshot is published with a single hard link, so it appears
-complete or not at all. A folder whose filesystem has no hard links (FAT/exFAT
-drives, some network shares) is refused with "No snapshot was created … Choose
-a folder on a local disk" rather than written by a copy that could be seen
-half-finished. Export to a local disk, then copy the file wherever it needs to
+The finished snapshot is published with a single hard link, so it appears complete or not at all.
+A folder whose filesystem has no hard links (FAT/exFAT drives, some network shares) is refused
+with "No snapshot was created … Choose a folder on a local disk" rather than written by a copy
+that could be seen half-finished. Export to a local disk, then copy the file wherever it needs to
 go.
 
 Verify a snapshot by hand:
@@ -315,56 +340,61 @@ Verify a snapshot by hand:
 ```bash
 sqlite3 -readonly vermilian-runway-20261115-090507.sqlite \
   'PRAGMA integrity_check; PRAGMA application_id; PRAGMA user_version;
-   SELECT count(*) FROM runway_entry; SELECT count(*) FROM dismissal;'
-# Expect: ok, 1448234316 (VRML), 1, then the two row counts.
+   SELECT count(*) FROM runway_entry; SELECT count(*) FROM dismissal;
+   SELECT count(*) FROM runway_item;'
+# Expect: ok, 1448234316 (VRML), 2, then the three row counts.
 ```
+
+### Automatic backups and retention
+
+Two operations back up the whole live database first, verified, with the same export:
+
+- a **snapshot import** (below), before it replaces anything;
+- a Markdown import's **Apply** (VERM-104), before it creates a workspace or writes a row.
+
+Both write `runway-backups/runway-before-import-YYYYMMDD-HHMMSS.sqlite` in the user-data
+directory (local time, with a `-2`, `-3` … suffix if that name exists; never overwritten). If the
+backup fails, nothing is changed. Every backup is an ordinary snapshot, restorable as below.
+
+The two share one pool: the **10 newest** `runway-before-import-*.sqlite` files are kept, and older
+ones are removed after a successful snapshot import and after each Apply backup is written (even if
+that Apply is then refused or fails). The backup just written is never removed. Nothing else in
+`runway-backups/` (manual exports, other files, links, folders) is ever removed. Export a snapshot
+by hand to keep a recovery point longer.
 
 ### Importing a snapshot (VERM-51)
 
-Importing replaces the Runway metadata for **every** workspace on this
-computer with the snapshot's. Nothing is sent to Jira or YouTrack.
+Importing replaces the whole Runway database — **every** workspace's Runway order, and Jira Desk
+metadata and dismissals — with the snapshot's. Nothing is sent to Jira or YouTrack, and workspace
+configuration is not touched.
 
-1. Open **Settings → Advanced → Import Runway snapshot…** and choose a
-   snapshot file.
-2. Vermilian reads the file once into a private copy in
-   `runway-import-staging/` (user-data directory) and checks the copy:
-   `integrity_check`, the `VRML` application ID, a schema version exactly the
-   one this build uses (newer and older are refused; nothing is migrated), a
-   schema identical to this build's (extra triggers, views or indexes are
-   refused), Jira-only issue IDs, and a dry run that inserts every row under
-   the live constraints. A file that fails is refused before any preview.
-3. The confirmation shows the file, **Export time: Not recorded in the
-   snapshot** (the export does not store one), the file's last-modified time
-   labelled as file metadata, the schema version, snapshot and current row
-   counts, and the backup folder. **Cancel** changes nothing.
+1. Open **Settings → Advanced → Import Runway snapshot…** and choose a snapshot file.
+2. Vermilian reads the file once into a private copy in `runway-import-staging/` (user-data
+   directory) and checks the copy: `integrity_check`, the `VRML` application ID, schema version 1
+   or 2 (a newer one is refused), a schema identical to that version's (extra triggers, views or
+   indexes are refused), Jira-only Desk issue IDs, dense 1..N Runway order rows, and a dry run that
+   inserts every row under the live constraints. A version 1 snapshot is upgraded to version 2 in
+   the staged copy only. A file that fails is refused before any preview.
+3. **Replace all Runway metadata?** shows **File**, **Snapshot version**, **Exported by
+   computer**, **Export time**, **File last modified (file metadata, not the export time)**,
+   **Snapshot holds** and **Will replace (current)** (row counts), and **Backup of current data
+   first, in**. A version 1 snapshot shows *Version 1 — will be upgraded to version 2 on import*
+   and *Not recorded (version 1 snapshot)* for the computer and time. Before you can confirm,
+   **Local Runway changes may be lost** warns when this computer has changes newer than the
+   snapshot, or when Vermilian cannot tell. **Cancel** changes nothing.
 4. **Replace Runway data**:
-   - the chosen file must still be byte-identical to what was previewed,
-     otherwise the import is refused ("changed after it was previewed");
-   - the current database is backed up, verified, to
-     `runway-backups/runway-before-import-YYYYMMDD-HHMMSS.sqlite` (with a
-     `-2`, `-3` … suffix if that name exists; never overwritten). If the
-     backup fails, nothing is imported;
-   - the replacement is one SQLite transaction on the live connection
-     (`ATTACH`, `BEGIN IMMEDIATE`, `DELETE`, `INSERT … SELECT`, `COMMIT`):
-     every row is re-checked by the live constraints, and any failure rolls
-     back with the live data unchanged. Runway writes wait while it runs, and
-     if live data changed after the backup the import is refused;
-   - the result is verified (`integrity_check` and a row-by-row comparison
-     with the snapshot), the Priority Desk refreshes, and a toast names the
-     backup.
-5. One import at a time: while an import runs, a new preview, a second
-   confirmation (from any window) and a cancel are refused or ignored with
-   "A Runway snapshot import is already running", and the running import's
-   staged copy is removed only when it finishes, succeeded or failed.
-6. Retention: after a successful import only the **10 newest**
-   `runway-before-import-*.sqlite` files are kept. Nothing else in
-   `runway-backups/` (manual exports, other files, links, folders) is ever
-   removed, and nothing is pruned after a failed or cancelled import. A
-   cleanup failure shows a warning; the import itself still succeeded.
-
-**Undo an import**, or recover after "the result did not verify": import the
-backup named in the toast — it is an ordinary snapshot. Open the user-data
-directory with **Settings → Advanced → Open config folder**.
+   - the chosen file must still be byte-identical to what was previewed, otherwise the import is
+     refused ("changed after it was previewed");
+   - the current database is backed up as above. If the backup fails, nothing is imported;
+   - the replacement is one SQLite transaction on the live connection (`ATTACH`, `BEGIN
+     IMMEDIATE`, `DELETE`, `INSERT … SELECT`, `COMMIT`): every row is re-checked by the live
+     constraints, and any failure rolls back with the live data unchanged. Runway writes wait while
+     it runs, and if live data changed after the backup the import is refused;
+   - the result is verified (`integrity_check` and a row-by-row comparison with the snapshot), and
+     a toast reads "Imported Runway snapshot (…). Previous data backed up to …".
+5. One import at a time: while an import runs, a new preview, a second confirmation (from any
+   window) and a cancel are refused or ignored with "A Runway snapshot import is already running",
+   and the running import's staged copy is removed only when it finishes, succeeded or failed.
 
 | Message starts with | Meaning | Live data |
 | --- | --- | --- |
@@ -375,7 +405,58 @@ directory with **Settings → Advanced → Open config folder**.
 | Nothing was imported: … changed after it was previewed | File replaced or edited after the preview; choose it again | Unchanged |
 | Nothing was imported: the backup … could not be written | Disk or permission problem in the user-data directory | Unchanged |
 | Nothing was imported: … busy / changed while the backup was being written | Try again | Unchanged |
-| The snapshot was imported but the result did not verify | Restore the named backup as above | Replaced; restore the backup |
+| The snapshot was imported but the result did not verify | Restore the named backup as below | Replaced; restore the backup |
+
+### Markdown import Apply (VERM-104, VERM-105)
+
+*Available on main for the upcoming release; not in v1.6.0.*
+
+**Import from Markdown…** (Runway view) previews a schedule file; **Apply** writes it. Apply:
+
+1. reads every numbered ticket again on its group's connection and, for an existing destination,
+   the tickets already on that Runway; anything changed since the preview sends the group back;
+2. backs up the whole database (above);
+3. creates the new workspaces — each copies only its chosen workspace's tracker connection and
+   credential reference; no projects, no AI credential;
+4. in one transaction, **appends** to each destination what it does not have yet, after checking
+   every destination's rows are still exactly the ones the preview compared. Nothing already on a
+   Runway moves, changes or is removed, so no Runway # changes.
+
+If any step fails, nothing is written, and the workspaces this Apply created are removed again
+(any it could not remove are listed in the dialog with the backup path).
+
+### Recovery: what "restore" means
+
+Two operations change a Runway in bulk. They have different scopes:
+
+| | Markdown import **Apply** | Snapshot **restore** (import) |
+| --- | --- | --- |
+| Rows | Appends missing rows to the chosen Runways only | Replaces **every** row of the whole database |
+| Workspaces | Can create new workspaces (configuration) | Never creates, deletes or edits a workspace |
+| Other workspaces' Runways | Untouched | Replaced with the snapshot's |
+| Jira Desk metadata and dismissals | Untouched | Replaced with the snapshot's |
+| YouTrack and Jira tickets and fields | Never written | Never written |
+| Backup first | Yes | Yes |
+
+**Undo a Markdown Apply:**
+
+1. If the Apply created workspaces you do not want, delete them in **Manage workspaces**. A
+   restore does not remove them: it only touches the Runway database.
+2. Import the backup named in the Apply's toast (`runway-backups/runway-before-import-…sqlite`)
+   with **Settings → Advanced → Import Runway snapshot…**. This returns **every** workspace's
+   Runway, and Jira Desk metadata, to the moment before that Apply — including undoing anything
+   changed since in any workspace. Read the **Local Runway changes may be lost** warning before
+   confirming. The restore itself backs up the current state first.
+
+For a single ticket, removing it by hand in the Runway view (**Remove**) is narrower than a
+restore.
+
+**Restore a snapshot** (moving to a new computer, or recovering a damaged database): import it as
+above. Runway rows for a workspace that no longer exists in the configuration stay in the database
+but are not shown (deleting a workspace never removes its Runway rows); workspaces are restored
+separately, through their configuration.
+
+**After "the result did not verify":** import the backup named in the message.
 
 ---
 

@@ -145,6 +145,55 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
 - **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (Apple Silicon `.dmg`), and Windows.
   Intel macOS and Raspberry Pi / arm64 Linux can be built from source (see
   [Target platforms](#target-platforms)).
+- **Workspace Runways** — *Available on main for the upcoming release; not in v1.6.0.* Each
+  workspace keeps its own ordered list of tickets, numbered Runway #1, #2, #3…, with section
+  headings and notes between them, on this computer. See [Workspace Runways](#workspace-runways).
+
+## Workspace Runways
+
+*Available on main for the upcoming release; not in v1.6.0.*
+
+A Runway is a workspace's own ordered list of the tickets to work on, from either tracker. Its
+tickets are numbered **Runway #1**, **#2**, **#3**… in order; sections and notes sit between them
+and have no number. Each workspace has its own Runway, so one ticket can be #3 in one workspace
+and #1 in another. Projects never move: putting a ticket on a Runway does not add its project to
+the workspace.
+
+- **Runway view** (the rail's **Runway**): add a ticket by key, link or search, at the end or at a
+  chosen #; move it up or down, to a typed #, or by dragging; remove it. Numbers stay 1..N.
+- **All tasks** shows a **Runway #** column and a sort control: **Runway #**, **Tracker
+  priority** or **Ticket ID**, ascending or descending, remembered per workspace on this
+  computer. Changing the sort never changes a Runway # or a tracker field.
+- **Blockers:** a ticket blocked by a prerequisite shows **Blocked** (or **Ready** once it is
+  resolved). A blocker outside the Runway offers **Add KEY to Runway**; a prerequisite placed
+  after its dependent shows **Order conflict** with **Move prerequisite above**. Nothing moves
+  until you click.
+- **Priority Desk:** Desk cards show their **Runway #**, and Runway and All tasks rows show their
+  Desk slot (**Now**, **Next** or **Then**). The two are separate: Runway #1 is not the same as
+  the Desk's Now.
+- **Import from Markdown…** turns a schedule file into a preview: each `##` heading proposes a
+  workspace, its list items become numbered tickets, `###` headings become sections and paragraphs
+  become notes. Nothing is written until **Apply**, which backs up the Runway database first.
+  Importing again into a Runway that already has rows only appends what is missing.
+
+A synthetic schedule:
+
+```markdown
+## Ship the offline reader
+
+- [ ] https://yt.example.test/issue/READ-12 - Cache articles locally
+- [ ] SYNC-3 - Conflict-free merge library
+
+### Later
+
+- Look at READ-9 again; it was the first attempt and is mostly obsolete.
+```
+
+The Runway database is local (`runway-metadata.sqlite` in the user-data directory) and travels
+between computers only as a Runway snapshot (**Settings → Advanced**). Operations, backups and
+recovery are in [RUNBOOK.md](RUNBOOK.md#runway-database-backups-and-recovery); the full rules are
+in the [spec](spec/features/workspace-runway.md); step-by-step help is in the
+[AI help desk](docs/ai-help-desk.md#workspace-runways).
 
 ## Screenshots
 
@@ -323,6 +372,7 @@ vermilian/
 - [Project plan](PLAN.md)
 - [To-do / next steps](TODO.md)
 - [SDD specs](spec/README.md)
+- [Workspace Runways spec](spec/features/workspace-runway.md)
 - [Architecture diagrams](docs/architecture/README.md)
 - [UI wireframes](docs/design/README.md)
 - [Architecture Decision Records](docs/adr/README.md)

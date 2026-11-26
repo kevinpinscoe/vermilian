@@ -110,16 +110,41 @@ notifications, or the timer worklog round-trip.
 | Credential storage (safeStorage, fail-closed) | 🚫 Out of harness | keyring |
 | Friendly error messages | 🧪 Unit | `errors.test.ts` |
 
+## workspace-runway.md — end-to-end acceptance scenarios (VERM-75)
+
+Each scenario of the spec's *End-to-end acceptance* list, and the test that asserts it. ⚠ **Partial**
+marks a scenario only part of which an automated test asserts; the rest is named. Scenarios 6, 7
+and 14 are mapped elsewhere (6 and 7 in `all-tasks-sort.spec.ts` and `kanban-sort.spec.ts`; 14
+below).
+
+| # | Scenario | Status | How |
+| --- | --- | --- | --- |
+| 1 | Import: the example gives a workspace with #1..5 in file order, the section and notes in place, READ-9 unscheduled, no project moved; Cancel leaves the database byte-identical | ✅ E2E | `runway-markdown-import.spec.ts` "the section 5 example: a proposed workspace with #1..5, its section and notes, READ-9 unticked; Cancel writes nothing" (byte-identical database); `runway-markdown-apply.spec.ts` "per-workspace storage: the section 5 example is applied after a backup…; no project moves" and "legacy storage: the example is applied as a new workspace…" |
+| 2 | Repeat import: after moving READ-20 to #1 and adding a key, existing positions stay, the new key is offered at the end, nothing is removed | ✅ E2E | `runway-markdown-apply.spec.ts` "spec 2: … the whole earlier sequence stays a prefix and only the new key is appended" (also every *Already scheduled as* label says #1) |
+| 3 | Reorder: dense 1..N after up, down, *Move to #N*, typed #, drag, remove, re-add, from the Runway view, All tasks or the detail panel; a randomized unit test | ✅ E2E + 🧪 | `runway-reorder.spec.ts` "a YouTrack Runway: up, down, Move to #N, typed #, drag and Remove keep it dense…"; `runway-number-cell.spec.ts` "YouTrack: the column shows each Runway #… the popover adds, moves and removes" (All tasks); `runway-detail.spec.ts` "YouTrack: add at #N, move, remove and add at end from the panel…" (re-add); 🧪 `runwayItemStore.test.ts` "randomized sequence" |
+| 4 | Membership: READ-14 at #3 and #1 in two workspaces, each keeps its own position, project ownership unchanged | ⚠ Partial | 🧪 Unit only for the two positions: `runwayItemStore.test.ts` "one ticket holds different positions in two workspaces". No e2e puts one ticket on two workspaces' Runways. Projects unchanged by an import: `runway-markdown-apply.spec.ts` (section 5 tests) |
+| 5 | Sorts: Runway # puts unnumbered last both ways; priority follows tracker order across the list; ID sort across the list | ⚠ Partial | `all-tasks-sort.spec.ts` "each sort in both directions orders All tasks as one flat list…" and "Tracker priority follows each project's configured bundle…" (YouTrack); `kanban-sort.spec.ts` "each sort orders the cards within each column by the All tasks sort, priority by each project's own scheme" (Jira). The `OPS-956`/`OPS-4089` order is 🧪 unit only: `runwaySort.test.ts` "compares the project prefix as text and the final number numerically", which gives `OPS-96`, `OPS-956`, `OPS-4089` ascending — the spec's sort rule; this scenario's wording ("`OPS-4089` before `OPS-956`") contradicts that rule and is left for a spec decision |
+| 8 | Blockers: resolving SYNC-3 turns READ-14 Ready without reordering; PLAT-40 stays external on SYNC-7 | ✅ E2E | `runway-blockers.spec.ts` "blocked, external, resolved after Refresh with the order unchanged" |
+| 9 | Order conflict: SYNC-3 below READ-14 is flagged; nothing moves without a click | ✅ E2E | `runway-blockers.spec.ts` "an order conflict is flagged, nothing moves until Move prerequisite above is clicked" |
+| 10 | Desk unchanged: existing Desk specs pass unmodified; promoting never changes a position | ⚠ Partial | `runway-desk.spec.ts` "Desk cards and Choose next candidates show the Runway #; promoting and demoting never move it". "Unmodified" is a property of the diffs, not a test: the existing `priority-desk*.spec.ts` and `jira-priority-desk.spec.ts` pass in the full suite |
+| 11 | Credentials: refused shows *Not readable*, 404 shows *Missing or not readable*, no other credential is used | ⚠ Partial | `runway-view.spec.ts` "a YouTrack Runway: stored order, ticket states…" (*Missing or not readable*). *Not readable* and "no other credential" are 🧪 unit only: `runwayTicketFetch.test.ts` "an unreadable ticket yields Not readable, and no other credential is resolved or used" |
+| 12 | Restart: order, sections, notes and remembered sort identical after quit and relaunch | ✅ E2E | `runway-reorder.spec.ts` and `runway-view.spec.ts` (order, sections and notes across a relaunch); `all-tasks-sort.spec.ts` "each workspace remembers its own sort across a relaunch…" |
+| 13 | Snapshot restore: an exported snapshot restores the order exactly, a version 1 snapshot is accepted, a backup is written first | ✅ E2E | `runway-snapshot-import.spec.ts` "previews, backs up, and restores every workspace" and "migrates a live v1 database, then imports a v1 snapshot with the cannot-tell warning" |
+| 15 | Zero-project All tasks: five Runway tickets listed once each, sorted correctly by Runway #, tracker priority and ticket ID, both directions | ⚠ Partial | `runway-all-tasks.spec.ts` "YouTrack, no projects: … each once in All tasks" and "Jira, no projects or boards: the Runway tickets show once…" (listing). Sorting a zero-project workspace is not e2e-tested; the sort rules are 🧪 `runwaySort.test.ts` |
+| 16 | Repeat import of an unchanged file adds nothing and changes no Runway # | ✅ E2E | `runway-markdown-apply.spec.ts` "spec 16: … Nothing new to add, Apply disabled, rows and backups unchanged" |
+| 17 | Transfer warning: an older snapshot shows the exporting computer and the newer-local-changes warning; a version 1 snapshot shows *Version 1 — will be upgraded*, *Not recorded (version 1 snapshot)* and the cannot-tell warning | ✅ E2E | `runway-snapshot-import.spec.ts` "restores a populated v2 snapshot from another computer, warning first about newer local changes" and "migrates a live v1 database, then imports a v1 snapshot with the cannot-tell warning" |
+| 18 | Repeated headings and notes: two `### Later` sections each with the same note import as two of each; a second import adds nothing | ✅ E2E | `runway-markdown-apply.spec.ts` "spec 18: two Later sections each holding the same note import as two of each, and a second import adds nothing" |
+
 ## workspace-runway.md — ConTower boundary (VERM-106, spec e2e 14)
 
 | Criterion | Status | How |
-|---|---|---|
+| --- | --- | --- |
 | Runway, sort and import actions start no agent, send no input to tmux and never invoke ConTower; a shell-command credential still reads tickets | ✅ E2E | `runway-process-boundary.spec.ts`: the e2e-only recorder (`main/e2eProcessRecorder.ts`) sees every process launch and every `openPath`/`openExternal`; only the configured credential command is allowed, matched by its SHA-256. No command text is recorded: a shell-string launch is labelled `shell`, a direct launch by its plain basename only. The recorder and its debug methods exist only in a package built with `VERMILIAN_E2E_BUILD=1`, which `pnpm test:e2e` always packages (`e2e/package-e2e-build.sh`); a release package contains neither, even when launched with `VERMILIAN_E2E=1` — checked by `release-recorder-isolation.spec.ts` through `pnpm test:release-isolation`. The fake YouTrack accepts ticket reads only with the token that command prints (`VERMILIAN_E2E_YT_REQUIRE_TOKEN`), so a fresh read in the observation window proves the command ran, the tracker accepted its token and the summary appeared. Each step waits for its action, then fails on any other launch. Only the credential resolver and the recorder may load `child_process` 🧪 `processBoundary.test.ts`, which also proves the recorder is inert outside e2e and records no command text |
 
 Each handler and the step of `runway-process-boundary.spec.ts` that exercises it:
 
 | Handler (IPC) | Step |
-|---|---|
+| --- | --- |
 | `runwayItemsAddByReference` | 1. fresh ticket read (the Runway's Add box), and 2. `runwayItemsAddByReference` (a link) |
 | `runwayItemsResolve` | 1. fresh ticket read, and 2. `runwayItemsResolve` |
 | `runwayItemsList` | 2. `runwayItemsList` |
