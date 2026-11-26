@@ -422,8 +422,11 @@ configuration is not touched.
    every destination's rows are still exactly the ones the preview compared. Nothing already on a
    Runway moves, changes or is removed, so no Runway # changes.
 
-If any step fails, nothing is written, and the workspaces this Apply created are removed again
-(any it could not remove are listed in the dialog with the backup path).
+If Apply fails, no partial set of Runway rows is committed. Any backup already created is kept.
+Vermilian attempts to remove the workspaces this Apply created. If cleanup is incomplete, the dialog
+shows the backup path and identifies what needs attention. Remove only items the dialog identifies
+as created by this import and requiring manual removal. Leave articles listed under "Left in place
+for inspection" in place while you investigate.
 
 ### Recovery: what "restore" means
 
