@@ -3,7 +3,8 @@
 Look up how to perform a Vermilian function here before reading source code. Written for AI
 agents answering "how do I…?" questions. Facts are for **v1.5.0** and were checked against the
 code, except [OpenBao credential storage](#store-credentials-in-openbao), which is merged but not
-yet in a release. Paths are relative to `app/src/` unless they start with `app/` or `docs/`, and
+yet in a release. [Workspace Runways](#workspace-runways) is *available on main for the upcoming
+release; not in v1.6.0*; its entries were checked against `main`. Paths are relative to `app/src/` unless they start with `app/` or `docs/`, and
 `tid` means `data-testid`.
 
 ## How to use this file
@@ -45,7 +46,17 @@ yet in a release. Paths are relative to `app/src/` unless they start with `app/`
 | Token, credentials, Test connection, revoked token | Both | [Settings and credentials](#settings-and-credentials) |
 | OpenBao, move credentials to OpenBao, keychain lockout after an upgrade | Both | [Store credentials in OpenBao](#store-credentials-in-openbao) |
 | Theme, reset settings, config folder | Both | [Other settings](#other-settings) |
-| Back up or restore Jira ranks, Runway snapshot | Jira | [Runway snapshots](#runway-snapshots) |
+| Put a ticket on a workspace's Runway, Runway #, my ordered list | Both | [Add tickets to a Runway](#add-tickets-to-a-runway) |
+| Move, renumber, drag or remove a Runway ticket | Both | [Reorder a Runway](#reorder-a-runway) |
+| Section headings and notes on a Runway | Both | [Sections and notes](#sections-and-notes) |
+| Sort All tasks by Runway #, priority or ticket ID | Both | [Sort All tasks](#sort-all-tasks) |
+| Blocked, Ready, Unknown, Add to Runway, Order conflict, Move prerequisite above | Both | [Blockers and order conflicts](#blockers-and-order-conflicts) |
+| Which link types count as prerequisites | Both | [Choose prerequisite link types](#choose-prerequisite-link-types) |
+| Runway # on a Desk card, Now / Next / Then on a Runway row | Both | [Runway # and Desk slot](#runway--and-desk-slot) |
+| Import a schedule or plan from Markdown | Both | [Import a schedule from Markdown](#import-a-schedule-from-markdown) |
+| Import the same file again, add new tickets to a Runway that has rows | Both | [Import again](#import-again-into-a-runway-that-has-rows) |
+| Not readable, Missing or not readable, on a Runway ticket | Both | [Runway ticket states](#runway-ticket-states) |
+| Back up or restore Runways, Jira ranks, Runway snapshot | Both | [Runway snapshots](#runway-snapshots) |
 
 ## Common misreadings
 
@@ -58,6 +69,11 @@ yet in a release. Paths are relative to `app/src/` unless they start with `app/`
 | The board picker shows "Unauthorized; scope does not match" | That projects are broken. The text is Jira's own error for listing boards | See [Jira connection problems](#jira-connection-problems) |
 | **Test connection** passes but the app still fails | That the saved credential works. A pasted token is tested even when OpenBao or Source 1 or 2 overrides it | See [Settings and credentials](#settings-and-credentials) |
 | An OpenBao error appears although a token is still saved locally | That the local copy can be used. A credential using OpenBao reads nothing else | Restore OpenBao, or choose **Stop using OpenBao**. See [Store credentials in OpenBao](#store-credentials-in-openbao) |
+| A ticket is **Runway #1** but not on the Desk's **Now** card | That the Runway and the Desk disagree. Runway # and Desk slot are separate | See [Runway # and Desk slot](#runway--and-desk-slot) |
+| A ticket on the Runway is not on the workspace's board | That the add failed. A Runway ticket never adds its project to the workspace | Find it in the **Runway** view, or in **All tasks**, which lists Runway tickets too |
+| A repeat import shows **Nothing new to add** and **Apply** is disabled | That the import is broken. Every ticket, section and note is already on that Runway | Nothing to do; edit the file or the Runway first |
+| Tickets are listed under **Not in this file** | That they will be removed. An import never removes or moves a Runway row | Remove them by hand in the Runway view if they are no longer wanted |
+| A Runway row shows **Missing or not readable** | That the ticket is gone, or that another credential could read it. Only the workspace's own connection is used | See [Runway ticket states](#runway-ticket-states) |
 
 ## Priority Desk
 
@@ -427,24 +443,234 @@ Remote servers must use `https://`. The section is absent from the first-run Set
 - **Advanced:** **Reset to defaults** keeps credentials. Also **Open config folder** and **Force
   resync from server**.
 
+## Workspace Runways
+
+*Available on main for the upcoming release; not in v1.6.0.* A Runway is a workspace's own ordered
+list of the tickets to work on, from either tracker, kept on this computer. Open it with **Runway**
+in the rail. Each workspace has its own Runway; the order is never written to YouTrack or Jira, and
+adding a ticket never adds its project to the workspace. Rules: `spec/features/workspace-runway.md`.
+Code: `renderer/features/runway/`, `main/services/runwayItemStore.ts`.
+
+Two numbers, two meanings:
+
+- **Runway #** is a ticket's place in this workspace's Runway: 1..N, counting tickets only (sections
+  and notes have none). It is the same in the Runway view, the **Runway #** column of **All
+  tasks**, the board cards, the detail panel and Desk cards.
+- **Desk slot** (**Now**, **Next**, **Then**) is the ticket's Priority Desk rank 1, 2 or 3. It is set
+  on the Desk, not by the Runway.
+
+A ticket can be **Runway #1** without being **Now**, and **Now** without being on the Runway.
+Promoting or demoting on the Desk never changes a Runway #; moving on the Runway never changes the
+Desk.
+
+### Add tickets to a Runway
+
+1. Open **Runway** in the rail. The view is titled **Runway** with the workspace's name.
+2. In the add box (*Add a ticket: key (READ-12), YouTrack link, or search*; on a Jira workspace
+   *key (OPS-7), Jira link, or search*), type a key such as `READ-12`, paste a ticket link on the
+   workspace's own tracker host, or type words and pick a search result.
+3. Leave **at #** empty to add at the end, or type a Runway # to add there. Click **Add**.
+
+From a board or a detail panel: open the ticket's **Runway #** control and use **Add at #**. A link
+to another host, a ticket on the other tracker, or one already on this Runway is refused with the
+reason. The ticket is read on the workspace's own connection before it is added.
+
+### Reorder a Runway
+
+In the Runway view each row has **↑** (**Move up**), **↓** (**Move down**), **Move to #** (tickets
+only) and **Remove**. You can also click a ticket's number and type a new one, or drag a row by
+its handle. In **All tasks**, on cards and in the detail panel, the **Runway #** control offers
+**Move to #** and **Remove**. **Remove** asks first (*Remove KEY from this Runway?*) and only takes
+the row off this workspace's Runway; the ticket is untouched. Numbers stay 1..N after every
+action, and the order survives a restart.
+
+### Sections and notes
+
+Section headings and notes come from a [Markdown import](#import-a-schedule-from-markdown); there
+is no control to add or edit them by hand. They have no Runway #, can be moved with **↑**, **↓** or
+drag, and removed with **Remove**.
+
+### Sort All tasks
+
+The **Sort** control offers **Runway #**, **Tracker priority** and **Ticket ID**, with **↑
+Ascending** to flip the direction and **Clear sort** to return to the default. It behaves
+differently on each tracker:
+
+- **YouTrack All tasks** defaults to **Status sections**. Choosing a sort turns the board into one
+  flat list of every visible ticket, without status sections; **Clear sort** brings the sections
+  back. The **Runway #** and Priority column headers choose the same sorts (other headers sort
+  temporarily and show **Column header**).
+- **Jira All tasks** is a board of status columns. It defaults to **Default order**, and a sort
+  orders the cards **within each status column**; the columns never move. It uses the workspace's
+  All tasks setting.
+- **YouTrack project boards** in Kanban view have their own **Sort** (default **Default order**),
+  remembered separately from All tasks; it also sorts within each column.
+
+Each sort, both trackers:
+
+- **Runway #**: tickets not on this Runway come last in both directions.
+- **Tracker priority**: each project's own priority order, never the alphabet.
+- **Ticket ID**: the project prefix as text, then the number as a number. Ascending is `OPS-956` →
+  `OPS-4089`; descending reverses it.
+
+The sort is remembered per workspace **on this computer** only. Changing it never changes a Runway #
+or a tracker field.
+
+### Blockers and order conflicts
+
+In the Runway view each ticket shows **Ready**, **Blocked**, **Unknown** or **Done**, recomputed on
+every read; **Refresh** re-reads the tickets. Nothing is ever reordered automatically.
+
+- *Blocked by SYNC-3 (#2 here).* — the prerequisite is on this Runway.
+- *Blocked by PLAT-40 (external, In Progress)* — the prerequisite is not on this Runway. Click
+  **Add PLAT-40 to Runway** to put it immediately above the blocked ticket.
+- *Order conflict — SYNC-3 is #5, after this (#2)* — a prerequisite sits after its dependent. Click
+  **Move prerequisite above** to move it immediately above. *Possible order conflict …* means one of
+  the two is not known to be open.
+
+**All tasks** shows a badge beside the Runway # only for **Blocked** or **Unknown**, with the reason
+on hover.
+
+### Choose prerequisite link types
+
+Which tracker links make a prerequisite is set per workspace, under per-workspace storage only:
+**Manage workspaces → Prerequisites…**. In *Prerequisites for "&lt;workspace&gt;"* choose, for each
+link type, which side is the prerequisite, or **Not a prerequisite**, then **Save**. **Reset to
+default** returns to YouTrack's **Depend** or Jira's **Blocks** ("is blocked by" is the
+prerequisite). Subtask links are never prerequisites.
+
+### Runway # and Desk slot
+
+Desk cards show **Runway #N** (or **Runway #?** when the position cannot be verified) and nothing
+when the ticket is not on this Runway. Runway and All tasks rows show a read-only **Now**, **Next**
+or **Then** chip when the ticket holds that Desk slot, marked ⚠ when two tickets share a rank. See
+the definitions at the top of this section.
+
+### Import a schedule from Markdown
+
+Use this to turn a schedule file into workspaces and Runways. Nothing is written until **Apply**.
+
+1. Open **Runway** and click **Import from Markdown…**. Choose a Markdown file (at most 1 MiB).
+2. **Import preview — &lt;file&gt;** shows one group per `##` heading. In each group:
+   - list items that start with a key or ticket link are numbered #1, #2…; `###` headings become
+     sections and paragraphs become notes;
+   - keys mentioned in prose, nested bullets, tables or code are listed under **References**,
+     unticked; tick one to schedule it;
+   - a key that cannot be read on the group's connection is kept as a note (*Unmatched, kept as a
+     note: …*), and a repeated ticket as *Already scheduled as #N*.
+3. Correct the grouping:
+   - **Workspace**: map the group to an existing workspace, or **New workspace**. For a new one,
+     **Check tickets using** picks the workspace whose connection reads the tickets, and
+     **Rename…** names it.
+   - **Merge into…** joins the group into another; **Make its own workspace** splits a `###`
+     section out; **Skip** leaves a group out (**Include again** undoes it).
+   - **Undo** reverses the last correction, **Reset** restores the preview as opened, **Cancel**
+     closes without writing anything.
+4. Click **Apply**. It shows **Applying…**, and the preview cannot be changed until it finishes.
+   Apply checks the tickets again, backs up the Runway database, creates the new workspaces (each
+   copying only its chosen workspace's connection and credential reference, with no projects) and
+   writes the rows. The toast reads *Import applied: created …; added to the Runway of …. Backup:
+   &lt;path&gt;*, and the active workspace stays the same.
+
+A group that cannot be applied says why above its rows, for example *Choose a workspace for this
+group.*, *This name is already used. Rename it, map it, or merge it.* or *Another group also goes
+to this workspace. Merge them, or skip one.* If Apply sends a group back (a ticket changed, or the
+Runway changed since the preview), correct it and click **Apply** again.
+
+A synthetic schedule (the YouTrack server is `yt.example.test`):
+
+```markdown
+## Ship the offline reader
+
+Readers lose their place on the train.
+
+- [ ] https://yt.example.test/issue/READ-12 - Cache articles locally
+- [ ] SYNC-3 - Conflict-free merge library
+- [ ] READ-14 - Sync read state between devices
+- [ ] SYNC-7 - Background sync worker
+- [ ] READ-20 - Offline indicator in the toolbar
+
+### Later
+
+- Look at READ-9 again; it was the first attempt and is mostly obsolete.
+```
+
+This proposes the workspace *Ship the offline reader* with READ-12 … READ-20 as #1..5, the note
+before them, the section **Later** and its note; READ-9 is listed under **References**, unticked.
+
+### Import again into a Runway that has rows
+
+Importing into a Runway that already has rows is additive and append-only: rows already there keep
+their place and Runway #, and only what is missing is added **at the end**, in file order.
+
+Example: after the import above, READ-20 was moved to **#1**. The file then gains one line,
+`- [ ] PLAT-40 - Device token service`. Importing it again (the heading maps to the existing
+workspace) previews:
+
+| File row | Shown | Means |
+| --- | --- | --- |
+| READ-12 | #2, *Already on the Runway* | stays #2 |
+| SYNC-3 | #3, *Already on the Runway* | stays #3 |
+| READ-14 | #4, *Already on the Runway* | stays #4 |
+| SYNC-7 | #5, *Already on the Runway* | stays #5 |
+| READ-20 | #1, *Already on the Runway* | stays #1 |
+| PLAT-40 | #6, *Added at the end* | new, after the last row |
+
+After **Apply**, READ-20 is still #1 and PLAT-40 is #6. Every label naming a ticket by number uses
+its Runway #, so *Already scheduled as #1* refers to READ-20 here.
+
+- Sections and notes match by text and occurrence: with two **Later** sections on the Runway and
+  three in the file, only the third is added. Indentation does not matter; trailing spaces are
+  ignored.
+- **Not in this file** lists the Runway's tickets the file does not have. They stay where they are.
+- **Nothing new to add** means every row is already there; **Apply** stays disabled unless another
+  group adds something.
+- **Unable to verify** means a ticket already on the Runway could not be read, so a new ticket might
+  be it under an old key. The new ticket shows **#?**, nothing can be applied, and **Retry** reads
+  the Runway's tickets again.
+- A ticket saved under an old Jira key (DEMO-101, now DEMO-150) is recognised as the same ticket.
+
+### Runway ticket states
+
+A Runway ticket is always read on its own workspace's connection; no other credential is ever
+tried. Its row shows **Loading…**, then the ticket, or one of: **Not readable** (the credential was
+refused), **Missing or not readable** (the tracker answered 404, which can mean either), **Missing**,
+**Wrong tracker** or **Not refreshed**. The row keeps its place; fix the credential in **Settings**,
+or **Remove** it.
+
 ## Runway snapshots
 
-Runway holds Jira Focus, rank, Why now and dismissals for all workspaces on this computer. YouTrack
-data is not included. Both actions are in **Settings → Advanced**.
+The Runway database holds every workspace's Runway order (both trackers), plus Jira Desk metadata
+(Focus, rank, Why now) and dismissals. YouTrack Desk fields, workspace configuration and tickets
+are not in it. Both actions are in **Settings → Advanced**.
 
 **Export:** click **Export Runway snapshot…** and choose a new file. It never overwrites a file.
-FAT, exFAT and some network folders are refused.
+FAT, exFAT and some network folders are refused. The toast counts only Jira entries and
+dismissals, but the file holds the Runway rows too.
 
-**Import:**
+**Import (restore):**
 
 1. Click **Import Runway snapshot…** and pick a file.
-2. Click **Preview import**.
-3. In **Replace all Runway metadata?**, click **Replace Runway data**.
+2. Read **Replace all Runway metadata?**, including any **Local Runway changes may be lost**
+   warning.
+3. Click **Replace Runway data**.
 
-Import replaces everything, and records absent from the snapshot are removed. Current data is backed
-up first to `runway-backups/`. To undo, import the backup named in the toast.
+Import replaces the whole database for every workspace; records absent from the snapshot are
+removed. It never creates or deletes a workspace and never writes a ticket. The current data is
+backed up first to `runway-backups/` (the 10 newest automatic backups are kept). To undo, import
+the backup named in the toast.
 
-See `RUNBOOK.md` for operational detail.
+**Undo a Markdown Apply:**
+
+1. Import the backup named in the Apply's toast. That restore is local to this computer and returns
+   every workspace's Runway to the moment before the Apply.
+2. Check the Runways.
+3. Only if you also want to remove a workspace the Apply created, delete it in **Manage
+   workspaces**. This is optional, and it is not part of the restore: under per-workspace storage it
+   deletes the workspace's configuration from YouTrack for every computer. Its Runway rows, if any
+   remain, stay hidden in the database.
+
+See `RUNBOOK.md`, *Runway database, backups and recovery*, for operational detail.
 
 ## Known behaviour to warn users about
 
@@ -455,6 +681,8 @@ These are current behaviours that can surprise a user.
 | **Stop and start new** replaces the timer even if logging the old timer's work failed, so that time can be lost | `renderer/AppShell.tsx` |
 | The app quits on **Stop timer & quit** even if logging fails | `renderer/AppShell.tsx` |
 | The **OS notifications** checkbox is saved, but the notification code never reads it | `renderer/features/timer/FocusOverlay.tsx`, `renderer/features/timer/BreakBanner.tsx` |
+| **Export Runway snapshot…**'s hint and toast mention only Jira data, though the snapshot holds every workspace's Runway too | `renderer/features/settings/sections/AdvancedSection.tsx` |
+| A snapshot restore never removes a workspace a Markdown Apply created; delete it by hand | `main/services/runwayImport.ts` |
 
 ## Keeping this file current
 

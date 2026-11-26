@@ -347,47 +347,47 @@ Approved design: VERM-74. Epic: VERM-75. This spec uses synthetic keys (`READ`, 
 
 ### Markdown import
 
-- [ ] Import shows a **preview**; nothing is written until **Apply**, and **Cancel** leaves
-      `runway-metadata.sqlite` byte-identical.
-- [ ] Each `##` heading becomes a **proposed workspace** — new, or mapped to an existing workspace
-      by name. `###` and deeper headings become **section** rows inside it.
-- [ ] In the preview the grouping can be corrected: rename, merge, split a `###` into its own
-      workspace, map to an existing workspace, choose the workspace's tracker connection, or skip.
-- [ ] A ticket is **scheduled** when it leads a list item — `- [ ] KEY …`, `- [ ] <ticket URL> …`,
+- [x] Import shows a **preview**; nothing is written until **Apply**, and **Cancel** leaves
+      `runway-metadata.sqlite` byte-identical (VERM-102).
+- [x] Each `##` heading becomes a **proposed workspace** — new, or mapped to an existing workspace
+      by name. `###` and deeper headings become **section** rows inside it (VERM-100, VERM-102).
+- [x] In the preview the grouping can be corrected: rename, merge, split a `###` into its own
+      workspace, map to an existing workspace, choose the workspace's tracker connection, or skip (VERM-103).
+- [x] A ticket is **scheduled** when it leads a list item — `- [ ] KEY …`, `- [ ] <ticket URL> …`,
       `- [-] …`, `- [X] …`, or a plain bullet starting with a key or URL. Scheduled tickets become
-      #1..N in file order, and `[X]` items keep their place.
-- [ ] Keys in prose, nested sub-bullets, tables or code fences, or after "see", "moved to" or
-      "replaced by", are listed under **References**, unticked. Ticking one schedules it.
-- [ ] Prose paragraphs, non-ticket checklist items and fenced blocks become **note** rows at their
-      position.
-- [ ] **Repeated headings and notes are preserved.** A heading or note whose text appears more
+      #1..N in file order, and `[X]` items keep their place (VERM-100).
+- [x] Keys in prose, nested sub-bullets, tables or code fences, or after "see", "moved to" or
+      "replaced by", are listed under **References**, unticked. Ticking one schedules it (VERM-100, VERM-103).
+- [x] Prose paragraphs, non-ticket checklist items and fenced blocks become **note** rows at their
+      position (VERM-100).
+- [x] **Repeated headings and notes are preserved.** A heading or note whose text appears more
       than once in the file — two `### Later` sections, or the same note under two headings —
       becomes one row per occurrence, each at its original location. Matching text is never
-      merged or dropped.
-- [ ] A key on the other tracker, or one the workspace's credential cannot read, is listed as
-      unmatched and becomes a note.
-- [ ] Importing a ticket never adds its project to the workspace.
-- [ ] **Repeat import is additive and append-only:** into a non-empty Runway, tickets new to it
+      merged or dropped (VERM-100, VERM-104).
+- [x] A key on the other tracker, or one the workspace's credential cannot read, is listed as
+      unmatched and becomes a note (VERM-101, VERM-104).
+- [x] Importing a ticket never adds its project to the workspace (VERM-104).
+- [x] **Repeat import is additive and append-only:** into a non-empty Runway, tickets new to it
       are offered **at the end**, in file order. Every existing ticket keeps its Runway #;
       nothing is inserted between existing rows, removed or reordered. Tickets missing from the
-      file are only listed.
-- [ ] A repeat import never duplicates structure. A section or note in the file matches an
+      file are only listed (VERM-105).
+- [x] A repeat import never duplicates structure. A section or note in the file matches an
       existing row by **kind, text and occurrence** — the first `### Later` in the file matches
       the first `### Later` row, the second matches the second — and a matched row stays where
       it is. Only occurrences the Runway does not already have are new; they are appended at the
       end with the new tickets, in file order. Importing the same file twice leaves the Runway
-      unchanged.
-- [ ] **Apply** is one transaction, taken after a pre-apply snapshot in `runway-backups`.
+      unchanged (VERM-105).
+- [x] **Apply** is one transaction, taken after a pre-apply snapshot in `runway-backups` (VERM-104).
 
 ### ConTower boundary
 
-- [ ] Adding, removing, moving, sorting or importing tickets never starts an agent (such as
+- [x] Adding, removing, moving, sorting or importing tickets never starts an agent (such as
       Claude Code), never sends input to tmux, and never invokes ConTower. A test asserts this for
-      the Runway, sort and import handlers.
-- [ ] This is not a ban on every child process: a workspace whose tracker credential comes from
+      the Runway, sort and import handlers (VERM-106).
+- [x] This is not a ban on every child process: a workspace whose tracker credential comes from
       a shell command still runs that command, and credential reads keep working during Runway,
-      sort and import actions.
-- [ ] The Runway is fully usable with ConTower absent.
+      sort and import actions (VERM-106).
+- [x] The Runway is fully usable with ConTower absent (VERM-106).
 
 ### End-to-end acceptance
 
@@ -395,20 +395,20 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
 `Depend` links; their Jira equivalents in the fake Jira, with `Blocks` links and the keys
 `OPS-956` and `OPS-4089`.
 
-- [ ] **1. Import:** the Markdown example below produces a workspace with tickets #1..5 in file
+- [x] **1. Import:** the Markdown example below produces a workspace with tickets #1..5 in file
       order, the section and notes in place, READ-9 unscheduled and no project moved. Cancel
-      leaves the database byte-identical.
-- [ ] **2. Repeat import:** after moving READ-20 to #1 and adding a key to the file, a second
+      leaves the database byte-identical (VERM-102, VERM-104).
+- [x] **2. Repeat import:** after moving READ-20 to #1 and adding a key to the file, a second
       import keeps every existing position (READ-20 stays #1), offers the new key at the end,
-      and removes nothing.
+      and removes nothing (VERM-105).
 - [ ] **3. Reorder:** positions stay dense 1..N after any action — up, down, *Move to #N*, typed
       #, drag, remove, re-add — from the Runway view, All tasks or the detail panel (plus a unit
       test over random action sequences).
 - [ ] **4. Membership:** READ-14 sits in two workspaces at #3 and #1, each keeps its own
       position, and project ownership is unchanged.
 - [ ] **5. Sorts:** the Runway # sort puts unnumbered tickets last both ways; the priority sort
-      follows tracker order across the whole list; the ID sort puts `OPS-4089` before `OPS-956`
-      ascending, across the whole list.
+      follows tracker order across the whole list; the ID sort is numeric, `OPS-956` → `OPS-4089`
+      ascending and the reverse descending, across the whole list.
 - [ ] **6. Sort safety:** switching sorts writes no Runway position and no tracker field, and
       the positions afterwards are identical. Only the remembered sort is saved locally.
 - [x] **7. Kanban (optional):** each status column follows the chosen sort, and the column order
@@ -426,21 +426,21 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
       and relaunch.
 - [ ] **13. Snapshot restore:** an exported snapshot restores the order exactly, a version 1
       snapshot is accepted, and a backup is written first.
-- [ ] **14. ConTower:** Runway, sort and import actions start no agent, send nothing to tmux
+- [x] **14. ConTower:** Runway, sort and import actions start no agent, send nothing to tmux
       and never invoke ConTower, while a workspace with a shell-command credential still reads
-      its tickets.
+      its tickets (VERM-106).
 - [ ] **15. Zero-project All tasks:** in a workspace with no board projects and five Runway
       tickets, All tasks lists each of the five exactly once and sorts them correctly by
       Runway #, tracker priority and ticket ID, each ascending and descending.
-- [ ] **16. Repeat import of an unchanged file:** importing the example below a second time
-      adds no ticket, section or note and changes no Runway #.
+- [x] **16. Repeat import of an unchanged file:** importing the example below a second time
+      adds no ticket, section or note and changes no Runway # (VERM-105).
 - [ ] **17. Transfer warning:** importing a snapshot older than this computer's latest Runway
       change shows the exporting computer and the newer-local-changes warning before the user
       confirms. A version 1 snapshot shows *Version 1 — will be upgraded*, the exporting computer
       and export time as *Not recorded (version 1 snapshot)*, and the cannot-tell warning.
-- [ ] **18. Repeated headings and notes:** a file with two `### Later` sections, each holding the
+- [x] **18. Repeated headings and notes:** a file with two `### Later` sections, each holding the
       same note, imports as two section rows and two note rows at their original locations;
-      importing it a second time adds nothing.
+      importing it a second time adds nothing (VERM-104, VERM-105).
 
 ### Example (synthetic)
 

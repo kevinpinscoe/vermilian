@@ -25,7 +25,8 @@ Three gaps in today's behavior also bear on it:
 - YouTrack priority sorts alphabetically (`Critical, Major, Minor, Normal, Show-stopper`), not in
   YouTrack's own order.
 - The Jira board's key tie-break is numeric-aware, so `OPS-956` sorts before `OPS-4089`; the user
-  wants plain text order.
+  wants plain text order. (Superseded by VERM-91; see the
+  [clarification recorded 2026-11-26](#ticket-id-sort-clarification).)
 - The All tasks sort lasts only for the session.
 
 The feature is specified in [`spec/features/workspace-runway.md`](../../spec/features/workspace-runway.md).
@@ -77,6 +78,11 @@ bundle order; each Jira project's order from editmeta), never alphabetical; **ti
 the displayed key code unit by code unit, with no numeric awareness, so `OPS-4089` sorts before
 `OPS-956` ascending. Ties break by ticket ID ascending under every sort. Sorting within Kanban
 status columns is **optional** and separate; the Initial Usable Milestone does not depend on it.
+
+<a id="ticket-id-sort-clarification"></a>**Clarification recorded 2026-11-26.** VERM-91 superseded the
+original ticket-ID sort rule above. Compare the project prefix as text and the final number
+numerically. Ascending places `OPS-956` before `OPS-4089`. Descending reverses that order.
+**Runway #** and **Tracker priority** use ascending ticket ID to break ties in either direction.
 
 ### Decisions revised in review of the spec (VERM-76)
 
