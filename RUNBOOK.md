@@ -283,7 +283,7 @@ folder**), is local to this computer and holds, for **every** workspace:
 
 | Table | What it is |
 | --- | --- |
-| `runway_item` | Each workspace's **Workspace Runway**: its ordered tickets (YouTrack and Jira), sections and notes. *Available on main for the upcoming release; not in v1.6.0.* |
+| `runway_item` | Each workspace's **Workspace Runway**: its ordered tickets (YouTrack and Jira), sections and notes (v1.7.0) |
 | `runway_entry` | Jira workspaces' Priority Desk metadata: Focus, Focus rank, Why now |
 | `dismissal` | Jira workspaces' "Not this week" dismissals |
 
@@ -409,7 +409,7 @@ configuration is not touched.
 
 ### Markdown import Apply (VERM-104, VERM-105)
 
-*Available on main for the upcoming release; not in v1.6.0.*
+*New in v1.7.0.*
 
 **Import from Markdown…** (Runway view) previews a schedule file; **Apply** writes it. Apply:
 

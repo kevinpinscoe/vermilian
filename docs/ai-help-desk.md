@@ -1,11 +1,10 @@
 # Vermilian AI help desk
 
 Look up how to perform a Vermilian function here before reading source code. Written for AI
-agents answering "how do I…?" questions. Facts are for **v1.5.0** and were checked against the
-code, except [OpenBao credential storage](#store-credentials-in-openbao), which is merged but not
-yet in a release. [Workspace Runways](#workspace-runways) is *available on main for the upcoming
-release; not in v1.6.0*; its entries were checked against `main`. Paths are relative to `app/src/` unless they start with `app/` or `docs/`, and
-`tid` means `data-testid`.
+agents answering "how do I…?" questions. Facts are for **v1.7.0** and were checked against the
+code. [OpenBao credential storage](#store-credentials-in-openbao) shipped in v1.6.0, and
+[Workspace Runways](#workspace-runways) ships in v1.7.0. Paths are relative to `app/src/` unless
+they start with `app/` or `docs/`, and `tid` means `data-testid`.
 
 ## How to use this file
 
@@ -389,7 +388,7 @@ a file or OpenBao instead.
 
 ### Store credentials in OpenBao
 
-**Not yet in a release.** This section describes the code merged after v1.5.0.
+**Shipped in v1.6.0.**
 
 **Preconditions:** a reachable OpenBao server with a KV version 2 mount, and a login for Vermilian.
 Remote servers must use `https://`. The section is absent from the first-run Settings screen.
@@ -445,7 +444,7 @@ Remote servers must use `https://`. The section is absent from the first-run Set
 
 ## Workspace Runways
 
-*Available on main for the upcoming release; not in v1.6.0.* A Runway is a workspace's own ordered
+*New in v1.7.0.* A Runway is a workspace's own ordered
 list of the tickets to work on, from either tracker, kept on this computer. Open it with **Runway**
 in the rail. Each workspace has its own Runway; the order is never written to YouTrack or Jira, and
 adding a ticket never adds its project to the workspace. Rules: `spec/features/workspace-runway.md`.

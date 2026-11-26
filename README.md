@@ -18,7 +18,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.6.0 — current release.** Vermilian is feature-complete against its specification and
+**v1.7.0 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -50,13 +50,18 @@ each release.
   per-workspace master plan; stand-ups scoped to the active workspace; **per-workspace
   configuration storage**, activated only on explicit confirmation (the shared
   `_vermilian-config` stays in use until then), with write guards on every computer;
+  **Workspace Runways** (v1.7.0): each workspace's own ordered list of tickets, numbered Runway #,
+  with sections and notes, All tasks sorts by Runway #, tracker priority and ticket ID, blockers
+  and order conflicts, the Runway # on Desk cards, and an append-only Markdown schedule import;
   and light/dark themes.
-- **Tested:** over 1,400 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+- **Tested:** over 2,300 unit tests cover the core logic (board grouping/sorting/filtering, the timer
   state machine, API transforms, search query building, workspace-config sync, the Priority
   Desk's rank rules, Jira mapping and boards, board search and the Assignee filter, credential
   references and plain-text migration, workspace migration and storage activation), alongside an end-to-end (Playwright) suite over the board, detail panel,
   settings, timer, AI, stand-up, search, workspace-config sync, Priority Desk, Jira, Runway
-  snapshot and workspace-storage flows. A separate
+  snapshot and workspace-storage flows, and Workspace Runways (the Runway view, sorts, blockers,
+  the Markdown import and its repeat import, and a check that Runway, sort and import actions
+  start no agent, tmux or ConTower process). A separate
   live acceptance harness (`app/e2e-live/`) runs selected Priority Desk cases against a real
   YouTrack server. Verified on Linux (Fedora 42) and macOS; the Windows build is
   published but less extensively exercised. Lint, the unit suite, and a full packaged build run in
@@ -145,13 +150,12 @@ against its spec and shipping as of v1.0.0 (see [Status](#status)):
 - **Cross-platform desktop** — Linux (x86_64 AppImage), macOS (Apple Silicon `.dmg`), and Windows.
   Intel macOS and Raspberry Pi / arm64 Linux can be built from source (see
   [Target platforms](#target-platforms)).
-- **Workspace Runways** — *Available on main for the upcoming release; not in v1.6.0.* Each
-  workspace keeps its own ordered list of tickets, numbered Runway #1, #2, #3…, with section
+- **Workspace Runways** (new in v1.7.0) — each workspace keeps its own ordered list of tickets, numbered Runway #1, #2, #3…, with section
   headings and notes between them, on this computer. See [Workspace Runways](#workspace-runways).
 
 ## Workspace Runways
 
-*Available on main for the upcoming release; not in v1.6.0.*
+*New in v1.7.0.*
 
 A Runway is a workspace's own ordered list of the tickets to work on, from either tracker. Its
 tickets are numbered **Runway #1**, **#2**, **#3**… in order; sections and notes sit between them
