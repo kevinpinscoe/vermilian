@@ -407,8 +407,8 @@ Fixtures: synthetic YouTrack projects `READ`, `SYNC` and `PLAT` in the fake YouT
 - [ ] **4. Membership:** READ-14 sits in two workspaces at #3 and #1, each keeps its own
       position, and project ownership is unchanged.
 - [ ] **5. Sorts:** the Runway # sort puts unnumbered tickets last both ways; the priority sort
-      follows tracker order across the whole list; the ID sort puts `OPS-4089` before `OPS-956`
-      ascending, across the whole list.
+      follows tracker order across the whole list; the ID sort is numeric, `OPS-956` → `OPS-4089`
+      ascending and the reverse descending, across the whole list.
 - [ ] **6. Sort safety:** switching sorts writes no Runway position and no tracker field, and
       the positions afterwards are identical. Only the remembered sort is saved locally.
 - [x] **7. Kanban (optional):** each status column follows the chosen sort, and the column order

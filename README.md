@@ -161,11 +161,13 @@ the workspace.
 
 - **Runway view** (the rail's **Runway**): add a ticket by key, link or search, at the end or at a
   chosen #; move it up or down, to a typed #, or by dragging; remove it. Numbers stay 1..N.
-- **All tasks** shows a **Runway #** column and a sort control: **Runway #**, **Tracker
-  priority** or **Ticket ID**, ascending or descending, remembered per workspace on this
-  computer. Changing the sort never changes a Runway # or a tracker field.
-- **Blockers:** a ticket blocked by a prerequisite shows **Blocked** (or **Ready** once it is
-  resolved). A blocker outside the Runway offers **Add KEY to Runway**; a prerequisite placed
+- **All tasks** shows each ticket's **Runway #** (a column on YouTrack, a badge on Jira cards) and
+  a sort control: **Runway #**, **Tracker priority** or **Ticket ID**, ascending or descending,
+  remembered per workspace on this computer. On YouTrack a sort replaces the status sections with
+  one flat list; on Jira it orders the cards within each status column. Changing the sort never
+  changes a Runway # or a tracker field.
+- **Blockers:** each Runway ticket shows **Ready**, **Blocked**, **Unknown** or **Done**, from its
+  prerequisite links (All tasks shows a badge only for **Blocked** and **Unknown**). A blocker outside the Runway offers **Add KEY to Runway**; a prerequisite placed
   after its dependent shows **Order conflict** with **Move prerequisite above**. Nothing moves
   until you click.
 - **Priority Desk:** Desk cards show their **Runway #**, and Runway and All tasks rows show their

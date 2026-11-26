@@ -492,24 +492,34 @@ drag, and removed with **Remove**.
 
 ### Sort All tasks
 
-On **All tasks**, the **Sort** control offers **Status sections** (the default), **Runway #**,
-**Tracker priority** and **Ticket ID**, with **↑ Ascending** to flip the direction and **Clear
-sort** to return to status sections. The **Runway #** and Priority column headers choose the same
-sorts.
+The **Sort** control offers **Runway #**, **Tracker priority** and **Ticket ID**, with **↑
+Ascending** to flip the direction and **Clear sort** to return to the default. It behaves
+differently on each tracker:
 
-- **Runway #** lists every visible ticket as one list; tickets not on the Runway come last in both
-  directions.
-- **Tracker priority** follows each project's own priority order, never the alphabet.
-- **Ticket ID** compares the project prefix as text and the number as a number, so `OPS-4089` sorts
-  after `OPS-956` ascending.
+- **YouTrack All tasks** defaults to **Status sections**. Choosing a sort turns the board into one
+  flat list of every visible ticket, without status sections; **Clear sort** brings the sections
+  back. The **Runway #** and Priority column headers choose the same sorts (other headers sort
+  temporarily and show **Column header**).
+- **Jira All tasks** is a board of status columns. It defaults to **Default order**, and a sort
+  orders the cards **within each status column**; the columns never move. It uses the workspace's
+  All tasks setting.
+- **YouTrack project boards** in Kanban view have their own **Sort** (default **Default order**),
+  remembered separately from All tasks; it also sorts within each column.
+
+Each sort, both trackers:
+
+- **Runway #**: tickets not on this Runway come last in both directions.
+- **Tracker priority**: each project's own priority order, never the alphabet.
+- **Ticket ID**: the project prefix as text, then the number as a number. Ascending is `OPS-956` →
+  `OPS-4089`; descending reverses it.
 
 The sort is remembered per workspace **on this computer** only. Changing it never changes a Runway #
-or a tracker field. Kanban boards have their own sort, remembered apart from All tasks.
+or a tracker field.
 
 ### Blockers and order conflicts
 
-Each Runway ticket shows **Ready**, **Blocked** or **Unknown**, recomputed on every read; **Refresh**
-re-reads the tickets. Nothing is ever reordered automatically.
+In the Runway view each ticket shows **Ready**, **Blocked**, **Unknown** or **Done**, recomputed on
+every read; **Refresh** re-reads the tickets. Nothing is ever reordered automatically.
 
 - *Blocked by SYNC-3 (#2 here).* — the prerequisite is on this Runway.
 - *Blocked by PLAT-40 (external, In Progress)* — the prerequisite is not on this Runway. Click
@@ -650,9 +660,15 @@ removed. It never creates or deletes a workspace and never writes a ticket. The 
 backed up first to `runway-backups/` (the 10 newest automatic backups are kept). To undo, import
 the backup named in the toast.
 
-**Undo a Markdown Apply:** delete any workspace it created in **Manage workspaces**, then import the
-backup named in the Apply's toast. That restore returns every workspace's Runway to the moment
-before the Apply.
+**Undo a Markdown Apply:**
+
+1. Import the backup named in the Apply's toast. That restore is local to this computer and returns
+   every workspace's Runway to the moment before the Apply.
+2. Check the Runways.
+3. Only if you also want to remove a workspace the Apply created, delete it in **Manage
+   workspaces**. This is optional, and it is not part of the restore: under per-workspace storage it
+   deletes the workspace's configuration from YouTrack for every computer. Its Runway rows, if any
+   remain, stay hidden in the database.
 
 See `RUNBOOK.md`, *Runway database, backups and recovery*, for operational detail.
 

@@ -438,15 +438,19 @@ Two operations change a Runway in bulk. They have different scopes:
 | YouTrack and Jira tickets and fields | Never written | Never written |
 | Backup first | Yes | Yes |
 
-**Undo a Markdown Apply:**
+**Undo a Markdown Apply** — restore first; deleting a workspace is a separate, optional step:
 
-1. If the Apply created workspaces you do not want, delete them in **Manage workspaces**. A
-   restore does not remove them: it only touches the Runway database.
-2. Import the backup named in the Apply's toast (`runway-backups/runway-before-import-…sqlite`)
-   with **Settings → Advanced → Import Runway snapshot…**. This returns **every** workspace's
-   Runway, and Jira Desk metadata, to the moment before that Apply — including undoing anything
-   changed since in any workspace. Read the **Local Runway changes may be lost** warning before
-   confirming. The restore itself backs up the current state first.
+1. Import the backup named in the Apply's toast (`runway-backups/runway-before-import-…sqlite`)
+   with **Settings → Advanced → Import Runway snapshot…**. This is local to this computer and
+   returns **every** workspace's Runway, and Jira Desk metadata, to the moment before that Apply —
+   including undoing anything changed since in any workspace. Read the **Local Runway changes may
+   be lost** warning before confirming. The restore itself backs up the current state first.
+2. Verify the Runways in the Runway view.
+3. **Optional:** a workspace the Apply created is still there, because a restore never touches
+   configuration. Delete it in **Manage workspaces** only if you also want to remove its
+   configuration. Under per-workspace storage that deletes its configuration article from YouTrack
+   for **every** computer and cannot be undone by a restore (see
+   [Deleting a workspace](#deleting-a-workspace)). Do it only after step 2 succeeded.
 
 For a single ticket, removing it by hand in the Runway view (**Remove**) is narrower than a
 restore.
