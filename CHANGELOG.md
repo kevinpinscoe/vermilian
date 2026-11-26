@@ -176,8 +176,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corrected — rename, merge, split a `###` into its own workspace, map to another workspace, choose
   the connection, skip, tick References — with **Undo** and **Reset**. **Apply** checks the tickets
   again, backs up the Runway database to `runway-backups/`, creates any new workspaces (each copying
-  only the chosen workspace's connection and credential reference) and writes every Runway in one
-  transaction; if anything fails nothing is written and the workspaces it created are removed again.
+  only the chosen workspace's connection and credential reference), then writes all Runway rows in
+  one transaction. If the import fails, no partial set of Runway rows is committed. A backup already
+  created is kept. Vermilian attempts to remove workspaces it created and reports anything that
+  needs manual cleanup or inspection.
   Importing into a Runway that already has rows is append-only: rows already there keep their place
   and Runway #, only missing tickets, sections and notes are added at the end, *Not in this file*
   lists the Runway's other tickets, *Nothing new to add* disables **Apply**, and *Unable to verify*
