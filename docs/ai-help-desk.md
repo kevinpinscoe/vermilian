@@ -1,10 +1,11 @@
 # Vermilian AI help desk
 
 Look up how to perform a Vermilian function here before reading source code. Written for AI
-agents answering "how do I…?" questions. Facts are for **v1.7.0** and were checked against the
+agents answering "how do I…?" questions. Facts are for **v1.8.0** and were checked against the
 code. [OpenBao credential storage](#store-credentials-in-openbao) shipped in v1.6.0, and
-[Workspace Runways](#workspace-runways) ships in v1.7.0. Paths are relative to `app/src/` unless
-they start with `app/` or `docs/`, and `tid` means `data-testid`.
+[Workspace Runways](#workspace-runways) shipped in v1.7.0. v1.8.0 adds short names, short-name
+ranking and a project-list refresh to the **+ Add projects** picker (VERM-120). Paths are
+relative to `app/src/` unless they start with `app/` or `docs/`, and `tid` means `data-testid`.
 
 ## How to use this file
 
