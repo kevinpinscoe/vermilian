@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-27
+
 ### Changed
+
+- **Add projects shows short names, ranks by them, and stays current** (VERM-120). Each row of a
+  workspace's **+ Add projects** picker now shows the project's YouTrack short name (`KEVIN`,
+  `VERM`) beside its long name, so a project whose long name is a prefix of its siblings' ("Kevin"
+  beside "Kevin - PIM") can be told apart. The search, now labelled **Filter by key or name**,
+  lists an exact short-name match first, then short names that start with the query, then any
+  other match. Opening the picker reloads the project list from YouTrack, and the list also
+  reloads when you return to the window after a minute, so a project renamed in YouTrack appears
+  under its new name without **Force resync from server** or a restart.
 
 - **RUNBOOK: which OpenBao instance holds a credential** (VERM-119). The *OpenBao credential
   storage* section now says to store a scope's credentials in the instance designated for the host
@@ -1108,7 +1119,8 @@ First public release. Vermilian is feature-complete against its specification.
   warns on first launch; the Homebrew Cask clears the quarantine flag, or run
   `xattr -dr com.apple.quarantine /Applications/Vermilian.app` for the manual `.dmg`.
 
-[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/kevinpinscoe/vermilian/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/kevinpinscoe/vermilian/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/kevinpinscoe/vermilian/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kevinpinscoe/vermilian/releases/tag/v1.5.0
