@@ -67,6 +67,22 @@
   white-space: nowrap;
 }
 
+/* The YouTrack short name (KEVIN, VERM) — what projects are known by, and
+   the only thing that tells "Kevin" from "Kevin - PIM" at a glance (VERM-120).
+   Fixed minimum width keeps the long names aligned. */
+.projectKey {
+  flex-shrink: 0;
+  min-width: 56px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ui-background-color, #f0f1f5);
+  color: var(--primary-text-color, #111111);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* "in <workspace>" — where this project lives today. */
 .origin {
   font-size: 12px;

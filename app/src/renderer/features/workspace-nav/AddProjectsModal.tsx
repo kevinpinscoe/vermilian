@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
 import { filterProjects, setWorkspaceProjects } from '../../../shared/workspace';
 import styles from './AddProjectsModal.module.css';
 import modalLayout from '../../components/ModalLayout.module.css';
+import { PROJECTS_QUERY_KEY } from './api';
 
 interface AddProjectsModalProps {
   config: VermilianConfig;
@@ -27,6 +29,11 @@ interface AddProjectsModalProps {
  *
  * The search box only narrows what is shown. Ticks on rows it hides are kept,
  * saved, and counted in the move notice (VERM-13).
+ *
+ * Each row shows the project's short name as well as its long name, and the
+ * search ranks short-name matches first (VERM-120). Opening the dialog
+ * refetches the project list, so a project renamed in YouTrack appears under
+ * its new name without a Force resync.
  */
 export function AddProjectsModal({
   config, workspaceId, workspaceName, allProjects, onClose, onSave,
@@ -46,6 +53,11 @@ export function AddProjectsModal({
     const ws = config.workspaces.find((w) => w.id === workspaceId);
     return new Set(ws?.folders.flatMap((f) => f.projectIds) ?? []);
   }, [config, workspaceId]);
+
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    void queryClient.refetchQueries({ queryKey: PROJECTS_QUERY_KEY });
+  }, [queryClient]);
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initiallyHere));
   const [query, setQuery] = useState('');
@@ -89,7 +101,7 @@ export function AddProjectsModal({
               <input
                 type="search"
                 className={styles.search}
-                placeholder="Filter projects"
+                placeholder="Filter by key or name"
                 aria-label="Filter projects"
                 data-testid="add-projects-search"
                 value={query}
@@ -111,14 +123,16 @@ export function AddProjectsModal({
                         className={styles.row}
                         data-testid="add-projects-row"
                         data-project-name={p.name}
+                        data-project-key={p.shortName}
                       >
                         <input
                           type="checkbox"
                           className={styles.checkbox}
                           checked={selected.has(p.id)}
                           onChange={() => toggle(p.id)}
-                          aria-label={p.name}
+                          aria-label={`${p.name} (${p.shortName})`}
                         />
+                        <span className={styles.projectKey} data-testid="add-projects-key">{p.shortName}</span>
                         <span className={styles.projectName}>{p.name}</span>
                         {here ? (
                           <span className={styles.origin}>in this workspace</span>

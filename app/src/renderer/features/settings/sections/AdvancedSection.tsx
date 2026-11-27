@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Heading, Button, AttentionBox, Modal, ModalContent, ModalBasicLayout, ModalHeader } from '@vibe/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToastStore } from '../../../stores/toast';
+import { PROJECTS_QUERY_KEY } from '../../workspace-nav/api';
 import type { RunwayImportPreview } from '../../../../shared/ipc';
 import { importPreviewRows, importSuccessMessage, importWarningTexts } from '../runwayImport';
 import styles from '../SettingsView.module.css';
@@ -28,7 +29,7 @@ export function AdvancedSection({ onReset }: Props) {
       if (result.ok) {
         await qc.invalidateQueries({ queryKey: ['workspace', 'config'] });
         await qc.invalidateQueries({ queryKey: ['board-config'] });
-        await qc.invalidateQueries({ queryKey: ['youtrack', 'projects'] });
+        await qc.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
         showToast('positive', 'Resynced workspace configuration from YouTrack.');
       } else {
         showToast('negative', result.error ?? 'Resync failed.');
