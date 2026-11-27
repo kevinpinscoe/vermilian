@@ -18,7 +18,7 @@ Vermilian also features a fully functional Kanban board for quick task review.
 
 ## Status
 
-**v1.7.0 — current release.** Vermilian is feature-complete against its specification and
+**v1.8.0 — current release.** Vermilian is feature-complete against its specification and
 available from [GitHub Releases](https://github.com/kevinpinscoe/vermilian/releases) and package
 managers (see [Installation](#installation)). See the [changelog](CHANGELOG.md) for what changed in
 each release.
@@ -36,8 +36,9 @@ each release.
   encrypt, and offers **Encrypt now** for plain-text copies left by older versions);
   cross-machine workspace/project sync via a YouTrack Knowledge Base Article (self-healing against
   stale project ids, with a manual "Force resync from server" recovery action); workspace
-  organisation, including an "+ Add projects" picker, with a search box that filters by project
-  name or short name, for moving projects between workspaces and a
+  organisation, including an "+ Add projects" picker that shows each project's short name, with
+  a search box that filters by short name or name and lists short-name matches first, and that
+  reloads the project list each time it opens (v1.8.0), for moving projects between workspaces and a
   workspace delete that re-homes any projects it still holds (under per-workspace storage it also
   deletes the workspace's configuration article); the **Priority Desk** (Focus, Focus
   rank and Why now; Now/Next/Then cards; Choose next with *Not this week*; epic and Master Plan
@@ -54,7 +55,7 @@ each release.
   with sections and notes, All tasks sorts by Runway #, tracker priority and ticket ID, blockers
   and order conflicts, the Runway # on Desk cards, and an append-only Markdown schedule import;
   and light/dark themes.
-- **Tested:** over 2,300 unit tests cover the core logic (board grouping/sorting/filtering, the timer
+- **Tested:** over 2,400 unit tests cover the core logic (board grouping/sorting/filtering, the timer
   state machine, API transforms, search query building, workspace-config sync, the Priority
   Desk's rank rules, Jira mapping and boards, board search and the Assignee filter, credential
   references and plain-text migration, workspace migration and storage activation), alongside an end-to-end (Playwright) suite over the board, detail panel,
