@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **RUNBOOK: which OpenBao instance holds a credential** (VERM-119). The *OpenBao credential
+  storage* section now says to store a scope's credentials in the instance designated for the host
+  where Vermilian uses them, work-service credentials such as a Jira token included, and to give
+  each scope its own AppRole with nothing reused across instances. It replaces the earlier advice to
+  keep work and personal credentials on separate instances. It also notes that **Move credentials to
+  OpenBao** moves every credential in the scope that has a source, Jira included. Documentation
+  only.
+
 ## [1.7.0] - 2026-11-26
 
 ### Added

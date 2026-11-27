@@ -802,8 +802,22 @@ Settings configures one **scope** at a time, and scopes share nothing:
 | The active workspace | That workspace's tracker and Anthropic credential references. Needs per-workspace storage | The workspace ID |
 
 Each scope has its own server, namespace, KV mount, secret path and login, and logs in for itself.
-A workspace never reads another workspace's scope. Use a separate OpenBao instance, policy and
-AppRole for work and for personal workspaces; Vermilian assumes nothing is shared between them.
+A workspace never reads another workspace's scope.
+
+### Which instance holds a credential
+
+Store a scope's credentials in the OpenBao instance designated for the host where Vermilian uses
+them. That includes work-service credentials, such as a Jira token, that are already authorized
+for use on that host. What stays separate is each instance's own administration and
+authentication material. Give every scope its own least-privilege AppRole, scoped to its own
+secret path, and never reuse a policy, AppRole, SecretID or token on another instance. Vermilian
+assumes nothing is shared between instances.
+
+**Example: the Settings scope on the FLDW.** The FLDW's designated instance is the home OpenBao
+server, so the FLDW's Settings scope keeps the YouTrack, Claude and Jira credentials there, the
+work Jira token included. It logs in with an AppRole of its own whose policy covers only that
+scope's secret path. On a work laptop, the same Jira token goes in that laptop's own designated
+instance, under that instance's own AppRole.
 
 `app-config.json` holds connection details and references only. The AppRole SecretID or token is
 read from your command or file at login and kept in memory.
@@ -836,7 +850,10 @@ If the SecretID has a use limit, allow for one login per token lifetime and per 
 3. **Test connection**. It reports connected, unreachable, sealed, login rejected, insufficient
    permissions, secret not found, or incomplete configuration.
 4. **Move credentials to OpenBao**. Each credential is read from its current source, written,
-   read back and compared. The scope switches over only after every credential verifies.
+   read back and compared. The scope switches over only after every credential verifies. Every
+   credential in the scope that has a source is moved, and you cannot pick which ones. For the
+   Settings scope that is Jira too, whenever a Jira token command, file or saved value is set.
+   Clear a credential's source first if it should not go to this instance.
 5. Restart Vermilian and confirm the board loads.
 6. Optional: **Remove local copy** deletes the saved keychain-encrypted copy, after confirming the
    OpenBao copy is readable. A configured command or file is left as it is.
