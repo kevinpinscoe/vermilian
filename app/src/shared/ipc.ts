@@ -1002,6 +1002,8 @@ export interface VermilianAPI {
   // the fake accepted with the token VERMILIAN_E2E_YT_REQUIRE_TOKEN names.
   debugGetProcessLaunches?(): Promise<Array<{ seq: number; kind: string; program: string; sha256: string }>>;
   debugGetRequiredTokenReads?(): Promise<number>;
+  // e2e-only (VERM-120): rename a fake YouTrack project while the app runs.
+  debugRenameProject?(shortName: string, name: string): Promise<boolean>;
   // e2e-only (VERM-105): the fake YouTrack's keys whose reads fail with 404.
   debugSetUnreadableIssues?(keys: string[]): Promise<void>;
   // Per-workspace configuration articles (VERM-43). `base` is the document the

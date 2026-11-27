@@ -164,6 +164,7 @@ const api: VermilianAPI = {
         debugGetRequiredTokenReads: () => ipcRenderer.invoke('e2e:getRequiredTokenReads'),
       }
     : {}),
+  debugRenameProject: (shortName: string, name: string) => ipcRenderer.invoke('e2e:renameProject', shortName, name),
   debugSetUnreadableIssues: (keys: string[]) => ipcRenderer.invoke('e2e:setUnreadableIssues', keys),
   listWorkspaceArticles: () => ipcRenderer.invoke(IPC.listWorkspaceArticles),
   readWorkspaceArticle: (workspaceId: string) => ipcRenderer.invoke(IPC.readWorkspaceArticle, workspaceId),

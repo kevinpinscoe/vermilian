@@ -1302,6 +1302,7 @@ export function registerIpc(): void {
       ipcMain.handle('e2e:getProcessLaunches', () => e2eProcessLaunches());
       ipcMain.handle('e2e:getRequiredTokenReads', () => fakeYouTrackForE2E.requiredTokenReadsForTests());
     }
+    ipcMain.handle('e2e:renameProject', (_e, shortName: string, name: string): boolean => fakeYouTrackForE2E.renameProjectForTests(shortName, name));
     ipcMain.handle('e2e:setUnreadableIssues', (_e, keys: string[]) => fakeYouTrackForE2E.setUnreadableIssuesForTests(Array.isArray(keys) ? keys : []));
     ipcMain.handle('e2e:writeConfigArticle', (_e, content: string): boolean => fakeYouTrackForE2E.writeConfigArticleForTests(content));
     // The fake Jira (VERM-39): change its issues as an edit in Jira would,

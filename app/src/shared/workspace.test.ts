@@ -243,4 +243,45 @@ describe('filterProjects', () => {
   it('returns nothing when no project matches', () => {
     expect(filterProjects(projects, 'zzz')).toEqual([]);
   });
+
+  // VERM-120: a project whose long name is a prefix of others ("Kevin" beside
+  // "Kevin - PIM") must surface first when its short name is typed.
+  describe('ranking by short name', () => {
+    const kevin: YouTrackProject[] = [
+      { id: 'a', name: 'ideation', shortName: 'IDEA' },
+      { id: 'b', name: 'Kevin - Personal data', shortName: 'KPD' },
+      { id: 'c', name: 'Kevin - PIM', shortName: 'PIM' },
+      { id: 'd', name: 'Kevin', shortName: 'KEVIN' },
+      { id: 'e', name: 'Kevin - Physical security', shortName: 'KPS' },
+    ];
+
+    it('puts an exact short-name match first, ignoring case', () => {
+      expect(ids(filterProjects(kevin, 'kevin'))).toEqual(['d', 'b', 'c', 'e']);
+      expect(ids(filterProjects(kevin, ' KEVIN '))).toEqual(['d', 'b', 'c', 'e']);
+    });
+
+    it('ranks short-name prefix matches ahead of other matches', () => {
+      // "kp" prefixes KPD and KPS; nothing else contains it.
+      expect(ids(filterProjects(kevin, 'kp'))).toEqual(['b', 'e']);
+      // "k" prefixes the keys KPD, KEVIN and KPS; "Kevin - PIM" matches only
+      // through its name, so it comes after them.
+      expect(ids(filterProjects(kevin, 'k'))).toEqual(['b', 'd', 'e', 'c']);
+    });
+
+    it('keeps the original order within each rank', () => {
+      // "e" is no key's prefix and every row contains it, so the list is the
+      // input order unchanged.
+      expect(ids(filterProjects(kevin, 'e'))).toEqual(['a', 'b', 'c', 'd', 'e']);
+    });
+
+    it('does not reorder for an empty query', () => {
+      expect(ids(filterProjects(kevin, ''))).toEqual(['a', 'b', 'c', 'd', 'e']);
+    });
+
+    it('does not mutate its input', () => {
+      const copy = kevin.map((p) => ({ ...p }));
+      filterProjects(kevin, 'kevin');
+      expect(kevin).toEqual(copy);
+    });
+  });
 });

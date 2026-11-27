@@ -7,11 +7,20 @@ export const WORKSPACE_CONFIG_QUERY_KEY = ['workspace', 'config'] as const;
 // The per-machine active workspace and its backend context (VERM-46).
 export const ACTIVE_WORKSPACE_QUERY_KEY = ['workspace', 'active'] as const;
 
+// The YouTrack project list. Import this rather than writing the array inline,
+// so every invalidation names the key the hook registers.
+export const PROJECTS_QUERY_KEY = ['youtrack', 'projects'] as const;
+
 export function useProjects() {
   return useQuery<YouTrackProject[]>({
-    queryKey: ['youtrack', 'projects'],
+    queryKey: PROJECTS_QUERY_KEY,
     queryFn: () => window.vermilian.getProjects(),
-    staleTime: 5 * 60 * 1000,
+    // The rail that holds this query never unmounts, so before VERM-120 a
+    // project renamed in YouTrack kept its old name until Force resync or a
+    // restart. Coming back to the window now refetches once the list is a
+    // minute old; the Add projects dialog also refetches whenever it opens.
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

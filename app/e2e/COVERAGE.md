@@ -27,6 +27,7 @@ notifications, or the timer worklog round-trip.
 | Folder management — rename / delete | ✅ E2E | `workspace-folders.spec.ts` |
 | Folder management — move up/down | ✅ E2E | `workspace-folders.spec.ts` |
 | Project assignment (drag between folders / across workspaces) | ✋ Manual | dnd-kit drag; `TESTING.md` |
+| Add projects picker — membership, search, short names, ranking, refetch on open | ✅ E2E | `add-projects.spec.ts`, `add-projects-short-names.spec.ts` (VERM-120); ranking in `workspace.test.ts` |
 | Empty-state / onboarding banner | ✅ E2E | `workspace-nav.spec.ts` (fresh-install banner) |
 
 ## project-board.md

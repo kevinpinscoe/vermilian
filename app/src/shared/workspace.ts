@@ -134,14 +134,28 @@ export function makeInitialConfig(projectIds: string[]): VermilianConfig {
 /**
  * Narrow a project list to those whose name or short name contains `query`,
  * ignoring case and surrounding whitespace. A blank query returns the list
- * unchanged. Order is preserved, so a filtered picker keeps the rail's order.
+ * unchanged. Matches are ranked by short name (below); within a rank the
+ * input order is kept, so a filtered picker otherwise follows the rail.
  */
 export function filterProjects(projects: YouTrackProject[], query: string): YouTrackProject[] {
   const q = query.trim().toLowerCase();
   if (!q) return projects;
-  return projects.filter(
-    (p) => p.name.toLowerCase().includes(q) || p.shortName.toLowerCase().includes(q),
-  );
+  // Ranked by short name (VERM-120): an exact key first, then keys that start
+  // with the query, then any other name or key containing it. Without this,
+  // typing "kevin" listed "Kevin - Personal data" and its siblings ahead of
+  // the KEVIN project itself. Order within a rank is the input order.
+  const rank = (p: YouTrackProject): number => {
+    const key = p.shortName.toLowerCase();
+    if (key === q) return 0;
+    if (key.startsWith(q)) return 1;
+    if (key.includes(q) || p.name.toLowerCase().includes(q)) return 2;
+    return -1;
+  };
+  return projects
+    .map((p, i) => ({ p, i, r: rank(p) }))
+    .filter((x) => x.r >= 0)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.p);
 }
 
 /** Return every project ID that appears in any folder across all workspaces. */

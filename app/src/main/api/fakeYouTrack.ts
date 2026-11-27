@@ -42,6 +42,17 @@ const RUNWAY_PROJECTS: YouTrackProject[] = [
   { id: '0-e7', shortName: 'PLAT', name: 'Platform' },
 ];
 
+// VERMILIAN_E2E_YT_PREFIX_FIXTURES=1 adds projects whose long names look alike
+// and where one is a prefix of the others, as on the real instance ("Kevin"
+// beside "Kevin - PIM") — for the picker's short-name display and ranking
+// (VERM-120). KEVIN is listed last so ranking, not input order, must lift it.
+const PREFIX_FIXTURES = process.env.VERMILIAN_E2E_YT_PREFIX_FIXTURES === '1';
+const PREFIX_PROJECTS: YouTrackProject[] = [
+  { id: '0-e8', shortName: 'KPD', name: 'Kevin - Personal data' },
+  { id: '0-e9', shortName: 'PIM', name: 'Kevin - PIM' },
+  { id: '0-e10', shortName: 'KEVIN', name: 'Kevin' },
+];
+
 const PROJECTS: YouTrackProject[] = [
   { id: '0-e1', shortName: 'TEST', name: 'Test Project' },
   { id: '0-e2', shortName: 'TST2', name: 'Test Project Two' },
@@ -52,6 +63,7 @@ const PROJECTS: YouTrackProject[] = [
   // stay stable.
   { id: '0-e4', shortName: 'EMP', name: 'Empty Project' },
   ...(RUNWAY_FIXTURES ? RUNWAY_PROJECTS : []),
+  ...(PREFIX_FIXTURES ? PREFIX_PROJECTS : []),
 ];
 
 function emptyFields(over: Partial<BoardIssueFields>): BoardIssueFields {
@@ -227,6 +239,15 @@ export async function getProjects(_url: string, _token: string): Promise<YouTrac
     throw { status: 401, message: 'Unauthorized' };
   }
   return PROJECTS.map((p) => ({ ...p }));
+}
+
+// e2e-only (VERM-120): rename a project as an edit in YouTrack's project
+// settings would, while the app runs. The id and short name are unchanged.
+export function renameProjectForTests(shortName: string, name: string): boolean {
+  const project = PROJECTS.find((p) => p.shortName === shortName);
+  if (!project || typeof name !== 'string' || !name) return false;
+  project.name = name;
+  return true;
 }
 
 // Each project's Priority bundle order (VERM-92). The built-in list unless
