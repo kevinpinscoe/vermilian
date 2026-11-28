@@ -3,6 +3,7 @@
 // `window.vermilian` (exposed by preload through contextBridge).
 
 import type { AppConfig } from './config';
+import type { QuitChoice, UnsavedQuitRequest, UnsavedState } from './quitGuard';
 import type { BoardIssue, VermilianConfig, YouTrackProject } from './workspace';
 import type { MasterPlanState, Outcome } from './masterPlan';
 import type { JiraProfile } from './jiraProfile';
@@ -51,6 +52,9 @@ export const IPC = {
   timerReadCheckpoint: 'timer:readCheckpoint',
   timerSetQuitProtection: 'timer:setQuitProtection',
   timerProceedQuit: 'timer:proceedQuit',
+  // Quitting with unsaved changes (VERM-123, shared/quitGuard.ts).
+  quitSetUnsavedState: 'quit:setUnsavedState',
+  quitProceed: 'quit:proceed',
   getBoardConfig: 'board:getConfig',
   saveBoardConfig: 'board:saveConfig',
   resetBoardConfig: 'board:resetConfig',
@@ -878,6 +882,11 @@ export interface VermilianAPI {
   timerSetQuitProtection(active: boolean): Promise<void>;
   timerProceedQuit(): Promise<void>;
   onQuitRequested(callback: () => void): void;
+  // What a quit would lose right now (VERM-123); the main process asks first.
+  quitSetUnsavedState(state: UnsavedState): Promise<void>;
+  // The user's answer to the unsaved-changes prompt: quit, saving or not.
+  quitProceed(choice: QuitChoice): Promise<void>;
+  onUnsavedQuitRequested(callback: (request: UnsavedQuitRequest) => void): void;
   // Fires after the _vermilian-config article finishes loading/syncing from YouTrack.
   // The renderer should invalidate workspace and board config queries on this event.
   onConfigSynced(callback: () => void): void;
@@ -1029,6 +1038,8 @@ export interface VermilianAPI {
   debugWriteConfigArticle?(content: string): Promise<boolean>;
   debugFailConfigWrites?(n: number): Promise<void>;
   debugFailWorkspaceWrites?(n: number): Promise<void>;
+  // e2e-only (VERM-123): leave a workspace out of the article listing for `ms`.
+  debugHideWorkspaceFromListing?(workspaceId: string, ms: number): Promise<void>;
   listCredentialRefs(): Promise<CredentialRefStatus[]>;
   setCredentialRefSources(credentialRef: string, sources: CredentialSourceConfig): Promise<CredentialRefWriteResult>;
   saveCredentialRefSecret(credentialRef: string, value: string): Promise<CredentialRefWriteResult>;

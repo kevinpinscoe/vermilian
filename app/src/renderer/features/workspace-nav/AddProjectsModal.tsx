@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
@@ -77,12 +78,18 @@ export function AddProjectsModal({
     (p) => selected.has(p.id) && !initiallyHere.has(p.id) && originByProjectId.has(p.id),
   );
 
-  function handleSave() {
+  function handleSave(): boolean {
     // Preserve the order projects appear in the rail rather than click order.
     const ids = allProjects.filter((p) => selected.has(p.id)).map((p) => p.id);
     onSave(setWorkspaceProjects(config, workspaceId, ids, `folder-${Date.now()}`));
     onClose();
+    return true;
   }
+
+  // Quitting asks about ticks not yet saved (VERM-123). onSave starts the
+  // layout save; quitting then waits for it like any other save in flight.
+  const addProjectsDirty = selected.size !== initiallyHere.size || [...selected].some((id) => !initiallyHere.has(id));
+  useUnsavedDraft(`add-projects-${workspaceId}`, `Add projects to “${workspaceName}”`, addProjectsDirty, handleSave);
 
   return (
     <Modal id="add-projects-modal" show onClose={onClose} size="medium">

@@ -3,6 +3,7 @@ import { Loader } from '@vibe/core';
 import { useConfig, useCredentialStatus } from './features/settings/api';
 import { SettingsView } from './features/settings/SettingsView';
 import { AppShell } from './AppShell';
+import { UnsavedQuitGuard } from './features/quit/UnsavedQuitGuard';
 import { useThemeStore } from './stores/theme';
 import styles from './App.module.css';
 
@@ -24,12 +25,24 @@ export function App() {
     );
   }
 
+  // The quit guard sits beside whichever view is showing (VERM-123).
+
   const connected =
     Boolean(configData?.youtrackUrl) && Boolean(credData?.hasYouTrackToken);
 
   if (!connected || showSettings) {
-    return <SettingsView canCancel={connected} onClose={() => setShowSettings(false)} />;
+    return (
+      <>
+        <SettingsView canCancel={connected} onClose={() => setShowSettings(false)} />
+        <UnsavedQuitGuard />
+      </>
+    );
   }
 
-  return <AppShell onOpenSettings={() => setShowSettings(true)} />;
+  return (
+    <>
+      <AppShell onOpenSettings={() => setShowSettings(true)} />
+      <UnsavedQuitGuard />
+    </>
+  );
 }

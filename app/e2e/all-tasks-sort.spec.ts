@@ -82,7 +82,11 @@ async function ipcLog(app: ElectronApplication): Promise<string[]> {
 // A channel that changes something — a Runway write, a tracker write, or any
 // other save — judged by its verb, the part after the colon.
 const WRITE = /^(save|update|add|remove|move|delete|patch|create|post|import-confirm|set|migrate|checkpoint|clear|force|resync)/i;
-const isWrite = (channel: string) => WRITE.test(channel.split(':')[1] ?? '');
+// quit:setUnsavedState only tells the main process what a quit would lose
+// (VERM-123); it stores nothing, and the renderer sends it whenever a save
+// starts or finishes, so it is not a write here.
+const NOT_WRITES = new Set(['quit:setUnsavedState']);
+const isWrite = (channel: string) => !NOT_WRITES.has(channel) && WRITE.test(channel.split(':')[1] ?? '');
 
 test.describe('All tasks sort (VERM-92)', () => {
   let app: ElectronApplication | undefined;

@@ -89,6 +89,11 @@ let revision = 0;
 let savedRevision = 0;
 const hasUnsavedEdits = () => revision !== savedRevision;
 
+/** Whether an edit has not yet been verified in YouTrack (VERM-123: asked about on quit). */
+export function hasUnsavedChanges(): boolean {
+  return hasUnsavedEdits();
+}
+
 // Writes run one at a time, in order: an overlapping save waits for the one
 // in flight instead of interleaving with it.
 let writeChain: Promise<unknown> = Promise.resolve();

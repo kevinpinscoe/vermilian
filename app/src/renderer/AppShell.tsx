@@ -407,6 +407,9 @@ export function AppShell({ onOpenSettings }: AppShellProps) {
       showToast('negative', `Could not switch workspace: ${result.message}`, 5000);
       return false;
     }
+    // A re-check already in flight carries the answer from before the switch;
+    // cancel it so it cannot land on top of the user's choice (VERM-123).
+    await queryClient.cancelQueries({ queryKey: ACTIVE_WORKSPACE_QUERY_KEY });
     setActiveWorkspaceInStore(id);
     queryClient.setQueryData(ACTIVE_WORKSPACE_QUERY_KEY, result.context);
     return true;

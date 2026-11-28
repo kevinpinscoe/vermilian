@@ -937,11 +937,22 @@ if (process.env.VERMILIAN_E2E_WS_ARTICLES) {
   }
 }
 
+// e2e-only (VERM-123): leave one workspace's article out of listings until a
+// deadline, the start-up transient that cost the FLDW its last workspace.
+let hiddenFromListing: { workspaceId: string; until: number } | null = null;
+
+export function hideWorkspaceFromListingForTests(workspaceId: string, ms: number): void {
+  hiddenFromListing = { workspaceId, until: Date.now() + ms };
+}
+
 export async function listWorkspaceArticles(_url: string, _token: string): Promise<WorkspaceArticleListing> {
+  const hidden = hiddenFromListing && Date.now() < hiddenFromListing.until
+    ? workspaceArticleTitle(hiddenFromListing.workspaceId)
+    : null;
   return {
     ok: true,
     articles: [...wsArticles.values()]
-      .filter((a) => a.summary.startsWith(WORKSPACE_ARTICLE_PREFIX))
+      .filter((a) => a.summary.startsWith(WORKSPACE_ARTICLE_PREFIX) && a.summary !== hidden)
       .map((a) => ({ ...a })),
   };
 }

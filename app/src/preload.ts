@@ -50,6 +50,7 @@ import {
   type SearchWorkspaceJiraIssuesArgs,
 } from './shared/ipc';
 import type { AppConfig } from './shared/config';
+import type { QuitChoice, UnsavedQuitRequest, UnsavedState } from './shared/quitGuard';
 import type { JiraProfile } from './shared/jiraProfile';
 import type { WorkspaceDocument } from './shared/workspaceSchema';
 import type { WorkspaceMigrationOptions } from './shared/workspaceMigration';
@@ -86,6 +87,12 @@ const api: VermilianAPI = {
   onQuitRequested: (callback: () => void) => {
     ipcRenderer.removeAllListeners('timer:quit-requested');
     ipcRenderer.on('timer:quit-requested', () => callback());
+  },
+  quitSetUnsavedState: (state: UnsavedState) => ipcRenderer.invoke(IPC.quitSetUnsavedState, state),
+  quitProceed: (choice: QuitChoice) => ipcRenderer.invoke(IPC.quitProceed, choice),
+  onUnsavedQuitRequested: (callback: (request: UnsavedQuitRequest) => void) => {
+    ipcRenderer.removeAllListeners('quit:unsaved-requested');
+    ipcRenderer.on('quit:unsaved-requested', (_e, request: UnsavedQuitRequest) => callback(request));
   },
   onConfigSynced: (callback: () => void) => {
     ipcRenderer.removeAllListeners('config:article-synced');
@@ -216,6 +223,8 @@ const api: VermilianAPI = {
   debugWriteConfigArticle: (content: string) => ipcRenderer.invoke('e2e:writeConfigArticle', content),
   debugFailConfigWrites: (n: number) => ipcRenderer.invoke('e2e:failConfigWrites', n),
   debugFailWorkspaceWrites: (n: number) => ipcRenderer.invoke('e2e:failWorkspaceWrites', n),
+  debugHideWorkspaceFromListing: (workspaceId: string, ms: number) =>
+    ipcRenderer.invoke('e2e:hideWorkspaceFromListing', workspaceId, ms),
   debugJiraChange: (change: unknown) => ipcRenderer.invoke('e2e:jiraChange', change),
   debugGetJiraCalls: () => ipcRenderer.invoke('e2e:jiraCalls'),
   debugSetJiraSearchDelay: (ms: number) => ipcRenderer.invoke('e2e:jiraSearchDelay', ms),

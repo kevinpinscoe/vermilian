@@ -1,9 +1,9 @@
 import { BrowserWindow, app, Menu } from 'electron';
 import path from 'node:path';
-import { isQuitProtected, sendQuitRequested } from './ipc';
+import { getUnsavedState, isQuitProtected, loadYtToken, sendQuitRequested, sendUnsavedQuitRequested, takeQuitChoice } from './ipc';
+import { hasUnsaved, nextQuitStep } from '../shared/quitGuard';
 import * as articleConfig from './services/articleConfig';
-import { readConfig, writeConfig as _writeConfig } from './services/config';
-import { loadSecretWithSources, FILES } from './services/credentials';
+import { readConfig } from './services/config';
 import { workspaceStorageMode } from './services/activeWorkspace';
 
 export function createWindow(): BrowserWindow {
@@ -43,48 +43,95 @@ export function createWindow(): BrowserWindow {
     menu.popup();
   });
 
-  // Intercept window close button when timer is running.
+  // Every close is a quit (except on macOS, below), so it goes through the
+  // before-quit pipeline while the window is still here to ask in (VERM-123).
   win.on('close', (e) => {
+    if (finalPass) return;
+    if (process.platform !== 'darwin') {
+      e.preventDefault();
+      app.quit();
+      return;
+    }
+    // macOS keeps the app running when its window closes: ask only about what
+    // would be lost with the window. The timer is unaffected by a close.
     if (isQuitProtected()) {
       e.preventDefault();
       sendQuitRequested();
+    } else if (hasUnsaved(getUnsavedState())) {
+      e.preventDefault();
+      sendUnsavedQuitRequested({ kind: 'unsaved', state: getUnsavedState() });
     }
   });
 
   return win;
 }
 
-// Intercept app quit (Cmd+Q / Ctrl+Q / menu) when timer is running.
-// This is registered once globally so it doesn't accumulate.
+// The quit pipeline (Cmd+Q / Ctrl+Q / menu / window close), registered once.
+// Each step is shared/quitGuard.ts nextQuitStep: ask about a running timer,
+// then about unsaved changes (VERM-123), then flush the pending debounced
+// _vermilian-config write. A flush that fails asks again instead of quitting.
 let beforeQuitRegistered = false;
 let flushing = false;
+// Set once every step has passed; lets the re-triggered quit and the window
+// closes it causes through.
+let finalPass = false;
+
+const SAVE_FAILED_MESSAGE =
+  'Your workspace layout and board settings could not be saved to YouTrack. ' +
+  'Quitting now loses those changes.';
+
+async function flushPendingWrites(): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Legacy storage only: under per-workspace storage nothing is pending for
+  // _vermilian-config, and its guard would refuse the write anyway (VERM-53).
+  if (workspaceStorageMode() !== 'legacy' || !articleConfig.hasUnsavedChanges()) return { ok: true };
+  try {
+    const cfg = await readConfig();
+    const token = await loadYtToken(cfg);
+    if (cfg.youtrackUrl && token) await articleConfig.flush(cfg.youtrackUrl, token);
+  } catch { /* reported below: the edits are still unsaved */ }
+  return articleConfig.hasUnsavedChanges() ? { ok: false, message: SAVE_FAILED_MESSAGE } : { ok: true };
+}
+
+function finishQuit(): void {
+  finalPass = true;
+  app.quit();
+}
 
 export function registerQuitProtection(): void {
   if (beforeQuitRegistered) return;
   beforeQuitRegistered = true;
 
-  app.on('before-quit', async (e) => {
-    if (isQuitProtected()) {
-      e.preventDefault();
+  app.on('before-quit', (e) => {
+    if (finalPass) return;
+    e.preventDefault();
+    if (flushing) return;
+    const timerProtected = isQuitProtected();
+    const step = nextQuitStep({
+      timerProtected,
+      choice: timerProtected ? null : takeQuitChoice(),
+      state: getUnsavedState(),
+    });
+    if (step === 'ask-timer') {
       sendQuitRequested();
       return;
     }
-    // Flush any pending debounced article saves before the process exits.
-    if (!flushing) {
-      flushing = true;
-      e.preventDefault();
-      try {
-        const cfg = await readConfig();
-        const token = await loadSecretWithSources(
-          FILES.youtrackToken, cfg.youtrackTokenCommand, cfg.youtrackTokenFile,
-        );
-        // Legacy storage only: under per-workspace storage nothing is pending
-        // for _vermilian-config, and its guard would refuse the write anyway (VERM-53).
-        if (cfg.youtrackUrl && token && workspaceStorageMode() === 'legacy') {
-          await articleConfig.flush(cfg.youtrackUrl, token);
-        }
-      } catch { /* best effort */ }
-      app.quit(); // re-trigger; flushing=true prevents infinite loop
+    if (step === 'ask-unsaved') {
+      sendUnsavedQuitRequested({ kind: 'unsaved', state: getUnsavedState() });
+      return;
     }
+    if (step === 'quit') {
+      finishQuit();
+      return;
+    }
+    flushing = true;
+    void flushPendingWrites().then((r) => {
+      flushing = false;
+      // With no window left (macOS) there is no one to ask: quit as before.
+      if (!r.ok && BrowserWindow.getAllWindows().length > 0) {
+        sendUnsavedQuitRequested({ kind: 'save-failed', message: r.message });
+        return;
+      }
+      finishQuit();
+    });
   });
 }

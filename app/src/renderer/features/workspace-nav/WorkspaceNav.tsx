@@ -895,10 +895,25 @@ export function WorkspaceNav({
   }, [activeContext.data?.storage, workspaceConfig.data, projects.data]);
 
   // ── Sync activeWorkspaceId from this machine's local choice (VERM-46) ─────
+  // Follows every answer, not only the first: a start-up answer can be a
+  // tentative fallback, and latching it once showed the wrong workspace until
+  // the next click persisted it (VERM-123). A user's switch writes the store
+  // and this query's data together (AppShell.performWorkspaceSwitch), so the
+  // two agree and following cannot undo a choice.
+  const activeContextId = activeContext.data?.workspaceId;
+  const activeContextTentative = activeContext.data?.tentative;
+  const wasTentative = useRef(false);
   useEffect(() => {
-    const localId = activeContext.data?.workspaceId;
-    if (!activeWorkspaceId && localId) setActiveWorkspace(localId);
-  }, [activeContext.data, activeWorkspaceId, setActiveWorkspace]);
+    if (activeContextId && activeContextId !== activeWorkspaceId) setActiveWorkspace(activeContextId);
+    // Settled after a tentative answer: the rail's list may be a stale null
+    // from the same failed listing, so read it again once.
+    if (activeContextTentative === false && wasTentative.current) {
+      void queryClient.invalidateQueries({ queryKey: WORKSPACE_CONFIG_QUERY_KEY });
+    }
+    wasTentative.current = activeContextTentative === true;
+    // activeWorkspaceId is left out on purpose: this runs when the answer
+    // changes, never because the user switched.
+  }, [activeContextId, activeContextTentative, setActiveWorkspace, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const cfg = workspaceConfig.data;

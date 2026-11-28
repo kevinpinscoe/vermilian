@@ -31,10 +31,27 @@ export function useWorkspaceConfig() {
   });
 }
 
+// How often, and how many times, a tentative answer is re-checked (VERM-123).
+// A minute in all: long enough to outlast a slow first credential or network
+// at start-up; after that only a window refocus re-checks.
+export const ACTIVE_WORKSPACE_RECHECK_MS = 5_000;
+export const ACTIVE_WORKSPACE_RECHECK_LIMIT = 12;
+
+/** Whether to re-check a tentative active-workspace answer, and when. */
+export function activeWorkspaceRecheckInterval(
+  data: Pick<ActiveWorkspaceContext, 'tentative'> | undefined,
+  updates: number,
+): number | false {
+  return data?.tentative && updates <= ACTIVE_WORKSPACE_RECHECK_LIMIT ? ACTIVE_WORKSPACE_RECHECK_MS : false;
+}
+
 export function useActiveWorkspace() {
   return useQuery<ActiveWorkspaceContext>({
     queryKey: ACTIVE_WORKSPACE_QUERY_KEY,
     queryFn: () => window.vermilian.getActiveWorkspace(),
+    // A fallback is not an answer to settle on: the stored choice was missing
+    // or the list could not be read, so ask again (VERM-123).
+    refetchInterval: (query) => activeWorkspaceRecheckInterval(query.state.data, query.state.dataUpdateCount),
   });
 }
 
