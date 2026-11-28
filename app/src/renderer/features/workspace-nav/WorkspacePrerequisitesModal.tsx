@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import type { PrerequisiteSide } from '../../../shared/issueLink';
 import type { WorkspaceDocument } from '../../../shared/workspaceSchema';
@@ -62,18 +63,30 @@ export function WorkspacePrerequisitesModal({ workspaceId, onClose, onSaved }: W
     return () => { live = false; };
   }, [workspaceId]);
 
-  async function save(reset: boolean) {
-    if (!base) return;
+  // Quitting asks about prerequisite choices not yet saved (VERM-123).
+  const prerequisitesDirty = base && types
+    ? JSON.stringify(entriesFromRows(rows)) !==
+      JSON.stringify(entriesFromRows(prerequisiteRows(types, prerequisiteLinkTypesOf(base))))
+    : false;
+  useUnsavedDraft(
+    `workspace-prerequisites-${workspaceId}`, `Prerequisites for “${base?.name ?? 'workspace'}”`,
+    prerequisitesDirty, () => save(false),
+  );
+
+  async function save(reset: boolean): Promise<boolean> {
+    if (!base) return false;
     setSaving(true);
     setSaveError(null);
     try {
       const next = withPrerequisiteLinkTypes(base, reset ? null : entriesFromRows(rows));
       const r = await window.vermilian.updateWorkspaceArticle(base, next);
-      if (!r.ok) { setSaveError(r.message); return; }
+      if (!r.ok) { setSaveError(r.message); return false; }
       onSaved();
       onClose();
+      return true;
     } catch (e) {
       setSaveError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }

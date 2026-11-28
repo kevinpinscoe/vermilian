@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import type { WorkspaceDocument } from '../../../shared/workspaceSchema';
 import { parseAiCredentialRefInput, withAiCredentialRef } from '../../../shared/workspaceAi';
@@ -40,19 +41,27 @@ export function WorkspaceAiCredentialModal({ workspaceId, onClose, onSaved }: Wo
     return () => { live = false; };
   }, [workspaceId]);
 
-  async function save(raw: string) {
-    if (!base) return;
+  // Quitting asks about a reference typed but not saved (VERM-123).
+  useUnsavedDraft(
+    `workspace-ai-${workspaceId}`, `AI credential for “${base?.name ?? 'workspace'}”`,
+    Boolean(base) && draft !== (base?.ai.credentialRef ?? ''), () => save(draft),
+  );
+
+  async function save(raw: string): Promise<boolean> {
+    if (!base) return false;
     const parsed = parseAiCredentialRefInput(raw);
-    if (!parsed.ok) { setSaveError(parsed.message); return; }
+    if (!parsed.ok) { setSaveError(parsed.message); return false; }
     setSaving(true);
     setSaveError(null);
     try {
       const r = await window.vermilian.updateWorkspaceArticle(base, withAiCredentialRef(base, parsed.credentialRef));
-      if (!r.ok) { setSaveError(r.message); return; }
+      if (!r.ok) { setSaveError(r.message); return false; }
       onSaved();
       onClose();
+      return true;
     } catch (e) {
       setSaveError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }

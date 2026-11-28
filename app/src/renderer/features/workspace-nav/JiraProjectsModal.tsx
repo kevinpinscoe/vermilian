@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import { useQuery } from '@tanstack/react-query';
 import type { WorkspaceDocument, WorkspaceJiraBoard } from '../../../shared/workspaceSchema';
@@ -77,8 +78,14 @@ export function JiraProjectsModal({ workspaceId, onClose, onSaved }: JiraProject
     });
   }
 
-  async function handleSave() {
-    if (!base || !projects.data?.ok) return;
+  // Quitting asks about project and board choices not yet saved (VERM-123).
+  const sameSet = <T,>(a: Set<T>, b: T[]) => a.size === new Set(b).size && b.every((x) => a.has(x));
+  const jiraDirty = Boolean(base) && base !== null &&
+    (!sameSet(selected, workspaceProjectIds(base)) || !sameSet(selectedBoards, workspaceBoardIds(base)));
+  useUnsavedDraft(`workspace-jira-projects-${workspaceId}`, `Jira projects for “${base?.name ?? 'workspace'}”`, jiraDirty, () => handleSave());
+
+  async function handleSave(): Promise<boolean> {
+    if (!base || !projects.data?.ok) return false;
     // Jira's own project order, then any selected key Jira no longer lists
     // (kept rather than silently dropped).
     const listed = projects.data.projects.map((p) => p.shortName);
@@ -97,11 +104,13 @@ export function JiraProjectsModal({ workspaceId, onClose, onSaved }: JiraProject
     setSaveError(null);
     try {
       const r = await window.vermilian.updateWorkspaceArticle(base, withJiraBoards(withJiraProjects(base, keys), chosenBoards));
-      if (!r.ok) { setSaveError(r.message); return; }
+      if (!r.ok) { setSaveError(r.message); return false; }
       onSaved();
       onClose();
+      return true;
     } catch (e) {
       setSaveError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }

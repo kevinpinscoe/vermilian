@@ -37,6 +37,24 @@ function resolveExecutablePath(): string {
 
 const EXECUTABLE = resolveExecutablePath();
 
+// Every launch goes through here so close() can answer the unsaved-changes
+// prompt (VERM-123): a test that ends with an edited form open, or with a
+// configuration write it made fail, is now asked before quitting, and an
+// unanswered prompt would hold close() until the worker times out. Teardown
+// is not what such a test checks, so close() chooses "Quit without saving".
+// e2e/quit-unsaved.spec.ts drives the prompt itself and never calls close().
+async function launch(options: Parameters<typeof electron.launch>[0]): Promise<ElectronApplication> {
+  const app = await electron.launch(options);
+  const close = app.close.bind(app);
+  app.close = async () => {
+    const win = app.windows()[0];
+    // Not awaited: the process may exit before the call can answer.
+    if (win) void win.evaluate(() => window.vermilian.quitProceed('discard')).catch(() => undefined);
+    await close();
+  };
+  return app;
+}
+
 // A new profile inside this run's profile root, which global-setup.ts removes
 // when the run ends (VERM-54) — so callers never clean up after themselves.
 export function freshUserDataDir() {
@@ -44,7 +62,7 @@ export function freshUserDataDir() {
 }
 
 export async function launchApp(): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1' },
@@ -60,7 +78,7 @@ export async function launchAppWithUserDataDir(
   userDataDir: string,
   extraEnv: Record<string, string> = {},
 ): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${userDataDir}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', ...extraEnv },
@@ -71,7 +89,7 @@ export async function launchAppWithUserDataDir(
 // so the app starts in unconfigured (first-run) state. Use this to test the
 // settings → save → navigate-to-board flow.
 export async function launchAppUnconfigured(): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_UNCONFIGURED: '1' },
@@ -83,7 +101,7 @@ export async function launchAppUnconfigured(): Promise<ElectronApplication> {
 // the app in. The token file still exists, so the app considers itself
 // connected and routes to the board rather than to first-run Settings.
 export async function launchAppWithRevokedToken(): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_YT_401: '1' },
@@ -93,7 +111,7 @@ export async function launchAppWithRevokedToken(): Promise<ElectronApplication> 
 // Launches with a single fake _vermilian-master-plan article seeded with
 // `content` (see src/main/api/fakeYouTrack.ts's findMasterPlanArticle).
 export async function launchAppWithMasterPlan(content: string): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_CONTENT: content },
@@ -103,7 +121,7 @@ export async function launchAppWithMasterPlan(content: string): Promise<Electron
 // Simulates two matching _vermilian-master-plan articles — the ambiguous-
 // discovery case that must never be resolved by silently picking one.
 export async function launchAppWithDuplicateMasterPlan(): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_DUPLICATE: '1' },
@@ -112,7 +130,7 @@ export async function launchAppWithDuplicateMasterPlan(): Promise<ElectronApplic
 
 // Simulates a Master Plan discovery request failing outright.
 export async function launchAppWithMasterPlanError(): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', VERMILIAN_E2E_MASTER_PLAN_ERROR: '1' },
@@ -124,7 +142,7 @@ export async function launchAppWithMasterPlanError(): Promise<ElectronApplicatio
 // clarification response) without a dedicated named helper per combination —
 // see priority-desk-recommendation.spec.ts (VERM-8).
 export async function launchAppWithEnv(extraEnv: Record<string, string>): Promise<ElectronApplication> {
-  return electron.launch({
+  return launch({
     executablePath: EXECUTABLE,
     args: [`--user-data-dir=${freshUserDataDir()}`, ...ELECTRON_ARGS],
     env: { ...process.env, VERMILIAN_E2E: '1', ...extraEnv },

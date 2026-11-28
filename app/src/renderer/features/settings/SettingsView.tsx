@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { useQueryClient } from '@tanstack/react-query';
 import { Heading, Button, Loader, AttentionBox, Toast, Modal, ModalContent, ModalBasicLayout, ModalHeader } from '@vibe/core';
 import type { AppConfig } from '../../../shared/config';
@@ -59,6 +60,21 @@ function draftFromConfig(c: AppConfig): SettingsDraft {
     defaultWorklogType: c.defaultWorklogType,
     dailyNotesFolder: c.dailyNotesFolder,
   };
+}
+
+// True when the draft holds anything Save would write (VERM-123). The Jira
+// fields count only once the profile has loaded into the draft.
+function settingsDraftDirty(
+  d: SettingsDraft,
+  c: AppConfig,
+  loadedJira: JiraProfile | null | undefined,
+  assigneeDraft: string | null,
+): boolean {
+  const { jiraSiteUrl: _s, jiraEmail: _e, jiraCloudId: _c, ...rest } = d;
+  const { jiraSiteUrl: _bs, jiraEmail: _be, jiraCloudId: _bc, ...base } = draftFromConfig(c);
+  if (JSON.stringify(rest) !== JSON.stringify(base)) return true;
+  if (assigneeDraft !== null) return true;
+  return loadedJira !== undefined && jiraProfileChanged(d, loadedJira);
 }
 
 // True when the Jira fields differ from the profile loaded from YouTrack, so
@@ -137,6 +153,12 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
   const assigneeWorkspaceId = activeWorkspace.data?.workspaceId ?? '';
 
+  // Quitting asks about changes not yet saved here (VERM-123). Registered
+  // before the loading return below, so the hook order never changes;
+  // handleSave is hoisted.
+  const unsaved = Boolean(draft && config && settingsDraftDirty(draft, config, jiraLoaded ? (jiraProfile ?? null) : null, assigneeDraft));
+  useUnsavedDraft('settings', 'Settings', unsaved, () => handleSave());
+
   if (!draft || !config || !cred) {
     return (
       <div className={styles.view}>
@@ -193,8 +215,8 @@ export function SettingsView({ canCancel, onClose }: Props) {
     setJiraTest({ status: res.ok ? 'success' : 'error', message: describeJiraTest(res) });
   }
 
-  async function handleSave() {
-    if (!draft) return;
+  async function handleSave(): Promise<boolean> {
+    if (!draft) return false;
     setSaving(true);
     setFailClosed(null);
     setJiraSaveError(null);
@@ -259,19 +281,21 @@ export function SettingsView({ canCancel, onClose }: Props) {
 
       if (saveFailed) {
         setFailClosed(FAIL_CLOSED_MSG);
-        return;
+        return false;
       }
       setDraft((d) => (d ? { ...d, youtrackToken: '', claudeKey: '', jiraToken: '' } : d));
       // Stay open so the user can fix the profile; everything else is saved.
       if (jiraError) {
         setJiraSaveError(jiraError);
-        return;
+        return false;
       }
       setSavedToast(true);
       onClose();
+      return true;
     } catch {
       setSaving(false);
       setFailClosed('Save failed unexpectedly. Please try again.');
+      return false;
     }
   }
 

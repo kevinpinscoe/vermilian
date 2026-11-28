@@ -39,6 +39,11 @@ export interface ActiveWorkspaceContext {
   // Whether this workspace's AI features can run here, and why not (VERM-47,
   // shared/workspaceAi.ts). Names a reference at most, never a value.
   ai: AiAvailability;
+  // True when this answer is a fallback the caller must not settle on: the
+  // machine's stored choice was not among the listed workspaces, or the
+  // listing itself failed (VERM-123). The renderer re-checks while it is true
+  // instead of latching the fallback, and nothing persists it.
+  tentative: boolean;
 }
 
 export type SetActiveWorkspaceResult =
@@ -55,24 +60,50 @@ export interface WorkspaceChoice {
   aiCredentialRef: CredentialRef | null;
 }
 
+export type ActiveWorkspaceSource = 'stored' | 'legacy-hint' | 'first' | 'none';
+
+export interface ActiveWorkspaceResolution {
+  id: string;
+  source: ActiveWorkspaceSource;
+  /** See ActiveWorkspaceContext.tentative. */
+  tentative: boolean;
+}
+
 /**
  * Pick the active workspace from the ones that exist.
  *
- * The locally stored choice wins when it still names a workspace. Otherwise
- * the legacy hint — the activeWorkspaceId _vermilian-config carried before
- * VERM-46, read and never written — keeps an upgraded machine on the
- * workspace it was showing. Otherwise the first workspace in display order.
+ * The locally stored choice wins when it still names a workspace. The legacy
+ * hint — the activeWorkspaceId _vermilian-config carried before VERM-46, read
+ * and never written — is consulted only when this machine has never stored a
+ * choice, so an upgraded machine keeps the workspace it was showing. It never
+ * overrides a stored choice that is missing from the list: by then the hint
+ * is frozen and can be weeks stale (VERM-123, where it reopened the FLDW on
+ * the workspace it had been showing before per-workspace activation).
+ * Otherwise the first workspace in display order.
+ *
+ * A missing stored choice or a failed listing makes the answer tentative.
  */
+export function resolveActiveWorkspace(
+  choices: readonly Pick<WorkspaceChoice, 'id' | 'order'>[],
+  stored: string,
+  legacyHint: string,
+  listingOk = true,
+): ActiveWorkspaceResolution {
+  const ids = new Set(choices.map((c) => c.id));
+  if (stored && ids.has(stored)) return { id: stored, source: 'stored', tentative: false };
+  const tentative = !listingOk || stored !== '';
+  if (!stored && legacyHint && ids.has(legacyHint)) return { id: legacyHint, source: 'legacy-hint', tentative };
+  const first = [...choices].sort((a, b) => a.order - b.order)[0];
+  return first ? { id: first.id, source: 'first', tentative } : { id: '', source: 'none', tentative };
+}
+
+/** The ID resolveActiveWorkspace picks. */
 export function resolveActiveWorkspaceId(
   choices: readonly Pick<WorkspaceChoice, 'id' | 'order'>[],
   stored: string,
   legacyHint: string,
 ): string {
-  const ids = new Set(choices.map((c) => c.id));
-  if (stored && ids.has(stored)) return stored;
-  if (legacyHint && ids.has(legacyHint)) return legacyHint;
-  const first = [...choices].sort((a, b) => a.order - b.order)[0];
-  return first?.id ?? '';
+  return resolveActiveWorkspace(choices, stored, legacyHint).id;
 }
 
 /** A per-workspace document's backend, reduced to its non-secret context. */
@@ -119,6 +150,8 @@ export function buildActiveContext(
   configuredServerUrl: string,
   /** Whether the chosen workspace's AI reference has a source on this machine. */
   aiConfigured = false,
+  /** Whether the choice is a fallback to re-check (resolveActiveWorkspace). */
+  tentative = false,
 ): ActiveWorkspaceContext {
   const ws = choices.find((c) => c.id === id) ?? null;
   const backend = ws?.backend ?? null;
@@ -131,5 +164,6 @@ export function buildActiveContext(
     boardAvailable: board.available,
     boardUnavailableReason: board.reason,
     ai: aiAvailability(ws?.aiCredentialRef ?? null, aiConfigured),
+    tentative,
   };
 }

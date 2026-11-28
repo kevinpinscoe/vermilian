@@ -3,6 +3,7 @@ import {
   backendContextOf,
   boardAvailability,
   buildActiveContext,
+  resolveActiveWorkspace,
   resolveActiveWorkspaceId,
   workspacesFromDocuments,
   type WorkspaceChoice,
@@ -44,8 +45,15 @@ describe('resolveActiveWorkspaceId', () => {
     expect(resolveActiveWorkspaceId(choices, 'ws-c', 'ws-b')).toBe('ws-c');
   });
 
-  it('falls back to the legacy hint when the stored choice is gone', () => {
-    expect(resolveActiveWorkspaceId(choices, 'ws-deleted', 'ws-b')).toBe('ws-b');
+  it('uses the legacy hint only when this machine has never stored a choice', () => {
+    expect(resolveActiveWorkspaceId(choices, '', 'ws-b')).toBe('ws-b');
+  });
+
+  // VERM-123: a stored choice that is missing from the list is not replaced
+  // by the legacy hint, which is frozen at whatever the shared article held
+  // before this machine first chose (on the FLDW, days before the upgrade).
+  it('never lets the legacy hint override a stored choice that is missing', () => {
+    expect(resolveActiveWorkspaceId(choices, 'ws-deleted', 'ws-b')).toBe('ws-a');
   });
 
   it('falls back to the first workspace in display order otherwise', () => {
@@ -54,6 +62,32 @@ describe('resolveActiveWorkspaceId', () => {
 
   it('is empty when there are no workspaces', () => {
     expect(resolveActiveWorkspaceId([], 'ws-a', 'ws-b')).toBe('');
+  });
+});
+
+describe('resolveActiveWorkspace (VERM-123)', () => {
+  const choices = [choice('ws-b', 1), choice('ws-a', 0), choice('ws-c', 2)];
+
+  it('is settled when the stored choice is listed', () => {
+    expect(resolveActiveWorkspace(choices, 'ws-c', 'ws-b')).toEqual({ id: 'ws-c', source: 'stored', tentative: false });
+  });
+
+  it('is tentative when the stored choice is missing, so the caller re-checks rather than latching the fallback', () => {
+    expect(resolveActiveWorkspace(choices, 'ws-budget', 'ws-b')).toEqual({ id: 'ws-a', source: 'first', tentative: true });
+  });
+
+  it('is tentative when the listing failed, even with nothing stored', () => {
+    expect(resolveActiveWorkspace([], 'ws-c', 'ws-b', false)).toEqual({ id: '', source: 'none', tentative: true });
+    expect(resolveActiveWorkspace([], '', '', false)).toEqual({ id: '', source: 'none', tentative: true });
+  });
+
+  it('is settled for a first resolution from the legacy hint or display order', () => {
+    expect(resolveActiveWorkspace(choices, '', 'ws-b')).toEqual({ id: 'ws-b', source: 'legacy-hint', tentative: false });
+    expect(resolveActiveWorkspace(choices, '', '')).toEqual({ id: 'ws-a', source: 'first', tentative: false });
+  });
+
+  it('is settled and empty when the listing worked and there are no workspaces', () => {
+    expect(resolveActiveWorkspace([], '', '')).toEqual({ id: '', source: 'none', tentative: false });
   });
 });
 
@@ -96,7 +130,12 @@ describe('buildActiveContext', () => {
       boardAvailable: true,
       boardUnavailableReason: null,
       ai: { state: 'not-selected', credentialRef: null, message: AI_NOT_SELECTED_MESSAGE },
+      tentative: false,
     });
+  });
+
+  it('carries whether the choice is tentative (VERM-123)', () => {
+    expect(buildActiveContext('per-workspace', [choice('ws-a', 0)], 'ws-a', YT, false, true).tentative).toBe(true);
   });
 
   it("reports the chosen workspace's AI availability, by reference only (VERM-47)", () => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button } from '@vibe/core';
 import type { VermilianConfig, YouTrackProject } from '../../../shared/workspace';
@@ -13,7 +14,8 @@ interface AddProjectsModalProps {
   workspaceName: string;
   allProjects: YouTrackProject[];
   onClose: () => void;
-  onSave: (config: VermilianConfig) => void;
+  /** Saves the layout; rejects when the save failed (VERM-123). */
+  onSave: (config: VermilianConfig) => Promise<void>;
 }
 
 /**
@@ -77,12 +79,33 @@ export function AddProjectsModal({
     (p) => selected.has(p.id) && !initiallyHere.has(p.id) && originByProjectId.has(p.id),
   );
 
-  function handleSave() {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Closes only once the save has succeeded. A failed save keeps the dialog,
+  // and every tick in it, open to try again (VERM-123: Save and quit once lost
+  // the selections when the save failed after the dialog had already closed).
+  async function handleSave(): Promise<boolean> {
     // Preserve the order projects appear in the rail rather than click order.
     const ids = allProjects.filter((p) => selected.has(p.id)).map((p) => p.id);
-    onSave(setWorkspaceProjects(config, workspaceId, ids, `folder-${Date.now()}`));
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(setWorkspaceProjects(config, workspaceId, ids, `folder-${Date.now()}`));
+    } catch (e) {
+      setSaveError(e instanceof Error && e.message ? e.message : 'The projects could not be saved.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
     onClose();
+    return true;
   }
+
+  // Quitting asks about ticks not yet saved (VERM-123), and Save and quit
+  // uses handleSave, so it learns whether the save really happened.
+  const addProjectsDirty = selected.size !== initiallyHere.size || [...selected].some((id) => !initiallyHere.has(id));
+  useUnsavedDraft(`add-projects-${workspaceId}`, `Add projects to “${workspaceName}”`, addProjectsDirty, handleSave);
 
   return (
     <Modal id="add-projects-modal" show onClose={onClose} size="medium">
@@ -157,12 +180,19 @@ export function AddProjectsModal({
             </div>
           )}
 
+          {saveError && (
+            <div className={styles.moveNotice} role="alert" data-testid="add-projects-save-error">
+              {saveError}
+            </div>
+          )}
+
           <div className={styles.footer}>
-            <Button kind="tertiary" onClick={onClose}>Cancel</Button>
+            <Button kind="tertiary" onClick={onClose} disabled={saving}>Cancel</Button>
             <Button
               kind="primary"
               data-testid="add-projects-save"
-              onClick={handleSave}
+              onClick={() => void handleSave()}
+              loading={saving}
             >
               Save
             </Button>

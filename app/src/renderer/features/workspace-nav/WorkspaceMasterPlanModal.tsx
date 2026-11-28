@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useUnsavedDraft } from '../quit/useUnsavedDraft';
 import { Modal, ModalContent, ModalBasicLayout, ModalHeader, Button, Loader } from '@vibe/core';
 import type { WorkspaceDocument } from '../../../shared/workspaceSchema';
 import { masterPlanArticleIdOf, parseMasterPlanArticleIdInput, withMasterPlanArticle } from '../../../shared/workspaceMasterPlan';
@@ -40,19 +41,27 @@ export function WorkspaceMasterPlanModal({ workspaceId, onClose, onSaved }: Work
     return () => { live = false; };
   }, [workspaceId]);
 
-  async function save(raw: string) {
-    if (!base) return;
+  // Quitting asks about an article ID typed but not saved (VERM-123).
+  useUnsavedDraft(
+    `workspace-master-plan-${workspaceId}`, `Master plan for “${base?.name ?? 'workspace'}”`,
+    Boolean(base) && draft !== ((base && masterPlanArticleIdOf(base)) ?? ''), () => save(draft),
+  );
+
+  async function save(raw: string): Promise<boolean> {
+    if (!base) return false;
     const parsed = parseMasterPlanArticleIdInput(raw);
-    if (!parsed.ok) { setSaveError(parsed.message); return; }
+    if (!parsed.ok) { setSaveError(parsed.message); return false; }
     setSaving(true);
     setSaveError(null);
     try {
       const r = await window.vermilian.updateWorkspaceArticle(base, withMasterPlanArticle(base, parsed.articleId));
-      if (!r.ok) { setSaveError(r.message); return; }
+      if (!r.ok) { setSaveError(r.message); return false; }
       onSaved();
       onClose();
+      return true;
     } catch (e) {
       setSaveError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }

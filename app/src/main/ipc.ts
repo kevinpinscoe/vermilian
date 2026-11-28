@@ -1,6 +1,7 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import type { TrackerLinkTypesResult } from '../shared/workspacePrerequisites';
 import type { StandupWorkspace } from '../shared/standup';
+import { EMPTY_UNSAVED_STATE, normaliseUnsavedState, type QuitChoice, type QuitScope, type UnsavedQuitRequest, type UnsavedState } from '../shared/quitGuard';
 import { generateWorkspaceStandup, getWorkspaceDailyReview, type WorkspaceReportSourceDeps } from './services/workspaceStandup';
 import { randomUUID } from 'node:crypto';
 import { NO_WORKSPACE_MESSAGE, resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
@@ -113,6 +114,7 @@ import {
 import {
   backendContextOf,
   buildActiveContext,
+  resolveActiveWorkspace,
   resolveActiveWorkspaceId,
   workspacesFromDocuments,
   type ActiveWorkspaceContext,
@@ -258,6 +260,41 @@ export function sendQuitRequested(): void {
   BrowserWindow.getAllWindows()[0]?.webContents.send('timer:quit-requested');
 }
 
+// ─── Quitting with unsaved changes (VERM-123, shared/quitGuard.ts) ──────────
+// The renderer reports what a quit would lose; window.ts asks before quitting.
+let unsavedState: UnsavedState = EMPTY_UNSAVED_STATE;
+// The user's answer to the prompt, consumed by the quit it starts.
+let quitChoice: QuitChoice | null = null;
+
+export function getUnsavedState(): UnsavedState {
+  return unsavedState;
+}
+
+export function clearUnsavedState(): void {
+  unsavedState = EMPTY_UNSAVED_STATE;
+}
+
+export function takeQuitChoice(): QuitChoice | null {
+  const c = quitChoice;
+  quitChoice = null;
+  return c;
+}
+
+// What the last prompt was about, so its answer closes only the window when
+// that is all it asked about (macOS).
+let promptScope: QuitScope = 'quit';
+
+export function sendUnsavedQuitRequested(request: UnsavedQuitRequest): void {
+  promptScope = request.scope;
+  BrowserWindow.getAllWindows()[0]?.webContents.send('quit:unsaved-requested', request);
+}
+
+// window.ts handles an answer to a window-close prompt; set once at start-up.
+let windowChoiceHandler: ((choice: QuitChoice) => void) | null = null;
+export function setWindowChoiceHandler(fn: (choice: QuitChoice) => void): void {
+  windowChoiceHandler = fn;
+}
+
 // Every YouTrack tracker call goes through the TrackerProvider binding
 // (VERM-27): the client is unchanged, and `youtrack` is still the e2e fake
 // under VERMILIAN_E2E.
@@ -266,7 +303,7 @@ function youtrackTracker(url: string, token: string): YouTrackProvider {
 }
 
 // Helpers — load credentials via the three-source chain (command → file → safeStorage).
-async function loadYtToken(cfg?: AppConfig): Promise<string | null> {
+export async function loadYtToken(cfg?: AppConfig): Promise<string | null> {
   if (IS_E2E) return 'e2e-token';
   const c = cfg ?? (await readConfig());
   return loadSecretWithSources(FILES.youtrackToken, c.youtrackTokenCommand, c.youtrackTokenFile);
@@ -776,6 +813,8 @@ export function registerIpc(): void {
     choices: WorkspaceChoice[];
     legacyHint: string;
     configuredServerUrl: string;
+    /** False when the workspace list could not be read (VERM-123). */
+    listingOk: boolean;
   }> {
     const cfg = await readConfig();
     if (workspaceStorageMode() === 'per-workspace') {
@@ -794,6 +833,7 @@ export function registerIpc(): void {
         })),
         legacyHint: articleConfig.getWorkspaceConfig()?.activeWorkspaceId ?? '',
         configuredServerUrl: cfg.youtrackUrl,
+        listingOk: Boolean(listed?.ok),
       };
     }
     const legacy = await loadLegacyWorkspaceConfig();
@@ -807,6 +847,8 @@ export function registerIpc(): void {
       })),
       legacyHint: legacy?.activeWorkspaceId ?? '',
       configuredServerUrl: cfg.youtrackUrl,
+      // The legacy store is local: an absent config is a fresh install, not a failure.
+      listingOk: true,
     };
   }
 
@@ -848,9 +890,20 @@ export function registerIpc(): void {
   }
 
   async function activeWorkspaceContext(): Promise<ActiveWorkspaceContext> {
-    const { choices, legacyHint, configuredServerUrl } = await workspaceChoices();
-    const id = resolveActiveWorkspaceId(choices, await readStoredActiveWorkspaceId(), legacyHint);
-    return contextFor(choices, id, configuredServerUrl);
+    const { choices, legacyHint, configuredServerUrl, listingOk } = await workspaceChoices();
+    const stored = await readStoredActiveWorkspaceId();
+    const r = resolveActiveWorkspace(choices, stored, legacyHint, listingOk);
+    if (r.tentative) {
+      // VERM-123: the evidence that would have explained the FLDW's lost
+      // workspace. IDs only — no names, no credentials. Goes to stdout, which
+      // the desktop session's journal keeps.
+      console.warn(
+        `[vermilian] active workspace unresolved: stored=${stored || '(none)'} ` +
+          `listing=${listingOk ? 'ok' : 'failed'} listed=${choices.map((c) => c.id).join(',') || '(none)'} ` +
+          `showing=${r.id || '(none)'} (${r.source}); re-checking`,
+      );
+    }
+    return contextFor(choices, r.id, configuredServerUrl, r.tentative);
   }
 
   // ─── The active workspace's Anthropic credential (VERM-47) ─────────────────
@@ -871,10 +924,12 @@ export function registerIpc(): void {
     return IS_E2E && e2eFakeAnthropicKeyAllowed(ref, 'no-source');
   }
 
-  async function contextFor(choices: WorkspaceChoice[], id: string, configuredServerUrl: string): Promise<ActiveWorkspaceContext> {
+  async function contextFor(
+    choices: WorkspaceChoice[], id: string, configuredServerUrl: string, tentative = false,
+  ): Promise<ActiveWorkspaceContext> {
     const storage = workspaceStorageMode();
     const ref = choices.find((c) => c.id === id)?.aiCredentialRef ?? null;
-    return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref, id));
+    return buildActiveContext(storage, choices, id, configuredServerUrl, await aiConfigured(storage, ref, id), tentative);
   }
 
   // One AI operation for the active workspace only (services/workspaceAiKey.ts).
@@ -1295,6 +1350,8 @@ export function registerIpc(): void {
     ipcMain.handle('e2e:getMigrationSources', () => fakeYouTrackForE2E.getMigrationSourcesForTests());
     ipcMain.handle('e2e:failConfigWrites', (_e, n: number) => fakeYouTrackForE2E.failConfigWritesForTests(n));
     ipcMain.handle('e2e:failWorkspaceWrites', (_e, n: number) => fakeYouTrackForE2E.failWorkspaceWritesForTests(n));
+    ipcMain.handle('e2e:hideWorkspaceFromListing', (_e, workspaceId: string, ms: number) =>
+      fakeYouTrackForE2E.hideWorkspaceFromListingForTests(workspaceId, ms));
     // VERM-106: the processes and desktop calls the main process made (no command text), and the
     // ticket reads the fake accepted with the shell-command credential's token.
     // Compiled out of a release package (__VERMILIAN_E2E_BUILD__ is false there).
@@ -2264,6 +2321,21 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.timerProceedQuit, (): void => {
     forceQuit();
+  });
+
+  ipcMain.handle(IPC.quitSetUnsavedState, (_e, state: unknown): void => {
+    unsavedState = normaliseUnsavedState(state);
+  });
+
+  ipcMain.handle(IPC.quitProceed, (_e, choice: unknown): void => {
+    if (choice !== 'save' && choice !== 'discard') return;
+    if (promptScope === 'window' && windowChoiceHandler) {
+      promptScope = 'quit';
+      windowChoiceHandler(choice);
+      return;
+    }
+    quitChoice = choice;
+    app.quit();
   });
 
   // ─── Board configuration ────────────────────────────────────────────────────
