@@ -13,7 +13,9 @@ import styles from './UnsavedQuitGuard.module.css';
  * Tells the main process what a quit would lose — open editors with
  * unsubmitted changes, and saves still in flight — and answers its prompt:
  * Save and quit (each editor's own save, then every in-flight save, then the
- * main process's final flush), Quit without saving, or Cancel. Saves that are
+ * main process's final flush), Quit without saving, or Cancel. A prompt about
+ * closing the window on macOS reads "Save and close" / "Close without saving",
+ * and its answer closes the window without quitting the app. Saves that are
  * merely in flight are waited for without asking; only a failure asks.
  *
  * Mounted at the top of the app, so it also covers Settings shown before the
@@ -67,12 +69,12 @@ export function UnsavedQuitGuard() {
     const settled = await waitForSaves(queryClient);
     setBusy(false);
     if (failed.length) {
-      setError(`${failed.join(', ')} could not be saved. Fix it and try again, or quit without saving.`);
+      setError(`${failed.join(', ')} could not be saved. Fix it and try again, or continue without saving.`);
       setVisible(true);
       return;
     }
     if (!settled.ok) {
-      setError(`${settled.message} Try again, or quit without saving.`);
+      setError(`${settled.message} Try again, or continue without saving.`);
       setVisible(true);
       return;
     }
@@ -95,11 +97,13 @@ export function UnsavedQuitGuard() {
 
   if (!visible || !request) return null;
   const text = request.kind === 'save-failed' ? request.message : unsavedQuitMessage(request.state);
+  // macOS: closing the window leaves the app running, and the answer says so.
+  const closing = request.scope === 'window';
 
   return (
     <Modal id="unsaved-quit-modal" show onClose={busy ? () => undefined : cancel} size="small">
       <ModalBasicLayout className={modalLayout.layout}>
-        <ModalHeader title="Save changes before quitting?" />
+        <ModalHeader title={closing ? 'Save changes before closing?' : 'Save changes before quitting?'} />
         <ModalContent>
           <div data-testid="unsaved-quit-dialog">
             <p className={styles.text} data-testid="unsaved-quit-message">{text}</p>
@@ -109,10 +113,10 @@ export function UnsavedQuitGuard() {
                 Cancel
               </Button>
               <Button kind="secondary" color="negative" data-testid="unsaved-quit-discard" onClick={() => void quitWithoutSaving()} disabled={busy}>
-                Quit without saving
+                {closing ? 'Close without saving' : 'Quit without saving'}
               </Button>
               <Button data-testid="unsaved-quit-save" onClick={() => void saveAndQuit()} loading={busy}>
-                Save and quit
+                {closing ? 'Save and close' : 'Save and quit'}
               </Button>
             </div>
           </div>

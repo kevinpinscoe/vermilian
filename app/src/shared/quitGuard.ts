@@ -17,10 +17,17 @@ export interface UnsavedState {
 
 export const EMPTY_UNSAVED_STATE: UnsavedState = { drafts: [], saving: 0 };
 
-/** Why the main process is asking the renderer before quitting. */
+/**
+ * What the prompt is about: quitting the app, or only closing its window
+ * (macOS, where the app keeps running without a window). An answer to a
+ * `window` prompt closes the window and never quits the app.
+ */
+export type QuitScope = 'quit' | 'window';
+
+/** Why the main process is asking the renderer before quitting or closing. */
 export type UnsavedQuitRequest =
-  | { kind: 'unsaved'; state: UnsavedState }
-  | { kind: 'save-failed'; message: string };
+  | { kind: 'unsaved'; scope: QuitScope; state: UnsavedState }
+  | { kind: 'save-failed'; scope: QuitScope; message: string };
 
 /** What the user chose; `save` flushes pending writes first, `discard` does not. */
 export type QuitChoice = 'save' | 'discard';

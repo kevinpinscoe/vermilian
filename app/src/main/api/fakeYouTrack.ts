@@ -25,6 +25,7 @@ import type {
 // Same paging bounds as the real client (the fake reads one in-memory page).
 export { STANDUP_PAGE_SIZE } from './youtrack';
 import { WORKSPACE_ARTICLE_PREFIX, workspaceArticleTitle } from '../../shared/workspaceArticle';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { STORAGE_MARKER_TITLE, serialiseStorageMarker } from '../../shared/storageActivation';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
@@ -907,9 +908,30 @@ function nextUpdated(): number {
   return wsClock;
 }
 
+// e2e-only (VERM-123): VERMILIAN_E2E_WS_STORE_FILE keeps the workspace and
+// marker articles in a file, so they survive a quit and relaunch the way
+// articles in YouTrack do. Without it they live only in this process.
+const WS_STORE_FILE = process.env.VERMILIAN_E2E_WS_STORE_FILE ?? '';
+
+function persistWsArticles(): void {
+  if (WS_STORE_FILE) writeFileSync(WS_STORE_FILE, JSON.stringify([...wsArticles.values()]), 'utf8');
+}
+
+function loadWsArticles(): boolean {
+  if (!WS_STORE_FILE || !existsSync(WS_STORE_FILE)) return false;
+  for (const a of JSON.parse(readFileSync(WS_STORE_FILE, 'utf8')) as FakeWsArticle[]) {
+    wsArticles.set(a.id, a);
+    wsSeq = Math.max(wsSeq, Number(a.id.replace(/^e2e-ws-/, '')) || 0);
+    wsClock = Math.max(wsClock, a.updated);
+  }
+  return true;
+}
+const wsStoreLoaded = loadWsArticles();
+
 function addWsArticle(summary: string, content: string): FakeWsArticle {
   const a = { id: `e2e-ws-${++wsSeq}`, summary, content, updated: nextUpdated() };
   wsArticles.set(a.id, a);
+  persistWsArticles();
   return a;
 }
 
@@ -928,10 +950,12 @@ function writeWsArticle(articleId: string, content: string): { updated: number }
   }
   a.content = content;
   a.updated = nextUpdated();
+  persistWsArticles();
   return { updated: a.updated };
 }
 
-if (process.env.VERMILIAN_E2E_WS_ARTICLES) {
+// Seeds apply to a fresh store only; a relaunch keeps what the store holds.
+if (process.env.VERMILIAN_E2E_WS_ARTICLES && !wsStoreLoaded) {
   for (const seed of JSON.parse(process.env.VERMILIAN_E2E_WS_ARTICLES) as Array<{ summary: string; content: string }>) {
     addWsArticle(seed.summary, seed.content);
   }
@@ -940,6 +964,12 @@ if (process.env.VERMILIAN_E2E_WS_ARTICLES) {
 // e2e-only (VERM-123): leave one workspace's article out of listings until a
 // deadline, the start-up transient that cost the FLDW its last workspace.
 let hiddenFromListing: { workspaceId: string; until: number } | null = null;
+// VERMILIAN_E2E_HIDE_WORKSPACE_AT_START="<workspaceId>:<ms>" hides it from the
+// first moment of a launch, before any test code can run.
+{
+  const m = /^([A-Za-z0-9-]+):(\d+)$/.exec(process.env.VERMILIAN_E2E_HIDE_WORKSPACE_AT_START ?? '');
+  if (m) hiddenFromListing = { workspaceId: m[1], until: Date.now() + Number(m[2]) };
+}
 
 export function hideWorkspaceFromListingForTests(workspaceId: string, ms: number): void {
   hiddenFromListing = { workspaceId, until: Date.now() + ms };
@@ -969,7 +999,9 @@ export async function lookupVermilianArticle(_url: string, _token: string, artic
 }
 
 export async function deleteVermilianArticle(_url: string, _token: string, articleId: string): Promise<boolean> {
-  return wsArticles.delete(articleId);
+  const deleted = wsArticles.delete(articleId);
+  persistWsArticles();
+  return deleted;
 }
 
 // e2e-only: every workspace article as stored, unknown fields and all.
@@ -987,7 +1019,9 @@ export function writeWorkspaceArticleForTests(articleId: string, content: string
 // "another machine" write hook work on it unchanged. VERMILIAN_E2E_STORAGE_MARKER
 // seeds its body — e.g. a marker another machine wrote.
 
-if (process.env.VERMILIAN_E2E_STORAGE_MARKER) {
+if (wsStoreLoaded) {
+  // The marker, like every article, comes back from the store.
+} else if (process.env.VERMILIAN_E2E_STORAGE_MARKER) {
   addWsArticle(STORAGE_MARKER_TITLE, process.env.VERMILIAN_E2E_STORAGE_MARKER);
 } else if (process.env.VERMILIAN_E2E_WORKSPACE_STORAGE === 'per-workspace') {
   // Forced per-workspace storage (services/activeWorkspace.ts) comes with the

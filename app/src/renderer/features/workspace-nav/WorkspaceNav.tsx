@@ -1423,8 +1423,9 @@ export function WorkspaceNav({
           workspaceName={activeWorkspace.name}
           allProjects={allProjects}
           onClose={() => setShowAddProjects(false)}
-          onSave={(updated) => {
-            saveConfig.mutate(updated);
+          onSave={async (updated) => {
+            // Awaited, so the picker stays open with its ticks if this fails (VERM-123).
+            await saveConfig.mutateAsync(updated);
             // A folder the picker just created — or an existing one the user had
             // collapsed — would otherwise swallow the projects they just added,
             // leaving the rail looking exactly as empty as before the save.

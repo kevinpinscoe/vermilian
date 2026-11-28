@@ -6,6 +6,7 @@ import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
 import { createWindow, registerQuitProtection } from './main/window';
 import { registerIpc } from './main/ipc';
+import { windowCloseQuits } from './main/windowClose';
 import { encryptPlaintextSecrets } from './main/services/credentials';
 import { runSqliteSelfTest } from './main/services/sqliteSelfTest';
 
@@ -39,7 +40,7 @@ if (started) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    if (windowCloseQuits()) {
       app.quit();
     }
   });

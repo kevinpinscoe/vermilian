@@ -1,7 +1,10 @@
-import { BrowserWindow, app, Menu } from 'electron';
+import { BrowserWindow, app, dialog, Menu } from 'electron';
 import path from 'node:path';
-import { getUnsavedState, isQuitProtected, loadYtToken, sendQuitRequested, sendUnsavedQuitRequested, takeQuitChoice } from './ipc';
-import { hasUnsaved, nextQuitStep } from '../shared/quitGuard';
+import {
+  clearUnsavedState, getUnsavedState, isQuitProtected, loadYtToken, sendQuitRequested, sendUnsavedQuitRequested, setWindowChoiceHandler, takeQuitChoice,
+} from './ipc';
+import { hasUnsaved, nextQuitStep, type QuitChoice } from '../shared/quitGuard';
+import { windowCloseQuits } from './windowClose';
 import * as articleConfig from './services/articleConfig';
 import { readConfig } from './services/config';
 import { workspaceStorageMode } from './services/activeWorkspace';
@@ -43,24 +46,24 @@ export function createWindow(): BrowserWindow {
     menu.popup();
   });
 
-  // Every close is a quit (except on macOS, below), so it goes through the
-  // before-quit pipeline while the window is still here to ask in (VERM-123).
+  // On Windows and Linux every close is a quit, so it goes through the
+  // before-quit pipeline while the window is still here to ask in. On macOS
+  // the app keeps running without its window, so a close only ever closes the
+  // window: it asks about what the window would lose and flushes pending
+  // writes first, and an answer never quits the app (VERM-123 review).
   win.on('close', (e) => {
-    if (finalPass) return;
-    if (process.platform !== 'darwin') {
-      e.preventDefault();
+    if (finalPass || closeApproved.has(win)) return;
+    e.preventDefault();
+    if (windowCloseQuits()) {
       app.quit();
       return;
     }
-    // macOS keeps the app running when its window closes: ask only about what
-    // would be lost with the window. The timer is unaffected by a close.
-    if (isQuitProtected()) {
-      e.preventDefault();
-      sendQuitRequested();
-    } else if (hasUnsaved(getUnsavedState())) {
-      e.preventDefault();
-      sendUnsavedQuitRequested({ kind: 'unsaved', state: getUnsavedState() });
-    }
+    void closeWindowSteps(win);
+  });
+  win.on('closed', () => {
+    closeApproved.delete(win);
+    // Its editors went with it; nothing it reported is unsaved any more.
+    clearUnsavedState();
   });
 
   return win;
@@ -97,9 +100,69 @@ function finishQuit(): void {
   app.quit();
 }
 
+// ─── Closing a window without quitting (macOS) ───────────────────────────────
+
+// Windows allowed to close by the steps below; checked by their close handler.
+const closeApproved = new Set<BrowserWindow>();
+
+function closeWindowNow(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  closeApproved.add(win);
+  win.close();
+}
+
+async function closeWindowSteps(win: BrowserWindow): Promise<void> {
+  // The timer lives in the window: ask about it as before. Its "Stop timer &
+  // quit" is a quit, which is what it says.
+  if (isQuitProtected()) {
+    sendQuitRequested();
+    return;
+  }
+  if (hasUnsaved(getUnsavedState())) {
+    sendUnsavedQuitRequested({ kind: 'unsaved', scope: 'window', state: getUnsavedState() });
+    return;
+  }
+  await flushThenCloseWindow(win);
+}
+
+// Pending automatic writes are flushed while the window is still here to ask
+// in; after it closes there would be no one to tell if they failed.
+async function flushThenCloseWindow(win: BrowserWindow): Promise<void> {
+  const r = await flushPendingWrites();
+  if (!r.ok) {
+    sendUnsavedQuitRequested({ kind: 'save-failed', scope: 'window', message: r.message });
+    return;
+  }
+  closeWindowNow(win);
+}
+
+// The answer to a window-close prompt (ipc.ts quitProceed).
+function onWindowChoice(choice: QuitChoice): void {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (choice === 'discard') closeWindowNow(win);
+  else void flushThenCloseWindow(win);
+}
+
+// A quit with no window left to ask in, and a flush that failed: a native
+// dialog asks instead of the app exiting silently (VERM-123 review).
+async function askWithoutWindow(message: string): Promise<void> {
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    message: 'Save changes before quitting?',
+    detail: message,
+    buttons: ['Try again', 'Quit without saving', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  if (response === 0) app.quit();
+  else if (response === 1) finishQuit();
+}
+
 export function registerQuitProtection(): void {
   if (beforeQuitRegistered) return;
   beforeQuitRegistered = true;
+  setWindowChoiceHandler(onWindowChoice);
 
   app.on('before-quit', (e) => {
     if (finalPass) return;
@@ -116,22 +179,34 @@ export function registerQuitProtection(): void {
       return;
     }
     if (step === 'ask-unsaved') {
-      sendUnsavedQuitRequested({ kind: 'unsaved', state: getUnsavedState() });
+      if (BrowserWindow.getAllWindows().length > 0) {
+        sendUnsavedQuitRequested({ kind: 'unsaved', scope: 'quit', state: getUnsavedState() });
+      } else {
+        // Nothing left that could hold an unsaved editor: carry on.
+        flushStep();
+      }
       return;
     }
     if (step === 'quit') {
       finishQuit();
       return;
     }
-    flushing = true;
-    void flushPendingWrites().then((r) => {
-      flushing = false;
-      // With no window left (macOS) there is no one to ask: quit as before.
-      if (!r.ok && BrowserWindow.getAllWindows().length > 0) {
-        sendUnsavedQuitRequested({ kind: 'save-failed', message: r.message });
-        return;
-      }
+    flushStep();
+  });
+}
+
+// The last step: flush pending automatic writes, then quit. A failure asks in
+// the window, or with a native dialog when no window is left.
+function flushStep(): void {
+  flushing = true;
+  void flushPendingWrites().then((r) => {
+    flushing = false;
+    if (r.ok) {
       finishQuit();
-    });
+    } else if (BrowserWindow.getAllWindows().length > 0) {
+      sendUnsavedQuitRequested({ kind: 'save-failed', scope: 'quit', message: r.message });
+    } else {
+      void askWithoutWindow(r.message);
+    }
   });
 }

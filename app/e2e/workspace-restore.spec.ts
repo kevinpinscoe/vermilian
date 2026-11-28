@@ -17,7 +17,8 @@ import type { ElectronApplication } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
-import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocument } from '../src/shared/workspaceSchema';
+import { WORKSPACE_SCHEMA_VERSION, serialiseNewWorkspaceDocument, type WorkspaceDocument } from '../src/shared/workspaceSchema';
+import { workspaceArticleTitle } from '../src/shared/workspaceArticle';
 
 const switcher = (page: Page) => page.locator('[data-testid="workspace-switcher"]');
 
@@ -90,5 +91,62 @@ test.describe('Restoring the last workspace (VERM-123)', () => {
     expect(ctx.tentative).toBe(true);
     expect(storedActiveId(userDataDir)).toBe('ws-e2ebudget');
     await page.evaluate(() => window.vermilian.debugHideWorkspaceFromListing!('ws-e2ebudget', 0));
+  });
+});
+
+test.describe('Restoring the last workspace after a cold relaunch (VERM-123)', () => {
+  let app: ElectronApplication | undefined;
+  let page: Page;
+  let userDataDir: string;
+  let env: Record<string, string>;
+
+  async function launch(extra: Record<string, string> = {}) {
+    app = await launchAppWithUserDataDir(userDataDir, { ...env, ...extra });
+    page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="topbar-settings-btn"]', { timeout: 15_000 });
+  }
+
+  test.beforeEach(async () => {
+    userDataDir = freshUserDataDir();
+    const seed = [wsDoc('ws-e2efirst', 'First Space', 0), wsDoc('ws-e2ebudget', 'Budget Space', 1)].map((d) => ({
+      summary: workspaceArticleTitle(d.workspaceId),
+      content: serialiseNewWorkspaceDocument(d),
+    }));
+    env = {
+      VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace',
+      VERMILIAN_E2E_WS_ARTICLES: JSON.stringify(seed),
+      VERMILIAN_E2E_WS_STORE_FILE: path.join(userDataDir, 'e2e-ws-store.json'),
+    };
+    await launch();
+    await expect(switcher(page)).toContainText('First Space', { timeout: 15_000 });
+    await switcher(page).click();
+    await page.locator('[data-testid="workspace-menu-item"]').filter({ hasText: 'Budget Space' }).click();
+    await expect(switcher(page)).toContainText('Budget Space');
+    await expect.poll(() => storedActiveId(userDataDir)).toBe('ws-e2ebudget');
+    await app!.close();
+    app = undefined;
+  });
+
+  test.afterEach(async () => { await app?.close(); });
+
+  test('a relaunch opens on the saved workspace', async () => {
+    await launch();
+    await expect(switcher(page)).toContainText('Budget Space', { timeout: 15_000 });
+    const ctx = await page.evaluate(() => window.vermilian.getActiveWorkspace());
+    expect(ctx).toMatchObject({ workspaceId: 'ws-e2ebudget', tentative: false });
+    expect(storedActiveId(userDataDir)).toBe('ws-e2ebudget');
+  });
+
+  test('a relaunch whose first listings miss the saved workspace still opens on it', async () => {
+    await launch({ VERMILIAN_E2E_HIDE_WORKSPACE_AT_START: 'ws-e2ebudget:4000' });
+    // While it is missing, the main process says so rather than settling.
+    const early = await page.evaluate(() => window.vermilian.getActiveWorkspace());
+    if (early.workspaceId !== 'ws-e2ebudget') expect(early.tentative).toBe(true);
+    expect(storedActiveId(userDataDir)).toBe('ws-e2ebudget');
+
+    await expect(switcher(page)).toContainText('Budget Space', { timeout: 15_000 });
+    const ctx = await page.evaluate(() => window.vermilian.getActiveWorkspace());
+    expect(ctx).toMatchObject({ workspaceId: 'ws-e2ebudget', tentative: false });
+    expect(storedActiveId(userDataDir)).toBe('ws-e2ebudget');
   });
 });

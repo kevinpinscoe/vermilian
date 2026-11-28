@@ -1,7 +1,7 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import type { TrackerLinkTypesResult } from '../shared/workspacePrerequisites';
 import type { StandupWorkspace } from '../shared/standup';
-import { EMPTY_UNSAVED_STATE, normaliseUnsavedState, type QuitChoice, type UnsavedQuitRequest, type UnsavedState } from '../shared/quitGuard';
+import { EMPTY_UNSAVED_STATE, normaliseUnsavedState, type QuitChoice, type QuitScope, type UnsavedQuitRequest, type UnsavedState } from '../shared/quitGuard';
 import { generateWorkspaceStandup, getWorkspaceDailyReview, type WorkspaceReportSourceDeps } from './services/workspaceStandup';
 import { randomUUID } from 'node:crypto';
 import { NO_WORKSPACE_MESSAGE, resolveWorkspaceYouTrackConnection } from './services/workspaceYouTrack';
@@ -270,14 +270,29 @@ export function getUnsavedState(): UnsavedState {
   return unsavedState;
 }
 
+export function clearUnsavedState(): void {
+  unsavedState = EMPTY_UNSAVED_STATE;
+}
+
 export function takeQuitChoice(): QuitChoice | null {
   const c = quitChoice;
   quitChoice = null;
   return c;
 }
 
+// What the last prompt was about, so its answer closes only the window when
+// that is all it asked about (macOS).
+let promptScope: QuitScope = 'quit';
+
 export function sendUnsavedQuitRequested(request: UnsavedQuitRequest): void {
+  promptScope = request.scope;
   BrowserWindow.getAllWindows()[0]?.webContents.send('quit:unsaved-requested', request);
+}
+
+// window.ts handles an answer to a window-close prompt; set once at start-up.
+let windowChoiceHandler: ((choice: QuitChoice) => void) | null = null;
+export function setWindowChoiceHandler(fn: (choice: QuitChoice) => void): void {
+  windowChoiceHandler = fn;
 }
 
 // Every YouTrack tracker call goes through the TrackerProvider binding
@@ -2314,6 +2329,11 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.quitProceed, (_e, choice: unknown): void => {
     if (choice !== 'save' && choice !== 'discard') return;
+    if (promptScope === 'window' && windowChoiceHandler) {
+      promptScope = 'quit';
+      windowChoiceHandler(choice);
+      return;
+    }
     quitChoice = choice;
     app.quit();
   });

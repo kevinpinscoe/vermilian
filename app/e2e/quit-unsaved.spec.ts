@@ -11,7 +11,10 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
+import path from 'path';
 import { freshUserDataDir, launchAppWithUserDataDir } from './helpers/launch';
+import { WORKSPACE_SCHEMA_VERSION, serialiseNewWorkspaceDocument, type WorkspaceDocument } from '../src/shared/workspaceSchema';
+import { workspaceArticleTitle } from '../src/shared/workspaceArticle';
 
 const LOGIN = 'your.login';
 
@@ -136,5 +139,173 @@ test.describe('Quitting with unsaved changes (VERM-123)', () => {
     expect(exited).toBe(false);
 
     await clickAndExit(app, page, 'unsaved-quit-discard');
+  });
+});
+
+// Per-workspace storage, with the workspace articles kept in a store file so a
+// relaunch reads what the first launch saved (VERMILIAN_E2E_WS_STORE_FILE).
+test.describe('Save and quit from Add projects (VERM-123 review)', () => {
+  let app: ElectronApplication;
+  let page: Page;
+  let userDataDir: string;
+  let env: Record<string, string>;
+  let exited: boolean;
+
+  const doc: WorkspaceDocument = {
+    schema: WORKSPACE_SCHEMA_VERSION,
+    workspaceId: 'ws-e2equit',
+    name: 'Quit Space',
+    order: 0,
+    backend: { kind: 'youtrack', serverUrl: 'http://e2e.local', credentialRef: 'youtrack-1' },
+    ai: { credentialRef: null },
+    folders: [{ id: 'folder-quit', name: 'Projects', order: 0, parentId: null, projectIds: ['0-e1'] }],
+    boards: {},
+    dismissals: {},
+  };
+
+  async function launch() {
+    app = await launchAppWithUserDataDir(userDataDir, env);
+    exited = false;
+    app.on('close', () => { exited = true; });
+    page = await app.firstWindow();
+    await expect(page.locator('[data-testid="workspace-switcher"]')).toContainText('Quit Space', { timeout: 15_000 });
+  }
+
+  test.beforeEach(async () => {
+    userDataDir = freshUserDataDir();
+    env = {
+      VERMILIAN_E2E_WORKSPACE_STORAGE: 'per-workspace',
+      VERMILIAN_E2E_WS_ARTICLES: JSON.stringify([{ summary: workspaceArticleTitle(doc.workspaceId), content: serialiseNewWorkspaceDocument(doc) }]),
+      VERMILIAN_E2E_WS_STORE_FILE: path.join(userDataDir, 'e2e-ws-store.json'),
+    };
+    await launch();
+  });
+
+  test.afterEach(async () => {
+    if (exited) return;
+    await app.evaluate(({ app: electronApp }) => electronApp.exit(0)).catch(() => undefined);
+  });
+
+  test('a refused save keeps the picker and its ticks; a retry saves them and quits', async () => {
+    await page.locator('[data-testid="add-projects-btn"]').click();
+    const tst2 = page.locator('[data-testid="add-projects-row"][data-project-key="TST2"] input');
+    await tst2.check();
+
+    await requestQuit(app);
+    await expect(dialog(page)).toBeVisible();
+    await expect(page.locator('[data-testid="unsaved-quit-message"]')).toContainText('Add projects to “Quit Space”');
+
+    // The next workspace-article write is refused.
+    await page.evaluate(() => window.vermilian.debugFailWorkspaceWrites!(1));
+    await page.locator('[data-testid="unsaved-quit-save"]').click();
+    await expect(page.locator('[data-testid="unsaved-quit-error"]')).toContainText('Add projects to “Quit Space” could not be saved');
+    expect(exited).toBe(false);
+    // The picker is still open with the tick.
+    await expect(page.locator('[data-testid="add-projects-save-error"]')).toBeVisible();
+    await expect(tst2).toBeChecked();
+
+    // The retry saves, and only then quits.
+    await clickAndExit(app, page, 'unsaved-quit-save');
+
+    await launch();
+    const config = await page.evaluate(() => window.vermilian.getWorkspaceConfig());
+    expect(config!.workspaces[0].folders.flatMap((f) => f.projectIds)).toEqual(expect.arrayContaining(['0-e1', '0-e2']));
+  });
+});
+
+// macOS keeps the app running when its last window closes. The suite runs on
+// Linux, so VERMILIAN_E2E_WINDOW_CLOSE=keep-running gives the app that
+// behaviour (main/windowClose.ts).
+test.describe('Closing the window without quitting, as on macOS (VERM-123 review)', () => {
+  let app: ElectronApplication;
+  let page: Page;
+  let exited: boolean;
+
+  const windowCount = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+
+  // Replaces the native dialog a windowless quit uses; records each call.
+  async function stubNativeDialog(response: number) {
+    await app.evaluate(({ dialog }, r) => {
+      const g = globalThis as unknown as { __dialogCalls?: unknown[] };
+      g.__dialogCalls = g.__dialogCalls ?? [];
+      dialog.showMessageBox = (async (...args: unknown[]) => {
+        g.__dialogCalls!.push(args);
+        return { response: r, checkboxChecked: false };
+      }) as typeof dialog.showMessageBox;
+    }, response);
+  }
+  const nativeDialogCalls = () =>
+    app.evaluate(() => JSON.stringify((globalThis as unknown as { __dialogCalls?: unknown[] }).__dialogCalls ?? []));
+
+  test.beforeEach(async () => {
+    app = await launchAppWithUserDataDir(freshUserDataDir(), { VERMILIAN_E2E_WINDOW_CLOSE: 'keep-running' });
+    exited = false;
+    app.on('close', () => { exited = true; });
+    page = await app.firstWindow();
+    await page.waitForSelector('[data-testid="nav-project"]', { timeout: 15_000 });
+  });
+
+  test.afterEach(async () => {
+    if (exited) return;
+    await app.evaluate(({ app: electronApp }) => electronApp.exit(0)).catch(() => undefined);
+  });
+
+  test('a dirty editor asks about closing the window, and the answer never quits the app', async () => {
+    await openSettings(page);
+    await page.getByPlaceholder(LOGIN).fill('typed-not-saved');
+
+    await closeWindow(app);
+    await expect(dialog(page)).toBeVisible();
+    await expect(page.getByText('Save changes before closing?')).toBeVisible();
+    await expect(page.locator('[data-testid="unsaved-quit-discard"]')).toHaveText('Close without saving');
+    await expect(page.locator('[data-testid="unsaved-quit-save"]')).toHaveText('Save and close');
+    await page.locator('[data-testid="unsaved-quit-cancel"]').click();
+    await expect(dialog(page)).toBeHidden();
+    expect(await windowCount()).toBe(1);
+
+    await closeWindow(app);
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-testid="unsaved-quit-discard"]').click().catch(() => undefined);
+    await expect.poll(windowCount).toBe(0);
+    // The window closed; the app did not quit.
+    await new Promise((r) => setTimeout(r, 500)); // the page is gone with its window
+    expect(exited).toBe(false);
+
+    // With nothing left unsaved, quitting now is immediate.
+    const closed = app.waitForEvent('close');
+    await requestQuit(app);
+    await closed;
+  });
+
+  test('a write that cannot be saved asks at the window close, and again when quitting with no window', async () => {
+    await page.evaluate(() => window.vermilian.debugFailConfigWrites!(1_000));
+    const config = await page.evaluate(() => window.vermilian.getWorkspaceConfig());
+    const ws = config!.workspaces[0];
+    await page.evaluate(
+      (c) => window.vermilian.saveWorkspaceConfig(c),
+      { ...config!, workspaces: [{ ...ws, name: `${ws.name} renamed` }, ...config!.workspaces.slice(1)] },
+    );
+
+    // Closing the window flushes first, while it can still ask.
+    await closeWindow(app);
+    await expect(dialog(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="unsaved-quit-message"]')).toContainText('could not be saved to YouTrack');
+    await page.locator('[data-testid="unsaved-quit-discard"]').click().catch(() => undefined);
+    await expect.poll(windowCount).toBe(0);
+    expect(exited).toBe(false);
+
+    // Quitting with no window: the failed flush asks through a native dialog.
+    // Cancel keeps the app running.
+    await stubNativeDialog(2);
+    await requestQuit(app);
+    await expect.poll(nativeDialogCalls, { timeout: 15_000 }).toContain('could not be saved to YouTrack');
+    await new Promise((r) => setTimeout(r, 500));
+    expect(exited).toBe(false);
+
+    // "Quit without saving" quits.
+    await stubNativeDialog(1);
+    const closed = app.waitForEvent('close');
+    await requestQuit(app);
+    await closed;
   });
 });
